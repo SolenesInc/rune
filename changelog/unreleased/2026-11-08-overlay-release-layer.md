@@ -1,0 +1,1 @@
+- Overlays on macOS: releasing an overlay's surface (`release_gpu_when_hidden`) now takes its CAMetalLayer out of the view. Before, each release left the layer behind, holding its last drawable, about 10 MB for a 2048x1240 surface.

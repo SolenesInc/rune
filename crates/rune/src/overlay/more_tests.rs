@@ -804,3 +804,25 @@ fn a_windows_fade_steps_alpha_down_to_zero() {
     assert_eq!(fade_alpha(end, length, end + Duration::from_millis(50)), 0, "past the end stays clear");
     assert_eq!(fade_alpha(end, Duration::ZERO, now), 0);
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_released_surface_leaves_no_layer_in_its_view() {
+    use objc2_quartz_core::{CALayer, CAMetalLayer};
+    use objc2_video::rc::Retained;
+
+    let view_layer = CALayer::new();
+    let metal_layer = CAMetalLayer::new();
+    view_layer.addSublayer(&metal_layer);
+    // SAFETY: read and compared here, with nothing else touching the layer.
+    let sublayers = || unsafe { view_layer.sublayers() }.map_or(0, |list| list.count());
+    assert_eq!(sublayers(), 1);
+    let instance = wgpu::Instance::default();
+    // SAFETY: `metal_layer` outlives the surface.
+    let surface = unsafe {
+        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(Retained::as_ptr(&metal_layer).cast_mut().cast()))
+    }.unwrap();
+    crate::platform::macos::detach_layer(&surface);
+    drop(surface);
+    assert_eq!(sublayers(), 0, "the view keeps a released surface's layer, and its last drawable");
+}
