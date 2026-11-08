@@ -336,6 +336,10 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
     }
 
     let wall = Instant::now();
+    // RUNE_DESKTOP_FRAME_LOG=FILE: every window's CPU-side frame build, one JSON line a frame.
+    let mut frame_log = std::env::var_os("RUNE_DESKTOP_FRAME_LOG").map(|path| {
+        std::io::BufWriter::new(std::fs::File::create(&path).unwrap_or_else(|e| die(&format!("RUNE_DESKTOP_FRAME_LOG {}: {e}", path.to_string_lossy()))))
+    });
     let mut cpu_ms = Vec::new();
     let mut next_ev = 0;
     let mut last_down = (0.0f32, 0.0f32);
@@ -401,6 +405,10 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
         desk.catch_up(&desktop, real_t);
         record(&desk, real_t);
         let update_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
+        if let Some(log) = frame_log.as_mut() {
+            use std::io::Write;
+            let _ = writeln!(log, "{}", json!({"k": k, "update_ms": update_ms}));
+        }
 
         let key = desk.key.filter(|_| desk.active);
         drawn.clear();
