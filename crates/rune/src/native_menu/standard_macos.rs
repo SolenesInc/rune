@@ -31,6 +31,7 @@ pub(crate) fn install(opt_in: bool) {
     if INSTALLED.with(Cell::get) { return; }
     let app = NSApplication::sharedApplication(mtm);
     let default = !CHECKED.with(|c| c.replace(true)) && default_macos::is_winit_default(&app);
+    if default { default_macos::name_winit_default(&app); }
     if !opt_in && !default { return; }
     INSTALLED.with(|i| i.set(true));
     default_macos::add_standard(&app);

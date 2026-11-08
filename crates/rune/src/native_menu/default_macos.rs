@@ -106,6 +106,23 @@ pub(crate) fn is_winit_default(app: &NSApplication) -> bool {
     }
 }
 
+/// Puts the bundle's name in winit's default app menu, which names the process.
+pub(crate) fn name_winit_default(app: &NSApplication) {
+    let process = NSProcessInfo::processInfo().processName().to_string();
+    let name = app_name();
+    if name == process { return; }
+    // SAFETY: main thread; reading and retitling retained menu items.
+    unsafe {
+        let first = app.mainMenu().and_then(|root| root.itemAtIndex(0)).and_then(|item| item.submenu());
+        let Some(menu) = first else { return };
+        for item in (0..menu.numberOfItems()).filter_map(|i| menu.itemAtIndex(i)) {
+            if let Some(prefix) = item.title().to_string().strip_suffix(&process) {
+                item.setTitle(&NSString::from_str(&format!("{prefix}{name}")));
+            }
+        }
+    }
+}
+
 /// Tags the items `add_standard` makes.
 const STANDARD: isize = 0x5255_4e45;
 
