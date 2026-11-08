@@ -3,7 +3,7 @@
 //! installation order composes.
 use std::{cell::RefCell, collections::HashSet};
 use super::standard::Equivalent;
-use objc2::{rc::Retained, runtime::Sel, sel};
+use objc2::{class, msg_send_id, rc::Retained, runtime::{AnyObject, Sel}, sel};
 use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem};
 use objc2_foundation::{MainThreadMarker, NSProcessInfo, NSString};
 
@@ -49,12 +49,30 @@ pub(crate) fn empty_root(app: &NSApplication) -> Retained<NSMenu> {
     root
 }
 
+/// The name AppKit shows for this app: the bundle's display name, then its name, then the
+/// process name for an unbundled binary.
+fn app_name() -> String {
+    // SAFETY: NSBundle reads, which are thread-safe.
+    unsafe {
+        let bundle: Option<Retained<AnyObject>> = msg_send_id![class!(NSBundle), mainBundle];
+        let named = |key: &str| -> Option<String> {
+            let bundle = bundle.as_ref()?;
+            let key = NSString::from_str(key);
+            let value: Option<Retained<NSString>> = msg_send_id![&**bundle, objectForInfoDictionaryKey: &*key];
+            value.map(|v| v.to_string()).filter(|v| !v.is_empty())
+        };
+        named("CFBundleDisplayName")
+            .or_else(|| named("CFBundleName"))
+            .unwrap_or_else(|| NSProcessInfo::processInfo().processName().to_string())
+    }
+}
+
 /// winit's app menu items, appended after any custom items already in `menu`.
 unsafe fn add_app_items(app: &NSApplication, menu: &NSMenu) {
     // SAFETY: as `ensure`.
     unsafe {
         let mtm = MainThreadMarker::from(app);
-        let name = NSProcessInfo::processInfo().processName().to_string();
+        let name = app_name();
         let services = NSMenu::new(mtm);
         let services_item = item(mtm, "Services", None, "");
         services_item.setSubmenu(Some(&services));
