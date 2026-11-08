@@ -382,6 +382,9 @@ pub(crate) struct Overlay<T: 'static> {
     occluded_wait: Duration,
     /// When a hidden retained overlay commits the changes it hasn't yet.
     hidden_pace: crate::window::HiddenPace,
+    /// The runtime's view commits when the overlay last showed, until its next press: a
+    /// press before any commit since lays the view out first (`left_button`).
+    show_commits: Option<u64>,
     #[cfg(target_os = "macos")]
     frame_wake: Option<Waker>,
     meter: crate::frame::surface_stats::SurfaceMeter,
@@ -465,6 +468,7 @@ impl<T: 'static> Overlay<T> {
             retry: None,
             occluded_wait: crate::window::OCCLUDED_RETRY,
             hidden_pace: Default::default(),
+            show_commits: None,
             #[cfg(target_os = "macos")]
             frame_wake: None,
             meter,
@@ -532,6 +536,7 @@ impl<T: 'static> Overlay<T> {
             if !self.occluded { self.ensure_pacing(); }
         }
         if !self.retained() { self.dirty = true; }
+        self.shown_for_input();
         self.idle &= !(self.rt.animating || self.compositor.as_ref().is_some_and(|c| c.animating()));
     }
 

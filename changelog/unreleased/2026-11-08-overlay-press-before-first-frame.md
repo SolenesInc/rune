@@ -1,0 +1,1 @@
+- Overlays: a press that reaches a just-shown overlay before the frame that first lays its view out now reaches the view. The overlay lays the view out before hit-testing the press; before, the press and its whole drag went to no handler (a picker shown on a shortcut and pressed at once, under load).
