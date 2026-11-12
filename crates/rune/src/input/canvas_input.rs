@@ -87,7 +87,7 @@ impl RotateEvent {
 }
 
 /// A mouse button. Only `Primary` reaches `on_press` and `on_drag` unless an element opts in to
-/// others with [`El::pointer_buttons`]; `Secondary` always goes to `on_secondary_press`.
+/// others with [`El::pointer_buttons`]; `Secondary` otherwise goes to `on_secondary_press`.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PointerButton {
@@ -102,10 +102,11 @@ pub enum PointerButton {
 }
 
 impl PointerButton {
-    /// Its bit in [`CanvasInput::buttons`]; none for the primary and secondary buttons.
+    /// Its bit in [`CanvasInput::buttons`]; none for the primary button.
     pub(crate) fn bit(self) -> u8 {
         match self {
-            Self::Primary | Self::Secondary => 0,
+            Self::Primary => 0,
+            Self::Secondary => 16,
             Self::Middle => 1,
             Self::Back => 2,
             Self::Forward => 4,
@@ -185,7 +186,10 @@ impl El {
 
     /// Mouse buttons besides the primary that press and drag this element: its `on_press` and
     /// `on_drag` hear them too, and [`Tx::button`] says which. A middle-button drag pans a
-    /// canvas this way. The secondary button keeps opening `on_secondary_press`.
+    /// canvas this way. The secondary button keeps opening `on_secondary_press` unless it is
+    /// named here: then it presses and drags this element from its press to its release, as a
+    /// terminal reports it to a program that tracks the mouse, and no menu opens for it here.
+    /// An element inside with its own `on_secondary_press` keeps the button for its menu.
     pub fn pointer_buttons(mut self, buttons: impl IntoIterator<Item = PointerButton>) -> Self {
         let bits = buttons.into_iter().fold(0, |bits, b| bits | b.bit());
         self.canvas_input().buttons |= bits;
@@ -208,4 +212,9 @@ impl Tx {
     /// [`PointerButton::Primary`] unless the element opted in to others with
     /// [`El::pointer_buttons`]. Other handlers see `Primary`.
     pub fn button(&self) -> PointerButton { self.button }
+
+    /// In `on_pointer_move`, whether a mouse button was down when the pointer moved, on this
+    /// element or any other: a terminal reports motion with no button held to a program that
+    /// tracks it, but not a drag that began elsewhere. Other handlers see false.
+    pub fn pointer_held(&self) -> bool { self.pointer_held }
 }

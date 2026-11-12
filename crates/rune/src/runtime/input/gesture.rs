@@ -172,26 +172,19 @@ impl<S: 'static> Runtime<S> {
         Some((i, pick(self.nodes[i].handlers.gestures.as_deref()?)?))
     }
 
-    /// A mouse button went down at (x, y). The primary and secondary buttons do what
-    /// [`Self::pointer_down`] and [`Self::secondary_down`] do; another presses the innermost
-    /// element there that takes it ([`El::pointer_buttons`]), whose `on_drag` and `on_press`
-    /// follow as for the primary button.
+    /// A mouse button went down at (x, y). The primary button does what [`Self::pointer_down`]
+    /// does, and the secondary what [`Self::secondary_down`] does unless an element there takes
+    /// it ([`El::pointer_buttons`]); another button presses the innermost element there that
+    /// takes it, whose `on_drag` and `on_press` follow as for the primary button.
     pub fn button_down(&mut self, x: f32, y: f32, button: PointerButton) {
-        match button {
-            PointerButton::Primary => return self.pointer_down(x, y),
-            PointerButton::Secondary => return self.secondary_down(x, y),
-            _ => {}
+        if button == PointerButton::Primary { return self.pointer_down(x, y); }
+        let target = self.button_target(x, y, button);
+        if button == PointerButton::Secondary && (target.is_none() || self.press.is_held()) {
+            return self.secondary_down(x, y);
         }
         if self.press.is_held() { return; }
         self.pointer = Some((x, y));
         self.dismiss_help();
-        let hit = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
-        let target = std::iter::successors(hit, |&i| self.nodes[i].parent)
-            .take_while(|&i| !self.subtree_exiting(i) && self.allowed(i))
-            .find(|&i| {
-                let n = &self.nodes[i];
-                n.handlers.gestures.as_ref().is_some_and(|g| g.buttons & button.bit() != 0) && (n.handlers.on_press.is_some() || n.handlers.on_drag.is_some())
-            });
         let Some(i) = target else { return };
         let n = &self.nodes[i];
         let r = n.target;
@@ -204,12 +197,29 @@ impl<S: 'static> Runtime<S> {
         self.press.hold(capture::Held::new(path, d, button, (x, y), now, false, None));
     }
 
+    /// The innermost element at (x, y) that `button` presses: one that opted in to it with
+    /// [`El::pointer_buttons`] and has `on_press` or `on_drag`. For the secondary button an
+    /// element with its own `on_secondary_press` on the way keeps the press for its menu.
+    fn button_target(&self, x: f32, y: f32, button: PointerButton) -> Option<usize> {
+        let hit = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
+        std::iter::successors(hit, |&i| self.nodes[i].parent)
+            .take_while(|&i| !self.subtree_exiting(i) && self.allowed(i))
+            .find_map(|i| {
+                let n = &self.nodes[i];
+                if n.handlers.gestures.as_ref().is_some_and(|g| g.buttons & button.bit() != 0) && (n.handlers.on_press.is_some() || n.handlers.on_drag.is_some()) {
+                    return Some(Some(i));
+                }
+                (button == PointerButton::Secondary && n.handlers.on_secondary_press.is_some()).then_some(None)
+            })
+            .flatten()
+    }
+
     /// A mouse button came up at (x, y): the release of [`Self::button_down`].
     pub fn button_up(&mut self, x: f32, y: f32, button: PointerButton) {
         match button {
             PointerButton::Primary => self.pointer_up(x, y),
-            PointerButton::Secondary => self.secondary_up(x, y),
             _ if self.press.held().is_some_and(|h| h.button == button) => self.release_capture(x, y),
+            PointerButton::Secondary => self.secondary_up(x, y),
             _ => {}
         }
     }
@@ -392,6 +402,67 @@ mod tests {
         rt.key_up(up());
         rt.frame(0.0);
         assert_eq!(rt.state.log, ["inside"]);
+    }
+
+    #[derive(Default)]
+    struct Buttons { log: Vec<(&'static str, Phase, PointerButton)>, menus: Vec<&'static str> }
+
+    fn buttons(_: &Buttons, _: &mut crate::Cx<Buttons>) -> El {
+        let drag = |name: &'static str| move |s: &mut Buttons, d: &mut Drag, tx: &mut Tx| s.log.push((name, d.phase, tx.button()));
+        el().w_full().h_full()
+            .child(el().key("takes").size(40.0, 40.0).pointer_buttons([PointerButton::Secondary]).on_drag(drag("takes"))
+                .on_secondary_press(|s: &mut Buttons, _, _| s.menus.push("takes"))
+                .child(el().key("menu").size(10.0, 10.0).on_secondary_press(|s: &mut Buttons, _, _| s.menus.push("menu"))))
+            .child(el().key("plain").size(40.0, 40.0).on_drag(drag("plain")).on_secondary_press(|s: &mut Buttons, _, _| s.menus.push("plain")))
+    }
+
+    #[test]
+    fn an_element_that_takes_the_secondary_button_hears_its_press_drag_and_release_and_opens_no_menu() {
+        let mut rt = Runtime::new(Buttons::default(), buttons, (100.0, 100.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let (x, y) = rt.find("takes").unwrap();
+        rt.button_down(x + 10.0, y + 10.0, PointerButton::Secondary);
+        rt.frame(0.0);
+        rt.pointer_move(x + 12.0, y + 10.0);
+        rt.button_up(x + 12.0, y + 10.0, PointerButton::Secondary);
+        rt.frame(0.0);
+        let secondary = PointerButton::Secondary;
+        assert_eq!(rt.state.log, [("takes", Phase::Down, secondary), ("takes", Phase::Move, secondary), ("takes", Phase::Up, secondary)]);
+        assert!(rt.state.menus.is_empty());
+
+        let (mx, my) = rt.find("menu").unwrap();
+        rt.button_down(mx, my, secondary);
+        rt.button_up(mx, my, secondary);
+        let (px, py) = rt.find("plain").unwrap();
+        rt.button_down(px, py, secondary);
+        rt.button_up(px, py, secondary);
+        rt.frame(0.0);
+        assert_eq!(rt.state.log.len(), 3, "an element that did not take the button hears no drag");
+        assert_eq!(rt.state.menus, ["menu", "plain"]);
+    }
+
+    #[derive(Default)]
+    struct Watch { held: Vec<bool> }
+
+    fn watch(_: &Watch, _: &mut crate::Cx<Watch>) -> El {
+        el().w_full().h_full()
+            .child(el().key("grip").size(40.0, 40.0).on_drag(|_: &mut Watch, _: &mut Drag, _: &mut Tx| {}))
+            .child(el().key("watch").size(40.0, 40.0).on_pointer_move_local(|s: &mut Watch, _, tx: &mut Tx| s.held.push(tx.pointer_held())))
+    }
+
+    #[test]
+    fn pointer_motion_says_whether_a_button_is_down_on_any_element() {
+        let mut rt = Runtime::new(Watch::default(), watch, (100.0, 100.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let (gx, gy) = rt.find("grip").unwrap();
+        let (wx, wy) = rt.find("watch").unwrap();
+        rt.pointer_down(gx, gy);
+        rt.pointer_move(wx, wy);
+        rt.pointer_up(wx, wy);
+        rt.pointer_move(wx + 1.0, wy);
+        rt.frame(0.0);
+        assert_eq!(rt.state.held.first(), Some(&true), "{:?}", rt.state.held);
+        assert_eq!(rt.state.held.last(), Some(&false), "{:?}", rt.state.held);
     }
 
     #[test]

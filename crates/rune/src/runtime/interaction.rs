@@ -34,7 +34,7 @@ impl<S: 'static> Runtime<S> {
             Action::Gesture(chain, _) => ("gesture", 2, chain.first().map(String::as_str)),
             Action::Hover(p) => ("on_hover", 1, Some(p)),
             Action::HoverChange(p, _) => ("on_hover_change", 1, Some(p)),
-            Action::PointerMove(p, _) => ("on_pointer_move", 1, Some(p)),
+            Action::PointerMove(p, ..) => ("on_pointer_move", 1, Some(p)),
             _ => return None,
         };
         let at = path.and_then(|p| self.index_of(p));

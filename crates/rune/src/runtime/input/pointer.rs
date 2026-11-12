@@ -15,13 +15,14 @@ impl<S: 'static> Runtime<S> {
         if moved { self.hover_paused = false; self.release_hover_hold(); }
         self.pointer = Some((x, y));
         if self.in_viewport(x, y) { self.set_left(false); }
+        let held = self.pointer_captured();
         for &(id, rect) in &self.hits {
             if self.hit_contains(id, rect, x, y)
                 && let Some(&i) = self.node_index.get(&id)
                 && self.nodes[i].handlers.get().is_some_and(|h| h.on_pointer_move.is_some())
             {
                 let point = self.pointer_event(i, x, y);
-                self.queue.push(Action::PointerMove(self.nodes[i].path.clone(), point));
+                self.queue.push(Action::PointerMove(self.nodes[i].path.clone(), point, held));
             }
         }
         self.refresh_hover(x, y);

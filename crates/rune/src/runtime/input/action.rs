@@ -10,7 +10,7 @@ pub(super) enum Action {
     /// The pointer entered a `focus_highlight` row (`Some`) or left every such row.
     HoverFocus(Option<String>),
     Dismiss(String),
-    PointerMove(String, PointerEvent),
+    PointerMove(String, PointerEvent, bool),
     Hover(String),
     HoverChange(String, bool),
     /// `El::on_selection_change`.
@@ -140,7 +140,7 @@ pub(super) fn live_only_handler(action: &Action) -> Option<&'static str> {
 #[cfg(debug_assertions)]
 pub(super) fn action_path(action: &Action) -> Option<&str> {
     match action {
-        Action::PointerMove(path, _) | Action::DrawnLayout(path, ..) | Action::Layout(path, _) | Action::Hover(path) | Action::HoverChange(path, _) | Action::SelectionChange(path, _) | Action::Press(path, _) | Action::DoublePress(path)
+        Action::PointerMove(path, ..) | Action::DrawnLayout(path, ..) | Action::Layout(path, _) | Action::Hover(path) | Action::HoverChange(path, _) | Action::SelectionChange(path, _) | Action::Press(path, _) | Action::DoublePress(path)
         | Action::Link(path, _) | Action::LinkSecondary(path, ..) | Action::SecondaryPress(path, _) | Action::Drag(path, ..) | Action::DragRepeat(path, ..) | Action::DragStart(path)
         | Action::DragEnd(path, _) | Action::Visible(path, _) => Some(path),
         Action::Wheel(_, chain, _) | Action::Gesture(chain, _) => chain.first().map(String::as_str),
@@ -283,7 +283,7 @@ impl<S: 'static> Runtime<S> {
         match action {
             Action::Hover(p) => sites(p)?.hover,
             Action::HoverChange(p, _) => sites(p)?.hover_change,
-            Action::PointerMove(p, _) => sites(p)?.pointer_move,
+            Action::PointerMove(p, ..) => sites(p)?.pointer_move,
             Action::Layout(p, _) => sites(p)?.layout,
             Action::DrawnLayout(p, ..) => sites(p)?.drawn_layout,
             Action::VisibleRows(p, _) => sites(p)?.visible_rows,
@@ -339,8 +339,9 @@ impl<S: 'static> Runtime<S> {
                 f(states!(self), &mut one);
                 true
             }
-            Action::PointerMove(path, point) => {
+            Action::PointerMove(path, point, held) => {
                 let Some(f) = self.node(&path).and_then(|n| n.handlers.on_pointer_move.clone()) else { return false };
+                one.pointer_held = held;
                 f(states!(self), point, &mut one);
                 true
             }
