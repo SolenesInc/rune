@@ -34,6 +34,7 @@ mod web;
 pub(crate) use web::with_font;
 
 type Update<S> = Box<dyn FnOnce(&mut S, &mut Tx) -> bool + Send>;
+pub(crate) type Inspection<S> = Box<dyn FnOnce(&mut crate::Runtime<S>) + Send>;
 /// `App::on_window`'s hook, run after each native window creation.
 pub(crate) type OnWindow = Box<dyn FnMut(&crate::WindowHandle)>;
 
@@ -776,6 +777,16 @@ impl<S: 'static> AppHandle<S> {
         self.request(|q| q.updates.push(Box::new(f)));
     }
 
+    /// Runs `f` on the UI thread with the window's runtime, after the updates queued before it,
+    /// for a tool that reads a live window (`Runtime::elements`, `accessibility_json`) or
+    /// feeds it input (`Runtime::key`, `pointer_down`). Input `f` queues is handled before the
+    /// next inspection runs, without waiting for a frame, so a covered or occluded window
+    /// handles it too; the window then draws what changed as it would for an update. Desktop
+    /// windows run it; other hosts drop `f` unrun.
+    pub fn inspect(&self, f: impl FnOnce(&mut crate::Runtime<S>) + Send + 'static) {
+        self.request(|q| q.inspections.push(Box::new(f)));
+    }
+
     fn request(&self, f: impl FnOnce(&mut Requests<S>)) {
         f(&mut self.shared.requests.lock().unwrap());
         self.shared.wake();
@@ -802,7 +813,7 @@ pub(crate) enum Activation {
     Minimize,
 }
 
-pub(crate) struct Requests<S> {
+pub(crate) struct Requests<S: 'static> {
     pub window: Option<WindowRequest>,
     pub dock: Option<bool>,
     /// `AppHandle::focus` or `AppHandle::minimize`; last-wins (`cancel_minimize`).
@@ -814,9 +825,11 @@ pub(crate) struct Requests<S> {
     /// `AppHandle::wake` asked for `poll`.
     pub woken: bool,
     pub updates: Vec<Update<S>>,
+    /// `AppHandle::inspect`, run after the updates.
+    pub inspections: Vec<Inspection<S>>,
 }
 
-impl<S> Requests<S> {
+impl<S: 'static> Requests<S> {
     /// Asks something of the window itself: show, hide or close it, focus or minimize it, or
     /// move it. A request added here reaches both `only_updates` and `Shared::window_pending`.
     fn asks_window(&self) -> bool {
@@ -831,11 +844,11 @@ impl<S> Requests<S> {
 
     /// Nothing but updates: no wake for `poll`, no window, focus or geometry request.
     pub(crate) fn only_updates(&self) -> bool {
-        !self.woken && !self.asks_window()
+        !self.woken && !self.asks_window() && self.inspections.is_empty()
     }
 }
 
-impl<S> Default for Requests<S> {
+impl<S: 'static> Default for Requests<S> {
     fn default() -> Self {
         Requests {
             window: None,
@@ -846,11 +859,12 @@ impl<S> Default for Requests<S> {
             quit: None,
             woken: false,
             updates: Vec::new(),
+            inspections: Vec::new(),
         }
     }
 }
 
-pub(crate) struct Shared<S> {
+pub(crate) struct Shared<S: 'static> {
     pub(crate) menus: crate::native_menu::Hub<S>,
     pub(crate) shortcuts: crate::shortcuts::Hub<S>,
     requests: Mutex<Requests<S>>,
@@ -862,7 +876,7 @@ pub(crate) struct Shared<S> {
     pub(crate) window_error: Mutex<Option<String>>,
 }
 
-impl<S> Default for Shared<S> {
+impl<S: 'static> Default for Shared<S> {
     fn default() -> Self {
         Shared {
             menus: crate::native_menu::Hub::default(),
@@ -876,7 +890,7 @@ impl<S> Default for Shared<S> {
     }
 }
 
-impl<S> Shared<S> {
+impl<S: 'static> Shared<S> {
     /// Installs the event loop's wake-up and wakes it once for requests made before it existed.
     pub fn connect(&self, wake: crate::runtime::Waker) {
         *self.wake.lock().unwrap() = Some(wake);

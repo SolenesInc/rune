@@ -176,12 +176,18 @@ impl<S: 'static> Host<S> {
         self.shortcuts.drain();
         self.menus.drain();
         let (mut had_updates, mut updated) = (false, false);
-        let requests = self.shared.drain(|f| {
+        let mut requests = self.shared.drain(|f| {
             had_updates = true;
             updated |= self.rt.update_if(f);
             self.menus.drain();
         });
-        let changed = clipboard || answered || updated || self.rt.drag_ends_pending();
+        let inspections = std::mem::take(&mut requests.inspections);
+        let inspected = !inspections.is_empty();
+        for f in inspections {
+            inspect(&mut self.rt, f);
+            self.menus.drain();
+        }
+        let changed = clipboard || answered || updated || inspected || self.rt.drag_ends_pending();
         // Only updates that changed nothing (`AppHandle::update_if`), or an empty startup drain
         // after `try_create` already drew the first frame, ran: no poll, no frame.
         let quiet = (had_updates || (!wake && !stale_before)) && !changed && requests.only_updates()
@@ -471,4 +477,11 @@ impl<S: 'static> Host<S> {
         }
         *self.shared.window_error.lock().unwrap() = result.err();
     }
+}
+
+/// Runs one `AppHandle::inspect` and handles the input it queued at once, as a hidden window's
+/// queued keys are (`hidden_input`), so the next inspection reads what the input did.
+pub(super) fn inspect<S>(rt: &mut Runtime<S>, f: crate::app::Inspection<S>) {
+    f(rt);
+    if rt.has_pending_input() { rt.hidden_timer_frame(); }
 }

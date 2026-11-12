@@ -28,4 +28,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: "cargo test -p rune --lib --no-fail-fast -- overlay:: native_menu:: platform::macos:: runtime::live_only_tests::"
+      - run: "cargo test -p rune --lib --no-fail-fast -- overlay:: native_menu:: platform::macos:: runtime::live_only_tests:: window::tests::an_inspection"

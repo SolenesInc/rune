@@ -710,3 +710,30 @@ fn a_new_gpus_device_equals_the_old_one_but_its_key_differs() {
     let (old, new) = (crate::render::Renderer::new(&old, format), crate::render::Renderer::new(&new, format));
     assert_ne!(old.device_key(), new.device_key());
 }
+
+/// `AppHandle::inspect` as `Host::drain` runs it: a press one inspection feeds the window is
+/// handled before the next inspection reads it, with no frame between, and the drain then asks
+/// the window for a frame to draw what changed.
+#[test]
+fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
+    use crate::{App, AppSpec, el};
+    fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        el().key("button").w(40.0).h(20.0).on_press(|n: &mut u32| *n += 1)
+    }
+    let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (100.0, 100.0), crate::Env::default());
+    rt.frame(0.0);
+    let (read, seen) = std::sync::mpsc::channel();
+    handle.inspect(|rt| {
+        let (x, y) = rt.find("button").expect("laid out");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+    });
+    handle.inspect(move |rt| read.send(rt.state).unwrap());
+    let mut requests = shared.take();
+    assert!(!requests.only_updates(), "an inspection asks for a frame");
+    for f in std::mem::take(&mut requests.inspections) { lifecycle::inspect(&mut rt, f); }
+    assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
+    assert!(!rt.has_pending_input());
+}
