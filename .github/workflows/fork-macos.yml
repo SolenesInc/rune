@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: fork-macos-${{ github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
