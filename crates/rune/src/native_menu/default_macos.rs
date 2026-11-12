@@ -4,7 +4,7 @@
 use std::{cell::RefCell, collections::HashSet};
 use super::standard::Equivalent;
 use crate::Label;
-use objc2::{msg_send, msg_send_id, rc::Retained, runtime::Sel, sel};
+use objc2::{class, msg_send, msg_send_id, rc::Retained, runtime::{AnyObject, Sel}, sel};
 use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem};
 use objc2_foundation::{MainThreadMarker, NSProcessInfo, NSString};
 
@@ -95,11 +95,39 @@ unsafe fn add_app_items(app: &NSApplication, menu: &NSMenu) {
     }
 }
 
-/// The app menu items `add_app_items` made, titled with the app's labels (`rune::set_labels`).
+/// The name AppKit shows for this app, read from the main bundle (`standard::app_name`).
+fn app_name() -> String {
+    // SAFETY: NSBundle reads, which are thread-safe.
+    unsafe {
+        let bundle: Option<Retained<AnyObject>> = msg_send_id![class!(NSBundle), mainBundle];
+        let info = |key: &str| -> Option<String> {
+            let bundle = bundle.as_deref()?;
+            let key = NSString::from_str(key);
+            let value: Option<Retained<NSString>> = msg_send_id![bundle, objectForInfoDictionaryKey: &*key];
+            value.map(|v| v.to_string())
+        };
+        let process = NSProcessInfo::processInfo().processName().to_string();
+        super::standard::app_name(info("CFBundleDisplayName").as_deref(), info("CFBundleName").as_deref(), &process)
+    }
+}
+
+/// Takes winit's default app menu as Rune's own, so its items are titled with the app's name
+/// and labels as `add_app_items`'s are, rather than with the process name.
+pub(crate) fn adopt_winit_app_menu(app: &NSApplication) {
+    // SAFETY: main thread; tagging and retitling retained menu items.
+    unsafe {
+        let Some(menu) = app.mainMenu().and_then(|root| root.itemAtIndex(0)).and_then(|item| item.submenu()) else { return };
+        for entry in (0..menu.numberOfItems()).filter_map(|i| menu.itemAtIndex(i)) { entry.setTag(APP_ITEM); }
+        relabel_app_items(&menu);
+    }
+}
+
+/// The app menu items `add_app_items` made or `adopt_winit_app_menu` took, titled with the
+/// app's labels (`rune::set_labels`).
 unsafe fn relabel_app_items(menu: &NSMenu) {
     // SAFETY: as `ensure`.
     unsafe {
-        let name = NSProcessInfo::processInfo().processName().to_string();
+        let name = app_name();
         for entry in (0..menu.numberOfItems()).filter_map(|i| menu.itemAtIndex(i)).filter(|i| i.tag() == APP_ITEM) {
             let label = match entry.action().map(|a| a.name().to_owned()).as_deref() {
                 Some("orderFrontStandardAboutPanel:") => Label::About(&name),
@@ -168,7 +196,7 @@ pub(crate) fn is_winit_default(app: &NSApplication) -> bool {
 
 /// Tags the items `add_standard` makes.
 const STANDARD: isize = 0x5255_4e45;
-/// Tags the app menu items `add_app_items` makes.
+/// Tags the app menu items `add_app_items` makes and `adopt_winit_app_menu` takes.
 const APP_ITEM: isize = 0x5255_4e46;
 
 /// The standard items, into menus of their titles (made if absent) in the menu bar, or in a

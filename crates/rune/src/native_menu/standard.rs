@@ -125,9 +125,24 @@ pub(crate) fn is_winit_default(tops: usize, app_menu: &[Option<&str>]) -> bool {
     tops == 1 && app_menu.first() == Some(&Some("orderFrontStandardAboutPanel:")) && app_menu.last() == Some(&Some("terminate:"))
 }
 
+/// The name AppKit shows for the app: the bundle's display name, then its name, then the
+/// process name for an unbundled binary.
+pub(crate) fn app_name(display_name: Option<&str>, bundle_name: Option<&str>, process: &str) -> String {
+    [display_name, bundle_name].into_iter().flatten().find(|n| !n.is_empty()).unwrap_or(process).to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_app_is_named_as_appkit_names_it() {
+        assert_eq!(app_name(Some("Attn Lens"), Some("lens"), "lens-bin"), "Attn Lens");
+        assert_eq!(app_name(None, Some("lens"), "lens-bin"), "lens", "no display name: the bundle name");
+        assert_eq!(app_name(Some(""), Some("lens"), "lens-bin"), "lens", "an empty display name counts as none");
+        assert_eq!(app_name(None, None, "lens-bin"), "lens-bin", "unbundled: the process name");
+        assert_eq!(app_name(Some(""), Some(""), "lens-bin"), "lens-bin");
+    }
 
     fn key(chars: &str, shift: bool) -> KeyDown { KeyDown { chars: chars.into(), cmd: true, shift, ..KeyDown::default() } }
 
