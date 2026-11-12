@@ -27,4 +27,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - run: cargo test -p rune --lib --no-fail-fast -- overlay:: native_menu:: platform::macos::
+      - run: "cargo test -p rune --lib --no-fail-fast -- overlay:: native_menu:: platform::macos::"
