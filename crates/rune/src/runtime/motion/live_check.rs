@@ -40,13 +40,19 @@ impl<S: 'static> Runtime<S> {
         if self.live_only_check && self.clock - self.last_commit_clock >= LIVE_ONLY_CHECK {
             if self.live_check.is_none() { self.live_check = Some((label.to_string(), self.view_print())); }
             self.live_checks += 1;
-            self.live.set();
+            self.live_only_published();
             return true;
         }
         let _ = label;
         self.live_only_skips += 1;
-        self.live.set();
+        self.live_only_published();
         false
+    }
+
+    /// A live-only event owes the next frame the values it set, so only when the scene binds
+    /// live values to read. Without any, a frame would draw what is already on screen.
+    pub(super) fn live_only_published(&mut self) {
+        if !self.live_subscriptions.is_empty() { self.live.set(); }
     }
 
     /// Whether the commit about to run is a live-only check's, which builds what skipping it
