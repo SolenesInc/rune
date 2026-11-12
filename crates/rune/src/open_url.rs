@@ -51,6 +51,20 @@ pub(crate) struct Link {
 /// The link to open, trimmed and with a lowercase scheme, or why it can't be.
 pub(crate) fn check(url: &str) -> Result<String, OpenUrlError> { check_link(url, false) }
 
+/// `check` for `Tx::open_uri`: natively any scheme, since the system decides what opens it;
+/// on web only the schemes `check` allows, as a page can't hand others to the system safely.
+pub(crate) fn check_any_scheme(url: &str) -> Result<String, OpenUrlError> {
+    match check(url) {
+        Err(OpenUrlError::UnsupportedScheme(_)) if !cfg!(target_arch = "wasm32") => {
+            let url = url.trim();
+            let (scheme, rest) = url.split_once(':').ok_or(OpenUrlError::Invalid)?;
+            if rest.is_empty() { return Err(OpenUrlError::Invalid); }
+            Ok(format!("{}:{rest}", scheme.to_ascii_lowercase()))
+        }
+        checked => checked,
+    }
+}
+
 /// `check` for a same-tab link: on web a link without a scheme (`/notes/42`, `?q=a`, `#top`)
 /// is relative to the page, and the browser resolves it.
 pub(crate) fn check_same_tab(url: &str) -> Result<String, OpenUrlError> { check_link(url, cfg!(target_arch = "wasm32")) }
@@ -260,6 +274,23 @@ mod tests {
         assert_eq!(check_link("/a b", true), Err(OpenUrlError::Invalid));
         assert_eq!(check_link("HTTPS://example.com/x", true).as_deref(), Ok("https://example.com/x"));
         assert_eq!(check_same_tab("/notes/42"), Err(OpenUrlError::Invalid), "native has no page to resolve against");
+    }
+
+    #[test]
+    fn open_uri_takes_any_scheme_natively_and_still_refuses_malformed_links() {
+        if cfg!(target_arch = "wasm32") { return; }
+        assert_eq!(check_any_scheme(" FILE:///tmp/a%20b.md ").as_deref(), Ok("file:///tmp/a%20b.md"));
+        assert_eq!(check_any_scheme("ssh://host/repo").as_deref(), Ok("ssh://host/repo"));
+        assert_eq!(check_any_scheme("magnet:?xt=urn:btih:abc").as_deref(), Ok("magnet:?xt=urn:btih:abc"));
+        assert_eq!(check_any_scheme("https://example.com").as_deref(), Ok("https://example.com"));
+        for bad in ["", "file:", "file:///a b", "https://", "example.com", "1x:y", "file:///%ZZ"] {
+            assert!(check_any_scheme(bad).is_err(), "{bad:?}");
+        }
+        let mut rt = Runtime::new((), |_: &(), _: &mut Cx<()>| el(), (10.0, 10.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.update(|_, tx| tx.open_uri("file:///tmp/notes.md").unwrap());
+        rt.frame(0.0);
+        assert_eq!(rt.take_url_requests(), ["file:///tmp/notes.md"]);
     }
 
     #[test]

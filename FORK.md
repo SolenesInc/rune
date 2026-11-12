@@ -29,3 +29,4 @@ Dropped when the fork moved to upstream `f3ab74c1`:
 
 The `fork macOS tests` workflow (`.github/workflows/fork-macos.yml`) runs the
 patched areas' tests on macOS for each push to `attn`.
+| `Tx::open_uri` opens a link of any scheme natively, such as a `file:` URL or `ssh:`, with the same malformed-link checks as `open_url`, and headless runs record it with the others (`open_url.rs`, `el/tx.rs`). A terminal opens the paths and links its output names, as attn's Tauri terminal does | `Tx::open_url` refuses every scheme but `http:`, `https:` and `mailto:`; an app that spawned `open` or `xdg-open` itself would skip the headless record its wire tests read | `open_url::tests::open_uri_takes_any_scheme_natively_and_still_refuses_malformed_links` |

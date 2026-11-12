@@ -439,6 +439,14 @@ impl Tx {
         Ok(())
     }
 
+    /// `open_url` for a link of any scheme, such as a `file:` URL or `ssh:`, which the system
+    /// opens with whatever handles it. Malformed links are still refused. On web it allows only
+    /// what `open_url` does. Headless runs record it with the others.
+    pub fn open_uri(&mut self, uri: &str) -> Result<(), crate::open_url::OpenUrlError> {
+        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_any_scheme(uri)?, same_tab: false });
+        Ok(())
+    }
+
     /// `open_url`, but on web the link replaces this page instead of opening a tab: the app's
     /// [`App::same_tab_router`](crate::App::same_tab_router) gets it first (a single-page app
     /// routes it with `history.pushState`), else the browser loads it with `location.assign`.
