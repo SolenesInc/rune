@@ -24,6 +24,13 @@ def table():
         except OSError:
             continue
         name = s[s.index("(") + 1:s.rindex(")")]
+        try:
+            with open(f"/proc/{d}/cmdline", "rb") as f:
+                kind = [a for a in f.read().decode(errors="replace").split("\0") if a.startswith("--type=")]
+        except OSError:
+            kind = []
+        if kind:
+            name = kind[0][len("--type="):]
         rest = s[s.rindex(")") + 2:].split()
         rows[int(d)] = {"ppid": int(rest[1]), "cpu": (int(rest[11]) + int(rest[12])) / TICK, "rss": rss, "name": name}
     return rows
@@ -52,8 +59,9 @@ now = {p: last[p] for p in tree(last, root)}
 cpu = sum(now[p]["cpu"] - seen.get(p, {"cpu": 0})["cpu"] for p in now)
 by_name = {}
 for p, r in now.items():
-    e = by_name.setdefault(r["name"], {"rss_mb": 0.0, "n": 0})
+    e = by_name.setdefault(r["name"], {"rss_mb": 0.0, "cpu_pct": 0.0, "n": 0})
     e["rss_mb"] = round(e["rss_mb"] + r["rss"] / 1048576, 1)
+    e["cpu_pct"] = round(e["cpu_pct"] + (r["cpu"] - seen.get(p, {"cpu": 0})["cpu"]) / (t1 - t0) * 100, 1)
     e["n"] += 1
 print(json.dumps({"scenario": label, "cpu_pct": round(cpu / (t1 - t0) * 100, 1), "rss_mb": round(sum(r["rss"] for r in now.values()) / 1048576, 1),
                   "processes": len(now), "by_name": by_name, "load": os.getloadavg()[0]}))

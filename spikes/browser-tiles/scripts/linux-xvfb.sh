@@ -22,6 +22,7 @@ sleep 12
 win=$(xdotool search --onlyvisible --name "browser tiles" | head -1)
 echo "window $win" >> "$out/drive.log"
 xdotool windowmove "$win" 0 0
+xdotool windowfocus --sync "$win"
 sleep 1
 import -window root "$out/loaded.png"
 mark() { echo "{\"mark\":\"$1\"}" >> "$out/drive.log"; sleep 1.5; }
