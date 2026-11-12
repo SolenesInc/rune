@@ -162,11 +162,11 @@ impl<S: 'static> Host<S> {
         #[cfg(target_os = "macos")]
         { self.rt.native_materials = l.native.materials.native(); }
         if self.frame_reports.wanted() { self.frame_reports.set_refresh(display_hz(l)); }
-        // Only a timer woke the resting window: build the frame first, and take no drawable
-        // when it draws what's on screen.
+        // Only a timer or a key woke the resting window: build the frame first, and take no
+        // drawable when it draws what's on screen.
         #[cfg(feature = "frame-profile")]
         let fp_entry = crate::frame::live_log::on().then(crate::frame::live_log::Stamp::now);
-        let quiet = l.timer_frame.take_quiet() && !hidden && !live_resize && l.presented.is_some() && !composed(self.comp.as_deref())
+        let quiet = l.timer_frame.take_quiet() && !hidden && !live_resize && l.presented.is_some() && !composing(self.comp.as_deref())
             && self.trace.is_none() && self.args.trace.is_none() && self.rt.live_visible()
             && self.rt.window_frame.is_none() && !FrameMove::moving(&self.frame_move);
         #[cfg(target_os = "macos")]
@@ -181,7 +181,7 @@ impl<S: 'static> Host<S> {
             #[cfg(not(target_os = "macos"))]
             let next_tick = l.next_tick(now);
             if renderer.srgb_blend() == rt.srgb_blend()
-                && l.presented.as_ref().is_some_and(|p| p.unchanged(rt, &l.config, animating, next_tick)) {
+                && l.presented.as_ref().is_some_and(|p| p.unchanged(rt, &l.config, animating, next_tick, self.comp.as_deref())) {
                 sync_platform(l, rt, &mut self.secure_input, &mut self.ime_allowed, &self.clipboard);
                 l.stop_pacing();
                 self.meter.set_pacing(l.pacing_state(false));
@@ -427,7 +427,7 @@ impl<S: 'static> Host<S> {
             let event = if hidden { SteadyEvent::Ends } else { SteadyEvent::Drew { changed, focused: rt.has_window_focus(), now } };
             l.steady = l.steady.step(event).0;
         }
-        self.idle = Presented::settle(&mut l.presented, rt, &l.config, animating || FrameMove::moving(&self.frame_move), next_tick, rests, composed(self.comp.as_deref()));
+        self.idle = Presented::settle(&mut l.presented, rt, &l.config, animating || FrameMove::moving(&self.frame_move), next_tick, rests);
         // Why the window draws again: each bit is one of `Presented::settle`'s reasons.
         #[cfg(feature = "frame-profile")]
         let fp_next = [animating, FrameMove::moving(&self.frame_move), rt.needs_commit(), rt.stale() && !rt.needs_commit(), rt.has_pending_input(), rt.live_pending(),
