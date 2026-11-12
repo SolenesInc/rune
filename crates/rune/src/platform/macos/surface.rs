@@ -45,6 +45,13 @@ pub(crate) fn pin_contents_top_left(surface: &wgpu::Surface) {
     });
 }
 
+/// Takes the surface's CAMetalLayer out of its view, which otherwise keeps the layer, and with
+/// it the last drawable's pixels, after the surface is gone.
+pub(crate) fn detach_layer(surface: &wgpu::Surface) {
+    // SAFETY: a live CAMetalLayer, on the main thread, under wgpu's lock.
+    crate::gpu::with_layer(surface, |layer| unsafe { let _: () = objc2_video::msg_send![layer, removeFromSuperlayer]; });
+}
+
 /// Whether none of `window` is on screen: covered, or its displays asleep. AppKit keeps the
 /// state from the window server's notifications, so reading it costs one message send. wgpu
 /// declines a drawable on the same check.

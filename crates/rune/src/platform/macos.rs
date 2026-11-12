@@ -29,7 +29,7 @@ pub(crate) use geometry::{backing_scale, content_origin, display_bounds, outer_s
 pub(crate) use pointer::PointerState;
 #[cfg(test)]
 pub(crate) use surface::layer_occluded;
-pub(crate) use surface::{PresumeShown, pin_contents_top_left, present_with_transaction, surface_occluded, window_occluded};
+pub(crate) use surface::{PresumeShown, detach_layer, pin_contents_top_left, present_with_transaction, surface_occluded, window_occluded};
 use geometry::{overlay_rect_on, screen_id};
 use pointer::MouseMonitors;
 use presence::Presence;

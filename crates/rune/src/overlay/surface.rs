@@ -350,6 +350,8 @@ impl<T: 'static> Overlay<T> {
                 { live.present.take(); live.pacing.take(); }
                 let Live { alpha, surface, backing, .. } = live;
                 drop(alpha);
+                #[cfg(target_os = "macos")]
+                crate::platform::macos::detach_layer(&surface);
                 drop(surface);
                 Some(backing)
             }
