@@ -1,0 +1,30 @@
+name: fork macOS tests
+
+# SolenesInc/rune only (FORK.md). Runs the tests of the areas the fork patches on macOS, where
+# the menu and layer patches live, for each push to the `attn` branch and on request. Upstream's
+# macos-tests.yml needs a runner this organisation does not have.
+on:
+  push:
+    branches: [attn]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-macos-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_PROFILE_TEST_STRIP: debuginfo
+    steps:
+      - uses: actions/checkout@v5
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo test -p rune --lib --no-fail-fast -- overlay:: native_menu:: platform::macos::
