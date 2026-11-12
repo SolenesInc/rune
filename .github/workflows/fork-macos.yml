@@ -24,6 +24,7 @@ jobs:
       CARGO_PROFILE_TEST_STRIP: debuginfo
     steps:
       - uses: actions/checkout@v5
+      - run: brew install lld
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
