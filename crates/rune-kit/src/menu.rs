@@ -258,6 +258,7 @@ pub struct Menu {
     /// A context menu: its trigger is the area it opens over, not a button that opens it.
     context: bool,
     dismiss: Option<(El, Modal)>,
+    label: Option<String>,
 }
 
 /// Makes an open surface modal: it takes focus, Escape and outside presses dismiss it, and
@@ -293,6 +294,7 @@ impl Menu {
             at: None,
             context: false,
             dismiss: None,
+            label: None,
         }
     }
     pub fn trigger(mut self, t: El) -> Self {
@@ -333,6 +335,11 @@ impl Menu {
         self.min_width = w;
         self
     }
+    /// The open menu's accessible name, as a menu button names the menu it opens.
+    pub fn label(mut self, l: impl Into<String>) -> Self {
+        self.label = Some(l.into());
+        self
+    }
     /// A context menu: open at a window point (where the secondary press landed).
     pub fn at(mut self, x: f32, y: f32) -> Self {
         self.at = Some((x, y));
@@ -348,6 +355,7 @@ impl Menu {
         let c = &k.c;
         let standard = self.standard;
         let frame = col().key(format!("{}-menu", self.key)).role("menu").focus_group().min_w(self.min_width).items_stretch();
+        let frame = match self.label.clone() { Some(label) => frame.label(label), None => frame };
         let frame = if standard {
             shadows(k, frame.radius(k.radius.md).fill(c.surface_raised).border(1.0, k.alpha(c.std_border, 0.5)), &k.elevation.md)
         } else {
@@ -403,3 +411,7 @@ impl Menu {
         trigger
     }
 }
+
+#[cfg(test)]
+#[path = "menu_tests.rs"]
+mod tests;
