@@ -371,6 +371,7 @@ use cache_layer::{ActiveCache, AnotherFrame, NodeCache, RasterPass, RasterPhase,
 #[path = "runtime/paint/helpers.rs"]
 mod paint_helpers;
 use paint_helpers::*;
+pub(crate) use paint_helpers::glyph_or_image;
 #[path = "runtime/paint/content.rs"]
 mod paint_content;
 #[path = "runtime/input/hit.rs"]

@@ -135,3 +135,18 @@ impl<S: 'static> Frame<'_, S> {
 pub fn is_glyph(i: &Instance) -> bool {
     i.params[1] == KIND_GLYPH
 }
+
+/// The instance that draws one glyph quad from `TextSystem::glyphs`, `glyphs_for_layout` or
+/// `glyphs_in`: alpha-atlas coverage tinted by `fill` (premultiplied), or a colour glyph's image
+/// placed in `images` at `fill`'s alpha. `clip` is the device-pixel rect it may paint. None when
+/// the image atlas can't place a colour glyph. Emit and convert every visible glyph on each frame
+/// that draws it: atlas placements last until the next frame begins.
+pub fn glyph_instance(
+    q: &crate::text::GlyphQuad,
+    text: &crate::text::TextSystem,
+    images: &mut crate::pixels::ImageAtlas,
+    fill: [f32; 4],
+    clip: [f32; 4],
+) -> Option<Instance> {
+    crate::runtime::glyph_or_image(q, text, images, fill, clip, [0.0; 4])
+}
