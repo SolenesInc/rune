@@ -300,3 +300,17 @@ fn a_commit_records_why_for_the_frame_log() {
         assert_eq!(rt.commit_why & want, want, "source {source}: {:?}", CommitWhy::names(rt.commit_why));
     }
 }
+
+struct Quiet;
+
+#[test]
+fn a_live_only_key_in_a_view_without_live_values_leaves_no_frame_owed() {
+    let mut rt = Runtime::new(Quiet, |_: &Quiet, _: &mut Cx<Quiet>| el().size(100.0, 100.0), (200.0, 200.0), Env::new(true, 1.0));
+    rt.on_key = Some(|_, _, tx| { tx.live_only(); true });
+    rt.check_live_only(false);
+    rt.frame(0.0);
+    rt.frame(1.0);
+    rt.key(KeyEvent { key: Key::Text("x".into()), mods: Mods::default() });
+    rt.frame(1.0 / 60.0);
+    assert!(!rt.live_pending(), "a live-only key with nothing live to read must not keep asking for frames");
+}

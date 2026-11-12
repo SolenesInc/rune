@@ -16,6 +16,7 @@ the patch unneeded.
 | An overlay that gives its GPU back when hidden removes its CAMetalLayer from the view, which otherwise keeps the last drawable (macOS, `overlay/surface.rs`, `platform/macos/surface.rs`) | The surface and its layer are Rune's | `platform::macos::surface::tests::a_released_surface_leaves_no_layer_in_its_view` (macOS) |
 | The macOS app menu names the app from the bundle (`CFBundleDisplayName`, then `CFBundleName`, then the process), for Rune's app items and for winit's default menu, which Rune now adopts and labels (`native_menu/`) | Rune builds and relabels the app menu; an app's own titles are overwritten | `native_menu::standard::tests::the_app_is_named_as_appkit_names_it` |
 | `RUNE_OVERLAY_FRAME_LOG=FILE` writes one JSON line per presented overlay frame: name, time since the first, and `draw_frame` time in ms (`overlay/draw.rs`) | Overlays have no `on_frame_encoded`, and `RUNE_FRAME_LOG` covers windows only | `overlay::tests::each_presented_frame_is_one_line_in_the_log` |
+| A `Tx::live_only` event owes the next frame only when the scene binds live values; without any, the live lane stayed pending and the window drew every frame until the next commit (`runtime/motion/live_check.rs`, `runtime/input/physical.rs`) | The live lane is Rune's; an app that handles keys live-only cannot clear it | `runtime::live_only_tests::a_live_only_key_in_a_view_without_live_values_leaves_no_frame_owed` |
 
 Dropped when the fork moved to upstream `f3ab74c1`:
 
