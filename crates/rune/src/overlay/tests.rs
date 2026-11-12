@@ -660,7 +660,7 @@ fn a_timer_frame_that_changes_nothing_on_screen_draws_nothing() {
     present(&mut overlay, start);
     assert!(overlay.idle, "only the timer asks for another frame");
     let mut quiet = frame::Quiet::default();
-    let record = |slot: &mut Option<crate::window::Presented>| crate::window::Presented::record(slot, &overlay.rt, &config, false);
+    let record = |slot: &mut Option<crate::window::Presented>| crate::window::Presented::record(slot, &overlay.rt, &config);
     quiet.presented_frame(false, record);
     assert!(quiet.presented().is_none(), "a frame it doesn't rest on records nothing");
     quiet.presented_frame(true, record);

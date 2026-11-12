@@ -144,7 +144,7 @@ pub(super) fn turn(gate: Gate, now: impl Fn() -> Instant) -> Turn {
 pub(super) fn quiet_step<T: 'static>(rt: &mut Runtime<T>, clock: &mut FrameClock, presented: &Presented,
     config: &wgpu::SurfaceConfiguration, now: Instant, next_tick: Option<Instant>) -> Option<(bool, f64)> {
     let (animating, dt) = step(rt, clock, &None, now, false);
-    (!presented.unchanged(rt, config, animating, next_tick)).then_some((animating, dt))
+    (!presented.unchanged(rt, config, animating, next_tick, None)).then_some((animating, dt))
 }
 
 /// Whether a frame can leave the runtime as it is, drawing its last build again: after the

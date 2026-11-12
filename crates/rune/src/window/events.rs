@@ -410,7 +410,10 @@ impl<S: 'static> Host<S> {
                     else { rt.key(ev); }
                     redraw |= pressed;
                 }
-                if redraw { l.request_redraw(); }
+                if redraw {
+                    l.timer_frame.asked_by_key();
+                    l.request_redraw();
+                }
             }
             WindowEvent::Ime(ime) => {
                 match ime {

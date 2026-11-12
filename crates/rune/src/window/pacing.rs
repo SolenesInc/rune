@@ -115,16 +115,17 @@ pub(crate) fn timer_wants_frame<S>(rt: &Runtime<S>, next_frame: Option<Instant>)
 /// re-check.
 pub(crate) const TIMER_FRAME_STALL: Duration = OCCLUDED_RETRY;
 
-/// The frame a due timer asked a shown window for, until it draws it, and whether only that timer
-/// asked for it. An overdue timer whose frame never comes would otherwise keep turning the loop
+/// The frame a due timer asked a shown window for, until it draws it, and whether only that timer,
+/// or a key, asked for it. An overdue timer whose frame never comes would otherwise keep turning the loop
 /// (`new_events` asks again, no frame arrives, and `wake_deadline` returns the past timer), so
 /// after `TIMER_FRAME_STALL` the timer runs covered instead and the next ask starts over.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct TimerFrame {
     /// When a due timer asked for a frame the window hasn't drawn yet.
     owed: Option<Instant>,
-    /// Only a timer asked for it, so the frame may draw what is already on screen instead of
-    /// taking a drawable. A window event, or any wake but the display tick, says otherwise. It
+    /// Only a timer or a key asked for it, so the frame may draw what is already on screen
+    /// instead of taking a drawable. Any other window event, or any wake but the display tick,
+    /// says otherwise. It
     /// outlives `drawn`: a draw that returns before its decision leaves the frame for a later one.
     quiet: bool,
 }
@@ -139,6 +140,9 @@ impl TimerFrame {
     /// The frame asked for at the stall bound ran covered in its place, and the next is asked for
     /// from `now`; only a timer asking still holds.
     pub(crate) fn stalled_again(&mut self, now: Instant) { self.owed = Some(now); }
+
+    /// A key asked for a frame: its handlers run in it, and may change nothing on screen.
+    pub(crate) fn asked_by_key(&mut self) { self.quiet = true; }
 
     /// The frame came, or ran covered in its place: nothing waits for it now.
     pub(crate) fn drawn(&mut self) { self.owed = None; }

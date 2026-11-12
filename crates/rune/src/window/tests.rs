@@ -99,7 +99,7 @@ fn a_frame_that_draws_the_same_pixels_is_the_same() {
         color_space: Default::default(),
     };
     let mut presented = None;
-    Presented::record(&mut presented, &rt, &config, false);
+    Presented::record(&mut presented, &rt, &config);
     let p = presented.as_ref().unwrap();
 
     // A poll that says it changed state, but the view draws the same.
@@ -143,15 +143,15 @@ fn a_timer_frame_that_draws_the_same_still_draws_while_a_poll_steps() {
         color_space: Default::default(),
     };
     let mut presented = None;
-    Presented::record(&mut presented, &rt, &config, false);
+    Presented::record(&mut presented, &rt, &config);
     let p = presented.as_ref().unwrap();
     let next_tick = Some(Instant::now() + Duration::from_millis(8));
-    assert!(p.unchanged(&rt, &config, false, next_tick), "a slow timer leaves the drawable");
+    assert!(p.unchanged(&rt, &config, false, next_tick, None), "a slow timer leaves the drawable");
     rt.state = true;
     rt.frame(0.0);
     assert!(p.same(&rt, &config));
-    assert!(!p.unchanged(&rt, &config, false, next_tick), "a step due by the next tick draws");
-    assert!(p.unchanged(&rt, &config, false, None), "without a running link the timer paces it");
+    assert!(!p.unchanged(&rt, &config, false, next_tick, None), "a step due by the next tick draws");
+    assert!(p.unchanged(&rt, &config, false, None, None), "without a running link the timer paces it");
 }
 
 #[cfg(target_os = "macos")]
@@ -199,12 +199,13 @@ fn still(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_af
 fn every_third(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(COMP_PERIOD); *polls % 3 == 0 }
 fn changed(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(COMP_PERIOD); true }
 
-/// A compositor whose `animating` follows a shared flag, as one driven by app state.
-struct FlagComp(std::rc::Rc<std::cell::Cell<bool>>);
+/// A compositor whose `animating` and `redraws` follow shared flags, as one driven by app state.
+struct FlagComp { animates: std::rc::Rc<std::cell::Cell<bool>>, redraws: std::rc::Rc<std::cell::Cell<bool>> }
 
 impl crate::Compositor<u32> for FlagComp {
     fn render(&mut self, f: &mut crate::Frame<'_, u32>) { f.draw_ui(); }
-    fn animating(&self) -> bool { self.0.get() }
+    fn animating(&self) -> bool { self.animates.get() }
+    fn redraws(&self, _: &Runtime<u32>) -> bool { self.redraws.get() }
 }
 
 /// A window as the host runs it, with or without a compositor, counting its frames.
@@ -216,6 +217,8 @@ struct CompHost {
     comp: Option<Box<dyn crate::Compositor<u32>>>,
     /// Whether `comp` animates.
     comp_animates: std::rc::Rc<std::cell::Cell<bool>>,
+    /// Whether `comp` would draw something new (`Compositor::redraws`); true unless a test says.
+    comp_redraws: std::rc::Rc<std::cell::Cell<bool>>,
     frames: u32,
     /// Called where `draw` calls it.
     reports: crate::frame::encoded::FrameReports<u32>,
@@ -239,31 +242,42 @@ impl CompHost {
             color_space: Default::default(),
         };
         let comp_animates = std::rc::Rc::new(std::cell::Cell::new(comp == Some(true)));
-        let comp = comp.map(|_| Box::new(FlagComp(comp_animates.clone())) as Box<dyn crate::Compositor<u32>>);
-        let mut host = Self { rt, presented: None, config, idle: false, comp, comp_animates, frames: 0, reports: Default::default() };
+        let comp_redraws = std::rc::Rc::new(std::cell::Cell::new(true));
+        let comp = comp.map(|_| Box::new(FlagComp { animates: comp_animates.clone(), redraws: comp_redraws.clone() }) as Box<dyn crate::Compositor<u32>>);
+        let mut host = Self { rt, presented: None, config, idle: false, comp, comp_animates, comp_redraws, frames: 0, reports: Default::default() };
         host.frame(false);
         host.rt.poll = Some(poll);
         host.frame(false);
         host
     }
 
-    /// As `draw`: a quiet frame (only a timer asked for it) that draws what's on screen presents
-    /// nothing, unless a compositor draws it. Returns whether it presented.
+    /// As `draw`: a quiet frame (only a timer or a key asked for it) that draws what's on screen
+    /// presents nothing, unless a compositor would draw something new. Returns whether it presented.
     fn frame(&mut self, quiet: bool) -> bool {
         let started = Instant::now();
         self.rt.test_clock.as_mut().unwrap().step();
         let animating = self.rt.frame(crate::frame::clock::RESUME_STEP);
         let update_ms = started.elapsed().as_secs_f64() * 1000.0;
-        if quiet && self.comp.is_none() && self.presented.as_ref().is_some_and(|p| p.unchanged(&self.rt, &self.config, animating, None)) {
+        if quiet && !composing(self.comp.as_deref())
+            && self.presented.as_ref().is_some_and(|p| p.unchanged(&self.rt, &self.config, animating, None, self.comp.as_deref())) {
             self.reports.unchanged(None);
             return false;
         }
         let moving = animating || composing(self.comp.as_deref());
         let encoded = self.reports.stamp();
-        self.idle = Presented::settle(&mut self.presented, &self.rt, &self.config, moving, None, true, self.comp.is_some());
+        self.idle = Presented::settle(&mut self.presented, &self.rt, &self.config, moving, None, true);
         self.frames += 1;
         self.reports.drawn(encoded, None, started, update_ms);
         true
+    }
+
+    /// As `handle_window_event` for a key press: its handlers run in a frame only the key asked
+    /// for (`TimerFrame::asked_by_key`). Returns whether it presented.
+    fn key(&mut self) -> bool {
+        let mods = crate::Mods::default();
+        self.rt.physical_with_fallback(crate::PhysicalInput::Key { key: crate::PhysicalKeyCode::KeyA, mods, pressed: true, repeat: false },
+            Some(crate::KeyEvent { key: crate::Key::Text("a".into()), mods }));
+        self.frame(true)
     }
 
     /// As `new_events` at a due timer: a resting window polls first and asks for a frame only
@@ -319,13 +333,13 @@ fn an_animating_compositor_draws_every_frame() {
 }
 
 #[test]
-fn a_compositor_s_frame_never_counts_as_unchanged() {
+fn a_compositor_that_redraws_never_counts_as_unchanged() {
     let mut host = CompHost::new(Some(false), still);
     host.rt.update(|_, _| {});
     host.rt.frame(crate::frame::clock::RESUME_STEP);
     let p = host.presented.as_ref().unwrap();
-    assert!(!p.same(&host.rt, &host.config), "the same instances may composite differently");
-    assert!(!p.unchanged(&host.rt, &host.config, false, None));
+    assert!(p.same(&host.rt, &host.config));
+    assert!(!p.unchanged(&host.rt, &host.config, false, None, host.comp.as_deref()), "the same instances may composite differently");
     // A changed poll's quiet frame presents.
     let mut host = CompHost::new(Some(false), changed);
     assert!(host.idle && host.presented.is_some());
@@ -337,6 +351,37 @@ fn a_compositor_s_frame_never_counts_as_unchanged() {
     let frames = host.frames;
     assert!(!host.timer_wake());
     assert_eq!(host.frames, frames);
+}
+
+/// A terminal's key handler: the key goes to the shell, and only its echo changes the screen.
+fn sends_the_key_away(_: &mut u32, _: &crate::KeyEvent, tx: &mut Tx) -> bool { tx.live_only(); true }
+
+#[test]
+fn a_key_that_changes_nothing_on_screen_presents_no_frame() {
+    let mut host = CompHost::new(Some(false), still);
+    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.check_live_only(false);
+    host.comp_redraws.set(false);
+    let frames = host.frames;
+    for _ in 0..5 { assert!(!host.key(), "the compositor draws nothing new, so the key's frame takes no drawable"); }
+    assert_eq!(host.frames, frames);
+    assert_eq!(host.rt.live_only_events(), 5, "the handler heard each key");
+    assert!(host.idle && host.presented.is_some(), "the window still rests on the frame on screen");
+    // The echo changes what the compositor draws: its frame presents.
+    host.comp_redraws.set(true);
+    assert!(host.frame(false));
+
+    // A compositor that doesn't say presents the key's frame, as before.
+    let mut host = CompHost::new(Some(false), still);
+    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.check_live_only(false);
+    assert!(host.key());
+
+    // Without a compositor, a key whose frame builds the same instances presents nothing.
+    let mut host = CompHost::new(None, still);
+    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.check_live_only(false);
+    assert!(!host.key());
 }
 
 #[test]
@@ -357,12 +402,12 @@ fn a_frame_that_leaves_work_for_the_next_does_not_settle() {
     assert!(host.idle);
     // The compositor invalidated the view while drawing, as one ending its own motion may.
     host.rt.invalidate();
-    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, true, true);
+    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, true);
     assert!(!idle && host.presented.is_none(), "a frame with a commit pending isn't idle");
     host.frame(false);
     assert!(host.idle && host.presented.is_some(), "the frame that commits it settles");
     // A frame the window may not rest on (hidden, or a trace counting frames) records nothing.
-    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, false, true);
+    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, false);
     assert!(idle && host.presented.is_none());
 }
 

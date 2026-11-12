@@ -62,6 +62,16 @@ pub trait Compositor<S: 'static>: 'static {
     fn draws_own(&self) -> bool {
         true
     }
+
+    /// Whether the next frame would draw anything of the compositor's own differently from the
+    /// frame on screen. A frame that only a key or a due timer asked for, and that builds the
+    /// instances on screen, then presents nothing when this is false. A key handler that sends
+    /// its input elsewhere and calls `Tx::live_only` then costs no frame, so the frame its answer
+    /// asks for presents at once instead of a refresh later. Defaults to `draws_own`.
+    fn redraws(&self, rt: &Runtime<S>) -> bool {
+        let _ = rt;
+        self.draws_own()
+    }
     /// Printed after a headless run (e.g. GPU timings).
     fn summary(&mut self, _device: &wgpu::Device) -> Option<String> {
         None

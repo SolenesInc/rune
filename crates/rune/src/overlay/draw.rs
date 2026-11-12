@@ -275,7 +275,7 @@ impl<T: 'static> Overlay<T> {
         self.idle = idle_after(&self.rt, animating, next_tick);
         self.runtime_idle = !prewarm && idle_after(&self.rt, runtime_animating, next_tick);
         let rt = &self.rt;
-        self.quiet.presented_frame(!prewarm && self.idle && self.compositor.is_none(), |slot| crate::window::Presented::record(slot, rt, &live.config, false));
+        self.quiet.presented_frame(!prewarm && self.idle && self.compositor.is_none(), |slot| crate::window::Presented::record(slot, rt, &live.config));
         if !prewarm { self.backoff.step(crate::window::BackoffEvent::Presented); }
         // The display link wakes this overlay, never ControlFlow::Poll. Without one (it can't
         // be made while the displays sleep, or didn't start), a timer paces its motion.
