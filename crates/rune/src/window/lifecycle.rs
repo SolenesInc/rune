@@ -478,12 +478,16 @@ impl<S: 'static> Host<S> {
     }
 }
 
-/// Runs one `AppHandle::inspect` and handles the input it queued at once, as a hidden window's
-/// queued keys are (`hidden_input`), so the next inspection reads what the input did. Returns
-/// whether the window needs a frame for it: one that only read asks for none.
+/// Runs one `AppHandle::inspect` on a built view: what changed since the last frame builds
+/// first, and the input or changes the inspection made build after it, as a hidden window's
+/// queued keys are (`hidden_input`). A covered window builds no view until it shows again, so
+/// without this an inspection would read the view from before it was covered. Returns whether
+/// the window needs a frame to show it: one that only read a built view asks for none.
 pub(super) fn inspect<S>(rt: &mut Runtime<S>, f: crate::app::Inspection<S>) -> bool {
+    let behind = rt.stale();
+    if behind { rt.hidden_timer_frame(); }
     f(rt);
-    let input = rt.has_pending_input();
-    if input { rt.hidden_timer_frame(); }
-    input || rt.stale()
+    let changed = rt.has_pending_input() || rt.stale();
+    if changed { rt.hidden_timer_frame(); }
+    behind || changed
 }

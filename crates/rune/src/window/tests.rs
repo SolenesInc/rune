@@ -781,3 +781,25 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the read asks for none");
     assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
 }
+
+/// A covered window builds no view for an update until it shows again; an inspection builds it
+/// first, so it reads the update, and asks for a frame to show it.
+#[test]
+fn an_inspection_reads_the_view_an_update_built_without_a_frame() {
+    use crate::{App, AppSpec, el};
+    fn view(n: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        el().key(format!("count-{n}")).w(40.0).h(20.0)
+    }
+    let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (100.0, 100.0), crate::Env::default());
+    rt.frame(0.0);
+    rt.update(|n, _| *n += 1);
+    let (read, seen) = std::sync::mpsc::channel();
+    handle.inspect(move |rt| read.send(rt.find("count-1").is_some()).unwrap());
+    handle.inspect(|_| {});
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the update asks for a frame to show it");
+    assert!(seen.recv().unwrap(), "the inspection read the updated view");
+    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read of a built view asks for none");
+}
