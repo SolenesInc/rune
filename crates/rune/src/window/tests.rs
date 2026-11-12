@@ -712,8 +712,8 @@ fn a_new_gpus_device_equals_the_old_one_but_its_key_differs() {
 }
 
 /// `AppHandle::inspect` as `Host::drain` runs it: a press one inspection feeds the window is
-/// handled before the next inspection reads it, with no frame between, and the drain then asks
-/// the window for a frame to draw what changed.
+/// handled before the next inspection reads it, with no frame between. The press asks the
+/// window for a frame; the read asks for none.
 #[test]
 fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     use crate::{App, AppSpec, el};
@@ -731,9 +731,8 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
         rt.pointer_up(x, y);
     });
     handle.inspect(move |rt| read.send(rt.state).unwrap());
-    let mut requests = shared.take();
-    assert!(!requests.only_updates(), "an inspection asks for a frame");
-    for f in std::mem::take(&mut requests.inspections) { lifecycle::inspect(&mut rt, f); }
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the press asks for a frame");
+    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the read asks for none");
     assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
-    assert!(!rt.has_pending_input());
 }
