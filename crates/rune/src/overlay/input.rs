@@ -76,9 +76,16 @@ impl<T: 'static> Overlay<T> {
         self.apply_input();
         self.apply_cursor();
     }
+    /// Just shown: a press that comes before the view's next commit commits it first.
+    pub(super) fn shown_for_input(&mut self) { self.show_commits = Some(self.rt.stats.commits); }
+
     /// A left press or release, at the panel's click point when it has one.
     pub(super) fn left_button(&mut self, pressed: bool, point: Option<(f32, f32)>) {
         if pressed {
+            // Shown, the window takes the pointer before the frame that first lays its view
+            // out. A press in between would hit the tree of the last show, or none at all,
+            // and its drag would go nowhere: lay the view out first.
+            if self.show_commits.take() == Some(self.rt.stats.commits) { self.commit_at(Instant::now()); }
             if let Some((x, y)) = point { self.rt.pointer_move(x, y); }
             if let Some((x, y)) = self.rt.pointer() {
                 self.rt.pointer_down(x, y);

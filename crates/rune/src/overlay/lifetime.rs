@@ -46,6 +46,7 @@ impl<T: 'static> Overlay<T> {
             if !self.presence.occluded() { self.ensure_pacing(); }
         }
         if !self.retained() { self.dirty = true; }
+        self.shown_for_input();
         self.idle &= !(self.rt.animating || self.compositor.as_ref().is_some_and(|c| c.animating()));
     }
 

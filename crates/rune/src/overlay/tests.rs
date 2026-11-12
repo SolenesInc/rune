@@ -679,3 +679,4 @@ fn a_timer_frame_that_changes_nothing_on_screen_draws_nothing() {
 
 
 include!("more_tests.rs");
+include!("fork_tests.rs");

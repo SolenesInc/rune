@@ -366,6 +366,9 @@ pub(crate) struct Overlay<T: 'static> {
     backoff: crate::window::Backoff,
     /// When a hidden retained overlay commits the changes it hasn't yet.
     hidden_pace: crate::window::HiddenPace,
+    /// The runtime's view commits when the overlay last showed, until its next press: a
+    /// press before any commit since lays the view out first (`left_button`).
+    show_commits: Option<u64>,
     #[cfg(target_os = "macos")]
     frame_wake: Option<Waker>,
     meter: crate::frame::surface_stats::SurfaceMeter,
@@ -440,6 +443,7 @@ impl<T: 'static> Overlay<T> {
             occlusion_read: false,
             backoff: Default::default(),
             hidden_pace: Default::default(),
+            show_commits: None,
             #[cfg(target_os = "macos")]
             frame_wake: None,
             meter,
