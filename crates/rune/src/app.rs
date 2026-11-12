@@ -781,8 +781,9 @@ impl<S: 'static> AppHandle<S> {
     /// for a tool that reads a live window (`Runtime::elements`, `accessibility_json`) or
     /// feeds it input (`Runtime::key`, `pointer_down`). Input `f` queues is handled before the
     /// next inspection runs, without waiting for a frame, so a covered or occluded window
-    /// handles it too; the window then draws what changed as it would for an update. Desktop
-    /// windows run it; other hosts drop `f` unrun.
+    /// handles it too; the window then draws what changed as it would for an update, and an
+    /// inspection that only read draws nothing. Desktop windows run it; other hosts drop `f`
+    /// unrun.
     pub fn inspect(&self, f: impl FnOnce(&mut crate::Runtime<S>) + Send + 'static) {
         self.request(|q| q.inspections.push(Box::new(f)));
     }
@@ -844,7 +845,7 @@ impl<S: 'static> Requests<S> {
 
     /// Nothing but updates: no wake for `poll`, no window, focus or geometry request.
     pub(crate) fn only_updates(&self) -> bool {
-        !self.woken && !self.asks_window() && self.inspections.is_empty()
+        !self.woken && !self.asks_window()
     }
 }
 
