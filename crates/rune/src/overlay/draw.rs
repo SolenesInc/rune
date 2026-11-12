@@ -61,6 +61,7 @@ impl<T: 'static> Overlay<T> {
     }
 
     pub(super) fn draw_frame(&mut self, prewarm: bool) -> bool {
+        let started = Instant::now();
         let timer = !self.quiet.step(frame::QuietEvent::FrameStarts).is_empty();
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         if let Some(Live { backing: Backing::Layer(layer), .. }) = self.surface.live_mut() {
@@ -262,7 +263,10 @@ impl<T: 'static> Overlay<T> {
         frame::submit_and_present(live, renderer, gpu, &self.rt, enc, frame, prewarm);
         crate::render::gpu_events::presented();
         self.clock.presented(&mut self.rt, Instant::now());
-        if !prewarm { self.meter.presented(); }
+        if !prewarm {
+            self.meter.presented();
+            frame_log::drew(self.name, started);
+        }
         self.dirty = false;
         #[cfg(target_os = "macos")]
         let next_tick = live.pacing.as_ref().filter(|p| !prewarm && p.running()).map(|p| Instant::now() + Duration::from_secs_f64(1.0 / p.refresh_hz()));
@@ -403,5 +407,31 @@ impl<T: 'static> Overlay<T> {
         }, &mut self.compositor);
         renderer.submit(&gpu.queue, enc);
         let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+    }
+}
+
+/// `RUNE_OVERLAY_FRAME_LOG=FILE`: one JSON line per frame an overlay presents, with its name,
+/// when the frame ended since the first logged one and how long `draw_frame` took, in ms.
+/// Overlays have no `on_frame_encoded`, so this is how an app reads their frame times.
+pub(super) mod frame_log {
+    use std::{io::Write, sync::{Mutex, OnceLock}};
+
+    use crate::time::Instant;
+
+    pub(in crate::overlay) fn drew(name: &str, started: Instant) {
+        static LOG: OnceLock<Option<Mutex<(std::fs::File, Instant)>>> = OnceLock::new();
+        let log = LOG.get_or_init(|| {
+            let path = std::env::var_os("RUNE_OVERLAY_FRAME_LOG")?;
+            let file = std::fs::File::create(&path).unwrap_or_else(|e| panic!("RUNE_OVERLAY_FRAME_LOG {}: {e}", path.to_string_lossy()));
+            Some(Mutex::new((file, Instant::now())))
+        });
+        let Some(log) = log else { return };
+        let (file, first) = &mut *log.lock().unwrap();
+        let now = Instant::now();
+        let _ = writeln!(file, "{}", serde_json::json!({
+            "name": name,
+            "t_ms": now.duration_since(*first).as_secs_f64() * 1000.0,
+            "ms": now.duration_since(started).as_secs_f64() * 1000.0,
+        }));
     }
 }

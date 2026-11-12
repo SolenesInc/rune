@@ -26,3 +26,23 @@ fn a_press_before_the_first_frame_after_show_reaches_the_view() {
     assert_eq!(phases.first(), Some(&crate::Phase::Down), "{phases:?}");
     assert_eq!(phases.last(), Some(&crate::Phase::Up), "{phases:?}");
 }
+
+/// `RUNE_OVERLAY_FRAME_LOG`: an app reads an overlay's frame times from the log.
+#[test]
+fn each_presented_frame_is_one_line_in_the_log() {
+    let path = std::env::temp_dir().join(format!("rune-overlay-frame-log-{}.jsonl", std::process::id()));
+    // SAFETY: no other test in this process reads or writes this variable.
+    unsafe { std::env::set_var("RUNE_OVERLAY_FRAME_LOG", &path) };
+    let started = Instant::now();
+    super::draw::frame_log::drew("picker", started);
+    super::draw::frame_log::drew("picker", started);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let lines: Vec<serde_json::Value> = text.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(lines.len(), 2, "{text}");
+    for line in &lines {
+        assert_eq!(line["name"], "picker");
+        assert!(line["ms"].as_f64().is_some_and(|ms| ms >= 0.0), "{line}");
+    }
+    assert!(lines[1]["t_ms"].as_f64() >= lines[0]["t_ms"].as_f64(), "{text}");
+}
