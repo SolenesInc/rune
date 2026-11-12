@@ -275,10 +275,12 @@ wrap_render_handler! {
             if type_ != PaintElementType::VIEW || buffer.is_null() {
                 return;
             }
+            let started = Instant::now();
             let n = (width * height * 4) as usize;
             let bytes = unsafe { std::slice::from_raw_parts(buffer, n) }.to_vec();
             let id = self.tile.frame_id.get() + 1;
             self.tile.frame_id.set(id);
+            self.tile.copy_ms.set(self.tile.copy_ms.get() + started.elapsed().as_secs_f64() * 1000.0);
             let _ = self.tile.surface.push_bytes(rune::native_surface::ByteFrame { width: width as u32, height: height as u32, format: rune::native_surface::Format::Bgra, color: Default::default(), planes: [bytes, vec![]] }, id);
             self.tile.frames.set(self.tile.frames.get() + 1);
         }
