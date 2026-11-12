@@ -589,7 +589,7 @@ impl BrowserHost for Cef {
         if self.started {
             PUMP_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             do_message_loop_work();
-            schedule(MAX_PUMP_DELAY_MS);
+            schedule(std::env::var("BT_PUMP_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_PUMP_DELAY_MS));
         }
     }
     fn stats(&self) -> serde_json::Value {
