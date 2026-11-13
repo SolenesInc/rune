@@ -157,6 +157,8 @@ fn a_details_block_opens_and_closes_from_its_summary_as_the_app_says() {
     let summary = || |rt: &Runtime<Disclosed>| rt.elements().into_iter().find(|e| e.role == "button" && e.label.as_deref() == Some("More")).expect("the summary");
     assert_eq!(summary()(&rt).expanded, Some(false));
     assert!(!names(&rt, "label").iter().any(|l| l == "Hidden body"));
+    let markers = |rt: &Runtime<Disclosed>| rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("marker")).map(|e| e.role).collect::<Vec<_>>();
+    assert_eq!(markers(&rt), ["icon"], "the marker is drawn, not set in a font that may lack it");
 
     let r = summary()(&rt).rect;
     let (x, y) = (r[0] + 4.0, r[1] + r[3] * 0.5);

@@ -814,7 +814,8 @@ impl Renderer {
                 let wire = self.details.as_ref().zip(at);
                 let shown = wire.as_ref().map_or(true, |(d, at)| (d.open)(*at, *open));
                 let drawn = self.blocks(body, body_maps, &[], false);
-                let marker = text(if shown { "\u{25BE}" } else { "\u{25B8}" }).font(s.body).color(s.muted).w(16.0).a11y_hidden();
+                let marker = row().w(16.0).items_center().a11y_hidden()
+                    .child(icon(if shown { &crate::glyphs::TRIANGLE_DOWN } else { &crate::glyphs::TRIANGLE_RIGHT }, 16.0).key("marker").color(s.muted));
                 let mut head = row()
                     .key("summary")
                     .role("button")
