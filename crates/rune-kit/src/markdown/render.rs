@@ -253,10 +253,13 @@ fn shift_past(tabs: &Tabs, b: usize) -> usize {
     }
 }
 
-fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, presses: Vec<(Range<usize>, String)>, style: TextStyle) -> El {
+fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, (presses, strikes): (Vec<(Range<usize>, String)>, Vec<Range<usize>>), style: TextStyle) -> El {
     let (shown, tabs) = tabs_padded(code, style);
     let shift = |b: u32| shift_past(&tabs, b as usize) as u32;
-    let pressed = |el: El| presses.iter().fold(el, |el, (r, id)| el.link(press_link(shift(r.start as u32) as usize..shift(r.end as u32) as usize, id)));
+    let pressed = |el: El| {
+        let el = presses.iter().fold(el, |el, (r, id)| el.link(press_link(shift(r.start as u32) as usize..shift(r.end as u32) as usize, id)));
+        el.strikes(strikes.iter().map(|r| (shift(r.start as u32) as usize, shift(r.end as u32) as usize, None)))
+    };
     if tabs.is_empty() {
         return pressed(rich(shown, spans).text_highlights(highlights));
     }
@@ -365,6 +368,11 @@ impl Renderer {
         self.highlights.iter().enumerate().flat_map(|(idx, (src_ranges, _))| map.map_ranges(src_ranges, text).into_iter().map(move |r| (r, idx))).collect()
     }
 
+    /// The byte ranges of `marks` whose highlights strike their words through.
+    fn strikes(&self, marks: &[(Range<usize>, usize)]) -> Vec<Range<usize>> {
+        marks.iter().filter(|(_, idx)| self.highlights[*idx].1.strike).map(|(r, _)| r.clone()).collect()
+    }
+
     fn text_highlights(&self, marks: &[(Range<usize>, usize)]) -> Vec<TextHighlight> {
         marks.iter().map(|(r, idx)| self.make_text_highlight(*idx, r.clone(), &self.highlights[*idx].1)).collect()
     }
@@ -402,7 +410,7 @@ impl Renderer {
             }
         }
         let marks = self.marks_for(&inl.text, map);
-        e = e.text_highlights(self.text_highlights(&marks));
+        e = e.text_highlights(self.text_highlights(&marks)).strikes(self.strikes(&marks).into_iter().map(|r| (r.start, r.end, None)));
         let e = self.wire_link(self.link_icons(e, inl), inl);
         let links: Vec<Range<usize>> = if self.on_link.is_some() || self.on_link_secondary.is_some() { inl.links.iter().map(|(a, b, _)| *a..*b).collect() } else { Vec::new() };
         let presses = self.presses(&marks, &links);
@@ -505,7 +513,7 @@ impl Renderer {
             None => (s.code_block_fill, s.code_block_border, s.code_text.unwrap_or(s.text)),
         };
         let spans = if shell.is_some() { Vec::new() } else { self.syntax_spans(code, source) };
-        let body = self.wire_presses(self.with_reveal(tabbed(code, spans, highlights, presses, s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2), any);
+        let body = self.wire_presses(self.with_reveal(tabbed(code, spans, highlights, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2), any);
         // `.highlights`' `border: 0.5px` takes its device pixel each side, inside which the padding sits.
         // Code reads left to right in any document, as `markdown.css` isolates it.
         let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(0.5, border).border_layout();
@@ -564,7 +572,7 @@ impl Renderer {
                 .key(format!("l{n}"))
                 .w_full()
                 .px(s.code_block_pad[0])
-                .child(self.select(self.wire_presses(self.with_reveal(tabbed(shown, Vec::new(), line_hl, presses, s.code_block).font(s.code_block).color(color).wrap()), any).w_full()
+                .child(self.select(self.wire_presses(self.with_reveal(tabbed(shown, Vec::new(), line_hl, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(color).wrap()), any).w_full()
                     .copy_breaks(if n == 0 { 2 } else { 1 }, if n == last { 2 } else { 1 })));
             if let Some(t) = tint {
                 r = r.fill(t);

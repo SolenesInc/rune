@@ -349,3 +349,20 @@ fn a_highlight_is_a_button_over_its_glyphs_beside_the_links_inside_it() {
     assert!(rt.selected_text().is_some_and(|t| t.starts_with("his link pass")), "a drag from inside a mark selects: {:?}", rt.selected_text());
     assert_eq!(rt.state.heard.len(), 4, "and presses nothing");
 }
+
+#[test]
+fn a_struck_highlight_draws_a_line_through_its_words_in_prose_and_in_code() {
+    const SRC: &str = "Cut these words here.\n\n```\nlet cut = 1;\n```\n";
+    fn struck(src: &String, _: &mut Cx<String>) -> El {
+        let at = |s: &str| SRC.find(s).unwrap()..SRC.find(s).unwrap() + s.len();
+        let marks = vec![(vec![at("these words")], Highlight::new().strike()), (vec![at("cut")], Highlight::new().strike()), (vec![at("here")], Highlight::new())];
+        col().w_full().child(Markdown::new(src.clone()).highlights(marks).build(&Kit::neutral(true)))
+    }
+    let mut rt = Runtime::new(SRC.to_owned(), struck, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let strikes = |shown: &str| {
+        rt.elements().into_iter().find(|e| e.text.as_deref() == Some(shown)).map(|e| e.strikes).unwrap_or_else(|| panic!("no text {shown:?}"))
+    };
+    assert_eq!(strikes("Cut these words here."), vec![[4, 15]]);
+    assert_eq!(strikes("let cut = 1;"), vec![[4, 7]]);
+}
