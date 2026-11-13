@@ -140,6 +140,13 @@ impl<S: 'static> Runtime<S> {
     pub(super) fn takes_focus(&self, n: &Node) -> bool {
         n.focus.enabled || (self.defaults.web_focus && !n.focus.opt_out && n.handlers.on_press.is_some() && PRESSABLE_ROLES.contains(&n.role))
     }
+    /// A press on `n` leaves focus where it was under [`crate::Cx::controls_keep_focus`].
+    pub(super) fn control_keeps_focus(&self, n: &Node) -> bool {
+        self.defaults.controls_keep_focus
+            && n.focus.key.is_none()
+            && n.handlers.on_press.is_some()
+            && PRESSABLE_ROLES.contains(&n.role)
+    }
     pub(super) fn can_focus(&self, i: usize) -> bool {
         let n = &self.nodes[i];
         (self.takes_focus(n) || n.input.as_ref().is_some_and(|s| s.access.is_some())) && self.reachable(i)
