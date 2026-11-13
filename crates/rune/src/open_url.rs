@@ -46,6 +46,17 @@ pub(crate) struct Link {
     pub url: String,
     /// `Tx::open_url_same_tab`: replace the page on web rather than open a tab.
     pub same_tab: bool,
+    /// `Tx::reveal_path`: `url` is a path to show in the file manager.
+    pub reveal: bool,
+}
+
+/// The path to reveal, or why it can't be: it must be absolute and free of control characters.
+pub(crate) fn check_path(path: &str) -> Result<String, OpenUrlError> {
+    if path.is_empty() { return Err(OpenUrlError::Empty); }
+    if path.len() > MAX_LEN || path.chars().any(char::is_control) || !std::path::Path::new(path).is_absolute() {
+        return Err(OpenUrlError::Invalid);
+    }
+    Ok(path.to_owned())
 }
 
 /// The link to open, trimmed and with a lowercase scheme, or why it can't be.
@@ -158,8 +169,17 @@ impl<S: 'static> Runtime<S> {
     /// headless run or test, none in a window. Each was already checked.
     pub fn take_url_requests(&mut self) -> Vec<String> { std::mem::take(&mut self.url_requests) }
 
+    /// Takes the paths handlers asked to reveal that this runtime didn't reveal: all of them in
+    /// a headless run or test, none in a window. Each was already checked.
+    pub fn take_reveal_requests(&mut self) -> Vec<String> { std::mem::take(&mut self.reveal_requests) }
+
     pub(crate) fn open_urls(&mut self, links: Vec<Link>) {
         for link in links {
+            if link.reveal {
+                if !self.open_urls_natively { self.reveal_requests.push(link.url); }
+                else if let Err(e) = reveal(&link.url) { eprintln!("rune: reveal_path({}): {e}", link.url); }
+                continue;
+            }
             if self.open_urls_natively {
                 #[cfg(target_arch = "wasm32")]
                 let opened = if link.same_tab { crate::platform::web::open_url_same_tab(&link.url).map_err(OpenUrlError::Failed) } else { open(&link.url) };
@@ -235,6 +255,32 @@ fn open(url: &str) -> Result<(), OpenUrlError> {
 #[cfg(not(any(target_arch = "wasm32", target_os = "macos", target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android"))))))]
 fn open(_: &str) -> Result<(), OpenUrlError> { Err(OpenUrlError::Failed("this platform can't open links".into())) }
 
+#[cfg(target_os = "macos")]
+fn reveal(path: &str) -> Result<(), OpenUrlError> { spawn_reaped(std::process::Command::new("/usr/bin/open").arg("-R").arg(path)) }
+
+#[cfg(target_os = "windows")]
+fn reveal(path: &str) -> Result<(), OpenUrlError> {
+    spawn_reaped(std::process::Command::new("explorer.exe").arg(format!("/select,{path}")))
+}
+
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+fn reveal(path: &str) -> Result<(), OpenUrlError> {
+    let folder = std::path::Path::new(path).parent().unwrap_or(std::path::Path::new("/"));
+    spawn_reaped(std::process::Command::new("xdg-open").arg(folder))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android")))))]
+fn spawn_reaped(command: &mut std::process::Command) -> Result<(), OpenUrlError> {
+    let mut child = command
+        .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+        .spawn().map_err(|e| OpenUrlError::Failed(e.to_string()))?;
+    std::thread::spawn(move || { let _ = child.wait(); });
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(any(target_arch = "wasm32", target_os = "ios", target_os = "android"))))))]
+fn reveal(_: &str) -> Result<(), OpenUrlError> { Err(OpenUrlError::Failed("this platform can't reveal files".into())) }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,6 +336,24 @@ mod tests {
         rt.frame(0.0);
         rt.update(|_, tx| tx.open_uri("file:///tmp/notes.md").unwrap());
         rt.frame(0.0);
+        assert_eq!(rt.take_url_requests(), ["file:///tmp/notes.md"]);
+    }
+
+    #[test]
+    fn reveal_path_takes_absolute_paths_and_headless_runs_record_them_apart_from_links() {
+        let mut rt = Runtime::new((), |_: &(), _: &mut Cx<()>| el(), (10.0, 10.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let mut results = Vec::new();
+        rt.update(|_, tx| {
+            results.push(tx.reveal_path("/tmp/seed/report.pdf"));
+            results.push(tx.reveal_path("notes/report.pdf"));
+            results.push(tx.reveal_path("/tmp/a\nb"));
+            results.push(tx.reveal_path(""));
+            results.push(tx.open_uri("file:///tmp/notes.md"));
+        });
+        rt.frame(0.0);
+        assert_eq!(results, [Ok(()), Err(OpenUrlError::Invalid), Err(OpenUrlError::Invalid), Err(OpenUrlError::Empty), Ok(())]);
+        assert_eq!(rt.take_reveal_requests(), ["/tmp/seed/report.pdf"]);
         assert_eq!(rt.take_url_requests(), ["file:///tmp/notes.md"]);
     }
 

@@ -435,7 +435,7 @@ impl Tx {
     /// own) and malformed links are refused here with the reason and nothing opens. Headless
     /// runs and tests open nothing; read the requests with `Runtime::take_url_requests`.
     pub fn open_url(&mut self, url: &str) -> Result<(), crate::open_url::OpenUrlError> {
-        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check(url)?, same_tab: false });
+        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check(url)?, same_tab: false, reveal: false });
         Ok(())
     }
 
@@ -443,7 +443,17 @@ impl Tx {
     /// opens with whatever handles it. Malformed links are still refused. On web it allows only
     /// what `open_url` does. Headless runs record it with the others.
     pub fn open_uri(&mut self, uri: &str) -> Result<(), crate::open_url::OpenUrlError> {
-        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_any_scheme(uri)?, same_tab: false });
+        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_any_scheme(uri)?, same_tab: false, reveal: false });
+        Ok(())
+    }
+
+    /// Show the file or folder at `path` selected in the system's file manager once this
+    /// handler's frame is done: Finder on macOS, Explorer on Windows; Linux opens the folder
+    /// that holds it. A path that isn't absolute, or holds control characters, is refused here
+    /// and nothing opens. Headless runs and tests reveal nothing; read the requests with
+    /// `Runtime::take_reveal_requests`.
+    pub fn reveal_path(&mut self, path: &str) -> Result<(), crate::open_url::OpenUrlError> {
+        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_path(path)?, same_tab: false, reveal: true });
         Ok(())
     }
 
@@ -453,7 +463,7 @@ impl Tx {
     /// On web a link without a scheme (`/notes/42`) is relative to the page. Native opens it as
     /// `open_url` does, and headless runs record it with the others.
     pub fn open_url_same_tab(&mut self, url: &str) -> Result<(), crate::open_url::OpenUrlError> {
-        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_same_tab(url)?, same_tab: true });
+        self.open_urls.push(crate::open_url::Link { url: crate::open_url::check_same_tab(url)?, same_tab: true, reveal: false });
         Ok(())
     }
 
