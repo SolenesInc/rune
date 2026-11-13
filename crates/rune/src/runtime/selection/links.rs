@@ -360,6 +360,7 @@ impl<S: 'static> Runtime<S> {
                     expanded: None,
                     item_selected: false,
                     help: l.help.clone(),
+                    strikes: Vec::new(),
                     ..text.clone()
                 });
             }
@@ -486,6 +487,7 @@ impl<S: 'static> Runtime<S> {
                     level: None,
                     expanded: None,
                     item_selected: false,
+                    strikes: Vec::new(),
                     ..text.clone()
                 });
             }
