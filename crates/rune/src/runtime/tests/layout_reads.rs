@@ -63,3 +63,23 @@ fn a_virtual_row_reads_where_it_draws_with_rows_culled_above() {
     let label_drawn = rt.elements().into_iter().find(|e| e.path.contains("/r27/") && e.key.as_deref() == Some("label")).map(|e| e.rect);
     assert_eq!(label, label_drawn, "so does an element inside it");
 }
+
+type Sizes = std::rc::Rc<std::cell::RefCell<[Option<[f32; 2]>; 2]>>;
+
+fn fractions(seen: &Sizes, cx: &mut Cx<Sizes>) -> El {
+    *seen.borrow_mut() = [cx.layout_size("part"), cx.layout_size("over")];
+    col().child(
+        col().w(400.0).h(300.0)
+            .child(el().key("part").w_frac(0.25).h_frac(0.5))
+            .child(el().key("over").w_frac(1.0 / 0.8).h_frac(1.0 / 0.8)),
+    )
+}
+
+#[test]
+fn fractions_size_an_element_by_its_parents_width_and_height() {
+    let seen = Sizes::default();
+    let mut rt = Runtime::new(std::rc::Rc::clone(&seen), fractions, (800.0, 600.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(*seen.borrow(), [Some([100.0, 150.0]), Some([500.0, 375.0])]);
+}
