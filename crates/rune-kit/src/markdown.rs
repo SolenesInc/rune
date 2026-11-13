@@ -44,7 +44,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::rc::Rc;
 
-use pulldown_cmark::{Alignment, BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, MetadataBlockKind, Options, Parser, Tag, TagEnd};
 use rune::{Align, Color, Cursor, El, Family, Link, LinkPaint, Span, TextHighlight, TextStyle, Tx, col, el, icon, rich, row, text};
 
 use crate::Kit;
@@ -119,6 +119,9 @@ pub enum Block {
     /// A GFM alert: a quote whose first line is `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`,
     /// `[!WARNING]` or `[!CAUTION]`, which it does not show.
     Alert(Alert, Vec<Block>),
+    /// YAML front matter: the lines between a `---` that opens the document and the `---` or
+    /// `...` that closes it.
+    FrontMatter(String),
     Rule,
     /// A GFM table.
     Table(Table),
@@ -171,6 +174,7 @@ type TaskWire = Rc<dyn Fn(El, Rc<str>, usize, bool) -> El>;
 type FrameWire = Rc<dyn Fn(El, &DiagramFrame<'_>) -> El>;
 type CodeWire = Rc<dyn Fn(El, &CodeFrame<'_>) -> El>;
 type QuoteWire = Rc<dyn Fn(El, &QuoteFrame<'_>) -> El>;
+type FrontMatterWire = Rc<dyn Fn(El, &str) -> El>;
 
 /// A block quote [`Markdown::quote_frame`] is wrapping.
 #[non_exhaustive]
@@ -236,6 +240,7 @@ pub struct Markdown {
     diagram_frame: Option<FrameWire>,
     code_frame: Option<CodeWire>,
     quote_frame: Option<QuoteWire>,
+    front_matter_frame: Option<FrontMatterWire>,
     link_favicon: Option<link_icon::FaviconWire>,
     images: Option<image::ImageWire>,
     on_image: Option<image::ImagePress>,
@@ -251,7 +256,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, code_frame: None, quote_frame: None, link_favicon: None, images: None, on_image: None }
+            diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -424,6 +429,13 @@ impl Markdown {
         self
     }
 
+    /// Draws `f(block, yaml)` in place of the document's front matter, which by default shows as
+    /// its YAML in muted monospace, so an app can lay out its fields.
+    pub fn front_matter_frame(mut self, f: impl Fn(El, &str) -> El + 'static) -> Self {
+        self.front_matter_frame = Some(Rc::new(f));
+        self
+    }
+
     /// Colours code blocks with `f` instead of the built-in highlighter: it gets a fence's language
     /// as written (its info string's first word; `None` for an indented block or a bare fence)
     /// and the code, and returns byte ranges of the code with a token kind, which the style's
@@ -465,6 +477,7 @@ impl Markdown {
             && self.highlighter.is_builtin()
             && self.code_frame.is_none()
             && self.quote_frame.is_none()
+            && self.front_matter_frame.is_none()
             && self.link_favicon.is_none()
             && self.images.is_none()
             && self.on_image.is_none()
@@ -507,7 +520,7 @@ impl Markdown {
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]
-            diagram_frame: self.diagram_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
+            diagram_frame: self.diagram_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
         // The document reads the way its first words do; until any arrive, the way it was asked.
         let root = bidi::directed(r.blocks(&blocks, &maps, &keys, true), bidi::blocks_dir(&blocks).or(self.tentative)).selection_group(self.selectable);
         if !(self.selectable && self.copy_source) { return root; }

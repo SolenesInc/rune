@@ -180,6 +180,7 @@ enum Fence {
     Diff,
     /// A mermaid fence; whether its closing fence has arrived.
     Mermaid(bool),
+    FrontMatter,
 }
 
 /// An emphasis, strong, strike or link run that has started and not yet ended.
@@ -232,7 +233,7 @@ impl Builder {
             let (lang, closed) = match fence {
                 Fence::Plain(lang, closed) => (lang, closed),
                 Fence::Mermaid(closed) => (Some("mermaid".into()), closed),
-                Fence::Diff => (None, true),
+                Fence::Diff | Fence::FrontMatter => (None, true),
             };
             let coloured = if closed || line_ended { code.len() } else { code.rfind('\n').unwrap_or(0) };
             self.sources.push(Source { lang, len: code.len(), coloured, open: !closed });
@@ -464,13 +465,13 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         image_dests: Vec::new(),
         tail: Tail::None,
     };
-    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM;
+    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
     let mut events = super::interrupt::list_interrupts(src, Parser::new_ext(src, opts).into_offset_iter());
     while let Some((ev, range)) = events.next() {
         let starts_block = matches!(
             ev,
             Event::Start(
-                Tag::Paragraph | Tag::Heading { .. } | Tag::CodeBlock(_) | Tag::BlockQuote(_) | Tag::List(_) | Tag::Table(_) | Tag::HtmlBlock
+                Tag::Paragraph | Tag::Heading { .. } | Tag::CodeBlock(_) | Tag::BlockQuote(_) | Tag::List(_) | Tag::Table(_) | Tag::HtmlBlock | Tag::MetadataBlock(_)
             ) | Event::Rule
         );
         if starts_block && b.stack.len() == 1 && b.code.is_none() {
@@ -524,6 +525,10 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                         CodeBlockKind::Indented => Fence::Plain(None, true),
                     };
                     b.code = Some((String::new(), fence, SpanMap::default()));
+                }
+                Tag::MetadataBlock(MetadataBlockKind::YamlStyle) => {
+                    b.flush_inline();
+                    b.code = Some((String::new(), Fence::FrontMatter, SpanMap::default()));
                 }
                 Tag::BlockQuote(kind) => {
                     b.flush_inline();
@@ -586,7 +591,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
             },
             Event::End(tag) => match tag {
                 TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::TableCell => b.flush_inline(),
-                TagEnd::CodeBlock => {
+                TagEnd::CodeBlock | TagEnd::MetadataBlock(_) => {
                     if let Some((text, fence, map)) = b.code.take() {
                         b.push_code(text, fence, map, false);
                     }
@@ -691,6 +696,10 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         *blocks.last_mut().unwrap() = Block::Table(t);
         *maps.last_mut().unwrap() = map;
     }
+    // Front matter that has not closed yet would read as a rule and text from any later cut.
+    if src.lines().next().is_some_and(|l| l.trim_end() == "---") && !matches!(blocks.first(), Some(Block::FrontMatter(_))) {
+        b.cuts.retain(|c| c.at == 0);
+    }
     ((blocks, b.sources, b.tasks, b.cuts, b.block_starts, maps), b.tail)
 }
 
@@ -699,6 +708,7 @@ fn code_block(text: String, fence: &Fence) -> Block {
         Fence::Plain(..) => Block::Code(text),
         Fence::Diff => Block::Diff(text),
         Fence::Mermaid(_) => Block::Mermaid(text),
+        Fence::FrontMatter => Block::FrontMatter(text),
     }
 }
 

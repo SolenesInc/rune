@@ -63,7 +63,7 @@ fn plain(blocks: &[Block], tasks: &[Option<(bool, usize)>], task: &mut usize, co
                 let rows: Vec<String> = std::iter::once(row(&t.head)).chain(t.rows.iter().map(|r| row(r))).collect();
                 out.push(Piece { breaks: [1, 1], text: rows.join("\n") });
             }
-            Block::Image { .. } | Block::Rule => {}
+            Block::Image { .. } | Block::Rule | Block::FrontMatter(_) => {}
         }
     }
 }

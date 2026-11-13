@@ -37,6 +37,8 @@ pub(super) struct Renderer {
     pub(super) code_frame: Option<CodeWire>,
     /// `Markdown::quote_frame`.
     pub(super) quote_frame: Option<QuoteWire>,
+    /// `Markdown::front_matter_frame`.
+    pub(super) front_matter_frame: Option<FrontMatterWire>,
     /// `Markdown::link_favicon`.
     pub(super) link_favicon: Option<link_icon::FaviconWire>,
     /// `Markdown::images` and `Markdown::on_image`.
@@ -151,6 +153,7 @@ pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
         Block::Code { .. } | Block::Diff(_) | Block::Mermaid(_) => (s.code_margin[0], s.code_margin[1]),
         Block::List { .. } => (8.0, 12.0),
         Block::Quote(_) | Block::Alert(..) => (16.0, 16.0),
+        Block::FrontMatter(_) => (0.0, 16.0),
         Block::Rule => (32.0, 32.0),
         Block::Table(_) => (s.table_margin[0], s.table_margin[1]),
         Block::Image { .. } => (24.0, 24.0),
@@ -606,6 +609,13 @@ impl Renderer {
                 }
             }
             Block::Diff(src) => self.diff(src, code_map),
+            Block::FrontMatter(yaml) => {
+                let block = text(yaml.as_str()).font(s.code_block).color(s.muted).role("note").label("Front matter").w_full();
+                match &self.front_matter_frame {
+                    Some(f) => f(block, yaml),
+                    None => block,
+                }
+            }
             Block::Mermaid(src) => {
                 let n = self.next_source.get();
                 self.next_source.set(n + 1);

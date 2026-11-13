@@ -1,0 +1,1 @@
+- `Markdown` parses YAML front matter as `Block::FrontMatter` and draws it as muted YAML, or as `Markdown::front_matter_frame` lays it out. A match on `Block` needs the new variant.

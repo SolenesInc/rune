@@ -16,7 +16,7 @@ fn shown(blocks: &[Block]) -> String {
                         out.extend(row[..n].iter().map(|i| i.text.clone()));
                     }
                 }
-                Block::Code(c) | Block::Diff(c) | Block::Mermaid(c) => out.push(c.clone()),
+                Block::Code(c) | Block::Diff(c) | Block::Mermaid(c) | Block::FrontMatter(c) => out.push(c.clone()),
                 Block::Image { alt, .. } => out.push(alt.clone()),
                 Block::Rule => {}
             }
