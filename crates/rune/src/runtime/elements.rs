@@ -33,6 +33,8 @@ pub struct ElementInfo {
     pub radius: f32,
     pub fill: Color,
     pub text_color: Option<Color>,
+    /// The byte ranges of its text drawn struck through ([`El::strike`](crate::El::strike)).
+    pub strikes: Vec<[u32; 2]>,
     pub hover: f32,
     pub press: f32,
     pub moving: bool,
@@ -324,6 +326,7 @@ impl<S: 'static> Runtime<S> {
                     fill: self.color(n.id, P_FILL, n.vis.fill),
                     text_color: paint_tracks::text_color(n)
                         .map(|c| paint_tracks::group_tint(n, self.color(n.id, P_TEXT, c), self.inh_scratch.get(i).map_or(0.0, |h| h.group))),
+                    strikes: n.text.as_ref().map(|t| t.cold.strikes.iter().map(|s| [s.0, s.1]).collect()).unwrap_or_default(),
                     hover: if (n.focus.highlight.is_some() && self.highlight_visible(i)) || (n.focus.fill.is_some() && self.focus_ring_visible(i)) { 1.0 }
                         else { self.scene.get(n.id, P_HOVER).unwrap_or(0.0) },
                     press: self.scene.get(n.id, P_PRESS).unwrap_or(0.0),
@@ -363,7 +366,7 @@ impl<S: 'static> Runtime<S> {
                 focusable: false, focused: false, focus_visible: false, inert: true, exiting: false,
                 key: Some(path.clone()), path, role: "text", label: None, text: None,
                 rect: [r.x, r.y, r.w, r.h], target: [t.x, t.y, t.w, t.h],
-                opacity: f.source_alpha, scale: 1.0, blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None,
+                opacity: f.source_alpha, scale: 1.0, blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None, strikes: Vec::new(),
                 hover: 0.0, press: 0.0, moving: true, parent: None,
                 visible: [r.x.max(c[0]), r.y.max(c[1]), (r.edges()[2].min(c[2]) - r.x.max(c[0])).max(0.0),
                     (r.edges()[3].min(c[3]) - r.y.max(c[1])).max(0.0)],

@@ -15,6 +15,7 @@ pub struct Highlight {
     pub(crate) fg: Option<Color>,
     pub(crate) ring: Option<(Color, f32)>,
     pub(crate) key: Option<String>,
+    pub(crate) strike: bool,
 }
 
 impl Highlight {
@@ -55,6 +56,11 @@ impl Highlight {
         self.ring = (width > 0.0 && width.is_finite()).then_some((color, width));
         self
     }
+    /// Draws a line through the highlighted words, in their colour, as a deletion shows.
+    pub fn strike(mut self) -> Self {
+        self.strike = true;
+        self
+    }
     /// Sets a key for [`Tx::scroll_into_view`](rune::Tx::scroll_into_view),
     /// [`Cx::layout`](rune::Cx::layout) and [`Runtime::find`](rune::Runtime::find). When unset,
     /// the highlight is reachable under [`Markdown::highlight_key`]`(index)`.
@@ -66,8 +72,8 @@ impl Highlight {
 
 impl std::hash::Hash for Highlight {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let Highlight { current, bg, fg, ring, key } = self;
-        (current, bg, fg, ring.map(|(c, w)| (c, if w == 0.0 { 0 } else { w.to_bits() })), key).hash(state);
+        let Highlight { current, bg, fg, ring, key, strike } = self;
+        (current, bg, fg, ring.map(|(c, w)| (c, if w == 0.0 { 0 } else { w.to_bits() })), key, strike).hash(state);
     }
 }
 
