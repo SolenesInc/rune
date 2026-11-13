@@ -137,10 +137,13 @@ impl El {
         }
         self
     }
-    /// A press on this element or its unfocusable descendants leaves the current field
-    /// focused instead of blurring it. Works on any element, not only popups: a list row, a
-    /// button, a toolbar. The press still reaches `on_press` and the other handlers, and a
-    /// scroll still cancels it as usual. Focusable descendants still take focus normally.
+    /// A press on this element or its descendants leaves focus where it was, a field focused
+    /// or nothing focused, instead of moving it. Works on any element, not only popups: a list
+    /// row, a button, a toolbar. A focusable control keeps its place in the Tab order and only
+    /// a press passes it by, as a macOS push button does. The press still reaches `on_press`
+    /// and the other handlers, and a scroll still cancels it as usual. A text field still takes
+    /// focus on a press, and a press inside an element that owns its keys (`El::on_key`)
+    /// still focuses that element.
     pub fn preserve_focus_on_press(mut self, enabled: bool) -> Self {
         if enabled || !self.cold.focus.is_empty() {
             self.cold_mut().focus.preserve_on_press.focus = enabled;

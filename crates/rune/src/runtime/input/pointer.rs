@@ -257,8 +257,9 @@ impl<S: 'static> Runtime<S> {
         // off its links isn't a control: the press blurs, as a click on plain content does.
         // Inside a control that owns its keyboard (`El::on_key`), a click on any part of it
         // focuses it, as a click on a table view's row focuses the table.
-        // A `Cx::web_focus` control that keeps the field's focus on a press (`preserve_focus_on_press`)
-        // doesn't take it, as a button whose mousedown is prevented.
+        // A control that keeps the focus on a press (`preserve_focus_on_press`, or any control
+        // under `Cx::controls_keep_focus`) doesn't take it, focusable or not, as a macOS push
+        // button or a button whose mousedown is prevented.
         // So does a click on plain content in a focusable scroll region, as a web page focuses a
         // `tabIndex` scroller (a `ScrollView`) clicked where nothing inside takes focus; and a
         // press on a layer that hands focus below it (`El::press_focuses_below`) focuses the one
@@ -270,12 +271,13 @@ impl<S: 'static> Runtime<S> {
                 None => {}
             }
         }
-        let takes_focus = n.focus.enabled || (self.takes_focus(n) && !self.press_keeps_focus(ti));
+        let preserve_focus = self.press_keeps_focus(ti) || self.control_keeps_focus(n);
+        let takes_focus = (n.focus.enabled || self.takes_focus(n)) && !preserve_focus;
         let keyed = (!takes_focus && !self.is_selectable(ti)).then(|| std::iter::successors(n.parent, |&p| self.nodes[p].parent)
             .take_while(|&p| self.allowed(p))
             .find(|&p| (self.nodes[p].focus.key.is_some() || self.focuses_on_click(p)) && self.can_focus(p))).flatten();
         let in_textbox = std::iter::successors(n.parent, |&p| self.nodes[p].parent).any(|p| self.textbox_input(p).is_some());
-        let (preserve_focus, keeps) = (self.press_keeps_focus(ti), self.press_keeps_selection(ti));
+        let keeps = self.press_keeps_selection(ti);
         let below = n.focus.below;
         if !below && !on_link && !keeps && takes_focus && !self.is_selectable(ti) {
             self.queue.push(Action::FocusControl(n.path.clone()));
@@ -523,3 +525,7 @@ impl<S: 'static> Runtime<S> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "press_keeps_focus_tests.rs"]
+mod press_keeps_focus_tests;

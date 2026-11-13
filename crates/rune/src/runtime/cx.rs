@@ -26,6 +26,8 @@ pub(crate) struct ViewDefaults {
     pub(crate) help: Option<super::HelpLook>,
     /// [`Cx::web_focus`].
     pub(crate) web_focus: bool,
+    /// [`Cx::controls_keep_focus`].
+    pub(crate) controls_keep_focus: bool,
     /// [`Cx::force_focus_rings`].
     pub(crate) force_focus_rings: bool,
     /// [`Cx::mark_texts`].
@@ -195,6 +197,16 @@ impl<S> Cx<S> {
     /// rather than landing on its close button. Set it on every run of the view.
     pub fn web_focus(&mut self) {
         self.defaults.web_focus = true;
+    }
+    /// A press on a control (an `on_press` element whose role is button, link, tab, checkbox,
+    /// switch, radio, combobox, tree item or grid cell) leaves focus where it was, a field
+    /// focused or nothing focused, as a macOS window's push buttons and WebKit's buttons on
+    /// macOS do. A focusable control stays in the Tab order; only a press passes it by. A press
+    /// on plain content still blurs, a text field still takes focus, and a control that owns
+    /// its keys ([`El::on_key`](crate::El::on_key)) still takes focus. Set it on every run of
+    /// the view.
+    pub fn controls_keep_focus(&mut self) {
+        self.defaults.controls_keep_focus = true;
     }
     /// The height of the titlebar the app draws (`App::titlebar`), in window points, in place of
     /// `Titlebar::new`'s while the view keeps setting it: a band that scales with the app's UI
