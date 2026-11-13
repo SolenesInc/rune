@@ -1,4 +1,5 @@
 use super::*;
+use crate::ScrollSpec;
 
 const DT: f64 = 1.0 / 120.0;
 
@@ -72,4 +73,37 @@ fn a_press_on_a_press_through_modals_invoker_leaves_the_modal_to_the_invoker() {
     press(&mut rt, 2.0 * DT);
     assert!(!rt.state.open, "the second press closes it, and nothing opens it again");
     assert_eq!(rt.state.toggled, 2, "each press reached the invoker once");
+}
+
+struct Reading { through: bool }
+
+/// A tall page in a scroll viewport, with a modal open over its top left.
+fn reading(s: &Reading, _: &mut Cx<Reading>) -> El {
+    let page = col().key("page").size(200.0, 200.0).scroll(ScrollSpec { stick_bottom: false })
+        .child(el().size(200.0, 1000.0));
+    let modal = el().key("modal").absolute(0.0, 0.0).size(40.0, 40.0).focusable(true)
+        .modal(true, |_: &mut Reading| {})
+        .modal_press_through(s.through);
+    el().size(200.0, 200.0).child(page).child(modal)
+}
+
+fn wheel_beside_the_modal(through: bool) -> Runtime<Reading> {
+    let mut rt = Runtime::new(Reading { through }, reading, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.pointer_move(150.0, 150.0);
+    rt.wheel(150.0, 150.0, -60.0);
+    rt.frame(DT);
+    rt
+}
+
+#[test]
+fn the_wheel_beside_a_press_through_modal_scrolls_what_is_under_it() {
+    let rt = wheel_beside_the_modal(true);
+    assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(60.0));
+}
+
+#[test]
+fn the_wheel_beside_a_modal_scrolls_nothing_by_default() {
+    let rt = wheel_beside_the_modal(false);
+    assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(0.0));
 }
