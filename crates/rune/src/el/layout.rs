@@ -100,6 +100,18 @@ impl El {
         self.style.set_height(percent(1.0));
         self
     }
+    /// Height as a fraction of the parent's (CSS `height: 40%` is `.h_frac(0.4)`).
+    #[inline]
+    pub fn h_frac(mut self, f: f32) -> Self {
+        self.set_h_frac(f);
+        self
+    }
+    /// [`El::h_frac`] in place.
+    #[inline]
+    pub fn set_h_frac(&mut self, f: f32) -> &mut Self {
+        self.style.set_height(percent(f));
+        self
+    }
     /// Take a `g` share of the free space along the parent's main axis (CSS `flex: g 1 0`).
     ///
     /// This also sets flex-basis to 0 and allows shrinking, so the element's own content does
