@@ -38,6 +38,7 @@ impl MenuEntry {
 }
 
 pub struct MenuItem {
+    key: Option<String>,
     label: String,
     icon: Option<&'static Icon>,
     lead: Option<El>,
@@ -55,6 +56,7 @@ pub struct MenuItem {
 impl MenuItem {
     pub fn new(label: impl Into<String>) -> MenuItem {
         MenuItem {
+            key: None,
             label: label.into(),
             icon: None,
             lead: None,
@@ -67,6 +69,12 @@ impl MenuItem {
             state: State::Rest,
             acts: Acts::default(),
         }
+    }
+    /// The item's element key, in place of the menu's `{menu}-item{index}`: a key a test or a
+    /// script names the item by, which stays the same when items before it come and go.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
     }
     /// A 14 point icon before the label.
     pub fn icon(mut self, i: &'static Icon) -> Self {
@@ -259,6 +267,7 @@ pub struct Menu {
     context: bool,
     dismiss: Option<(El, Modal)>,
     label: Option<String>,
+    anchor: Option<String>,
 }
 
 /// Makes an open surface modal: it takes focus, Escape and outside presses dismiss it, and
@@ -295,6 +304,7 @@ impl Menu {
             context: false,
             dismiss: None,
             label: None,
+            anchor: None,
         }
     }
     pub fn trigger(mut self, t: El) -> Self {
@@ -340,6 +350,14 @@ impl Menu {
         self.label = Some(l.into());
         self
     }
+    /// Opens beside the element keyed `key`, which the view shows elsewhere (a list row's
+    /// button, a row reached by keys), in place of a trigger this menu wraps, and
+    /// [`Menu::build`] returns an empty element. As the menu closes, focus goes back to where
+    /// it was before the menu opened, not to that element.
+    pub fn anchor(mut self, key: impl Into<String>) -> Self {
+        self.anchor = Some(key.into());
+        self
+    }
     /// A context menu: open at a window point (where the secondary press landed).
     pub fn at(mut self, x: f32, y: f32) -> Self {
         self.at = Some((x, y));
@@ -364,7 +382,10 @@ impl Menu {
         let mut list = col().key("rows").items_stretch().padding(if standard { 4.0 } else { 2.0 });
         for (i, entry) in self.entries.into_iter().enumerate() {
             list = list.child(match entry {
-                MenuEntry::Item(item) => item.build(k, standard, format!("{}-item{i}", self.key), layer),
+                MenuEntry::Item(mut item) => {
+                    let key = item.key.take().unwrap_or_else(|| format!("{}-item{i}", self.key));
+                    item.build(k, standard, key, layer)
+                }
                 MenuEntry::Separator => {
                     let (m, color) = if standard { (4.0, c.border_weak) } else { (2.0, c.border_muted) };
                     el().key(format!("sep{i}")).h(1.0).mt(m).mb(m).ml(-m).mr(-m).fill(color).a11y_hidden()
@@ -383,11 +404,18 @@ impl Menu {
     }
 
     pub fn build(mut self, k: &Kit, layer: &mut Vec<El>) -> El {
-        let anchor_key = format!("{}-trigger", self.key);
         // A dropdown's trigger reads as open or closed; a context menu's is just where it opened.
         let open = self.open;
         let pointer = self.context || self.at.is_some();
-        let trigger = row().key(anchor_key.clone()).children(self.trigger.take().map(|t| if pointer { t } else { t.expanded(open) }));
+        let wraps_trigger = self.anchor.is_none();
+        let (anchor_key, trigger) = match self.anchor.take() {
+            Some(anchor) => (anchor, el()),
+            None => {
+                let key = format!("{}-trigger", self.key);
+                let trigger = self.trigger.take().map(|t| if pointer { t } else { t.expanded(open) });
+                (key.clone(), row().key(key).children(trigger))
+            }
+        };
         if !self.open {
             return trigger;
         }
@@ -402,7 +430,10 @@ impl Menu {
         };
         // Submenus anchor to items inside this surface, so they mount after it.
         let mut subs = Vec::new();
-        let mut surface = self.surface(k, &mut subs).focus_return(anchor_key);
+        let mut surface = self.surface(k, &mut subs);
+        if wraps_trigger {
+            surface = surface.focus_return(anchor_key);
+        }
         if let Some(modal) = modal {
             surface = modal(surface);
         }
