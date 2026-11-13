@@ -53,6 +53,7 @@ pub(super) fn doc_cached(src: &str) -> Doc {
 }
 
 /// [`doc_cached`] for a source still arriving.
+#[cfg(test)]
 pub(super) fn stream_cached(src: &str) -> Doc {
     doc_as(src, Reading::LINKED, true)
 }

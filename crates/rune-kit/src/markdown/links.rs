@@ -8,6 +8,34 @@ pub(super) type LinkRing = Rc<dyn Fn(&str) -> Option<(Color, f32)>>;
 pub(super) type LinkHelp = Rc<dyn Fn(&str) -> Option<String>>;
 pub(super) type CodeLink = (Rc<dyn Fn(&str) -> Option<String>>, Color);
 
+/// The link id a pressable highlight carries, ahead of its key: no destination starts with NUL.
+pub(super) const HIGHLIGHT_PRESS: &str = "\0highlight:";
+
+type Press<S> = Rc<dyn Fn(&mut S, &str, &mut Tx)>;
+
+/// What a press on a link and on a highlight run, kept together so a text holding both can
+/// hand its one link handler each press.
+pub(super) struct Presses<S> {
+    link: Option<Press<S>>,
+    highlight: Option<Press<S>>,
+}
+
+impl<S> Clone for Presses<S> {
+    fn clone(&self) -> Self {
+        Presses { link: self.link.clone(), highlight: self.highlight.clone() }
+    }
+}
+
+impl<S: 'static> Presses<S> {
+    fn press(&self, s: &mut S, id: &str, tx: &mut Tx) {
+        match (id.strip_prefix(HIGHLIGHT_PRESS), &self.highlight, &self.link) {
+            (Some(key), Some(f), _) => f(s, key, tx),
+            (None, _, Some(f)) => f(s, id, tx),
+            _ => {}
+        }
+    }
+}
+
 impl Markdown {
     /// Called with a link's destination when it is clicked, or pressed with Enter or Space
     /// while focused. With a handler, links show a hand and a solid underline under the
@@ -20,12 +48,37 @@ impl Markdown {
     /// or copies in the same commit (an app's own `scheme:id` links, say). Replaces any earlier
     /// `on_link` or `on_link_tx` handler (the later call wins).
     pub fn on_link_tx<S: 'static>(mut self, f: impl Fn(&mut S, &str, &mut Tx) + 'static) -> Self {
-        let f = Rc::new(f);
-        self.on_link = Some(Rc::new(move |e: El| {
-            let f = f.clone();
-            e.on_link(move |s: &mut S, url, tx| f(s, url, tx))
-        }));
+        self.presses::<S>().link = Some(Rc::new(f));
+        self.wire_presses::<S>();
         self
+    }
+    /// Called with a highlight's key ([`Highlight::key`], else [`Markdown::highlight_key`])
+    /// when it is clicked, or pressed with Enter or Space while focused: each highlight
+    /// ([`Self::highlights`]) becomes a button over its glyphs, a Tab stop with a hand under the
+    /// pointer, beside the links inside it. For notes on a passage that open where it is marked.
+    pub fn on_highlight<S: 'static>(mut self, f: impl Fn(&mut S, &str, &mut Tx) + 'static) -> Self {
+        self.presses::<S>().highlight = Some(Rc::new(f));
+        self.wire_presses::<S>();
+        self
+    }
+
+    fn presses<S: 'static>(&mut self) -> &mut Presses<S> {
+        if !self.presses.as_ref().is_some_and(|p| p.is::<Presses<S>>()) {
+            self.presses = Some(Box::new(Presses::<S> { link: None, highlight: None }));
+        }
+        self.presses.as_mut().and_then(|p| p.downcast_mut()).expect("presses of this state")
+    }
+
+    fn wire_presses<S: 'static>(&mut self) {
+        let presses = self.presses::<S>().clone();
+        let wire = |presses: Presses<S>| -> LinkWire {
+            Rc::new(move |e: El| {
+                let presses = presses.clone();
+                e.on_link(move |s: &mut S, id, tx| presses.press(s, id, tx))
+            })
+        };
+        self.on_link = presses.link.is_some().then(|| wire(presses.clone()));
+        self.on_highlight = presses.highlight.is_some().then(|| wire(presses));
     }
     /// Called with a link's destination and the point (window points) when a right-click (or
     /// macOS control-click) lands on it: a menu for that link (Open, Copy Link). It takes the

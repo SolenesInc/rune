@@ -52,6 +52,7 @@ use crate::Kit;
 mod autolink;
 mod bidi;
 mod cache;
+mod drawn;
 mod find;
 mod highlight;
 mod html;
@@ -68,6 +69,7 @@ mod style;
 mod table;
 mod text_links;
 
+pub use drawn::{Drawn, DrawnStep, DrawnText};
 pub use find::{Case, find};
 pub use image::ImageFrame;
 pub use style::MarkdownStyle;
@@ -76,15 +78,15 @@ pub use style::MarkdownStyle;
 use crate::budget::Budget;
 use crate::syntax::{Highlighter, SyntaxTheme};
 pub use crate::syntax::Syntax;
-use links::{CodeLink, LinkHelp, LinkLook, LinkRing, LinkWire};
+use links::{CodeLink, HIGHLIGHT_PRESS, LinkHelp, LinkLook, LinkRing, LinkWire};
 pub use cache::parse_cached;
 pub use highlight::{Highlight, HighlightItem};
 pub use parser::parse;
 
 use autolink::autolink_inline;
-use cache::{doc_cached, stream_cached};
+use cache::doc_cached;
 #[cfg(test)]
-use cache::{CACHE, PARSES};
+use cache::{CACHE, PARSES, stream_cached};
 use parser::{BlockMap, CLOSE, Cut, PAD, ParsedDoc, Source, SpanMap, parse_doc, unpadded};
 use render::{Renderer, hash_of, rendered_keys, source_copy};
 use stream::parse_streaming;
@@ -266,6 +268,8 @@ pub struct Markdown {
     reveal: f32,
     streaming: bool,
     on_link: Option<LinkWire>,
+    on_highlight: Option<LinkWire>,
+    presses: Option<Box<dyn std::any::Any>>,
     on_link_secondary: Option<LinkWire>,
     link_look: Option<LinkLook>,
     link_help: Option<LinkHelp>,
@@ -297,7 +301,7 @@ thread_local! {
 
 impl Markdown {
     pub fn new(src: impl Into<String>) -> Markdown {
-        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
+        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
             diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
@@ -541,6 +545,7 @@ impl Markdown {
     pub fn render(self, style: &MarkdownStyle) -> El {
         let can_cache = !self.streaming
             && self.on_link.is_none()
+            && self.on_highlight.is_none()
             && self.on_link_secondary.is_none()
             && self.link_look.is_none()
             && self.link_help.is_none()
@@ -598,7 +603,7 @@ impl Markdown {
             starts.iter().map(|at| self.block_keys.iter().find(|(offset, _)| offset == at)
                 .map_or_else(String::new, |(_, key)| key.clone())).collect::<Vec<_>>()
         };
-        let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
+        let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_highlight: self.on_highlight, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
             on_task: self.on_task, tasks_read_only: self.tasks_read_only, details: self.details, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),

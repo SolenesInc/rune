@@ -1,0 +1,1 @@
+- `Markdown::drawn` lists the selectable texts a document draws, each mapped to its source; `Drawn::at` finds the one a selection piece covers.

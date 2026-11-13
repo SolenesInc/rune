@@ -9,6 +9,7 @@ pub(super) struct Renderer {
     pub(super) reveal: f32,
     pub(super) streaming: bool,
     pub(super) on_link: Option<LinkWire>,
+    pub(super) on_highlight: Option<LinkWire>,
     pub(super) on_link_secondary: Option<LinkWire>,
     pub(super) link_look: Option<LinkLook>,
     pub(super) link_help: Option<LinkHelp>,
@@ -212,13 +213,22 @@ fn pad_size(font: TextStyle, pad: f32) -> f32 {
 /// tabs in a monospace `style` to four-column stops itself; in any other family it draws a tab
 /// as one space, so each tab is padded with uncopied spaces to the next stop: lines line up and a
 /// copy still gets the tab.
-fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, style: TextStyle) -> El {
+/// `code` as [`tabbed`] draws it in `style`, each tab padded to the next stop unless the font
+/// is monospaced, and where a byte of `code` lands in it.
+pub(super) fn tab_shown(code: &str, style: TextStyle) -> (String, impl Fn(usize) -> usize) {
+    let (shown, tabs) = tabs_padded(code, style);
+    (shown, move |b: usize| shift_past(&tabs, b))
+}
+
+/// (source byte, shown byte, pad, padding so far including this tab's) for each padded tab.
+type Tabs = Vec<(usize, usize, usize, usize)>;
+
+fn tabs_padded(code: &str, style: TextStyle) -> (String, Tabs) {
+    let mut tabs: Tabs = Vec::new();
     if !code.contains('\t') || matches!(style.family, Family::Mono | Family::SystemMono) {
-        return rich(code.to_owned(), spans).text_highlights(highlights);
+        return (code.to_owned(), tabs);
     }
     let mut shown = String::with_capacity(code.len() + code.len() / 8);
-    // (source byte, shown byte, pad, padding so far including this tab's)
-    let mut tabs: Vec<(usize, usize, usize, usize)> = Vec::new();
     let mut col = 0;
     for (i, c) in code.char_indices() {
         if c == '\t' {
@@ -233,10 +243,23 @@ fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, 
         col = if c == '\n' { 0 } else { col + 1 };
         shown.push(c);
     }
-    let shift = |b: u32| match tabs.partition_point(|t| (t.0 as u32) < b) {
+    (shown, tabs)
+}
+
+fn shift_past(tabs: &Tabs, b: usize) -> usize {
+    match tabs.partition_point(|t| t.0 < b) {
         0 => b,
-        n => b + tabs[n - 1].3 as u32,
-    };
+        n => b + tabs[n - 1].3,
+    }
+}
+
+fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, presses: Vec<(Range<usize>, String)>, style: TextStyle) -> El {
+    let (shown, tabs) = tabs_padded(code, style);
+    let shift = |b: u32| shift_past(&tabs, b as usize) as u32;
+    let pressed = |el: El| presses.iter().fold(el, |el, (r, id)| el.link(press_link(shift(r.start as u32) as usize..shift(r.end as u32) as usize, id)));
+    if tabs.is_empty() {
+        return pressed(rich(shown, spans).text_highlights(highlights));
+    }
     for sp in &mut spans {
         (sp.start, sp.end) = (shift(sp.start), shift(sp.end));
     }
@@ -244,7 +267,21 @@ fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, 
         let r = hl.range();
         *hl = hl.clone().with_range(shift(r.start as u32) as usize..shift(r.end as u32) as usize);
     }
-    tabs.iter().fold(rich(shown, spans).text_highlights(highlights), |el, t| el.uncopied(t.1 + 1..t.1 + 1 + t.2))
+    tabs.iter().fold(pressed(rich(shown, spans).text_highlights(highlights)), |el, t| el.uncopied(t.1 + 1..t.1 + 1 + t.2))
+}
+
+/// A highlight's button over `range`, a [`Markdown::on_highlight`] press as link `id`.
+fn press_link(range: Range<usize>, id: &str) -> Link {
+    Link::new(range, id).role("button").hover(LinkPaint::new()).drag_selects()
+}
+
+/// `range` less the parts `links` cover, in order.
+fn outside(range: Range<usize>, links: &[Range<usize>]) -> Vec<Range<usize>> {
+    let mut out = vec![range];
+    for l in links {
+        out = out.into_iter().flat_map(|r| [r.start..r.end.min(l.start), r.start.max(l.end)..r.end]).filter(|r| r.start < r.end).collect();
+    }
+    out
 }
 
 impl Renderer {
@@ -321,15 +358,34 @@ impl Renderer {
         th
     }
 
-    fn text_highlights_for(&self, text: &str, map: Option<&SpanMap>) -> Vec<TextHighlight> {
+    /// The highlights over `text` (mapped from source by `map`): each text range with its
+    /// highlight's index.
+    fn marks_for(&self, text: &str, map: Option<&SpanMap>) -> Vec<(Range<usize>, usize)> {
         let Some(map) = map.filter(|_| !self.highlights.is_empty()) else { return Vec::new() };
-        let mut out = Vec::new();
-        for (idx, (src_ranges, hl)) in self.highlights.iter().enumerate() {
-            for r in map.map_ranges(src_ranges, text) {
-                out.push(self.make_text_highlight(idx, r, hl));
-            }
+        self.highlights.iter().enumerate().flat_map(|(idx, (src_ranges, _))| map.map_ranges(src_ranges, text).into_iter().map(move |r| (r, idx))).collect()
+    }
+
+    fn text_highlights(&self, marks: &[(Range<usize>, usize)]) -> Vec<TextHighlight> {
+        marks.iter().map(|(r, idx)| self.make_text_highlight(*idx, r.clone(), &self.highlights[*idx].1)).collect()
+    }
+
+    /// The buttons [`Markdown::on_highlight`] makes of `marks`, around `links`: each range with
+    /// its link id. None without a handler.
+    fn presses(&self, marks: &[(Range<usize>, usize)], links: &[Range<usize>]) -> Vec<(Range<usize>, String)> {
+        if self.on_highlight.is_none() { return Vec::new() }
+        marks.iter().flat_map(|(r, idx)| {
+            let key = self.highlights[*idx].1.key.clone().unwrap_or_else(|| Markdown::highlight_key(*idx));
+            let id = format!("{HIGHLIGHT_PRESS}{key}");
+            outside(r.clone(), links).into_iter().map(move |piece| (piece, id.clone()))
+        }).collect()
+    }
+
+    /// `e` hearing its highlights' presses, when it holds any.
+    fn wire_presses(&self, e: El, any: bool) -> El {
+        match &self.on_highlight {
+            Some(wire) if any => wire(e),
+            _ => e,
         }
-        out
     }
 
     /// `e`, a text, selectable when the markdown is (after its links, so it shows the I-beam).
@@ -345,8 +401,13 @@ impl Renderer {
                 e = e.strike(a, b, None);
             }
         }
-        e = e.text_highlights(self.text_highlights_for(&inl.text, map));
-        let e = self.select(self.wire_link(self.link_icons(e, inl), inl));
+        let marks = self.marks_for(&inl.text, map);
+        e = e.text_highlights(self.text_highlights(&marks));
+        let e = self.wire_link(self.link_icons(e, inl), inl);
+        let links: Vec<Range<usize>> = if self.on_link.is_some() || self.on_link_secondary.is_some() { inl.links.iter().map(|(a, b, _)| *a..*b).collect() } else { Vec::new() };
+        let presses = self.presses(&marks, &links);
+        let any = !presses.is_empty();
+        let e = self.select(self.wire_presses(presses.iter().fold(e, |e, (r, id)| e.link(press_link(r.clone(), id))), any));
         if !self.selectable { return e; }
         inl.spans.iter().filter(|s| matches!(s.2, Style::CodePad)).fold(e, |e, s| e.uncopied(s.0..s.1))
     }
@@ -433,7 +494,9 @@ impl Renderer {
 
     pub(super) fn code(&self, code: &str, source: Option<&Source>, map: Option<&SpanMap>) -> El {
         let s = &self.s;
-        let highlights = self.text_highlights_for(code, map);
+        let marks = self.marks_for(code, map);
+        let (highlights, presses) = (self.text_highlights(&marks), self.presses(&marks, &[]));
+        let any = !presses.is_empty();
         let shell = s.shell.filter(|_| source.and_then(|src| src.lang.as_deref()).is_some_and(|l| SHELLS.iter().any(|sh| l.eq_ignore_ascii_case(sh))));
         let plain = source.and_then(|src| src.lang.as_deref()).is_none_or(|l| PLAIN_TEXT.iter().any(|p| l.eq_ignore_ascii_case(p)));
         let (fill, border, ink) = match shell {
@@ -442,7 +505,7 @@ impl Renderer {
             None => (s.code_block_fill, s.code_block_border, s.code_text.unwrap_or(s.text)),
         };
         let spans = if shell.is_some() { Vec::new() } else { self.syntax_spans(code, source) };
-        let body = self.with_reveal(tabbed(code, spans, highlights, s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2);
+        let body = self.wire_presses(self.with_reveal(tabbed(code, spans, highlights, presses, s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2), any);
         // `.highlights`' `border: 0.5px` takes its device pixel each side, inside which the padding sits.
         // Code reads left to right in any document, as `markdown.css` isolates it.
         let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(0.5, border).border_layout();
@@ -472,21 +535,21 @@ impl Renderer {
     /// One row per line, so added and removed lines are tinted edge to edge.
     pub(super) fn diff(&self, src: &str, map: Option<&SpanMap>) -> El {
         let s = &self.s;
-        let all_hl = self.text_highlights_for(src, map);
+        let all_marks = self.marks_for(src, map);
         let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(6.0).fill(s.code_block_fill).border(0.5, s.code_block_border).border_layout();
         let mut line_start = 0usize;
         let last = src.split('\n').count() - 1;
         for (n, line) in src.split('\n').enumerate() {
             let line_end = line_start + line.len();
-            let line_hl: Vec<TextHighlight> = all_hl
+            let marks: Vec<(Range<usize>, usize)> = all_marks
                 .iter()
-                .filter_map(|h| {
-                    let r = h.range();
-                    let a = r.start.max(line_start);
-                    let b = r.end.min(line_end);
-                    (a < b).then(|| h.clone().with_range((a - line_start)..(b - line_start)))
+                .filter_map(|(r, idx)| {
+                    let (a, b) = (r.start.max(line_start), r.end.min(line_end));
+                    (a < b).then(|| ((a - line_start)..(b - line_start), *idx))
                 })
                 .collect();
+            let (line_hl, presses) = (self.text_highlights(&marks), self.presses(&marks, &[]));
+            let any = !presses.is_empty();
             line_start = line_end + 1;
             let line = line.strip_suffix('\r').unwrap_or(line);
             let header = ["@@", "diff ", "index ", "--- ", "+++ "].iter().any(|p| line.starts_with(p));
@@ -501,7 +564,7 @@ impl Renderer {
                 .key(format!("l{n}"))
                 .w_full()
                 .px(s.code_block_pad[0])
-                .child(self.select(self.with_reveal(tabbed(shown, Vec::new(), line_hl, s.code_block).font(s.code_block).color(color).wrap()).w_full()
+                .child(self.select(self.wire_presses(self.with_reveal(tabbed(shown, Vec::new(), line_hl, presses, s.code_block).font(s.code_block).color(color).wrap()), any).w_full()
                     .copy_breaks(if n == 0 { 2 } else { 1 }, if n == last { 2 } else { 1 })));
             if let Some(t) = tint {
                 r = r.fill(t);

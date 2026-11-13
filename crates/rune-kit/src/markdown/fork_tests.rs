@@ -224,3 +224,126 @@ fn smart_punctuation_sets_prose_and_maps_each_piece_to_its_source() {
     let (plain, ..) = parse_doc(src, Reading::LINKED);
     assert!(matches!(plain.as_slice(), [Block::Para(p)] if p.text.starts_with("\"Ship it...\"")), "off by default: {plain:?}");
 }
+
+const DRAWN: &str = "# A \"title\"\n\nHello **world** &amp; [a link](https://x.dev) -- it's `code`.\n\n- one\n- two\n\n  second paragraph\n  - nested\n\n- [ ] a task\n\n> quoted\n\n> [!NOTE]\n> noted\n\n<details>\n<summary>More</summary>\n\nhidden body\n\n</details>\n\n| a | b |\n|---|---|\n| c | d |\n\n```rust\nfn main() {}\n```\n\n```diff\n-old\n+new\n```\n";
+
+fn drawn_view(src: &String, _: &mut Cx<String>) -> El {
+    col().w_full().child(Markdown::new(src.clone()).smart_punctuation(true).selectable(true).build(&Kit::neutral(true)).key("md"))
+}
+
+#[test]
+fn each_selectable_text_a_document_draws_is_drawn_text_found_by_its_path() {
+    let mut rt = Runtime::new(DRAWN.to_owned(), drawn_view, (480.0, 2000.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let first = rt.elements().into_iter().find(|e| e.path.ends_with("md/b1")).expect("the first paragraph");
+    rt.pointer_down(first.rect[0] + 2.0, first.rect[1] + 4.0);
+    rt.pointer_up(first.rect[0] + 2.0, first.rect[1] + 4.0);
+    rt.key(rune::KeyEvent { key: rune::Key::Command('a'), mods: rune::Mods { cmd: true, ctrl: cfg!(not(target_os = "macos")), ..rune::Mods::default() } });
+    rt.frame(1.0 / 60.0);
+    let drawn = Markdown::new(DRAWN).smart_punctuation(true).drawn(&Kit::neutral(true));
+    let sel = rt.selection().expect("everything selected");
+    let elements = rt.elements();
+    let mut seen = vec![0; drawn.texts().len()];
+    for piece in sel.texts().iter().filter(|t| t.len() > 0) {
+        let within = piece.path().split_once("md/").map(|(_, p)| p).unwrap_or_else(|| panic!("{} is outside the document", piece.path()));
+        let i = drawn.at(within).unwrap_or_else(|| panic!("no drawn text at {within}"));
+        let element = elements.iter().find(|e| e.path == piece.path()).expect("the piece's element");
+        let unmarked = |s: &str| s.chars().filter(|c| !('\u{2066}'..='\u{2069}').contains(c)).collect::<String>();
+        assert_eq!(unmarked(element.text.as_deref().unwrap_or_default()), unmarked(&drawn.texts()[i].text), "{within}");
+        assert_eq!(piece.authored(), 0..drawn.texts()[i].text.len(), "{within}: the whole text, as authored");
+        seen[i] += 1;
+    }
+    assert!(seen.iter().all(|&n| n == 1), "each drawn text is one selected text: {seen:?} of {:#?}", drawn.texts().iter().map(|t| &t.text).collect::<Vec<_>>());
+}
+
+#[test]
+fn drawn_text_maps_selected_bytes_to_the_source_they_came_from() {
+    let src = "Hello **world** &amp; it's here.";
+    let drawn = Markdown::new(src).smart_punctuation(true).drawn(&Kit::neutral(true));
+    let [para] = drawn.texts() else { panic!("one paragraph") };
+    assert_eq!(para.text, "Hello world & it\u{2019}s here.");
+    let world = para.text.find("world").unwrap();
+    assert_eq!(para.source(world..world + 5), [8..13]);
+    assert_eq!(para.source(0..world + 5), [0..6, 8..13]);
+    let amp = para.text.find('&').unwrap();
+    assert_eq!(para.source(amp..amp + 1), [16..21], "an entity maps as a whole");
+    let quote = para.text.find('\u{2019}').unwrap();
+    assert_eq!(&src[para.source(quote..quote + 3)[0].clone()], "'", "a curly quote maps to its straight one");
+}
+
+#[test]
+fn drawn_blocks_span_their_lines_and_texts_say_where_they_sit() {
+    let src = "# Title\n\n```\ncode\n```\n\n- a\n- b\n";
+    let drawn = Markdown::new(src).drawn(&Kit::neutral(true));
+    let blocks: Vec<&str> = drawn.blocks().iter().map(|r| &src[r.clone()]).collect();
+    assert_eq!(blocks, ["# Title", "```\ncode\n```", "- a\n- b"]);
+    let at: Vec<&[DrawnStep]> = drawn.texts().iter().map(DrawnText::at).collect();
+    use DrawnStep::*;
+    assert_eq!(at, [&[Block(0)][..], &[Block(1)], &[Block(2), Item(0), Block(0)], &[Block(2), Item(1), Block(0)]]);
+}
+
+#[derive(Default)]
+struct Pressed { heard: Vec<String> }
+
+const PRESSED: &str = "Mark this [link](https://x.dev) passage.\n\n```\nlet mark = 1;\n```\n";
+
+fn pressed_view(_: &Pressed, _: &mut Cx<Pressed>) -> El {
+    let this = PRESSED.find("this").unwrap()..PRESSED.find(" passage").unwrap() + 8;
+    let mark = PRESSED.find("mark =").unwrap()..PRESSED.find("mark =").unwrap() + 4;
+    col().w_full().child(Markdown::new(PRESSED).selectable(true)
+        .highlights([(this, Highlight::new().key("n1")), (mark, Highlight::new().key("n2"))])
+        .on_link(|s: &mut Pressed, url| s.heard.push(url.to_owned()))
+        .on_highlight(|s: &mut Pressed, key, _| s.heard.push(key.to_owned()))
+        .build(&Kit::neutral(true)))
+}
+
+/// Centres of the glyphs drawn inside the element whose path ends `end`, in reading order.
+fn glyphs_in(rt: &Runtime<Pressed>, end: &str) -> Vec<(f32, f32)> {
+    let e = rt.elements().into_iter().find(|e| e.path.ends_with(end)).unwrap_or_else(|| panic!("{end}"));
+    let mut out: Vec<(f32, f32)> = rt.instances.iter()
+        .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+        .map(|i| (i.rect[0] + i.rect[2] / 2.0, i.rect[1] + i.rect[3] / 2.0))
+        .filter(|&(x, y)| x >= e.rect[0] && x <= e.rect[0] + e.rect[2] && y >= e.rect[1] && y <= e.rect[1] + e.rect[3])
+        .collect();
+    out.sort_by(|a, b| ((a.1 / 10.0).round(), a.0).partial_cmp(&((b.1 / 10.0).round(), b.0)).unwrap());
+    out
+}
+
+fn click(rt: &mut Runtime<Pressed>, (x, y): (f32, f32)) {
+    rt.pointer_move(x, y);
+    rt.pointer_down(x, y);
+    rt.frame(1.0 / 60.0);
+    rt.pointer_up(x, y);
+    rt.frame(2.0 / 60.0);
+}
+
+#[test]
+fn a_highlight_is_a_button_over_its_glyphs_beside_the_links_inside_it() {
+    let mut rt = Runtime::new(Pressed::default(), pressed_view, (480.0, 400.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let para = glyphs_in(&rt, "b0");
+    // "Mark" is glyphs 0..4, "this" 4..8, "link" 8..12, "passage." 12..20.
+    click(&mut rt, para[1]);
+    assert!(rt.state.heard.is_empty(), "outside the mark nothing is pressed");
+    click(&mut rt, para[5]);
+    click(&mut rt, para[9]);
+    click(&mut rt, para[14]);
+    let code = glyphs_in(&rt, "b1");
+    // "let" is glyphs 0..3, "mark" 3..7.
+    click(&mut rt, code[4]);
+    assert_eq!(rt.state.heard, ["n1", "https://x.dev", "n1", "n2"], "the link inside the mark opens as a link");
+    assert!(names(&rt, "button").iter().any(|n| n == "this "), "a mark is a button named by its words: {:?}", names(&rt, "button"));
+    let (x0, y0) = (para[5].0 - 2.0, para[5].1);
+    let (x1, y1) = para[16];
+    rt.pointer_move(x0, y0);
+    rt.pointer_down(x0, y0);
+    rt.frame(3.0 / 60.0);
+    for k in 1..=6 {
+        rt.pointer_move(x0 + (x1 - x0) * k as f32 / 6.0, y0);
+        rt.frame((3 + k) as f64 / 60.0);
+    }
+    rt.pointer_up(x1, y1);
+    rt.frame(10.0 / 60.0);
+    assert!(rt.selected_text().is_some_and(|t| t.starts_with("his link pass")), "a drag from inside a mark selects: {:?}", rt.selected_text());
+    assert_eq!(rt.state.heard.len(), 4, "and presses nothing");
+}

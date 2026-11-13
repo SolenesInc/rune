@@ -1,0 +1,1 @@
+- `Markdown::on_highlight` makes highlights buttons over their glyphs, pressed by click, Enter or Space, that a drag still selects through.
