@@ -281,6 +281,9 @@ mod drop_tests;
 #[path = "runtime/on_key_tests.rs"]
 mod on_key_tests;
 #[cfg(test)]
+#[path = "runtime/field_key_tests.rs"]
+mod field_key_tests;
+#[cfg(test)]
 #[path = "live_only_tests.rs"]
 mod live_only_tests;
 #[cfg(test)]
@@ -464,6 +467,8 @@ pub struct Runtime<S: 'static> {
     pub(crate) test_clock: Option<crate::Clock>,
     /// Called for keys unhandled by the focused control; return true to consume it.
     pub on_key: Option<fn(&mut S, &KeyEvent, &mut Tx) -> bool>,
+    /// `App::on_field_key`: keys a focused text field would get, offered first.
+    pub on_field_key: Option<fn(&mut S, &KeyEvent, &mut Tx) -> bool>,
     pub(crate) nodes: Vec<Node>,
     /// The last commit's node buffer, emptied, for the next flatten to fill: an app of a few
     /// thousand elements otherwise maps and faults in megabytes every commit.
@@ -886,6 +891,7 @@ impl<S: 'static> Runtime<S> {
             #[cfg(test)]
             test_clock: None,
             on_key: None,
+            on_field_key: None,
             nodes: Vec::new(),
             spare_nodes: Vec::new(),
             apply_scratch: Default::default(),

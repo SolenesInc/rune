@@ -70,6 +70,7 @@ pub struct App<S: 'static> {
     pub(crate) turn_scope: Option<TurnScope<S>>,
     pub(crate) on_focus: Option<fn(&mut S, bool, &mut Tx)>,
     pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
+    pub(crate) on_field_key: Option<fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool>,
     pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
     pub(crate) on_ime: Option<fn(&mut S, &crate::Ime, &mut Tx) -> bool>,
     pub(crate) on_reopen: Option<fn(&mut S, bool, &mut Tx) -> bool>,
@@ -129,6 +130,7 @@ impl<S: 'static> App<S> {
             turn_scope: None,
             on_focus: None,
             on_mods: None,
+            on_field_key: None,
             on_visibility: None,
             on_ime: None,
             on_reopen: None,
@@ -303,6 +305,15 @@ impl<S: 'static> App<S> {
     /// frame. Native windows only.
     pub fn on_visibility(mut self, f: fn(&mut S, bool, &mut Tx)) -> Self {
         self.on_visibility = Some(f);
+        self
+    }
+
+    /// Hear each key pressed while a text field has focus before the field's own key handler
+    /// and its editor do, as a page's capture-phase listener does; true consumes the key. An
+    /// app's shortcuts fire from inside a field this way, as they do in a browser, and keys it
+    /// leaves reach the field, then `on_key`, as before.
+    pub fn on_field_key(mut self, f: fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool) -> Self {
+        self.on_field_key = Some(f);
         self
     }
 

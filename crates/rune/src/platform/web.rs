@@ -426,6 +426,7 @@ impl<S: 'static> ApplicationHandler<Wake> for Browser<S> {
             let compositor = app.compositor.take();
             let (on_focus, modifier_keys, srgb_blend) = (app.on_focus, app.modifier_keys, app.srgb_blend);
             let on_mods = app.on_mods;
+            let on_field_key = app.on_field_key;
             let (font_smoothing, fit_height) = (app.font_smoothing, app.fit_content_height);
             let tab_visits_controls = app.tab_visits_controls;
             let playground = app.playground.take();
@@ -475,6 +476,7 @@ impl<S: 'static> ApplicationHandler<Wake> for Browser<S> {
             }
             rt.on_focus = on_focus;
             rt.on_mods = on_mods;
+            rt.on_field_key = on_field_key;
             rt.set_modifier_keys(modifier_keys);
             rt.set_tab_visits_controls(tab_visits_controls);
             rt.set_srgb_blend(srgb_blend);
