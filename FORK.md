@@ -57,6 +57,7 @@ commit on `main` ends with `(cherry picked from commit <hash>)`. `scripts/rune-b
 
 | Upstream commit | Subject |
 |---|---|
+| `d80c872f` | macOS: a caret can ask for Option as the Alt key (ime_option_as_alt) (#837) |
 
 Last upstream commit reviewed: `50d5c6db` (2026-11-12), the last one merged
 before the fork became attn's own. Upstream's later commits have been read only
