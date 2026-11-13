@@ -1,0 +1,1 @@
+- `SelectedText::authored` gives a selected range in the text as the app wrote it, without the bidi marks `El::isolate` writes around runs.

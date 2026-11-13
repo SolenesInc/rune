@@ -112,6 +112,17 @@ impl TextSpec {
     }
 }
 
+impl TextSpec {
+    /// Byte `p` of the content in the text as authored: less the marks its isolates wrote in
+    /// before `p`, which copies leave out.
+    pub(crate) fn authored(&self, p: usize) -> usize {
+        let mark = |&&(a, b): &&(u32, u32)| {
+            (b as usize) <= p && self.content.get(a as usize..b as usize).is_some_and(|m| matches!(m, "\u{2066}" | "\u{2067}" | "\u{2068}" | "\u{2069}"))
+        };
+        p - self.cold.uncopied.iter().filter(mark).map(|&(a, b)| (b - a) as usize).sum::<usize>()
+    }
+}
+
 /// The sorted, disjoint isolates whose marks a text now holds, to move byte ranges with.
 struct Marks<'a>(&'a [(u32, u32, Direction)]);
 

@@ -36,6 +36,7 @@ pub struct SelectedText {
     pub(super) path: String,
     pub(super) key: Option<String>,
     pub(super) range: Range<usize>,
+    pub(super) authored: Range<usize>,
     pub(super) len: usize,
     pub(super) whole: bool,
     pub(super) text: String,
@@ -52,6 +53,10 @@ impl SelectedText {
     pub fn key(&self) -> Option<&str> { self.key.as_deref() }
     /// The selected bytes of the text's content, empty when none are.
     pub fn range(&self) -> Range<usize> { self.range.clone() }
+    /// [`Self::range`] in the text as the app wrote it, without the marks
+    /// [`El::isolate`](crate::El::isolate) (and a pill's own isolate) put around runs: what an
+    /// app that keeps its own copy of the text indexes.
+    pub fn authored(&self) -> Range<usize> { self.authored.clone() }
     /// The length in bytes of the text's content.
     pub fn len(&self) -> usize { self.len }
     /// The text has no content.
@@ -90,3 +95,7 @@ impl SelectionChange {
     /// open. A selection made by code is never dragging.
     pub fn dragging(&self) -> bool { self.dragging }
 }
+
+#[cfg(test)]
+#[path = "authored_tests.rs"]
+mod authored_tests;

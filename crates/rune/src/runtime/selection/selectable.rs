@@ -461,8 +461,10 @@ impl<S: 'static> Runtime<S> {
         let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
         let text = n.text.as_ref().and_then(|t| t.copy_slice(range.start as u32, range.end as u32)).unwrap_or_default();
         let content = self.content_of(i).get(range.clone()).unwrap_or_default().to_owned();
-        SelectedText { path, key: n.key.clone(), range, len, whole, text, content }
+        let authored = n.text.as_ref().map_or(range.clone(), |t| t.authored(range.start)..t.authored(range.end));
+        SelectedText { path, key: n.key.clone(), range, authored, len, whole, text, content }
     }
+
 
     /// What copying the selection puts on the clipboard: the nearest [`El::selection_copy`]
     /// around it says, else the text as drawn.

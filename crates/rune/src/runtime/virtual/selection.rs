@@ -166,7 +166,8 @@ pub(super) fn offscreen_piece(t: &OffscreenText, range: Range<usize>, base: Opti
     let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
     let text = t.spec.copy_slice(range.start as u32, range.end as u32).unwrap_or_default();
     let content = t.spec.content.get(range.clone()).unwrap_or_default().to_owned();
-    SelectedText { path, key: t.key.clone(), range, len, whole, text, content }
+    let authored = t.spec.authored(range.start)..t.spec.authored(range.end);
+    SelectedText { path, key: t.key.clone(), range, authored, len, whole, text, content }
 }
 
 impl<S: 'static> Runtime<S> {
