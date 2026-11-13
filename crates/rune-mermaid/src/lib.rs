@@ -283,6 +283,30 @@ pub fn supported(src: &str) -> bool {
     parse(src).is_some()
 }
 
+thread_local! {
+    static SKIPPED: std::cell::RefCell<Option<Vec<String>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Notes that the diagram being parsed leaves out `statement`, which it cannot read.
+pub(crate) fn skip(statement: &str) {
+    SKIPPED.with_borrow_mut(|s| {
+        if let Some(skipped) = s {
+            skipped.push(statement.trim().to_owned());
+        }
+    });
+}
+
+/// The statements a flowchart, sequence diagram, XY chart or pie chart in `src` leaves out
+/// because it cannot read them, in order, so an app can say what the drawing is missing.
+/// Empty when every statement reads, when `src` is another kind of diagram, or when it does not
+/// draw at all ([`supported`] is false).
+pub fn skipped(src: &str) -> Vec<String> {
+    SKIPPED.set(Some(Vec::new()));
+    let drawn = parse(src).is_some();
+    let skipped = SKIPPED.take().unwrap_or_default();
+    if drawn { skipped } else { Vec::new() }
+}
+
 pub(crate) enum Diagram {
     Flowchart(flowchart::Flowchart),
     Sequence(sequence::Sequence),

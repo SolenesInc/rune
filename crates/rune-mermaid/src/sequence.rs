@@ -100,6 +100,7 @@ pub(crate) fn parse(_header: &str, body: &[&str]) -> Option<Sequence> {
     for line in body {
         let (people, events) = (p.s.participants.len(), p.s.events.len());
         if p.line(line).is_none() {
+            crate::skip(line);
             // Whatever the line added before it failed goes too.
             p.s.participants.truncate(people);
             p.s.events.truncate(events);

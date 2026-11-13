@@ -57,8 +57,11 @@ pub(crate) fn parse(header: &str, body: &[&str]) -> Option<Flowchart> {
     // A statement that doesn't read is skipped; one past the bounds leaves the whole diagram as source.
     for line in std::iter::once(rest).chain(body.iter().copied()) {
         for stmt in statements(line) {
-            if p.statement(stmt).is_none() && p.over {
-                return None;
+            if p.statement(stmt).is_none() {
+                if p.over {
+                    return None;
+                }
+                crate::skip(stmt);
             }
         }
     }

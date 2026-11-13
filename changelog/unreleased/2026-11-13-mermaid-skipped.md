@@ -1,0 +1,1 @@
+- `rune_mermaid::skipped` lists the statements a flowchart, sequence diagram, XY chart or pie chart cannot read and leaves out.

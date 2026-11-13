@@ -30,9 +30,16 @@ pub(crate) fn parse(header: &str, body: &[&str]) -> Option<Pie> {
             if s.is_empty() || s.starts_with("accTitle") || s.starts_with("accDescr") {
                 continue;
             }
-            let Some((label, value)) = s.rsplit_once(':') else { continue };
-            let Ok(v) = value.trim().parse::<f64>() else { continue };
+            let Some((label, value)) = s.rsplit_once(':') else {
+                crate::skip(stmt);
+                continue;
+            };
+            let Ok(v) = value.trim().parse::<f64>() else {
+                crate::skip(stmt);
+                continue;
+            };
             if !(v.is_finite() && v > 0.0) {
+                crate::skip(stmt);
                 continue;
             }
             if p.slices.len() >= MAX_ITEMS {

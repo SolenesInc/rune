@@ -48,11 +48,19 @@ pub(crate) fn parse(header: &str, body: &[&str]) -> Option<XyChart> {
             let (title, _, range) = axis(rest);
             (x.y_title, x.y_range) = (title, range);
         } else if let Some((kind, rest)) = word(l, "bar").map(|r| (Kind::Bar, r)).or_else(|| word(l, "line").map(|r| (Kind::Line, r))) {
-            let Some(open) = rest.find('[') else { continue };
+            let Some(open) = rest.find('[') else {
+                crate::skip(l);
+                continue;
+            };
             let values: Option<Vec<f32>> = list(&rest[open..]).iter().map(|v| v.parse::<f32>().ok().filter(|f| f.is_finite())).collect();
-            let Some(values) = values.filter(|v| !v.is_empty()) else { continue };
+            let Some(values) = values.filter(|v| !v.is_empty()) else {
+                crate::skip(l);
+                continue;
+            };
             items += values.len();
             x.series.push(Series { kind, name: clean_quoted(&rest[..open]), values });
+        } else if !(l.starts_with("accTitle") || l.starts_with("accDescr")) {
+            crate::skip(l);
         }
         if items > MAX_ITEMS {
             return None;

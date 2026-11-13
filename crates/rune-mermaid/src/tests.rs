@@ -225,3 +225,20 @@ fn lines_shrink_with_the_drawing() {
         assert!(close, "{} is {:?} shrunk, {:?} full", a.key, a.size, b.size);
     }
 }
+
+#[test]
+fn skipped_lists_the_statements_a_drawn_diagram_leaves_out() {
+    let cases: &[(&str, &[&str])] = &[
+        ("flowchart LR\n  A --> B\n  %% a comment\n  A ==>>>> \n  click A call cb()\n", &["A ==>>>>"]),
+        ("sequenceDiagram\n  A->>B: hi\n  A~~B: what\n  Note over A: fine\n", &["A~~B: what"]),
+        ("xychart-beta\n  x-axis [a, b]\n  bar [1, 2]\n  line [x, y]\n  sparkle [3]\n", &["line [x, y]", "sparkle [3]"]),
+        ("pie title Pets\n  \"Dogs\" : 3\n  \"Cats\" : lots\n", &["\"Cats\" : lots"]),
+        ("flowchart TD\n  A --> B\n", &[]),
+        ("gantt\n  title g\n  nonsense here\n", &[]),
+        ("flowchart TD\n", &[]),
+    ];
+    for (src, want) in cases {
+        assert_eq!(skipped(src), *want, "{src:?}");
+    }
+    assert!(supported(cases[0].0), "a diagram that skips a statement still draws");
+}

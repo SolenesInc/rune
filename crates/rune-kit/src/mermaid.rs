@@ -22,7 +22,7 @@ use rune::El;
 
 use crate::markdown::{DiagramPaint, MarkdownStyle};
 
-pub use rune_mermaid::{DiagramStyle, Drawing, Hover, may_draw, supported};
+pub use rune_mermaid::{DiagramStyle, Drawing, Hover, may_draw, skipped, supported};
 
 /// `src` drawn as a diagram card with `style`'s diagram colours, or `None` when it is outside
 /// the supported subset.
