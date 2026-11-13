@@ -8,6 +8,10 @@ fn shown(blocks: &[Block]) -> String {
                 Block::Para(i) | Block::Heading(_, i) => out.push(i.text.clone()),
                 Block::List { items, .. } => items.iter().for_each(|i| walk(i, out)),
                 Block::Quote(inner) | Block::Alert(_, inner) => walk(inner, out),
+                Block::Details { summary, body, .. } => {
+                    out.push(summary.text.clone());
+                    walk(body, out);
+                }
                 Block::Table(t) => {
                     out.extend(t.head.iter().map(|i| i.text.clone()));
                     // A row still arriving is padded with empty cells.

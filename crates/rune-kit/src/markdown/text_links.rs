@@ -23,7 +23,7 @@ pub(super) fn link_blocks(blocks: &mut [Block], f: &FindLinks) {
         match block {
             Block::Para(inl) | Block::Heading(_, inl) => link_inline(inl, f),
             Block::List { items, .. } => items.iter_mut().for_each(|item| link_blocks(item, f)),
-            Block::Quote(inner) | Block::Alert(_, inner) => link_blocks(inner, f),
+            Block::Quote(inner) | Block::Alert(_, inner) | Block::Details { body: inner, .. } => link_blocks(inner, f),
             Block::Table(table) => table.head.iter_mut().chain(table.rows.iter_mut().flatten()).for_each(|inl| link_inline(inl, f)),
             Block::Code(_) | Block::FrontMatter(_) | Block::Rule | Block::Diff(_) | Block::Mermaid(_) | Block::Image { .. } => {}
         }

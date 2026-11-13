@@ -13,6 +13,7 @@ pub(super) struct Renderer {
     pub(super) link_look: Option<LinkLook>,
     pub(super) link_help: Option<LinkHelp>,
     pub(super) on_task: Option<TaskWire>,
+    pub(super) details: Option<DetailsWire>,
     pub(super) tasks_read_only: bool,
     pub(super) link_ring: Option<LinkRing>,
     /// `Markdown::code_link`.
@@ -157,6 +158,7 @@ pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
         Block::Rule => (32.0, 32.0),
         Block::Table(_) => (s.table_margin[0], s.table_margin[1]),
         Block::Image { .. } => (24.0, 24.0),
+        Block::Details { .. } => (0.0, 12.0),
     }
 }
 
@@ -740,6 +742,28 @@ impl Renderer {
                     Some(f) => f(quote, &QuoteFrame { text: &self.plain_text(inner, first_task, Flow { lead: None, ..flow }), alert: Some(*alert) }),
                     None => quote,
                 }
+            }
+            Block::Details { summary, open, body } => {
+                let (at, body_maps) = match map {
+                    BlockMap::Details { at, body } => (Some(*at), body.as_slice()),
+                    _ => (None, &[][..]),
+                };
+                let wire = self.details.as_ref().zip(at);
+                let shown = wire.as_ref().map_or(true, |(d, at)| (d.open)(*at, *open));
+                let drawn = self.blocks(body, body_maps, &[], false);
+                let marker = text(if shown { "\u{25BE}" } else { "\u{25B8}" }).font(s.body).color(s.muted).w(16.0).a11y_hidden();
+                let mut head = row()
+                    .key("summary")
+                    .role("button")
+                    .label(unpadded(&summary.text))
+                    .expanded(shown)
+                    .w_full()
+                    .child(marker)
+                    .child(self.para(summary, None, s.body, s.text).grow(1.0).shrink());
+                if let Some((d, at)) = wire {
+                    head = (d.press)(head.cursor(Cursor::Pointer), at, !shown);
+                }
+                col().role("group").w_full().child(head).children(shown.then(|| drawn.mt(8.0)))
             }
             // A clear rule is spacing only (`hr { border: none; height: 0 }`).
             Block::Image { src, alt, title } => self.image(src, alt, title),

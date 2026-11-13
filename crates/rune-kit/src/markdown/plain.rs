@@ -44,6 +44,14 @@ fn plain(blocks: &[Block], tasks: &[Option<(bool, usize)>], task: &mut usize, co
             }
             Block::Code(s) | Block::Diff(s) | Block::Mermaid(s) => out.push(Piece { breaks: [2, 2], text: s.trim_end_matches('\n').to_owned() }),
             Block::Quote(inner) | Block::Alert(_, inner) => plain(inner, tasks, task, cols, lists, here, out),
+            Block::Details { summary, body, .. } => {
+                let text = unpadded(&summary.text);
+                out.push(match here {
+                    Some((marker, before)) => Piece { breaks: [before, 1], text: marker + &text },
+                    None => Piece { breaks: [2, 2], text },
+                });
+                plain(body, tasks, task, cols, lists, None, out);
+            }
             Block::List { start, items } => {
                 for (k, item) in items.iter().enumerate() {
                     let checked = tasks.get(*task).copied().flatten().map(|(checked, _)| checked);

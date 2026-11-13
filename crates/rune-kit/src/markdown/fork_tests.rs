@@ -13,7 +13,7 @@ fn laid_out(src: &str) -> Runtime<String> {
     rt
 }
 
-fn names(rt: &Runtime<String>, role: &str) -> Vec<String> {
+fn names<S>(rt: &Runtime<S>, role: &str) -> Vec<String> {
     fn walk(v: &serde_json::Value, role: &str, out: &mut Vec<String>) {
         if v.get("role").and_then(|r| r.as_str()) == Some(role) {
             out.push(v.get("name").and_then(|n| n.as_str()).unwrap_or_default().to_owned());
@@ -110,4 +110,64 @@ fn text_links_skip_ranges_that_overlap_leave_the_run_or_cut_a_character() {
     rt.frame(0.0);
     let links: Vec<String> = rt.elements().into_iter().filter(|e| e.role == "link").filter_map(|e| e.key).collect();
     assert_eq!(links, ["first"]);
+}
+
+#[test]
+fn a_details_block_holds_its_summary_and_markdown_body_and_maps_to_source() {
+    let src = "Intro\n\n<details>\n<summary>More <b>here</b></summary>\n\n- one\n- two\n\n</details>\n\n<details open><summary>Open</summary>\n\nShown\n\n</details>\n\nAfter\n";
+    let b = parse(src);
+    assert_eq!(b.len(), 4, "{b:?}");
+    let Block::Details { summary, open: false, body } = &b[1] else { panic!("{b:?}") };
+    assert_eq!(summary.text, "More here");
+    assert!(matches!(&body[0], Block::List { items, .. } if items.len() == 2), "{body:?}");
+    assert!(matches!(&b[2], Block::Details { summary, open: true, .. } if summary.text == "Open"), "{b:?}");
+    assert!(matches!(&b[3], Block::Para(p) if p.text == "After"), "{b:?}");
+    let two = src.find("two").unwrap();
+    assert_eq!(find(src, "two", Case::Insensitive), vec![vec![two..two + 3]]);
+    assert!(matches!(parse("<details><summary>Cut</summary>\n\nstill arriving").as_slice(), [Block::Details { body, .. }] if body.len() == 1), "an unclosed block holds the rest");
+}
+
+struct Disclosed {
+    src: String,
+    flipped: Vec<usize>,
+}
+
+fn disclosed(d: &Disclosed, _: &mut Cx<Disclosed>) -> El {
+    let flipped = d.flipped.clone();
+    let md = Markdown::new(d.src.clone()).details(
+        move |at, open| open != flipped.contains(&at),
+        |d: &mut Disclosed, at, _open, _| {
+            match d.flipped.iter().position(|&f| f == at) {
+                Some(i) => {
+                    d.flipped.remove(i);
+                }
+                None => d.flipped.push(at),
+            }
+        },
+    );
+    col().w_full().child(md.build(&Kit::neutral(true)))
+}
+
+#[test]
+fn a_details_block_opens_and_closes_from_its_summary_as_the_app_says() {
+    let src = "<details>\n<summary>More</summary>\n\nHidden body\n\n</details>\n";
+    let at = src.find("<details>").unwrap();
+    let mut rt = Runtime::new(Disclosed { src: src.into(), flipped: Vec::new() }, disclosed, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let summary = || |rt: &Runtime<Disclosed>| rt.elements().into_iter().find(|e| e.role == "button" && e.label.as_deref() == Some("More")).expect("the summary");
+    assert_eq!(summary()(&rt).expanded, Some(false));
+    assert!(!names(&rt, "label").iter().any(|l| l == "Hidden body"));
+
+    let r = summary()(&rt).rect;
+    let (x, y) = (r[0] + 4.0, r[1] + r[3] * 0.5);
+    rt.pointer_move(x, y);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.flipped, [at]);
+    assert_eq!(summary()(&rt).expanded, Some(true));
+    assert!(names(&rt, "label").iter().any(|l| l == "Hidden body"));
+
+    let plain = laid_out(src);
+    assert!(names(&plain, "label").iter().any(|l| l == "Hidden body"), "without a handler the body shows");
 }

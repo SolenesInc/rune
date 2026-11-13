@@ -136,6 +136,9 @@ pub enum Block {
     /// `img { display: block }` sets one: a paragraph around it splits into the text before
     /// and after it. An image inside a link or emphasis stays its alt text in the line.
     Image { src: String, alt: String, title: String },
+    /// A `<details>` block: the text of its `<summary>`, whether its tag says `open`, and the
+    /// Markdown between its `<details>` and `</details>`. See [`Markdown::details`].
+    Details { summary: Inline, open: bool, body: Vec<Block> },
 }
 
 /// A GFM alert's kind.
@@ -173,6 +176,13 @@ pub struct Table {
 }
 
 type TaskWire = Rc<dyn Fn(El, Rc<str>, usize, bool) -> El>;
+
+/// Whether each `<details>` block is open, and what pressing its summary does.
+#[derive(Clone)]
+struct DetailsWire {
+    open: Rc<dyn Fn(usize, bool) -> bool>,
+    press: Rc<dyn Fn(El, usize, bool) -> El>,
+}
 #[cfg(feature = "mermaid")]
 type FrameWire = Rc<dyn Fn(El, &DiagramFrame<'_>) -> El>;
 type CodeWire = Rc<dyn Fn(El, &CodeFrame<'_>) -> El>;
@@ -232,6 +242,7 @@ pub struct Markdown {
     link_help: Option<LinkHelp>,
     on_task: Option<TaskWire>,
     tasks_read_only: bool,
+    details: Option<DetailsWire>,
     link_ring: Option<LinkRing>,
     code_link: Option<CodeLink>,
     selectable: bool,
@@ -258,7 +269,7 @@ thread_local! {
 impl Markdown {
     pub fn new(src: impl Into<String>) -> Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
-            on_task: None, tasks_read_only: false, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
+            on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
             diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
     }
@@ -348,6 +359,26 @@ impl Markdown {
             let f = f.clone();
             e.on_press_tx(move |s: &mut S, tx| f(s, &key, item, checked, tx))
         }));
+        self
+    }
+    /// Lets people open and close `<details>` blocks, whose open state the app keeps.
+    /// `open(at, open_tag)` says whether the block whose `<details>` tag starts at source byte
+    /// `at` shows its body (`open_tag`: whether the tag says `open`); a press on its summary
+    /// calls `toggle(state, at, open, tx)` with the state it asks for. Without this call, every
+    /// `<details>` block shows its body and its summary does nothing.
+    pub fn details<S: 'static>(
+        mut self,
+        open: impl Fn(usize, bool) -> bool + 'static,
+        toggle: impl Fn(&mut S, usize, bool, &mut Tx) + 'static,
+    ) -> Self {
+        let toggle = Rc::new(toggle);
+        self.details = Some(DetailsWire {
+            open: Rc::new(open),
+            press: Rc::new(move |e: El, at: usize, open: bool| {
+                let toggle = toggle.clone();
+                e.on_press_tx(move |s: &mut S, tx| toggle(s, at, open, tx))
+            }),
+        });
         self
     }
     /// Keeps GFM task list checkboxes read-only (unfocusable and unpressable), even when an
@@ -477,6 +508,7 @@ impl Markdown {
             && self.link_ring.is_none()
             && self.code_link.is_none()
             && self.on_task.is_none()
+            && self.details.is_none()
             && !(self.selectable && self.copy_source)
             && self.highlighter.is_builtin()
             && self.code_frame.is_none()
@@ -529,7 +561,7 @@ impl Markdown {
                 .map_or_else(String::new, |(_, key)| key.clone())).collect::<Vec<_>>()
         };
         let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
-            on_task: self.on_task, tasks_read_only: self.tasks_read_only, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
+            on_task: self.on_task, tasks_read_only: self.tasks_read_only, details: self.details, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]

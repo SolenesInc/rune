@@ -341,7 +341,9 @@ fn last_inline<'a>(b: &'a mut Block, m: &'a mut BlockMap) -> Option<(&'a mut Inl
     match (b, m) {
         (Block::Para(i) | Block::Heading(_, i), BlockMap::Inline(m)) => Some((i, m)),
         (Block::List { items, .. }, BlockMap::List(maps)) => last_inline(items.last_mut()?.last_mut()?, maps.last_mut()?.last_mut()?),
-        (Block::Quote(inner) | Block::Alert(_, inner), BlockMap::Quote(maps)) => last_inline(inner.last_mut()?, maps.last_mut()?),
+        (Block::Quote(inner) | Block::Alert(_, inner), BlockMap::Quote(maps)) | (Block::Details { body: inner, .. }, BlockMap::Details { body: maps, .. }) => {
+            last_inline(inner.last_mut()?, maps.last_mut()?)
+        }
         (Block::Table(t), BlockMap::Table { head, rows }) => match (t.rows.last_mut(), rows.last_mut()) {
             (Some(r), Some(m)) => Some((r.last_mut()?, m.last_mut()?)),
             _ => Some((t.head.last_mut()?, head.last_mut()?)),
@@ -356,7 +358,7 @@ fn shows(map: &BlockMap, r: &Range<usize>) -> bool {
     match map {
         BlockMap::Inline(m) | BlockMap::Code(m) => hit(m),
         BlockMap::List(items) => items.iter().flatten().any(|b| shows(b, r)),
-        BlockMap::Quote(inner) => inner.iter().any(|b| shows(b, r)),
+        BlockMap::Quote(inner) | BlockMap::Details { body: inner, .. } => inner.iter().any(|b| shows(b, r)),
         BlockMap::Table { head, rows } => head.iter().chain(rows.iter().flatten()).any(hit),
         BlockMap::None => false,
     }

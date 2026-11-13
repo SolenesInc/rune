@@ -61,6 +61,8 @@ pub(super) enum BlockMap {
     List(Vec<Vec<BlockMap>>),
     Quote(Vec<BlockMap>),
     Table { head: Vec<SpanMap>, rows: Vec<Vec<SpanMap>> },
+    /// A `<details>` block: the source byte its `<details>` tag starts at, and its body's maps.
+    Details { at: usize, body: Vec<BlockMap> },
     #[default]
     None,
 }
@@ -81,6 +83,12 @@ impl BlockMap {
             }
             BlockMap::Quote(inner) => {
                 for b in inner {
+                    *b = std::mem::take(b).shift_src(offset);
+                }
+            }
+            BlockMap::Details { at, body } => {
+                *at += offset;
+                for b in body {
                     *b = std::mem::take(b).shift_src(offset);
                 }
             }
@@ -105,6 +113,8 @@ pub(super) struct Builder {
     stack: Vec<(Container, Vec<Block>, Vec<BlockMap>)>,
     inline: Option<(InlineKind, Inline, Vec<Open>, SpanMap)>,
     code: Option<(String, Fence, SpanMap)>,
+    /// The HTML block being read: its text so far and the source byte it starts at.
+    html: Option<(String, usize)>,
     /// The source range of the last paragraph started at the root.
     last_root_para: Option<Range<usize>>,
     sources: Vec<Source>,
@@ -196,6 +206,9 @@ enum Container {
     List(Option<u64>, Vec<Vec<Block>>, Vec<Vec<BlockMap>>),
     Item(usize),
     Table(Table, Vec<Inline>, Vec<SpanMap>, Vec<Vec<SpanMap>>, Vec<SpanMap>),
+    /// A `<details>` block: its summary, whether it says `open`, and the source byte its tag
+    /// starts at.
+    Details(Inline, bool, usize),
 }
 
 #[derive(Clone, Copy)]
@@ -288,6 +301,26 @@ impl Builder {
         }
     }
 
+    /// Opens a `<details>` block whose tag starts at source byte `at`.
+    pub(super) fn open_details(&mut self, open: bool, at: usize) {
+        self.flush_inline();
+        self.stack.push((Container::Details(Inline::default(), open, at), Vec::new(), Vec::new()));
+    }
+
+    /// Sets the innermost open `<details>` block's summary.
+    pub(super) fn summarize(&mut self, summary: &str) {
+        if let Some((Container::Details(inl, ..), _, _)) = self.stack.last_mut() {
+            inl.text = summary.into();
+        }
+    }
+
+    /// Closes the innermost container if it is a `<details>` block.
+    pub(super) fn close_details(&mut self) {
+        if let Some((Container::Details(..), _, _)) = self.stack.last() {
+            self.pop_container();
+        }
+    }
+
     /// Closes the innermost container into its parent.
     fn pop_container(&mut self) {
         self.flush_inline();
@@ -309,6 +342,7 @@ impl Builder {
                 }
                 self.push(Block::Table(t), BlockMap::Table { head, rows });
             }
+            Container::Details(summary, open, at) => self.push(Block::Details { summary, open, body: blocks }, BlockMap::Details { at, body: maps }),
             Container::Root => {}
         }
     }
@@ -453,6 +487,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         stack: vec![(Container::Root, Vec::new(), Vec::new())],
         inline: None,
         code: None,
+        html: None,
         last_root_para: None,
         sources: Vec::new(),
         tasks: Vec::new(),
@@ -525,6 +560,10 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                         CodeBlockKind::Indented => Fence::Plain(None, true),
                     };
                     b.code = Some((String::new(), fence, SpanMap::default()));
+                }
+                Tag::HtmlBlock => {
+                    b.flush_inline();
+                    b.html = Some((String::new(), range.start));
                 }
                 Tag::MetadataBlock(MetadataBlockKind::YamlStyle) => {
                     b.flush_inline();
@@ -610,6 +649,11 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                         rows.push(std::mem::take(cell_maps));
                     }
                 }
+                TagEnd::HtmlBlock => {
+                    if let Some((html, at)) = b.html.take() {
+                        super::html::block(&mut b, &html, at);
+                    }
+                }
                 TagEnd::BlockQuote(_) | TagEnd::Item | TagEnd::List(_) | TagEnd::Table => b.pop_container(),
                 TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough | TagEnd::Link => close(&mut b),
                 TagEnd::Image => {
@@ -661,6 +705,11 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
             }
             Event::HardBreak => push_text(&mut b, "\n", range),
             Event::InlineHtml(html) => super::html::inline(&mut b, &html, range),
+            Event::Html(html) => {
+                if let Some((text, _)) = &mut b.html {
+                    text.push_str(&html);
+                }
+            }
             Event::TaskListMarker(checked) => {
                 if let Some(idx) = b.stack.iter().rev().find_map(|(c, _, _)| match c {
                     Container::Item(idx) => Some(*idx),
@@ -679,6 +728,9 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
     b.flush_inline();
     if let Some((text, fence, map)) = b.code.take() {
         b.push_code(text, fence, map, true);
+    }
+    if let Some((html, at)) = b.html.take() {
+        super::html::block(&mut b, &html, at);
     }
     // Unwind containers left open by a partial stream.
     while b.stack.len() > 1 {

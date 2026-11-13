@@ -29,6 +29,7 @@ pub(super) fn blocks_dir(blocks: &[Block]) -> Option<Direction> {
         Block::Para(inl) | Block::Heading(_, inl) => inline_dir(inl),
         Block::List { items, .. } => items.iter().find_map(|item| blocks_dir(item)),
         Block::Quote(inner) | Block::Alert(_, inner) => blocks_dir(inner),
+        Block::Details { summary, body, .. } => inline_dir(summary).or_else(|| blocks_dir(body)),
         Block::Table(t) => table_dir(t),
         _ => None,
     })

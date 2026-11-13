@@ -1,0 +1,1 @@
+- `Markdown` reads `<details>` blocks with their `<summary>` as `Block::Details`, and `Markdown::details` lets an app open and close them.
