@@ -369,3 +369,26 @@ fn a_struck_highlight_draws_a_line_through_its_words_in_prose_and_in_code() {
     assert!(els.iter().any(|e| e.key.as_deref() == Some("cut") && e.role == "mark"), "the keyed mark is its own element");
     assert_eq!(els.iter().filter(|e| !e.strikes.is_empty()).count(), 2, "only the texts carry their strikes, not the marks inside them");
 }
+
+#[cfg(feature = "mermaid")]
+fn source_framed_view(src: &String, _: &mut Cx<String>) -> El {
+    let md = Markdown::new(src.clone()).diagram_source_frame(|source, d| {
+        col().child(text(format!("fence {}", d.index)).key("why")).child(source)
+    });
+    col().w_full().child(md.build(&Kit::neutral(true)))
+}
+
+#[cfg(feature = "mermaid")]
+#[test]
+fn a_diagram_that_does_not_draw_comes_to_the_frame_as_its_source() {
+    let src = "```mermaid\ngraph LR\n  A --> B\n```\n\n```mermaid\nkanban\n  Todo\n```\n";
+    let mut rt = Runtime::new(src.to_owned(), source_framed_view, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let els = rt.elements();
+    let within = |block: &str, key: &str| {
+        let b = els.iter().find(|e| e.key.as_deref() == Some(block)).unwrap_or_else(|| panic!("{block}"));
+        els.iter().any(|e| e.key.as_deref() == Some(key) && e.path.starts_with(&b.path) && e.path != b.path)
+    };
+    assert!(within("b0", "card") && !within("b0", "why"), "a drawn diagram isn't framed as source");
+    assert!(within("b1", "source") && within("b1", "why"), "a fence shown as its source comes to the frame with it");
+}
