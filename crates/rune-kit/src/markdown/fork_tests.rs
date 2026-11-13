@@ -349,3 +349,26 @@ fn a_highlight_is_a_button_over_its_glyphs_beside_the_links_inside_it() {
     assert!(rt.selected_text().is_some_and(|t| t.starts_with("his link pass")), "a drag from inside a mark selects: {:?}", rt.selected_text());
     assert_eq!(rt.state.heard.len(), 4, "and presses nothing");
 }
+
+#[cfg(feature = "mermaid")]
+fn source_framed_view(src: &String, _: &mut Cx<String>) -> El {
+    let md = Markdown::new(src.clone()).diagram_source_frame(|source, d| {
+        col().child(text(format!("fence {}", d.index)).key("why")).child(source)
+    });
+    col().w_full().child(md.build(&Kit::neutral(true)))
+}
+
+#[cfg(feature = "mermaid")]
+#[test]
+fn a_diagram_that_does_not_draw_comes_to_the_frame_as_its_source() {
+    let src = "```mermaid\ngraph LR\n  A --> B\n```\n\n```mermaid\nkanban\n  Todo\n```\n";
+    let mut rt = Runtime::new(src.to_owned(), source_framed_view, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let els = rt.elements();
+    let within = |block: &str, key: &str| {
+        let b = els.iter().find(|e| e.key.as_deref() == Some(block)).unwrap_or_else(|| panic!("{block}"));
+        els.iter().any(|e| e.key.as_deref() == Some(key) && e.path.starts_with(&b.path) && e.path != b.path)
+    };
+    assert!(within("b0", "card") && !within("b0", "why"), "a drawn diagram isn't framed as source");
+    assert!(within("b1", "source") && within("b1", "why"), "a fence shown as its source comes to the frame with it");
+}

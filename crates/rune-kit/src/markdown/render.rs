@@ -35,6 +35,9 @@ pub(super) struct Renderer {
     /// `Markdown::diagram_frame`.
     #[cfg(feature = "mermaid")]
     pub(super) diagram_frame: Option<FrameWire>,
+    /// `Markdown::diagram_source_frame`.
+    #[cfg(feature = "mermaid")]
+    pub(super) diagram_source_frame: Option<FrameWire>,
     /// `Markdown::code_frame`.
     pub(super) code_frame: Option<CodeWire>,
     /// `Markdown::quote_frame`.
@@ -599,7 +602,11 @@ impl Renderer {
             if open && self.streaming && crate::mermaid::may_draw(lines) {
                 return holder();
             }
-            col().w_full().child(self.code(src, source, map).key("source"))
+            let shown = col().w_full().child(self.code(src, source, map).key("source"));
+            match &self.diagram_source_frame {
+                Some(f) if !open => f(shown, &DiagramFrame { index, source: src, open }),
+                _ => shown,
+            }
         }
         #[cfg(not(feature = "mermaid"))]
         self.code(src, source, map)
