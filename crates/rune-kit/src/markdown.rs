@@ -285,6 +285,8 @@ pub struct Markdown {
     highlighter: Highlighter,
     #[cfg(feature = "mermaid")]
     diagram_frame: Option<FrameWire>,
+    #[cfg(feature = "mermaid")]
+    diagram_source_frame: Option<FrameWire>,
     code_frame: Option<CodeWire>,
     quote_frame: Option<QuoteWire>,
     front_matter_frame: Option<FrontMatterWire>,
@@ -304,7 +306,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
+            diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -484,6 +486,19 @@ impl Markdown {
         self
     }
 
+    /// Draws `f(source, frame)` in place of each closed diagram fence that shows its source as a
+    /// code block instead of drawing, because its type isn't one that draws or its lines don't
+    /// read as one, so an app can say why above it.
+    ///
+    /// ```ignore
+    /// Markdown::new(src).diagram_source_frame(|source, _| col().child(text("Diagram failed to render")).child(source))
+    /// ```
+    #[cfg(feature = "mermaid")]
+    pub fn diagram_source_frame(mut self, f: impl Fn(El, &DiagramFrame<'_>) -> El + 'static) -> Self {
+        self.diagram_source_frame = Some(Rc::new(f));
+        self
+    }
+
     /// Draws `f(card, frame)` in place of each code block's card, so an app can put its own
     /// controls on it (a Copy button). Diagrams that draw as their source and diff fences don't
     /// come here.
@@ -608,7 +623,7 @@ impl Markdown {
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]
-            diagram_frame: self.diagram_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
+            diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
         // The document reads the way its first words do; until any arrive, the way it was asked.
         let root = bidi::directed(r.blocks(&blocks, &maps, &keys, true), bidi::blocks_dir(&blocks).or(self.tentative)).selection_group(self.selectable);
         if !(self.selectable && self.copy_source) { return root; }
