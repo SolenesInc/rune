@@ -260,7 +260,7 @@ impl CompHost {
         let update_ms = started.elapsed().as_secs_f64() * 1000.0;
         if quiet && !composing(self.comp.as_deref())
             && self.presented.as_ref().is_some_and(|p| p.unchanged(&self.rt, &self.config, animating, None, self.comp.as_deref())) {
-            self.reports.unchanged(None);
+            self.reports.unchanged(None, &self.rt);
             return false;
         }
         let moving = animating || composing(self.comp.as_deref());

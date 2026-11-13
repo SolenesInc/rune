@@ -212,7 +212,7 @@ impl<S: 'static> Host<S> {
                 sync_platform(l, rt, &mut self.secure_input, &mut self.ime_allowed, &self.clipboard);
                 l.stop_pacing();
                 self.meter.set_pacing(l.pacing_state(false));
-                self.frame_reports.unchanged(target);
+                self.frame_reports.unchanged(target, &self.rt);
                 return;
             }
             Some((animating, dt, now))

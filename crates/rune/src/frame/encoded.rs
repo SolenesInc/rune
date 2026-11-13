@@ -128,8 +128,10 @@ impl<S: 'static> FrameReports<S> {
         if let Some(hook) = &mut self.1 { hook(rt); }
     }
 
-    pub(crate) fn unchanged(&mut self, presents_at: Option<Instant>) {
+    /// An `Unchanged` frame leaves on screen what `rt` built, so `App::on_frame_drawn` reads it too.
+    pub(crate) fn unchanged(&mut self, presents_at: Option<Instant>, rt: &crate::Runtime<S>) {
         if self.0.is_some() { self.report(FrameOutcome::Unchanged, Instant::now(), presents_at, None); }
+        self.inspect(rt);
     }
 
     pub(crate) fn skipped(&mut self) {

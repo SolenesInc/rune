@@ -538,9 +538,11 @@ impl<S: 'static> App<S> {
         self
     }
 
-    /// Runs on the UI thread after each `Drawn` frame of the app's window, with the runtime as
-    /// that frame presented it (`Runtime::elements`, `Runtime::state`), for an app that watches
-    /// its own motion. Pair it with [`last_input`](crate::last_input) to tell motion the user
+    /// Runs on the UI thread after each frame that leaves the app's window showing the runtime
+    /// as it is: a `Drawn` frame, or an `Unchanged` one, whose build matches what is on screen.
+    /// It reads the runtime as the window shows it (`Runtime::elements`, `Runtime::state`,
+    /// `Runtime::stats`), for an app that watches its own motion or waits for its window to
+    /// show its latest commit. Pair it with [`last_input`](crate::last_input) to tell motion the user
     /// caused from motion they didn't. Like `on_frame_encoded`, it changes nothing about when
     /// or what the window draws, and only desktop windows call it.
     pub fn on_frame_drawn(mut self, f: impl FnMut(&crate::Runtime<S>) + 'static) -> Self {
