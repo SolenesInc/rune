@@ -512,25 +512,11 @@ impl<S: 'static> Host<S> {
                 if state == ElementState::Released { self.control_click = false; }
                 l.request_redraw();
             }
-            WindowEvent::MouseInput { state, button: MouseButton::Right, .. } => {
-                if let Some((x, y)) = button_at(rt, &l.window) {
-                    match state {
-                        ElementState::Pressed => rt.secondary_down(x, y),
-                        ElementState::Released => {
-                            rt.secondary_up(x, y);
-                            // At the pointer, while it's still where the click was.
-                            if let Some(menu) = rt.take_window_menu() { chrome::window_menu(&l.window, menu, Some((x * rt.zoom(), y * rt.zoom()))); }
-                        }
-                    }
-                }
-                l.request_redraw();
-            }
             WindowEvent::MouseInput { state, button, .. } => {
                 if let Some((x, y)) = button_at(rt, &l.window) {
-                    match state {
-                        ElementState::Pressed => rt.button_down(x, y, pointer_button(button)),
-                        ElementState::Released => rt.button_up(x, y, pointer_button(button)),
-                    }
+                    crate::window::mouse_button(rt, x, y, button, state);
+                    // At the pointer, while it's still where the click was.
+                    if let Some(menu) = rt.take_window_menu() { chrome::window_menu(&l.window, menu, Some((x * rt.zoom(), y * rt.zoom()))); }
                 }
                 l.request_redraw();
             }

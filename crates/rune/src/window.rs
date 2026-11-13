@@ -801,6 +801,15 @@ fn gesture_phase(phase: TouchPhase) -> crate::GesturePhase {
     }
 }
 
+/// Hands a mouse button other than the plain left one to the runtime: the right one goes to an
+/// element that takes the secondary button (`El::pointer_buttons`), else to the menu under it.
+pub(crate) fn mouse_button<S: 'static>(rt: &mut crate::Runtime<S>, x: f32, y: f32, button: MouseButton, state: ElementState) {
+    match state {
+        ElementState::Pressed => rt.button_down(x, y, pointer_button(button)),
+        ElementState::Released => rt.button_up(x, y, pointer_button(button)),
+    }
+}
+
 /// Hands a winit touch (a finger, or a pen where the system reports it as one) to the runtime
 /// in the view's points, timed on a clock that starts with the first touch.
 pub(crate) fn touch<S: 'static>(rt: &mut crate::Runtime<S>, touch: &winit::event::Touch) {

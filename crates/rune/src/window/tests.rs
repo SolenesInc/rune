@@ -803,3 +803,35 @@ fn an_inspection_reads_the_view_an_update_built_without_a_frame() {
     assert!(seen.recv().unwrap(), "the inspection read the updated view");
     assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read of a built view asks for none");
 }
+
+#[derive(Default)]
+struct RightClicks { drags: Vec<crate::Phase>, menus: Vec<&'static str> }
+
+/// The window's right button reaches an element that takes the secondary button as a press,
+/// drag and release, and still opens the menu of one that does not.
+#[test]
+fn the_right_button_reaches_an_element_that_takes_it_and_opens_the_menu_of_one_that_does_not() {
+    use crate::{PointerButton, el};
+    use winit::event::{ElementState, MouseButton};
+    let view = |_: &RightClicks, _: &mut crate::Cx<RightClicks>| {
+        el().w_full().h_full()
+            .child(el().key("takes").size(40.0, 40.0).pointer_buttons([PointerButton::Secondary])
+                .on_drag(|s: &mut RightClicks, d: &mut crate::Drag, _: &mut crate::Tx| s.drags.push(d.phase)))
+            .child(el().key("menu").size(40.0, 40.0).on_secondary_press(|s: &mut RightClicks, _, _| s.menus.push("menu")))
+    };
+    let mut rt = Runtime::new(RightClicks::default(), view, (100.0, 100.0), crate::Env::default());
+    rt.frame(0.0);
+    let (x, y) = rt.find("takes").unwrap();
+    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Pressed);
+    rt.frame(0.0);
+    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
+    rt.frame(0.0);
+    assert_eq!(rt.state.drags, [crate::Phase::Down, crate::Phase::Up]);
+    assert!(rt.state.menus.is_empty());
+
+    let (x, y) = rt.find("menu").unwrap();
+    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Pressed);
+    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
+    rt.frame(0.0);
+    assert_eq!(rt.state.menus, ["menu"]);
+}
