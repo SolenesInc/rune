@@ -66,3 +66,45 @@ fn an_anchored_menu_opens_beside_the_element_it_names_without_wrapping_a_trigger
     assert!(menu[1] >= anchor_bottom || menu_bottom <= anchor[1], "the menu sits above or below its anchor: {anchor:?} {menu:?}");
     assert!((menu[0] - anchor[0]).abs() < 1.0 || menu[0] + menu[2] <= 400.0, "{anchor:?} {menu:?}");
 }
+
+#[derive(Default)]
+struct Field {
+    edit: rune::TextEdit,
+    open: bool,
+}
+
+fn field_and_anchored_menu(s: &Field, _: &mut Cx<Field>) -> El {
+    let k = Kit::neutral(true);
+    let mut layer = Vec::new();
+    let menu = Menu::new("session")
+        .label("Session")
+        .anchor("row.actions")
+        .item(MenuItem::new("Rename"))
+        .open(s.open)
+        .on_close(|s: &mut Field| s.open = false)
+        .build(&k, &mut layer);
+    let field = rune::text_input(&s.edit, rune::tok::TextStyle::new(14.0, 400.0)).key("field").w(150.0).on_edit(|s: &mut Field| &mut s.edit);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).focusable(true).absolute(300.0, 200.0);
+    rune::el().w_full().h_full().child(field).child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
+    let mut s = Field::default();
+    s.edit.focused = true;
+    let mut rt = Runtime::new(s, field_and_anchored_menu, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let focused = |rt: &Runtime<Field>| rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone());
+    assert_eq!(focused(&rt).as_deref(), Some("field"));
+
+    rt.state.open = true;
+    rt.frame(1.0 / 60.0);
+    rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
+    rt.frame(1.5 / 60.0);
+    assert_eq!(focused(&rt).as_deref(), Some("session-item0"));
+
+    rt.key(rune::KeyEvent { key: rune::Key::Escape, mods: rune::Mods::default() });
+    rt.frame(2.0 / 60.0);
+    assert!(!rt.state.open);
+    assert_eq!(focused(&rt).as_deref(), Some("field"));
+}

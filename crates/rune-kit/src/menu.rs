@@ -351,8 +351,9 @@ impl Menu {
         self
     }
     /// Opens beside the element keyed `key`, which the view shows elsewhere (a list row's
-    /// button, a row reached by keys), in place of a trigger this menu wraps. Focus returns to
-    /// it as the menu closes, as to a trigger, and [`Menu::build`] returns an empty element.
+    /// button, a row reached by keys), in place of a trigger this menu wraps, and
+    /// [`Menu::build`] returns an empty element. As the menu closes, focus goes back to where
+    /// it was before the menu opened, not to that element.
     pub fn anchor(mut self, key: impl Into<String>) -> Self {
         self.anchor = Some(key.into());
         self
@@ -406,6 +407,7 @@ impl Menu {
         // A dropdown's trigger reads as open or closed; a context menu's is just where it opened.
         let open = self.open;
         let pointer = self.context || self.at.is_some();
+        let wraps_trigger = self.anchor.is_none();
         let (anchor_key, trigger) = match self.anchor.take() {
             Some(anchor) => (anchor, el()),
             None => {
@@ -428,7 +430,10 @@ impl Menu {
         };
         // Submenus anchor to items inside this surface, so they mount after it.
         let mut subs = Vec::new();
-        let mut surface = self.surface(k, &mut subs).focus_return(anchor_key);
+        let mut surface = self.surface(k, &mut subs);
+        if wraps_trigger {
+            surface = surface.focus_return(anchor_key);
+        }
         if let Some(modal) = modal {
             surface = modal(surface);
         }
