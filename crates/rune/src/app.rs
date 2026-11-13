@@ -443,7 +443,13 @@ impl<S: 'static> App<S> {
     /// (macOS, the end of a Windows session) can tell the app ending from its window closing
     /// alone. A Windows shutdown another app refuses clears it, and a later quit runs this again.
     /// What it asks of its `Tx` beyond state is moot once the loop ends. Native windows only.
+    /// An app sets it once: a second call panics, since replacing the first hook would silently
+    /// lose what it saves at the quit.
     pub fn on_quit(mut self, f: fn(&mut S, &mut Tx)) -> Self {
+        assert!(
+            self.on_quit.is_none(),
+            "App::on_quit is already set, and a second call would drop the first hook: install one hook that does both"
+        );
         self.on_quit = Some(f);
         self
     }
@@ -952,6 +958,14 @@ mod tests {
 
     fn spec() -> AppSpec<u32> {
         AppSpec::new("test", (100.0, 100.0), || 0, |_: &u32, _: &mut Cx<u32>| el())
+    }
+
+    #[test]
+    #[should_panic(expected = "App::on_quit is already set")]
+    fn a_second_on_quit_panics_instead_of_dropping_the_first() {
+        fn save(_: &mut u32, _: &mut Tx) {}
+        fn tidy(_: &mut u32, _: &mut Tx) {}
+        let _ = App::new(spec()).on_quit(save).on_quit(tidy);
     }
 
     #[test]
