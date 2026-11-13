@@ -22,6 +22,9 @@ pub struct ImageFrame<'a> {
     pub image: &'a Image,
 }
 
+/// The width the broken-image glyph takes before an image's alt text.
+pub(super) const BROKEN_GLYPH: f32 = 16.0;
+
 /// Chromium's 16 point broken-image glyph, as straight-alpha RGBA.
 const BROKEN: &[u8; 1024] = include_bytes!("broken-image.rgba");
 
@@ -53,9 +56,13 @@ impl Markdown {
 }
 
 impl Renderer {
+    /// The decoded picture the app has for `src`, and its size in pixels.
+    pub(super) fn picture(&self, src: &str) -> Option<([u32; 2], Image)> {
+        self.images.as_ref().and_then(|f| f(src)).filter(|i| i.is_ready() && i.error().is_none()).and_then(|i| Some((i.size()?, i)))
+    }
+
     pub(super) fn image(&self, src: &str, alt: &str, title: &str) -> El {
-        let shown = self.images.as_ref().and_then(|f| f(src)).filter(|i| i.is_ready() && i.error().is_none()).and_then(|i| Some((i.size()?, i)));
-        let Some(([w, _], picture)) = shown else { return self.broken(alt) };
+        let Some(([w, _], picture)) = self.picture(src) else { return self.broken(alt) };
         // Its own size in points, as a browser draws an image's pixels at 1x, up to the text's width.
         let mut e = el().role("image").label(if alt.is_empty() { "Image preview" } else { alt }).w_full().max_w(w as f32).pixels(picture.pixels()).radius(4.0).cursor(Cursor::ZoomIn);
         if !title.is_empty() {

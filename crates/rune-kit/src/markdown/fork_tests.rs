@@ -171,3 +171,37 @@ fn a_details_block_opens_and_closes_from_its_summary_as_the_app_says() {
     let plain = laid_out(src);
     assert!(names(&plain, "label").iter().any(|l| l == "Hidden body"), "without a handler the body shows");
 }
+
+#[test]
+fn a_table_cell_that_holds_only_an_image_is_known_by_its_row_and_column() {
+    let src = "| ![Before](a.png) | ![After](b.png \"later\") |\n|---|---|\n| ![Shot](shot.png) | text ![inline](c.png) |\n";
+    let b = parse(src);
+    let Block::Table(t) = &b[0] else { panic!("{b:?}") };
+    let at: Vec<_> = t.pictures.iter().map(|p| (p.row, p.column, p.src.as_str(), p.title.as_str())).collect();
+    assert_eq!(at, [(None, 0, "a.png", ""), (None, 1, "b.png", "later"), (Some(0), 0, "shot.png", "")]);
+    assert_eq!(t.rows[0][1].text, "text inline", "an image beside text stays its alt text");
+}
+
+#[test]
+fn a_table_cell_image_shows_its_picture_at_its_size_and_its_alt_text_until_then() {
+    fn shown(src: &String, _: &mut Cx<String>) -> El {
+        thread_local! {
+            static PICTURE: rune::Image = {
+                let cache = rune::ImageCache::new(std::sync::Arc::new(|| {}));
+                let image = cache.rgba(64, 32, [40u8, 80, 120, 255].repeat(64 * 32));
+                image.wait().unwrap();
+                image
+            };
+        }
+        let picture = PICTURE.with(|p| p.clone());
+        let md = Markdown::new(src.clone()).images(move |src| (src == "shot.png").then(|| picture.clone()));
+        col().w_full().child(md.build(&Kit::neutral(true)))
+    }
+    let src = "| Shot | Gone |\n|---|---|\n| ![A shot](shot.png) | ![Missing](gone.png) |\n";
+    let mut rt = Runtime::new(src.to_owned(), shown, (480.0, 400.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let images: Vec<_> = rt.elements().into_iter().filter(|e| e.role == "image").collect();
+    let labels: Vec<_> = images.iter().map(|e| e.label.as_deref().unwrap_or_default()).collect();
+    assert_eq!(labels, ["A shot", "Missing"]);
+    assert_eq!(images[0].rect[2], 64.0, "the picture at its own width");
+}

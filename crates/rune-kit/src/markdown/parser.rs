@@ -128,6 +128,10 @@ pub(super) struct Builder {
     image_ranges: Vec<(usize, usize)>,
     /// Each open image's source and title, beside `image_starts`.
     image_dests: Vec<(String, String)>,
+    /// The images of the table cell being read: their alt text's range, source and title.
+    cell_images: Vec<(usize, usize, String, String)>,
+    /// A table's header row is being read.
+    in_head: bool,
     tail: Tail,
 }
 
@@ -280,9 +284,17 @@ impl Builder {
             }
             self.image_ranges.clear();
             self.image_starts.clear();
+            let images = std::mem::take(&mut self.cell_images);
             if let InlineKind::Cell = kind {
                 // Empty cells still hold their column.
-                if let Some((Container::Table(_, cells, _, _, cell_maps), _, _)) = self.stack.last_mut() {
+                if let Some((Container::Table(t, cells, _, _, cell_maps), _, _)) = self.stack.last_mut() {
+                    if let [(0, end, src, title)] = images.as_slice()
+                        && *end == inl.text.len()
+                        && !src.is_empty()
+                    {
+                        let row = (!self.in_head).then_some(t.rows.len());
+                        t.pictures.push(CellPicture { row, column: cells.len(), src: src.clone(), title: title.clone() });
+                    }
                     cells.push(inl);
                     cell_maps.push(map);
                 }
@@ -498,6 +510,8 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         image_starts: Vec::new(),
         image_ranges: Vec::new(),
         image_dests: Vec::new(),
+        cell_images: Vec::new(),
+        in_head: false,
         tail: Tail::None,
     };
     let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
@@ -607,6 +621,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     ));
                 }
                 Tag::TableHead | Tag::TableRow => {
+                    b.in_head = matches!(tag, Tag::TableHead);
                     // A row is still arriving while its line has no newline yet.
                     let open = !src[range.start..].contains('\n');
                     if let Some((t, _, _, _, _)) = b.table() {
@@ -637,6 +652,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                 }
                 TagEnd::TableHead => {
                     b.flush_inline();
+                    b.in_head = false;
                     if let Some((t, cells, head, _, cell_maps)) = b.table() {
                         t.head = std::mem::take(cells);
                         *head = std::mem::take(cell_maps);
@@ -660,6 +676,9 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     if let Some(start) = b.image_starts.pop() {
                         let end = b.inline().1.text.len();
                         let (src, title) = b.image_dests.pop().unwrap_or_default();
+                        if matches!(b.inline, Some((InlineKind::Cell, ..))) {
+                            b.cell_images.push((start, end, src.clone(), title.clone()));
+                        }
                         if !b.lift_image(start, end, src, title) {
                             b.image_ranges.push((start, end));
                         }
@@ -805,7 +824,7 @@ fn pending_table(src: &str, base_offset: usize, autolink: bool) -> Option<(Table
         head_maps.push(map);
     }
     Some((
-        Table { align, head: head_inlines, rows: Vec::new(), open: true },
+        Table { align, head: head_inlines, rows: Vec::new(), open: true, pictures: Vec::new() },
         BlockMap::Table { head: head_maps, rows: Vec::new() },
     ))
 }

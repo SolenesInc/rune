@@ -173,6 +173,20 @@ pub struct Table {
     pub rows: Vec<Vec<Inline>>,
     /// The source ends inside the last row (or the header), so it may still grow.
     pub open: bool,
+    /// The cells that hold nothing but an image (`| ![alt](src) |`), which show its picture
+    /// in place of their text (the alt text).
+    pub pictures: Vec<CellPicture>,
+}
+
+/// A table cell that holds nothing but an image.
+#[derive(Clone, Debug, Default, PartialEq, Hash)]
+pub struct CellPicture {
+    /// The cell's row among the table's rows, or `None` in the header.
+    pub row: Option<usize>,
+    pub column: usize,
+    /// The image's source as written.
+    pub src: String,
+    pub title: String,
 }
 
 type TaskWire = Rc<dyn Fn(El, Rc<str>, usize, bool) -> El>;

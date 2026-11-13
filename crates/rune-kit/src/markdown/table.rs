@@ -286,11 +286,11 @@ impl Renderer {
             }
         }
         let widths = fixed.as_ref().map(|(w, _)| w.as_slice());
-        let head = self.table_row(&t.head, head_maps, t, &cols, widths, self.head_font(), s.table_head_text, self.head_pad(), "columnheader").key("th");
+        let head = self.table_row(&t.head, None, head_maps, t, &cols, widths, self.head_font(), s.table_head_text, self.head_pad(), "columnheader").key("th");
         let rule = |key: String| el().key(key).w_full().h(0.5).fill(s.table_rule).a11y_hidden();
         let row_at = |i: usize, cells: &[Inline]| {
             let rmap = row_maps.get(i).map_or(&[][..], Vec::as_slice);
-            self.table_row(cells, rmap, t, &cols, widths, self.body_font(), s.text, s.table_pad, "cell").key(format!("r{i}"))
+            self.table_row(cells, Some(i), rmap, t, &cols, widths, self.body_font(), s.text, s.table_pad, "cell").key(format!("r{i}"))
         };
         if let Some(body) = &s.table_body {
             // The frame doesn't clip, so the card's shadow shows past it; the header row and
@@ -374,7 +374,7 @@ impl Renderer {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn table_row(&self, cells: &[Inline], maps: &[SpanMap], t: &Table, cols: &Columns, widths: Option<&[f32]>, font: TextStyle, color: Color, [pad_x, pad_y]: [f32; 2], cell_role: &'static str) -> El {
+    fn table_row(&self, cells: &[Inline], row_at: Option<usize>, maps: &[SpanMap], t: &Table, cols: &Columns, widths: Option<&[f32]>, font: TextStyle, color: Color, [pad_x, pad_y]: [f32; 2], cell_role: &'static str) -> El {
         let empty = Inline::default();
         let total: f32 = cols.natural.iter().sum();
         let mut r = row().role("row").w_full();
@@ -412,7 +412,10 @@ impl Renderer {
             r = r.child(
                 // Clipped: a word wider than a shrunk column (or a row still streaming in) must
                 // not run into the next column.
-                cell.pl(self.pad_left(j, pad_x)).pr(pad_x).py(pad_y).clip_soft(0.0).child(self.select_inline(content, inl, maps.get(j))),
+                cell.pl(self.pad_left(j, pad_x)).pr(pad_x).py(pad_y).clip_soft(0.0).child(match cell_picture(t, row_at, j) {
+                    Some(p) => self.image(&p.src, &inl.text, &p.title),
+                    None => self.select_inline(content, inl, maps.get(j)),
+                }),
             );
         }
         r
@@ -436,10 +439,10 @@ impl Renderer {
         } else {
             Vec::new()
         };
+        let picture_widths: Vec<Option<u32>> = t.pictures.iter().map(|p| self.picture(&p.src).map(|([w, _], _)| w)).collect();
         let key = hash_of((
             n,
-            &t.head,
-            rows,
+            (&t.head, rows, &t.pictures, &picture_widths),
             font_key(head),
             font_key(body),
             cap.to_bits(),
@@ -455,13 +458,21 @@ impl Renderer {
         }
         // Each line's widest cell per column, the header's apart from the body's: their
         // padding can differ.
-        let widths = |lines: &mut dyn Iterator<Item = &Vec<Inline>>, font: TextStyle| {
+        let widths = |lines: &mut dyn Iterator<Item = (Option<usize>, &Vec<Inline>)>, font: TextStyle| {
             let (mut natural, mut fit) = (vec![0.0f32; n], vec![0.0f32; n]);
-            for cells in lines {
+            for (row_at, cells) in lines {
                 for (j, inl) in cells.iter().take(n).enumerate() {
+                    // A picture is as wide as its pixels and shrinks with its column; until the
+                    // app has it, the broken-image glyph and the alt text stand in.
+                    let picture = t.pictures.iter().position(|p| p.row == row_at && p.column == j);
+                    if let Some(Some(w)) = picture.map(|k| picture_widths[k]) {
+                        natural[j] = natural[j].max(w as f32);
+                        continue;
+                    }
                     if inl.text.is_empty() {
                         continue;
                     }
+                    let glyph = if picture.is_some() { super::image::BROKEN_GLYPH } else { 0.0 };
                     let spans = self.spans(inl, font);
                     // Unrounded, as a browser's table layout sums them; a hair over, so a cell at
                     // its column's natural width never wraps its last word.
@@ -473,15 +484,15 @@ impl Renderer {
                     let pad = |hit: bool| if hit { self.s.inline_code_pad } else { 0.0 };
                     let pads = inl.spans.iter().filter(|s| s.2 == Style::CodePad && inl.spans.iter().any(|c| c.2 == Style::Code && c.1 == s.0));
                     let (last, word) = pads.fold((false, false), |(last, word), s| (last || s.1 == inl.text.len(), word || ends_code(s.1)));
-                    natural[j] = natural[j].max(max + pad(last) + 0.01);
-                    fit[j] = fit[j].max(min + pad(word) + 0.01);
+                    natural[j] = natural[j].max(max + pad(last) + glyph + 0.01);
+                    fit[j] = fit[j].max(min + pad(word) + glyph + 0.01);
                 }
             }
             let min = fit.iter().map(|w| w.min(cap)).collect::<Vec<_>>();
             (natural, min, fit)
         };
-        let (head_natural, head_min, head_fit) = widths(&mut std::iter::once(&t.head), head);
-        let (body_natural, body_min, body_fit) = widths(&mut rows.iter(), body);
+        let (head_natural, head_min, head_fit) = widths(&mut std::iter::once((None, &t.head)), head);
+        let (body_natural, body_min, body_fit) = widths(&mut rows.iter().enumerate().map(|(i, r)| (Some(i), r)), body);
         let [head_x, body_x] = [self.head_pad()[0], self.s.table_pad[0]];
         let has_body = !rows.is_empty();
         let padded = |h: &[f32], b: &[f32]| -> Vec<f32> {
@@ -496,4 +507,10 @@ impl Renderer {
         WIDTHS.with_borrow_mut(|c| c.insert(key, cols.clone(), 12 * n + 64));
         cols
     }
+}
+
+/// The picture the cell at `row` (`None` in the header) and `column` shows, if it holds nothing
+/// but an image.
+fn cell_picture(t: &Table, row: Option<usize>, column: usize) -> Option<&CellPicture> {
+    t.pictures.iter().find(|p| p.row == row && p.column == column)
 }

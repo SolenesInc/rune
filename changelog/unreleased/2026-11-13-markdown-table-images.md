@@ -1,0 +1,1 @@
+- A `Markdown` table cell that holds only an image shows its picture, listed in `Table::pictures`.
