@@ -1,5 +1,11 @@
 # Rune
 
+This is [SolenesInc/rune](https://github.com/SolenesInc/rune), attn's own fork of
+[anomalyco/rune](https://github.com/anomalyco/rune). attn changes it freely and
+takes upstream changes by cherry-pick. Apps pin revisions of `main`, which is
+never rewritten; `dev` mirrors upstream. [FORK.md](FORK.md) lists every change
+we made and every upstream commit we picked.
+
 A native GPU-rendered Rust UI framework for macOS, Windows, Linux and the web, with its own renderer, text, layout and springs.
 
 Every app can run headless, so an agent can render to PNG, dump the element tree and drive it with scripted input.
@@ -49,16 +55,17 @@ Give your coding agent this repo. Have it start from [`examples/hello`](examples
 ## Add it
 
 ```toml
-rune = { git = "https://github.com/anomalyco/rune", rev = "<dev rev>" }
+rune = { git = "https://github.com/SolenesInc/rune", rev = "<main rev>" }
 ```
 
-Rune is pre-release. Pin a rev of `dev`; `dev` is never rewritten.
+Rune is pre-release. Pin a rev of `main`; `main` is never rewritten.
 
 [Docs](crates/rune/README.md) · [Components](crates/rune-kit/README.md) · [Examples](examples) · [Changelog](CHANGELOG.md)
 
 ## Contributing
 
-We don't take pull requests. Have your agent [open an issue](https://github.com/anomalyco/rune/issues)
-describing the bug or idea, and our agents usually turn it around fast.
+Changes to this fork follow [AGENTS.md](AGENTS.md) and attn's
+`docs/internal/rune-fork.md`. Do not take this fork's work to upstream's issues,
+pull requests or discussions.
 
 MIT, © Anomaly.

@@ -1,7 +1,7 @@
 <!-- tallow -->
 # Rune
 
-A Rust GPU UI framework (wgpu, winit) for apps that feel like SwiftUI on iOS at 120 Hz on Mac, Windows, Linux, web and iOS. Views are plain Rust. Apps pin `dev` revs.
+A Rust GPU UI framework (wgpu, winit) for apps that feel like SwiftUI on iOS at 120 Hz on Mac, Windows, Linux, web and iOS. Views are plain Rust. This is SolenesInc/rune, attn's own fork of upstream anomalyco/rune; apps pin revisions of `main`.
 
 ## Layout
 
@@ -20,13 +20,15 @@ A Rust GPU UI framework (wgpu, winit) for apps that feel like SwiftUI on iOS at 
 
 ## Changes
 
-- Work on `dev`. `production` deploys the site.
-- `dev` is fast-forward-only: never force-push or rewrite it. Apps pin its revs, so a rewrite breaks every app's build on a clean fetch.
-- For any change that can move an app's output or break its build, add `changelog/unreleased/<YYYY-MM-DD>-<slug>.md` with one top-level bullet, in the style of the `CHANGELOG.md` entries. `scripts/changelog-fold` folds them into `## dev`.
+- This library is attn's own. Change it whenever that makes attn simpler or better; attn's `docs/internal/rune-fork.md` has the rules.
+- Work on a branch from `main`. `main` is the trunk apps pin: never force-push or rewrite it, because every revision an app has pinned must stay reachable. attn's `scripts/rune-bump` brings a branch into `main`.
+- Every change comes with a test that fails without it and, in the same commit, a row in `FORK.md` that names the test, or an extension of its existing row. `scripts/rune-bump` runs those tests and fails on a commit that does not change `FORK.md`.
+- `dev` mirrors upstream's `dev` and takes no commits of ours. Take an upstream change by cherry-picking it with `git cherry-pick -x`, recorded under "Picked from upstream" in `FORK.md`; never merge `dev` into `main`.
+- Upstream's changelog does not apply here: `FORK.md` is this repository's record of what changed.
 - Keep Rust files under 800 non-test lines (`#[cfg(test)]` code excluded); 1,500 is a hard cap. The point is to stop god files and edit collisions, not to chop a file that reads fine as one piece. Older files over the cap are listed in `scripts/file-size-exceptions.txt` with ceilings that only go down. Run `scripts/file-size.sh` to check.
 - Keep folders shaped by capability: `x.rs` or `x/` beside two or more `x_*.rs` (or three or more `x_*.rs` alone) means move them into `x/`; a folder over 40 source files warns and over 60 is an error (tests aren't counted; `examples/`, `benches/` and `bin/` are skipped). `scripts/folder-shape.sh` runs inside `scripts/file-size.sh`; old violations are in `scripts/folder-shape-exceptions.txt` with ceilings that only go down.
 - Put tests in a sibling `tests.rs` or `*_tests.rs`, and keep any test file or module under 1,000 lines.
-- Before adding to a file over the cap, move the area you touch into its own module, in its own PR.
+- Before adding to a file over the cap, move the area you touch into its own module, in its own commit.
 - A feature owns its state, keys and registrations so it plugs in with one line. New runtime state goes in the owning subsystem's struct, not a flat `Runtime` field.
 - In `lib.rs`, keep `mod` and `pub use` lists one item per line, sorted.
 - Apps build these types as literals, so adding a pub field breaks them: `AppSpec`, `Env`, `Elevation`, `PaletteSeed`, `OverlaySpec`, `TextStyle`, `RunOptions`, `ScrollSpec`, `Span`, `ByteFrame`, `SurfaceDraw`, `LayerSpec`. Add a builder method instead.

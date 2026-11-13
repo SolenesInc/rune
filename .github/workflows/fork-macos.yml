@@ -1,11 +1,11 @@
 name: fork macOS tests
 
 # SolenesInc/rune only (FORK.md). Runs the tests of the areas the fork patches on macOS, where
-# the menu and layer patches live, for each push to the `attn` branch and on request. Upstream's
+# the menu and layer patches live, for each push to the `main` branch and on request. Upstream's
 # macos-tests.yml needs a runner this organisation does not have.
 on:
   push:
-    branches: [attn]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
