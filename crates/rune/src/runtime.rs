@@ -736,6 +736,8 @@ pub struct Runtime<S: 'static> {
     pub(crate) minimize: crate::window::Minimize,
     /// Links handlers asked to open that this runtime left unopened (`Runtime::take_url_requests`).
     pub(crate) url_requests: Vec<String>,
+    /// Paths handlers asked to reveal that this runtime left unrevealed (`Runtime::take_reveal_requests`).
+    pub(crate) reveal_requests: Vec<String>,
     /// True when attached to a live window, overlay or web canvas, not a headless or scripted run.
     pub(crate) open_urls_natively: bool,
     /// Pop-up menus asked for (`Tx::popup_menu`) and not yet answered, oldest first.
@@ -1046,6 +1048,7 @@ impl<S: 'static> Runtime<S> {
             shell_request: None,
             minimize: Default::default(),
             url_requests: Vec::new(),
+            reveal_requests: Vec::new(),
             open_urls_natively: false,
             popups: Default::default(),
             file_dialog: Default::default(),
