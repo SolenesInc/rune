@@ -355,7 +355,7 @@ fn a_struck_highlight_draws_a_line_through_its_words_in_prose_and_in_code() {
     const SRC: &str = "Cut these words here.\n\n```\nlet cut = 1;\n```\n";
     fn struck(src: &String, _: &mut Cx<String>) -> El {
         let at = |s: &str| SRC.find(s).unwrap()..SRC.find(s).unwrap() + s.len();
-        let marks = vec![(vec![at("these words")], Highlight::new().strike()), (vec![at("cut")], Highlight::new().strike()), (vec![at("here")], Highlight::new())];
+        let marks = vec![(vec![at("these words")], Highlight::new().strike().key("cut")), (vec![at("cut")], Highlight::new().strike()), (vec![at("here")], Highlight::new())];
         col().w_full().child(Markdown::new(src.clone()).highlights(marks).build(&Kit::neutral(true)))
     }
     let mut rt = Runtime::new(SRC.to_owned(), struck, (480.0, 800.0), Env::new(true, 1.0));
@@ -365,4 +365,7 @@ fn a_struck_highlight_draws_a_line_through_its_words_in_prose_and_in_code() {
     };
     assert_eq!(strikes("Cut these words here."), vec![[4, 15]]);
     assert_eq!(strikes("let cut = 1;"), vec![[4, 7]]);
+    let els = rt.elements();
+    assert!(els.iter().any(|e| e.key.as_deref() == Some("cut") && e.role == "mark"), "the keyed mark is its own element");
+    assert_eq!(els.iter().filter(|e| !e.strikes.is_empty()).count(), 2, "only the texts carry their strikes, not the marks inside them");
 }
