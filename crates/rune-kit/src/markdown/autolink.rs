@@ -8,6 +8,15 @@ pub(super) fn autolink_inline(inl: &mut Inline, image_ranges: &[(usize, usize)])
     if !inl.text.contains("://") && !inl.text.contains("www.") {
         return;
     }
+    let mut found: Vec<(usize, usize, String)> = Vec::new();
+    for (a, b) in prose(inl, image_ranges) {
+        scan_bare_urls(&inl.text, a, b, &mut found);
+    }
+    add_links(inl, found);
+}
+
+/// The byte ranges of `inl.text` outside inline code, links and `image_ranges`, in order.
+pub(super) fn prose(inl: &Inline, image_ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
     let mut excluded: Vec<(usize, usize)> = inl
         .spans
         .iter()
@@ -16,18 +25,22 @@ pub(super) fn autolink_inline(inl: &mut Inline, image_ranges: &[(usize, usize)])
         .chain(image_ranges.iter().copied())
         .collect();
     excluded.sort_unstable_by_key(|&(a, _)| a);
-
-    let mut found: Vec<(usize, usize, String)> = Vec::new();
+    let mut runs = Vec::new();
     let mut cursor = 0;
     for (ex_a, ex_b) in excluded {
         if cursor < ex_a {
-            scan_bare_urls(&inl.text, cursor, ex_a, &mut found);
+            runs.push((cursor, ex_a));
         }
         cursor = cursor.max(ex_b);
     }
     if cursor < inl.text.len() {
-        scan_bare_urls(&inl.text, cursor, inl.text.len(), &mut found);
+        runs.push((cursor, inl.text.len()));
     }
+    runs
+}
+
+/// Wires `found` links, which lie in [`prose`], into `inl.links` and `inl.spans`.
+pub(super) fn add_links(inl: &mut Inline, found: Vec<(usize, usize, String)>) {
     if found.is_empty() {
         return;
     }
@@ -39,7 +52,7 @@ pub(super) fn autolink_inline(inl: &mut Inline, image_ranges: &[(usize, usize)])
     if had_links {
         inl.links.sort_by_key(|l| l.0);
         // Keep `Style::Link` spans in `inl.spans` ordered by start byte to match `inl.links`.
-        let mut link_ranges: Vec<(usize, usize)> = inl.links.iter().map(|&(a, b, _)| (a, b)).collect();
+        let link_ranges: Vec<(usize, usize)> = inl.links.iter().map(|&(a, b, _)| (a, b)).collect();
         let mut k = 0;
         for sp in &mut inl.spans {
             if matches!(sp.2, Style::Link) {
@@ -47,7 +60,6 @@ pub(super) fn autolink_inline(inl: &mut Inline, image_ranges: &[(usize, usize)])
                 k += 1;
             }
         }
-        let _ = &mut link_ranges;
     }
 }
 

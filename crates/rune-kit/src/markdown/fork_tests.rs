@@ -82,3 +82,32 @@ fn inline_html_breaks_lines_and_styles_text_and_drops_other_tags() {
     assert_eq!(find(src, "two", Case::Insensitive), vec![vec![two..two + 3]]);
     assert_eq!(parse("a </b> b").first(), parse("a  b").first(), "an unmatched closing tag ends nothing");
 }
+
+#[test]
+fn text_links_link_what_the_app_finds_in_prose_and_leave_code_and_links_alone() {
+    fn view(_: &(), _: &mut Cx<()>) -> El {
+        let src = "# Plan s-1\n\nBlocked on **s-1** and [s-1](other), see `s-1`.\n\n```\ns-1\n```\n\n> - s-1\n\n| a |\n|---|\n| s-1 |";
+        Markdown::new(src)
+            .on_link(|_: &mut (), _| {})
+            .text_links(|run| run.match_indices("s-1").map(|(at, w)| (at..at + w.len(), "seed:s-1".to_owned())).collect())
+            .render(&MarkdownStyle::neutral(true))
+    }
+    let mut rt = Runtime::new((), view, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let links: Vec<String> = rt.elements().into_iter().filter(|e| e.role == "link").filter_map(|e| e.key).collect();
+    assert_eq!(links, ["seed:s-1", "seed:s-1", "other", "seed:s-1", "seed:s-1"], "heading, bold, the written link, quoted list, table cell");
+}
+
+#[test]
+fn text_links_skip_ranges_that_overlap_leave_the_run_or_cut_a_character() {
+    fn view(_: &(), _: &mut Cx<()>) -> El {
+        Markdown::new("é abc")
+            .on_link(|_: &mut (), _| {})
+            .text_links(|_| vec![(0..1, "cut".into()), (3..5, "first".into()), (4..6, "overlap".into()), (5..99, "out".into()), (5..5, "empty".into())])
+            .render(&MarkdownStyle::neutral(true))
+    }
+    let mut rt = Runtime::new((), view, (480.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let links: Vec<String> = rt.elements().into_iter().filter(|e| e.role == "link").filter_map(|e| e.key).collect();
+    assert_eq!(links, ["first"]);
+}

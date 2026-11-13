@@ -65,6 +65,7 @@ mod render;
 mod stream;
 mod style;
 mod table;
+mod text_links;
 
 pub use find::{Case, find};
 pub use image::ImageFrame;
@@ -86,6 +87,7 @@ use cache::{CACHE, PARSES};
 use parser::{BlockMap, CLOSE, Cut, PAD, ParsedDoc, Source, SpanMap, parse_doc, unpadded};
 use render::{Renderer, hash_of, rendered_keys, source_copy};
 use stream::parse_streaming;
+use text_links::TextLinks;
 
 /// An inline style run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -245,6 +247,7 @@ pub struct Markdown {
     link_favicon: Option<link_icon::FaviconWire>,
     images: Option<image::ImageWire>,
     on_image: Option<image::ImagePress>,
+    text_links: Option<TextLinks>,
 }
 
 #[cfg(test)]
@@ -257,7 +260,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None }
+            diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -482,6 +485,7 @@ impl Markdown {
             && self.link_favicon.is_none()
             && self.images.is_none()
             && self.on_image.is_none()
+            && self.text_links.is_none()
             && !(cfg!(feature = "mermaid") && self.src.contains("mermaid"));
         if can_cache {
             let h = rune::memo::digest(&(
@@ -511,6 +515,14 @@ impl Markdown {
                 let (b, s, t, _, st, m) = if streaming { parse_streaming(&self.src, false) } else { parse_doc(&self.src, false) };
                 (Rc::new(b), s.into(), t.into(), st.into(), m.into())
             }
+        };
+        let blocks = match &self.text_links {
+            Some(f) => {
+                let mut linked = (*blocks).clone();
+                text_links::link_blocks(&mut linked, &**f);
+                Rc::new(linked)
+            }
+            None => blocks,
         };
         let keys = if self.block_keys.is_empty() { Vec::new() } else {
             starts.iter().map(|at| self.block_keys.iter().find(|(offset, _)| offset == at)
