@@ -210,7 +210,8 @@ impl<S: 'static> Runtime<S> {
             && target.is_none_or(|t| !self.allowed(t))
         {
             let modal = self.nodes[i].handlers.modal.as_ref();
-            if modal.is_some_and(|m| m.outside) {
+            let on_invoker = target.is_some_and(|t| self.on_modal_invoker(t));
+            if modal.is_some_and(|m| m.outside) && !on_invoker {
                 self.queue.push(Action::Dismiss(self.nodes[i].path.clone()));
             }
             if target.is_none() || !modal.is_some_and(|m| m.outside && m.press_through) {

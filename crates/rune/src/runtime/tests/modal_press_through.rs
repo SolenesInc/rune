@@ -41,3 +41,35 @@ fn a_press_outside_a_modal_only_closes_it_by_default() {
     assert!(!rt.state.open);
     assert_eq!(rt.state.pressed, 0, "the press only closed the modal");
 }
+
+struct Invoked { open: bool, toggled: u32 }
+
+/// A toggle at the top left whose press-through popover, while open, is anchored under it.
+fn invoked(s: &Invoked, _: &mut Cx<Invoked>) -> El {
+    let toggle = el().key("toggle").absolute(0.0, 0.0).size(40.0, 40.0)
+        .on_press(|s: &mut Invoked| { s.open = !s.open; s.toggled += 1; });
+    let popover = s.open.then(|| {
+        el().key("popover").size(40.0, 40.0)
+            .modal(true, |s: &mut Invoked| s.open = false)
+            .modal_press_through(true)
+            .anchored("toggle", crate::Side::Bottom, crate::Align::Start, 4.0)
+    });
+    el().size(200.0, 200.0).child(toggle).children(popover)
+}
+
+#[test]
+fn a_press_on_a_press_through_modals_invoker_leaves_the_modal_to_the_invoker() {
+    let mut rt = Runtime::new(Invoked { open: false, toggled: 0 }, invoked, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let press = |rt: &mut Runtime<Invoked>, t: f64| {
+        rt.pointer_move(20.0, 20.0);
+        rt.pointer_down(20.0, 20.0);
+        rt.pointer_up(20.0, 20.0);
+        rt.frame(t);
+    };
+    press(&mut rt, DT);
+    assert!(rt.state.open, "the first press opens the popover");
+    press(&mut rt, 2.0 * DT);
+    assert!(!rt.state.open, "the second press closes it, and nothing opens it again");
+    assert_eq!(rt.state.toggled, 2, "each press reached the invoker once");
+}

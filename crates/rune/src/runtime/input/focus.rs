@@ -26,6 +26,9 @@ pub(super) struct ModalScope {
     members: Vec<bool>,
     /// `El::modal_press_through`: the pointer reaches what is behind the modal.
     pointer_through: bool,
+    /// The element a press-through modal is anchored to, whose press decides about the modal
+    /// instead of dismissing it, as a popover's invoker does.
+    invoker: Option<usize>,
 }
 
 /// Whether `ev` navigates (Tab, an arrow, Home, End, Page Up or Page Down, unmodified but for
@@ -70,6 +73,27 @@ impl<S: 'static> Runtime<S> {
     pub(super) fn active_modal(&self) -> Option<usize> {
         self.modal_scope.as_ref().map(|m| m.index)
     }
+    /// The element node `i`, or the nearest ancestor that is anchored, is anchored to.
+    fn anchor_of(&self, i: usize) -> Option<usize> {
+        let mut at = Some(i);
+        while let Some(j) = at {
+            if let Some(above) = &self.nodes[j].above {
+                return self.nodes.iter().position(|n| n.key.as_deref() == Some(&above.key));
+            }
+            at = self.nodes[j].parent;
+        }
+        None
+    }
+    /// Node `i` is the open press-through modal's invoker, or inside it.
+    pub(super) fn on_modal_invoker(&self, i: usize) -> bool {
+        let Some(invoker) = self.modal_scope.as_ref().and_then(|m| m.invoker) else { return false };
+        let mut at = Some(i);
+        while let Some(j) = at {
+            if j == invoker { return true; }
+            at = self.nodes[j].parent;
+        }
+        false
+    }
     /// Node `i` is inside the open modal's scope, or no modal is open.
     pub(crate) fn modal_member(&self, i: usize) -> bool {
         self.modal_scope.as_ref().is_none_or(|m| m.members.get(i).copied().unwrap_or(false))
@@ -100,7 +124,8 @@ impl<S: 'static> Runtime<S> {
             if !changed { break; }
         }
         let pointer_through = self.nodes[index].handlers.modal.as_ref().is_some_and(|m| m.outside && m.press_through);
-        self.modal_scope = Some(ModalScope { index, members, pointer_through });
+        let invoker = pointer_through.then(|| self.anchor_of(index)).flatten();
+        self.modal_scope = Some(ModalScope { index, members, pointer_through, invoker });
     }
     /// Input may reach node `i`: it's outside any `El::inert` subtree and not behind a modal.
     pub(super) fn allowed(&self, i: usize) -> bool {
