@@ -714,5 +714,5 @@ fn alert_colors(dark: bool) -> [Color; 5] {
     } else {
         ["#0969da", "#1a7f37", "#8250df", "#9a6700", "#cf222e"]
     };
-    hexes.map(|h| rune::color::hex(h).expect("a valid hex colour"))
+    hexes.map(|h| rune::color::hex(h).unwrap_or_default())
 }

@@ -1,0 +1,1 @@
+- `Markdown` reads inline `<br>` as a line break and `<b>`, `<strong>`, `<i>`, `<em>`, `<code>`, `<kbd>`, `<s>` and `<del>` as styles; other tags are still dropped.

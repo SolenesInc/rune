@@ -54,6 +54,7 @@ mod bidi;
 mod cache;
 mod find;
 mod highlight;
+mod html;
 mod image;
 mod interrupt;
 mod link_icon;

@@ -659,12 +659,8 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                 inl.1.text.push(' ');
                 inl.3.push(range, start..inl.1.text.len());
             }
-            Event::HardBreak => {
-                let inl = b.inline();
-                let start = inl.1.text.len();
-                inl.1.text.push('\n');
-                inl.3.push(range, start..inl.1.text.len());
-            }
+            Event::HardBreak => push_text(&mut b, "\n", range),
+            Event::InlineHtml(html) => super::html::inline(&mut b, &html, range),
             Event::TaskListMarker(checked) => {
                 if let Some(idx) = b.stack.iter().rev().find_map(|(c, _, _)| match c {
                     Container::Item(idx) => Some(*idx),
@@ -805,10 +801,28 @@ fn inline_of(src: &str, offset: usize, autolink: bool) -> (Inline, SpanMap) {
     }
 }
 
+/// Appends `text`, from source bytes `range`, to the inline text `b` is building.
+pub(super) fn push_text(b: &mut Builder, text: &str, range: Range<usize>) {
+    let inl = b.inline();
+    let start = inl.1.text.len();
+    inl.1.text.push_str(text);
+    inl.3.push(range, start..inl.1.text.len());
+}
+
 pub(super) fn open(b: &mut Builder, style: Style, url: Option<String>) {
     let inl = b.inline();
     let start = inl.1.text.len();
     inl.2.push(Open { start, style, url });
+}
+
+/// Ends the innermost open run when it has `style`; an unmatched closing tag ends nothing.
+pub(super) fn close_run(b: &mut Builder, style: Style) {
+    let (_, inl, open, _) = b.inline();
+    if open.last().is_some_and(|o| o.style == style)
+        && let Some(o) = open.pop()
+    {
+        end_run(inl, o);
+    }
 }
 
 fn close(b: &mut Builder) {

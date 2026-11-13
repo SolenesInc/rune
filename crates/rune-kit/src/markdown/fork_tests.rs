@@ -66,3 +66,19 @@ fn front_matter_is_its_own_block_that_an_app_can_frame() {
     assert_eq!(names(&rt, "heading"), ["Heading"]);
     assert!(!labels.iter().any(|l| l.contains("title: Plan")), "{labels:?}");
 }
+
+#[test]
+fn inline_html_breaks_lines_and_styles_text_and_drops_other_tags() {
+    let src = "| a |\n|---|\n| one<br>two |\n\nSay <b>bold</b>, <kbd>Esc</kbd>, <s>old</s> and <name> here.\n";
+    let b = parse(src);
+    let Block::Table(t) = &b[0] else { panic!("{b:?}") };
+    assert_eq!(t.rows[0][0].text, "one\ntwo");
+    let Block::Para(p) = &b[1] else { panic!("{b:?}") };
+    assert_eq!(p.text, "Say bold, Esc, old and  here.");
+    let styled: Vec<(&str, Style)> = p.spans.iter().map(|&(a, z, s)| (&p.text[a..z], s)).collect();
+    assert_eq!(styled, [("bold", Style::Strong), ("Esc", Style::Code), ("old", Style::Strike)]);
+    let two = src.find("two").unwrap();
+    assert_eq!(find(src, "one two", Case::Insensitive).len(), 0, "a break is not a space");
+    assert_eq!(find(src, "two", Case::Insensitive), vec![vec![two..two + 3]]);
+    assert_eq!(parse("a </b> b").first(), parse("a  b").first(), "an unmatched closing tag ends nothing");
+}
