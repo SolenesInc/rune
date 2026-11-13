@@ -2,7 +2,7 @@
 //! the app's; its focus lifecycle is Rune's modal stack (`runtime/input/modal_focus.rs`), as
 //! Desktop's dialog stack has it (`ui/src/context/dialog-machine.ts`): the top dialog holds the
 //! trap, opens on its content and hands focus back to where it was before it opened.
-use rune::{El, TextStyle, col, el, row, text};
+use rune::{El, TextStyle, Tx, col, el, row, text};
 use crate::{ControlSize, IconButton, IconButtonVariant, Kit, shadows};
 
 pub struct Dialog {
@@ -14,13 +14,15 @@ pub struct Dialog {
     outside: bool,
     width: f32,
     fit: bool,
+    max_height: Option<f32>,
+    header: Vec<El>,
     close: Option<Box<dyn FnOnce(El) -> El>>,
     button: Option<Box<dyn FnOnce(El) -> El>>,
 }
 impl Dialog {
     pub fn new(key: impl Into<String>, title: impl Into<String>) -> Self {
         Self { key: key.into(), title: title.into(), description: None, body: Vec::new(), open: false,
-            outside: true, width: 480.0, fit: false, close: None, button: None }
+            outside: true, width: 480.0, fit: false, max_height: None, header: Vec::new(), close: None, button: None }
     }
     pub fn open(mut self, open: bool) -> Self { self.open = open; self }
     pub fn description(mut self, description: impl Into<String>) -> Self { self.description = Some(description.into()); self }
@@ -31,11 +33,24 @@ impl Dialog {
     /// put a scroll view in the body if it can grow.
     pub fn fit(mut self) -> Self { self.fit = true; self }
     pub fn click_outside(mut self, close: bool) -> Self { self.outside = close; self }
+    /// Fills the window's height up to `points`, for a dialog that holds a whole surface, such as
+    /// settings; the body takes what the header leaves and scrolls on its own if it needs to.
+    pub fn max_height(mut self, points: f32) -> Self { self.max_height = Some(points); self }
+    /// Puts `e` in the header between the title and the close button, such as a search field.
+    pub fn header(mut self, e: El) -> Self { self.header.push(e); self }
     pub fn on_close<S: 'static>(mut self, f: impl Fn(&mut S) + Clone + 'static) -> Self {
         let button = f.clone();
         self.button = Some(Box::new(move |e| e.on_press(button)));
         // The policy is applied at build time, regardless of builder call order.
         self.close = Some(Box::new(move |e| e.modal(true, f)));
+        self
+    }
+    /// [`on_close`](Self::on_close) with the handler's `Tx`, for a close that has to move focus or
+    /// send something before the dialog goes, or decide to stay open.
+    pub fn on_close_tx<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + Clone + 'static) -> Self {
+        let button = f.clone();
+        self.button = Some(Box::new(move |e| e.on_press_tx(button)));
+        self.close = Some(Box::new(move |e| e.modal_tx(true, f)));
         self
     }
     pub fn build(self, k: &Kit, layer: &mut Vec<El>) {
@@ -52,11 +67,15 @@ impl Dialog {
             title = title.child(text(description).font(k.ty.ui.lh(20.0)).color(k.c.text_muted));
         }
         let body = col().key("body").w_full().children(self.body);
-        let (panel, body) = if self.fit { (col(), body) } else { (col().h(368.0), body.grow(1.0)) };
+        let (panel, body) = match (self.max_height, self.fit) {
+            (Some(h), _) => (col().h_full().max_h(h), body.grow(1.0).min_h(0.0)),
+            (None, true) => (col(), body),
+            (None, false) => (col().h(368.0), body.grow(1.0)),
+        };
         let panel = panel.description(self.description.unwrap_or_default());
         let panel = shadows(k, panel.key(format!("{}-dialog", self.key)).role("dialog").label(self.title.clone())
             .w_full().max_w(self.width).radius(6.0).fill(k.c.layer_01)
-            .child(row().key("header").w_full().padding(16.0).items_start().child(title).child(dismiss))
+            .child(row().key("header").w_full().padding(16.0).gap(12.0).items_start().child(title).children(self.header).child(dismiss))
             .child(body)
             .token_motion(k.motion.overlay), &k.elevation.overlay);
         let panel = close(panel).modal_click_outside(self.outside);
@@ -65,3 +84,7 @@ impl Dialog {
         layer.push(el().key(format!("{}-layer", self.key)).absolute(0.0, 0.0).w_full().h_full().padding(16.0).center().child(panel));
     }
 }
+
+#[cfg(test)]
+#[path = "dialog_tests.rs"]
+mod tests;
