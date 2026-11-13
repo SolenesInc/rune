@@ -79,6 +79,7 @@ impl crate::cold::Empty for FocusSpec {
 pub(crate) struct ModalSpec {
     pub dismiss: PressFn,
     pub outside: bool,
+    pub press_through: bool,
 }
 
 impl El {
@@ -261,19 +262,27 @@ impl El {
     }
     /// Trap focus and make the background inert while mounted. Escape requests dismissal.
     pub fn modal<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
             dismiss: Rc::new(move |s, _| dismiss(downcast::<S>(s))) });
         self
     }
     /// [`El::modal`] whose dismissal gets the change's [`Tx`]: a dialog that closes at once
     /// (`tx.instant()`), say.
     pub fn modal_tx<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
             dismiss: Rc::new(move |s, tx| dismiss(downcast::<S>(s), tx)) });
         self
     }
     pub fn modal_click_outside(mut self, enabled: bool) -> Self {
         if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.outside = enabled; }
+        self
+    }
+    /// A press outside a modal that closes on one ([`El::modal`]'s `click_outside`) goes on to
+    /// what is under it after asking the modal to close, as a light-dismiss popover's does: a
+    /// press on another control both closes the popover and presses that control. Off by
+    /// default, when the press only closes the modal.
+    pub fn modal_press_through(mut self, enabled: bool) -> Self {
+        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.press_through = enabled; }
         self
     }
 }

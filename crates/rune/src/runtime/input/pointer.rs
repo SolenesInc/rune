@@ -209,10 +209,13 @@ impl<S: 'static> Runtime<S> {
         if let Some(i) = self.active_modal()
             && target.is_none_or(|t| !self.allowed(t))
         {
-            if self.nodes[i].handlers.modal.as_ref().is_some_and(|m| m.outside) {
+            let modal = self.nodes[i].handlers.modal.as_ref();
+            if modal.is_some_and(|m| m.outside) {
                 self.queue.push(Action::Dismiss(self.nodes[i].path.clone()));
             }
-            return;
+            if target.is_none() || !modal.is_some_and(|m| m.outside && m.press_through) {
+                return;
+            }
         }
         self.playground_pointer_down(x);
         self.press_selection(target, x, y);

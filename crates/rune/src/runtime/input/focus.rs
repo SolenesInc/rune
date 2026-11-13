@@ -24,6 +24,8 @@ const PRESSABLE_ROLES: [&str; 9] = ["button", "link", "tab", "checkbox", "switch
 pub(super) struct ModalScope {
     index: usize,
     members: Vec<bool>,
+    /// `El::modal_press_through`: the pointer reaches what is behind the modal.
+    pointer_through: bool,
 }
 
 /// Whether `ev` navigates (Tab, an arrow, Home, End, Page Up or Page Down, unmodified but for
@@ -97,11 +99,17 @@ impl<S: 'static> Runtime<S> {
             }
             if !changed { break; }
         }
-        self.modal_scope = Some(ModalScope { index, members });
+        let pointer_through = self.nodes[index].handlers.modal.as_ref().is_some_and(|m| m.outside && m.press_through);
+        self.modal_scope = Some(ModalScope { index, members, pointer_through });
     }
     /// Input may reach node `i`: it's outside any `El::inert` subtree and not behind a modal.
     pub(super) fn allowed(&self, i: usize) -> bool {
         !self.nodes.get(i).is_some_and(|n| n.inert) && self.modal_member(i)
+    }
+    /// The pointer may reach node `i`: input may, or the open modal lets the pointer through to
+    /// what is behind it (`El::modal_press_through`).
+    pub(super) fn pointer_allowed(&self, i: usize) -> bool {
+        self.allowed(i) || (!self.nodes.get(i).is_some_and(|n| n.inert) && self.modal_scope.as_ref().is_some_and(|m| m.pointer_through))
     }
     /// `El::focusable`, or under `Cx::web_focus` a pressable control that didn't opt out.
     pub(super) fn takes_focus(&self, n: &Node) -> bool {

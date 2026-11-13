@@ -147,7 +147,7 @@ impl<S: 'static> Runtime<S> {
         let hit = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
         // A scroll view without handlers of its own isn't a hit: one inside the hit wins.
         let scroll = (0..self.nodes.len()).rev().find(|&i| self.nodes[i].scroll.is_some() && !self.subtree_exiting(i)
-            && self.allowed(i) && self.node_contains(i, x, y));
+            && self.pointer_allowed(i) && self.node_contains(i, x, y));
         let inside = |s: usize, h: usize| std::iter::successors(self.nodes[s].parent, |&p| self.nodes[p].parent).any(|p| p == h);
         let start = match (hit, scroll) {
             (Some(h), Some(s)) if inside(s, h) => Some(s),
@@ -157,7 +157,7 @@ impl<S: 'static> Runtime<S> {
         let mut chain = Vec::new();
         let mut at = start;
         while let Some(i) = at {
-            if self.subtree_exiting(i) || !self.allowed(i) { break; }
+            if self.subtree_exiting(i) || !self.pointer_allowed(i) { break; }
             let n = &self.nodes[i];
             if n.handlers.gestures.as_deref().is_some_and(&has) { chain.push(n.path.clone()); }
             if stop_at_scroll && n.scroll.is_some() { break; }
@@ -168,7 +168,7 @@ impl<S: 'static> Runtime<S> {
 
     /// Element `path` (not exiting or inert) and the handler `pick` takes from its canvas input.
     fn gesture_handler<F>(&self, path: &str, pick: impl Fn(&CanvasInput) -> Option<F>) -> Option<(usize, F)> {
-        let i = self.nodes.iter().enumerate().position(|(i, n)| n.path == path && !self.subtree_exiting(i) && self.allowed(i))?;
+        let i = self.nodes.iter().enumerate().position(|(i, n)| n.path == path && !self.subtree_exiting(i) && self.pointer_allowed(i))?;
         Some((i, pick(self.nodes[i].handlers.gestures.as_deref()?)?))
     }
 
@@ -203,7 +203,7 @@ impl<S: 'static> Runtime<S> {
     fn button_target(&self, x: f32, y: f32, button: PointerButton) -> Option<usize> {
         let hit = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
         std::iter::successors(hit, |&i| self.nodes[i].parent)
-            .take_while(|&i| !self.subtree_exiting(i) && self.allowed(i))
+            .take_while(|&i| !self.subtree_exiting(i) && self.pointer_allowed(i))
             .find_map(|i| {
                 let n = &self.nodes[i];
                 if n.handlers.gestures.as_ref().is_some_and(|g| g.buttons & button.bit() != 0) && (n.handlers.on_press.is_some() || n.handlers.on_drag.is_some()) {
@@ -236,7 +236,7 @@ impl<S: 'static> Runtime<S> {
 
     /// Some reachable element has an `on_wheel` handler.
     pub(crate) fn hears_wheel(&self) -> bool {
-        self.nodes.iter().enumerate().any(|(i, n)| n.handlers.get().is_some_and(|h| h.gestures.as_ref().is_some_and(|g| g.wheel.is_some())) && self.allowed(i))
+        self.nodes.iter().enumerate().any(|(i, n)| n.handlers.get().is_some_and(|h| h.gestures.as_ref().is_some_and(|g| g.wheel.is_some())) && self.pointer_allowed(i))
     }
 
     /// Some element hears key releases, so a host maps them to logical keys.
