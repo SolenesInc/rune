@@ -43,7 +43,7 @@ fn plain(blocks: &[Block], tasks: &[Option<(bool, usize)>], task: &mut usize, co
                 });
             }
             Block::Code(s) | Block::Diff(s) | Block::Mermaid(s) => out.push(Piece { breaks: [2, 2], text: s.trim_end_matches('\n').to_owned() }),
-            Block::Quote(inner) => plain(inner, tasks, task, cols, lists, here, out),
+            Block::Quote(inner) | Block::Alert(_, inner) => plain(inner, tasks, task, cols, lists, here, out),
             Block::List { start, items } => {
                 for (k, item) in items.iter().enumerate() {
                     let checked = tasks.get(*task).copied().flatten().map(|(checked, _)| checked);

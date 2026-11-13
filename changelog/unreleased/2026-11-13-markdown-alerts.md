@@ -1,0 +1,1 @@
+- `Markdown` draws GFM alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) as `Block::Alert`, with GitHub's colours (`MarkdownStyle::alerts`) and `QuoteFrame::alert`. A match on `Block` needs the new variant.

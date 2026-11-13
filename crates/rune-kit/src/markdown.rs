@@ -44,7 +44,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::rc::Rc;
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use rune::{Align, Color, Cursor, El, Family, Link, LinkPaint, Span, TextHighlight, TextStyle, Tx, col, el, icon, rich, row, text};
 
 use crate::Kit;
@@ -116,6 +116,9 @@ pub enum Block {
     Code(String),
     List { start: Option<u64>, items: Vec<Vec<Block>> },
     Quote(Vec<Block>),
+    /// A GFM alert: a quote whose first line is `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`,
+    /// `[!WARNING]` or `[!CAUTION]`, which it does not show.
+    Alert(Alert, Vec<Block>),
     Rule,
     /// A GFM table.
     Table(Table),
@@ -127,6 +130,29 @@ pub enum Block {
     /// `img { display: block }` sets one: a paragraph around it splits into the text before
     /// and after it. An image inside a link or emphasis stays its alt text in the line.
     Image { src: String, alt: String, title: String },
+}
+
+/// A GFM alert's kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Alert {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl Alert {
+    /// The title the alert shows above what it says.
+    pub fn title(self) -> &'static str {
+        match self {
+            Alert::Note => "Note",
+            Alert::Tip => "Tip",
+            Alert::Important => "Important",
+            Alert::Warning => "Warning",
+            Alert::Caution => "Caution",
+        }
+    }
 }
 
 /// A GFM table. Rows may have fewer cells than there are columns.
@@ -152,6 +178,8 @@ pub struct QuoteFrame<'a> {
     /// What it says, as copying a selection of all of it gives it: a blank line between
     /// paragraphs, list items after their markers, no quote marks.
     pub text: &'a str,
+    /// The alert it is, for a GFM alert.
+    pub alert: Option<Alert>,
 }
 
 /// A code block [`Markdown::code_frame`] is wrapping.
@@ -491,3 +519,5 @@ impl Markdown {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod fork_tests;

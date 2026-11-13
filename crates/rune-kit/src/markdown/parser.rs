@@ -191,7 +191,7 @@ pub(super) struct Open {
 
 enum Container {
     Root,
-    Quote,
+    Quote(Option<Alert>),
     List(Option<u64>, Vec<Vec<Block>>, Vec<Vec<BlockMap>>),
     Item(usize),
     Table(Table, Vec<Inline>, Vec<SpanMap>, Vec<Vec<SpanMap>>, Vec<SpanMap>),
@@ -299,7 +299,8 @@ impl Builder {
                 }
             }
             Container::List(start, items, item_maps) => self.push(Block::List { start, items }, BlockMap::List(item_maps)),
-            Container::Quote => self.push(Block::Quote(blocks), BlockMap::Quote(maps)),
+            Container::Quote(None) => self.push(Block::Quote(blocks), BlockMap::Quote(maps)),
+            Container::Quote(Some(alert)) => self.push(Block::Alert(alert, blocks), BlockMap::Quote(maps)),
             Container::Table(mut t, cells, head, mut rows, cell_maps) => {
                 if !cells.is_empty() {
                     t.rows.push(cells);
@@ -463,7 +464,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         image_dests: Vec::new(),
         tail: Tail::None,
     };
-    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS;
+    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM;
     let mut events = super::interrupt::list_interrupts(src, Parser::new_ext(src, opts).into_offset_iter());
     while let Some((ev, range)) = events.next() {
         let starts_block = matches!(
@@ -524,9 +525,16 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     };
                     b.code = Some((String::new(), fence, SpanMap::default()));
                 }
-                Tag::BlockQuote(_) => {
+                Tag::BlockQuote(kind) => {
                     b.flush_inline();
-                    b.stack.push((Container::Quote, Vec::new(), Vec::new()));
+                    let alert = kind.map(|k| match k {
+                        BlockQuoteKind::Note => Alert::Note,
+                        BlockQuoteKind::Tip => Alert::Tip,
+                        BlockQuoteKind::Important => Alert::Important,
+                        BlockQuoteKind::Warning => Alert::Warning,
+                        BlockQuoteKind::Caution => Alert::Caution,
+                    });
+                    b.stack.push((Container::Quote(alert), Vec::new(), Vec::new()));
                 }
                 Tag::List(start) => {
                     b.flush_inline();

@@ -150,7 +150,7 @@ pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
         Block::Heading(..) => (20.0, 8.0),
         Block::Code { .. } | Block::Diff(_) | Block::Mermaid(_) => (s.code_margin[0], s.code_margin[1]),
         Block::List { .. } => (8.0, 12.0),
-        Block::Quote(_) => (16.0, 16.0),
+        Block::Quote(_) | Block::Alert(..) => (16.0, 16.0),
         Block::Rule => (32.0, 32.0),
         Block::Table(_) => (s.table_margin[0], s.table_margin[1]),
         Block::Image { .. } => (24.0, 24.0),
@@ -700,7 +700,34 @@ impl Renderer {
                     bidi::blocks_dir(inner),
                 );
                 match &self.quote_frame {
-                    Some(f) => f(quote, &QuoteFrame { text: &self.plain_text(inner, first_task, Flow { lead: None, ..flow }) }),
+                    Some(f) => f(quote, &QuoteFrame { text: &self.plain_text(inner, first_task, Flow { lead: None, ..flow }), alert: None }),
+                    None => quote,
+                }
+            }
+            Block::Alert(alert, inner) => {
+                let inner_maps = match map {
+                    BlockMap::Quote(m) => m.as_slice(),
+                    _ => &[][..],
+                };
+                let (q, ink) = (s.quote, s.alert(*alert));
+                let flow = self.flow.get();
+                let first_task = self.next_task.get();
+                self.flow.set(Flow { inset: flow.inset + 3.0 + q.pad, ..flow });
+                let drawn = self.blocks(inner, inner_maps, &[], false);
+                self.flow.set(flow);
+                let title = text(alert.title()).font(TextStyle { size: 15.0, weight: 600.0, ..s.body }).color(ink).mb(4.0);
+                let quote = bidi::directed(
+                    row()
+                        .role("note")
+                        .label(alert.title())
+                        .w_full()
+                        .py(8.0)
+                        .child(el().w(3.0).h_full().fill(ink))
+                        .child(col().grow(1.0).shrink().pl(q.pad).child(title).child(drawn)),
+                    bidi::blocks_dir(inner),
+                );
+                match &self.quote_frame {
+                    Some(f) => f(quote, &QuoteFrame { text: &self.plain_text(inner, first_task, Flow { lead: None, ..flow }), alert: Some(*alert) }),
                     None => quote,
                 }
             }

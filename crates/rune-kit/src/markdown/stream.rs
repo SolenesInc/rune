@@ -341,7 +341,7 @@ fn last_inline<'a>(b: &'a mut Block, m: &'a mut BlockMap) -> Option<(&'a mut Inl
     match (b, m) {
         (Block::Para(i) | Block::Heading(_, i), BlockMap::Inline(m)) => Some((i, m)),
         (Block::List { items, .. }, BlockMap::List(maps)) => last_inline(items.last_mut()?.last_mut()?, maps.last_mut()?.last_mut()?),
-        (Block::Quote(inner), BlockMap::Quote(maps)) => last_inline(inner.last_mut()?, maps.last_mut()?),
+        (Block::Quote(inner) | Block::Alert(_, inner), BlockMap::Quote(maps)) => last_inline(inner.last_mut()?, maps.last_mut()?),
         (Block::Table(t), BlockMap::Table { head, rows }) => match (t.rows.last_mut(), rows.last_mut()) {
             (Some(r), Some(m)) => Some((r.last_mut()?, m.last_mut()?)),
             _ => Some((t.head.last_mut()?, head.last_mut()?)),

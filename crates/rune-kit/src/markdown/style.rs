@@ -19,6 +19,8 @@ pub struct MarkdownStyle {
     pub(super) code_block_border: Color,
     pub(super) quote_rule: Color,
     pub(super) quote: QuoteLook,
+    /// GFM alerts' colours: note, tip, important, warning, caution.
+    pub(super) alerts: [Color; 5],
     pub(super) rule: Color,
     pub(super) body: TextStyle,
     /// Levels 1 to 3, then 4 and deeper.
@@ -178,6 +180,7 @@ impl MarkdownStyle {
             code_block_border: c.border_muted,
             quote_rule: c.layer_03,
             quote: QuoteLook { width: 2.0, pad: 12.0, text: None },
+            alerts: alert_colors(k.dark),
             rule: c.border_base,
             body,
             headings: [heading(17.0, 24.0), heading(15.0, 24.0), heading(13.0, 20.0), heading(13.0, 20.0)],
@@ -312,6 +315,16 @@ impl MarkdownStyle {
         self.list_gap = gap;
         self
     }
+    /// GFM alerts' colours, for their rule and title: note, tip, important, warning, caution.
+    pub fn alerts(mut self, colors: [Color; 5]) -> Self {
+        self.alerts = colors;
+        self
+    }
+
+    pub(super) fn alert(&self, alert: Alert) -> Color {
+        self.alerts[alert as usize]
+    }
+
     pub fn quote_rule(mut self, c: Color) -> Self {
         self.quote_rule = c;
         self
@@ -581,6 +594,7 @@ impl std::hash::Hash for MarkdownStyle {
             code_block_border,
             quote_rule,
             quote,
+            alerts,
             rule,
             body,
             headings,
@@ -640,7 +654,7 @@ impl std::hash::Hash for MarkdownStyle {
         } = *self;
         (text, muted, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
         (body, headings, code_block, (code_text, plain_code_text), shell, link_hover, list_outside, list_nested.map(|n| n.map(f32_bits)), table_align).hash(state);
-        (f32_bits(quote.width), f32_bits(quote.pad), quote.text).hash(state);
+        (f32_bits(quote.width), f32_bits(quote.pad), quote.text, alerts).hash(state);
         [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]
             .map(f32_bits)
             .hash(state);
@@ -691,4 +705,14 @@ impl std::hash::Hash for MarkdownStyle {
         (text, muted, surface, surface_border, node_fill, node_border, line, cluster_fill, note_fill, note_border).hash(state);
         (font, f32_bits(max_width), f32_bits(min_scale), hover, hover_neighbours).hash(state);
     }
+}
+
+/// GitHub's alert colours: note, tip, important, warning, caution.
+fn alert_colors(dark: bool) -> [Color; 5] {
+    let hexes = if dark {
+        ["#4493f8", "#3fb950", "#ab7df8", "#d29922", "#f85149"]
+    } else {
+        ["#0969da", "#1a7f37", "#8250df", "#9a6700", "#cf222e"]
+    };
+    hexes.map(|h| rune::color::hex(h).expect("a valid hex colour"))
 }
