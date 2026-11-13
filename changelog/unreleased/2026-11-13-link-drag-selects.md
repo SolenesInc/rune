@@ -1,0 +1,1 @@
+- `Link::drag_selects`: in selectable text, a drag that starts on the link selects, and only a press that selects nothing activates it.

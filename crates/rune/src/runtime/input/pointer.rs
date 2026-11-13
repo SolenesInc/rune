@@ -393,7 +393,7 @@ impl<S: 'static> Runtime<S> {
             let [lx, ly] = self.to_local(i, x, y);
             self.queue.push(Action::Drag(path.clone(), Drag { phase: Phase::Up, x: lx, y: ly, dx, dy, window: [x, y], screen: self.screen_at(x, y), ..d }, button));
         }
-        if let Some(k) = link.filter(|_| inside) { self.link_up(&path, k, x, y); }
+        if let Some(k) = link.filter(|&k| inside && !(selected && self.link_drag_selects(i, k))) { self.link_up(&path, k, x, y); }
         if has_press && inside && !selected {
             self.queue.push(Action::Press(path.clone(), button));
         }

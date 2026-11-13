@@ -217,6 +217,7 @@ pub struct Link {
     pub(crate) pressed: Option<LinkPaint>,
     pub(crate) focused: Option<LinkPaint>,
     pub(crate) help: Option<String>,
+    pub(crate) drag_selects: bool,
 }
 
 impl Link {
@@ -232,7 +233,15 @@ impl Link {
             pressed: None,
             focused: None,
             help: None,
+            drag_selects: false,
         }
+    }
+    /// In [`El::selectable`](crate::El::selectable) text, a drag that starts on the link
+    /// selects text as it would off it, and only a press that selects nothing activates the
+    /// link: for a passage that opens on a click and is still text to select.
+    pub fn drag_selects(mut self) -> Self {
+        self.drag_selects = true;
+        self
     }
     /// Accessibility role, such as "button" for a file chip.
     pub fn role(mut self, role: &'static str) -> Self {

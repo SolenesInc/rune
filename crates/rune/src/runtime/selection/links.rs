@@ -156,6 +156,11 @@ impl<S: 'static> Runtime<S> {
             .find(|(_, r)| contains(*r, x, y)).map(|(k, _)| k)
     }
 
+    /// Node `i`'s link `k` lets a drag from it select ([`crate::Link::drag_selects`]).
+    pub(super) fn link_drag_selects(&self, i: usize, k: usize) -> bool {
+        self.nodes[i].text.as_ref().and_then(|t| t.cold.links.get(k)).is_some_and(|l| l.drag_selects)
+    }
+
     /// Hit rects for node `i`: only its links' boxes, clipped like `clipped`. False when it
     /// has no links, or is selectable (it takes its whole box).
     pub(super) fn push_link_hits(&mut self, i: usize, rect: [f32; 4], clipped: [f32; 4]) -> bool {
@@ -487,3 +492,7 @@ impl<S: 'static> Runtime<S> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "link_drag_tests.rs"]
+mod link_drag_tests;

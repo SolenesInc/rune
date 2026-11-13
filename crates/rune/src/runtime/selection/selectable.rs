@@ -607,7 +607,7 @@ impl<S: 'static> Runtime<S> {
     /// clears the selection.
     pub(super) fn selection_down(&mut self, target: Option<usize>, x: f32, y: f32) {
         use virtual_selection::EndRef;
-        let Some(i) = target.filter(|&i| self.is_selectable(i) && self.link_at(i, x, y).is_none()) else {
+        let Some(i) = target.filter(|&i| self.is_selectable(i) && self.link_at(i, x, y).is_none_or(|k| self.link_drag_selects(i, k))) else {
             self.clear_text_selection();
             self.selectable.presses.clear();
             return;
