@@ -427,7 +427,6 @@ impl<S: 'static> Runtime<S> {
             self.memo.clear();
             self.commit(&Tx::default());
         }
-        let mut tx = std::mem::take(&mut self.pending);
         let mut ran = false;
         let mut why = 0;
         #[cfg(debug_assertions)]
@@ -436,6 +435,8 @@ impl<S: 'static> Runtime<S> {
         self.settled = false;
         self.landing_holds.clear();
         self.clock = self.wall_clock().unwrap_or(self.clock + elapsed);
+        let mut tx = self.transaction();
+        merge(&mut tx, std::mem::take(&mut self.pending));
         if self.wall_start.is_none() {
             crate::video::headless_frame(self.clock);
             // Fake recorders publish this frame's level to bound meters, drawn this frame.

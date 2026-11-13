@@ -84,7 +84,7 @@ impl<S: 'static> Runtime<S> {
             self.queue.push(Action::Physical(event, None));
             return !busy;
         }
-        let mut tx = Tx::default();
+        let mut tx = self.transaction();
         let consumed = self.dispatch_physical(event, None, &mut tx);
         let live_only = std::mem::take(&mut tx.live_only);
         self.latch_requests(&mut tx);
@@ -210,7 +210,7 @@ impl<S: 'static> Runtime<S> {
     /// Focus moving off an element inside the window: its handler hears `FocusLost`, and
     /// modifier keys stay held.
     pub(super) fn physical_focus_lost(&mut self) -> bool {
-        let mut tx = Tx::default();
+        let mut tx = self.transaction();
         let changed = self.offer_physical(&PhysicalInput::FocusLost, &mut tx, &mut None);
         self.latch_requests(&mut tx);
         merge(&mut self.pending, tx);
