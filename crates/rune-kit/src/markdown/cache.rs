@@ -30,6 +30,10 @@ thread_local! {
     /// Sources drawn while still arriving ([`Markdown::streaming`]), parsed with their tail
     /// settled (see [`super::stream`]); kept apart, since the same string parses differently.
     pub(super) static STREAMS: RefCell<Cache> = RefCell::new(Cache::new(CACHE_BYTES / 4));
+    /// [`CACHE`] and [`STREAMS`] for documents read with smart punctuation, which parse to
+    /// other text.
+    static SMART: RefCell<Cache> = RefCell::new(Cache::new(CACHE_BYTES));
+    static SMART_STREAMS: RefCell<Cache> = RefCell::new(Cache::new(CACHE_BYTES / 4));
 }
 
 #[cfg(test)]
@@ -45,23 +49,34 @@ pub fn parse_cached(src: &str) -> Rc<Vec<Block>> {
 }
 
 pub(super) fn doc_cached(src: &str) -> Doc {
-    CACHE.with_borrow_mut(|c| cached(c, src, parse_doc))
+    doc_as(src, Reading::LINKED, false)
 }
 
 /// [`doc_cached`] for a source still arriving.
 pub(super) fn stream_cached(src: &str) -> Doc {
-    STREAMS.with_borrow_mut(|c| cached(c, src, parse_streaming))
+    doc_as(src, Reading::LINKED, true)
 }
 
-fn cached(c: &mut Cache, src: &str, parse: fn(&str, bool) -> ParsedDoc) -> Doc {
+/// `src` parsed as `how` says, memoised on this thread; `streaming` while it is still arriving.
+pub(super) fn doc_as(src: &str, how: Reading, streaming: bool) -> Doc {
+    let (cache, parse): (&'static std::thread::LocalKey<RefCell<Cache>>, fn(&str, Reading) -> ParsedDoc) = match (how.smart, streaming) {
+        (false, false) => (&CACHE, parse_doc),
+        (false, true) => (&STREAMS, parse_streaming),
+        (true, false) => (&SMART, parse_doc),
+        (true, true) => (&SMART_STREAMS, parse_streaming),
+    };
+    cache.with_borrow_mut(|c| cached(c, src, parse, how))
+}
+
+fn cached(c: &mut Cache, src: &str, parse: fn(&str, Reading) -> ParsedDoc, how: Reading) -> Doc {
     if let Some(hit) = c.docs.get(src) {
         return hit.doc.clone();
     }
     let grown = c.last.clone().filter(|last| src.len() > last.len() && src.starts_with(&**last));
-    let parsed = grown.as_ref().and_then(|last| extend(c.docs.peek(&**last)?, last.len(), src, parse)).unwrap_or_else(|| {
+    let parsed = grown.as_ref().and_then(|last| extend(c.docs.peek(&**last)?, last.len(), src, parse, how)).unwrap_or_else(|| {
         #[cfg(test)]
         PARSES.with(|p| p.set((p.get().0 + 1, p.get().1)));
-        let (blocks, sources, tasks, cuts, starts, maps) = parse(src, true);
+        let (blocks, sources, tasks, cuts, starts, maps) = parse(src, how);
         Parsed { doc: (Rc::new(blocks), sources.into(), tasks.into(), starts.into(), maps.into()), cuts: cuts.into() }
     });
     // A stream's earlier string is dead once it grows, unless something drew it this
@@ -86,7 +101,7 @@ fn cached(c: &mut Cache, src: &str, parse: fn(&str, bool) -> ParsedDoc) -> Doc {
 /// starts on a finished line. A reference definition (`[x]: url`) can change links anywhere,
 /// so a source that may hold one parses whole. A stream's parse may have left its last lines
 /// out, so a cut is only ever at or before `base_len`.
-fn extend(base: &Parsed, base_len: usize, src: &str, parse: fn(&str, bool) -> ParsedDoc) -> Option<Parsed> {
+fn extend(base: &Parsed, base_len: usize, src: &str, parse: fn(&str, Reading) -> ParsedDoc, how: Reading) -> Option<Parsed> {
     let i = base.cuts.iter().rposition(|c| c.at <= base_len && src[c.at..base_len].contains('\n'))?;
     let cut = base.cuts[i];
     if cut.at == 0 || cut.blocks >= base.doc.0.len() || src.contains("]:") {
@@ -94,7 +109,7 @@ fn extend(base: &Parsed, base_len: usize, src: &str, parse: fn(&str, bool) -> Pa
     }
     #[cfg(test)]
     PARSES.with(|p| p.set((p.get().0, p.get().1 + 1)));
-    let (tail, sources, tasks, cuts, starts, maps) = parse(&src[cut.at..], true);
+    let (tail, sources, tasks, cuts, starts, maps) = parse(&src[cut.at..], how);
     let mut blocks = base.doc.0[..cut.blocks].to_vec();
     blocks.extend(tail);
     let sources: Rc<[Source]> = base.doc.1[..cut.sources].iter().cloned().chain(sources).collect();

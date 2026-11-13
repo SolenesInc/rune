@@ -124,6 +124,8 @@ pub(super) struct Builder {
     root_start: usize,
     cuts: Vec<Cut>,
     autolink: bool,
+    /// Prose text reads with typographic punctuation and emoji shortcodes ([`Markdown::smart_punctuation`]).
+    smart: bool,
     image_starts: Vec<usize>,
     image_ranges: Vec<(usize, usize)>,
     /// Each open image's source and title, beside `image_starts`.
@@ -486,15 +488,15 @@ fn map_code_span(src: &str, range: Range<usize>, rendered: &str, offset: usize, 
 
 /// Parses `src` into blocks. Unclosed constructs are closed at the end of input.
 pub fn parse(src: &str) -> Vec<Block> {
-    parse_doc(src, true).0
+    parse_doc(src, Reading::LINKED).0
 }
 
-pub(super) fn parse_doc(src: &str, autolink: bool) -> ParsedDoc {
-    parse_doc_tail(src, autolink).0
+pub(super) fn parse_doc(src: &str, how: Reading) -> ParsedDoc {
+    parse_doc_tail(src, how).0
 }
 
 /// [`parse_doc`], and what the source ends inside.
-pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
+pub(super) fn parse_doc_tail(src: &str, how: Reading) -> (ParsedDoc, Tail) {
     let mut b = Builder {
         stack: vec![(Container::Root, Vec::new(), Vec::new())],
         inline: None,
@@ -506,7 +508,8 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
         block_starts: Vec::new(),
         root_start: 0,
         cuts: Vec::new(),
-        autolink,
+        autolink: how.autolink,
+        smart: how.smart,
         image_starts: Vec::new(),
         image_ranges: Vec::new(),
         image_dests: Vec::new(),
@@ -692,7 +695,17 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
                     code.push_str(&t);
                     map.push(range, start..code.len());
                 } else {
+                    let smart = b.smart && src.get(range.clone()) == Some(&*t);
                     let inl = b.inline();
+                    if smart && !inl.2.iter().any(|o| o.style == Style::Code) {
+                        let before = inl.1.text.chars().next_back();
+                        for (piece, shown) in super::prose::pieces(&t, before) {
+                            let start = inl.1.text.len();
+                            inl.1.text.push_str(&shown);
+                            inl.3.push(range.start + piece.start..range.start + piece.end, start..inl.1.text.len());
+                        }
+                        continue;
+                    }
                     let start = inl.1.text.len();
                     inl.1.text.push_str(&t);
                     inl.3.push(range, start..inl.1.text.len());
@@ -758,7 +771,7 @@ pub(super) fn parse_doc_tail(src: &str, autolink: bool) -> (ParsedDoc, Tail) {
     let last_para = b.last_root_para.take();
     let (_, mut blocks, mut maps) = b.stack.pop().unwrap();
     if let (Some(Block::Para(_)), Some(range)) = (blocks.last(), last_para)
-        && let Some((t, map)) = pending_table(&src[range.start..], range.start, autolink)
+        && let Some((t, map)) = pending_table(&src[range.start..], range.start, how)
     {
         *blocks.last_mut().unwrap() = Block::Table(t);
         *maps.last_mut().unwrap() = map;
@@ -793,7 +806,7 @@ fn fence_closed(block: &str) -> bool {
 
 /// The header (and partial delimiter row) of a table still streaming in, from the source of the
 /// document's last paragraph: `| a | b |` alone, or followed by a delimiter row in progress.
-fn pending_table(src: &str, base_offset: usize, autolink: bool) -> Option<(Table, BlockMap)> {
+fn pending_table(src: &str, base_offset: usize, how: Reading) -> Option<(Table, BlockMap)> {
     let mut lines = src.trim_end().lines();
     let raw_head = lines.next()?;
     let lead_ws = raw_head.len() - raw_head.trim_start().len();
@@ -819,7 +832,7 @@ fn pending_table(src: &str, base_offset: usize, autolink: bool) -> Option<(Table
     let mut head_inlines = Vec::with_capacity(cells.len());
     let mut head_maps = Vec::with_capacity(cells.len());
     for (cell_off, c) in &cells {
-        let (inl, map) = inline_of(c, *cell_off, autolink);
+        let (inl, map) = inline_of(c, *cell_off, how);
         head_inlines.push(inl);
         head_maps.push(map);
     }
@@ -857,8 +870,8 @@ fn split_row(line: &str, base_offset: usize) -> Vec<(usize, String)> {
         .collect()
 }
 
-fn inline_of(src: &str, offset: usize, autolink: bool) -> (Inline, SpanMap) {
-    let (blocks, _, _, _, _, maps) = parse_doc(src, autolink);
+fn inline_of(src: &str, offset: usize, how: Reading) -> (Inline, SpanMap) {
+    let (blocks, _, _, _, _, maps) = parse_doc(src, how);
     match (blocks.into_iter().next(), maps.into_iter().next()) {
         (Some(Block::Para(i)), Some(BlockMap::Inline(mut m))) => {
             m.shift_src(offset);

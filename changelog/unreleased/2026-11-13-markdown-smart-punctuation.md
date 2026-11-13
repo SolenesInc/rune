@@ -1,0 +1,1 @@
+- `Markdown::smart_punctuation` sets prose with typographic punctuation and 32 emoji shortcodes, mapped to the source.

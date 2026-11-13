@@ -205,3 +205,22 @@ fn a_table_cell_image_shows_its_picture_at_its_size_and_its_alt_text_until_then(
     assert_eq!(labels, ["A shot", "Missing"]);
     assert_eq!(images[0].rect[2], 64.0, "the picture at its own width");
 }
+
+#[test]
+fn smart_punctuation_sets_prose_and_maps_each_piece_to_its_source() {
+    let src = "\"Ship it...\" -- pages 3--4 :tada: `a--b \"c\"` <kbd>--x</kbd>\n";
+    let smart = Reading { autolink: true, smart: true };
+    let (blocks, _, _, _, _, maps) = parse_doc(src, smart);
+    let [Block::Para(p)] = blocks.as_slice() else { panic!("{blocks:?}") };
+    let code = |s: &str| format!("{}{s}{}", parser::OPEN, parser::CLOSE);
+    assert_eq!(p.text, format!("“Ship it…” -- pages 3–4 🎉 {} {}", code("a--b \"c\""), "--x"));
+    let [BlockMap::Inline(map)] = maps.as_slice() else { panic!("{maps:?}") };
+    let source_of = |shown: &str| {
+        let at = p.text.find(shown).unwrap();
+        let (s, out) = map.0.iter().find(|(_, out)| out.contains(&at)).unwrap_or_else(|| panic!("{shown:?} in {map:?}"));
+        if s.len() == out.len() { &src[s.start + at - out.start..s.start + at - out.start + shown.len()] } else { &src[s.clone()] }
+    };
+    assert_eq!((source_of("…"), source_of("“"), source_of("–"), source_of("🎉")), ("...", "\"", "--", ":tada:"));
+    let (plain, ..) = parse_doc(src, Reading::LINKED);
+    assert!(matches!(plain.as_slice(), [Block::Para(p)] if p.text.starts_with("\"Ship it...\"")), "off by default: {plain:?}");
+}

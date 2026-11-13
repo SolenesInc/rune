@@ -55,6 +55,7 @@ mod cache;
 mod find;
 mod highlight;
 mod html;
+mod prose;
 mod image;
 mod interrupt;
 mod link_icon;
@@ -191,6 +192,19 @@ pub struct CellPicture {
 
 type TaskWire = Rc<dyn Fn(El, Rc<str>, usize, bool) -> El>;
 
+/// How a source parses: whether bare URLs link ([`Markdown::autolink`]) and whether prose takes
+/// typographic punctuation ([`Markdown::smart_punctuation`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) struct Reading {
+    pub(super) autolink: bool,
+    pub(super) smart: bool,
+}
+
+impl Reading {
+    /// Bare URLs link; text stays as written.
+    pub(super) const LINKED: Reading = Reading { autolink: true, smart: false };
+}
+
 /// Whether each `<details>` block is open, and what pressing its summary does.
 #[derive(Clone)]
 struct DetailsWire {
@@ -248,6 +262,7 @@ pub struct Markdown {
     block_keys: Vec<(usize, String)>,
     highlights: Vec<(Vec<Range<usize>>, Highlight)>,
     autolink: bool,
+    smart: bool,
     reveal: f32,
     streaming: bool,
     on_link: Option<LinkWire>,
@@ -282,7 +297,7 @@ thread_local! {
 
 impl Markdown {
     pub fn new(src: impl Into<String>) -> Markdown {
-        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
+        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
             diagram_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
@@ -316,6 +331,16 @@ impl Markdown {
     /// This is URL-only: bare email addresses remain text; `<name@example.org>` still links.
     pub fn autolink(mut self, on: bool) -> Self {
         self.autolink = on;
+        self
+    }
+    /// Sets prose with typographic punctuation, as a page's prose transform does: `...` as `…`,
+    /// `---` as `—`, `--` between digits as `–`, straight quotes as curly ones (opening after a
+    /// space or `(`, `[`, `{`, closing otherwise), and 32 emoji shortcodes such as `:tada:` as
+    /// their emoji. Code, inline code and `<kbd>` keep what they say. Each replaced piece maps
+    /// to the source it came from, so selections and highlights still reach the source.
+    /// `false` by default.
+    pub fn smart_punctuation(mut self, on: bool) -> Self {
+        self.smart = on;
         self
     }
     /// Stable keys as `(source_byte_offset, key)` pairs. The offset is the start of the first
@@ -539,7 +564,7 @@ impl Markdown {
                 style,
                 &self.block_keys,
                 &self.highlights,
-                self.autolink,
+                (self.autolink, self.smart),
                 self.reveal.to_bits(),
                 self.tasks_read_only,
                 self.selectable,
@@ -554,13 +579,12 @@ impl Markdown {
     fn render_uncached(self, style: &MarkdownStyle) -> El {
         #[cfg(test)]
         RENDERS.with(|n| n.set(n.get() + 1));
-        let (blocks, sources, tasks, starts, maps) = match (self.autolink, self.streaming) {
-            (true, false) => doc_cached(&self.src),
-            (true, true) => stream_cached(&self.src),
-            (false, streaming) => {
-                let (b, s, t, _, st, m) = if streaming { parse_streaming(&self.src, false) } else { parse_doc(&self.src, false) };
-                (Rc::new(b), s.into(), t.into(), st.into(), m.into())
-            }
+        let how = Reading { autolink: self.autolink, smart: self.smart };
+        let (blocks, sources, tasks, starts, maps) = if self.autolink {
+            cache::doc_as(&self.src, how, self.streaming)
+        } else {
+            let (b, s, t, _, st, m) = if self.streaming { parse_streaming(&self.src, how) } else { parse_doc(&self.src, how) };
+            (Rc::new(b), s.into(), t.into(), st.into(), m.into())
         };
         let blocks = match &self.text_links {
             Some(f) => {
