@@ -111,3 +111,49 @@ fn under_controls_keep_focus_a_press_on_plain_content_still_blurs_the_field() {
 
     assert_eq!(focused(&rt), None);
 }
+
+#[derive(Default)]
+struct Recorder {
+    field: TextEdit,
+    recording: bool,
+}
+
+fn recorder_view(s: &Recorder, cx: &mut Cx<Recorder>) -> El {
+    cx.controls_keep_focus();
+    col()
+        .size(300.0, 100.0)
+        .child(
+            crate::text_input(&s.field, TextStyle::new(14.0, 400.0))
+                .key("field")
+                .w(150.0)
+                .on_edit(|s: &mut Recorder| &mut s.field),
+        )
+        .child(
+            row()
+                .key("recorder")
+                .role("button")
+                .label("Record")
+                .size(60.0, 24.0)
+                .focusable(true)
+                .on_press(|s: &mut Recorder| s.recording = true)
+                .on_physical_input(|_: &mut Recorder, _, _| true),
+        )
+}
+
+#[test]
+fn under_controls_keep_focus_a_press_on_a_control_that_takes_physical_keys_focuses_it() {
+    let mut s = Recorder::default();
+    s.field.focused = true;
+    let mut rt = Runtime::new(s, recorder_view, (300.0, 100.0), Env::default());
+    rt.frame(0.0);
+    let (x, y) = rt.find("recorder").expect("laid out");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    assert!(rt.state.recording);
+    assert_eq!(rt_focused(&rt).as_deref(), Some("recorder"));
+}
+
+fn rt_focused(rt: &Runtime<Recorder>) -> Option<String> {
+    rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
+}

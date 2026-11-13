@@ -125,6 +125,7 @@ fn name_field(e: El, label: Option<&str>, placeholder: &str, description: Option
 /// A single-line field: `TextInput::new(&s.name).placeholder("Name").on_edit(|s: &mut S| &mut s.name)`.
 pub struct TextInput {
     edit: TextEdit,
+    key: String,
     label: Option<String>,
     placeholder: String,
     large: bool,
@@ -145,6 +146,12 @@ pub struct TextInput {
 }
 
 impl TextInput {
+    /// The key of the editor inside, `"input"` unless set: what `Tx::focused` reports while it has
+    /// focus and what `Tx::focus` takes, so an app with several fields tells them apart.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = key.into();
+        self
+    }
     pub fn secure(mut self) -> Self {
         self.edit.set_secure(true);
         self
@@ -180,6 +187,7 @@ impl TextInput {
     }
     pub fn new(edit: &TextEdit) -> TextInput {
         TextInput {
+            key: "input".into(),
             edit: edit.clone(),
             label: None,
             placeholder: String::new(),
@@ -315,7 +323,7 @@ impl TextInput {
         let height = self.height.map_or_else(|| base.max(style.line_px() + 12.0), |h| h.max(style.line_px()));
         let field = text_input(&self.edit, style)
             .single_line()
-            .key("input")
+            .key(self.key.clone())
             .grow(1.0)
             .shrink()
             .min_w(0.0)
@@ -382,6 +390,7 @@ impl TextInput {
 /// A multi-line field (`Textarea`): 80 points tall at least, 13/1.35 type, 8 points of padding.
 pub struct TextArea {
     edit: TextEdit,
+    key: String,
     label: Option<String>,
     placeholder: String,
     width: Option<f32>,
@@ -394,6 +403,12 @@ pub struct TextArea {
 }
 
 impl TextArea {
+    /// The key of the editor inside, `"input"` unless set: what `Tx::focused` reports while it has
+    /// focus and what `Tx::focus` takes, so an app with several fields tells them apart.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = key.into();
+        self
+    }
     /// Protect the model like a password field. Hidden non-empty values use a fixed one-line
     /// mask. Clicks and unshifted navigation move to the end; shifted navigation selects all.
     /// Typing/paste append, or replace the whole value if selected; Backspace deletes at the
@@ -416,6 +431,7 @@ impl TextArea {
     }
     pub fn new(edit: &TextEdit) -> TextArea {
         TextArea {
+            key: "input".into(),
             edit: edit.clone(),
             label: None,
             placeholder: String::new(),
@@ -508,7 +524,7 @@ impl TextArea {
         let ink = if red { c.danger.fg } else { c.text_base };
         let hint = if red { c.danger.fg } else { c.text_faint };
         let field = text_input(&self.edit, style)
-            .key("input")
+            .key(self.key.clone())
             .w_full()
             .color(ink)
             .rich_style(kit_rich_style(k))
@@ -552,6 +568,7 @@ impl TextArea {
 pub struct TextField {
     label: String,
     edit: TextEdit,
+    key: String,
     placeholder: String,
     hide_label: bool,
     ghost: bool,
@@ -565,8 +582,15 @@ pub struct TextField {
 }
 
 impl TextField {
+    /// The key of the editor inside, `"input"` unless set: what `Tx::focused` reports while it has
+    /// focus and what `Tx::focus` takes, so an app with several fields tells them apart.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = key.into();
+        self
+    }
     pub fn new(label: impl Into<String>, edit: &TextEdit) -> TextField {
         TextField {
+            key: "input".into(),
             label: label.into(),
             edit: edit.clone(),
             placeholder: String::new(),
@@ -631,7 +655,7 @@ impl TextField {
         let c = &k.c;
         let body = TextStyle::new(14.0, 400.0).lh(21.0);
         let field = text_input(&self.edit, body)
-            .key("input")
+            .key(self.key.clone())
             .grow(1.0)
             .shrink()
             .color(c.text_strong)
@@ -687,3 +711,7 @@ impl TextField {
         if self.state == State::Disabled { root.layer_opacity(0.5) } else { root }
     }
 }
+
+#[cfg(test)]
+#[path = "text_input_tests.rs"]
+mod tests;

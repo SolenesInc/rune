@@ -144,6 +144,7 @@ impl<S: 'static> Runtime<S> {
     pub(super) fn control_keeps_focus(&self, n: &Node) -> bool {
         self.defaults.controls_keep_focus
             && n.focus.key.is_none()
+            && n.focus.physical.is_none()
             && n.handlers.on_press.is_some()
             && PRESSABLE_ROLES.contains(&n.role)
     }
