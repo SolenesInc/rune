@@ -54,4 +54,11 @@ impl Tx {
     pub fn focused(&self) -> Option<&str> {
         self.focused.as_deref()
     }
+
+    /// Whether the element that had focus when the key arrived is a text field. A window's
+    /// `on_key` that also hears a field's keys through `App::on_field_key` reads it to leave a
+    /// key it already declined there.
+    pub fn in_text_field(&self) -> bool {
+        self.in_text_field
+    }
 }

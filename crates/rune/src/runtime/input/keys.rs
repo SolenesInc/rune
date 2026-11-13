@@ -8,6 +8,7 @@ impl<S: 'static> Runtime<S> {
         let physical_key = one.physical_key;
         one.by_keys = true;
         one.focused = self.focused_key();
+        one.in_text_field = self.focused_input().is_some();
         if matches!(ev.key, crate::Key::Modifier { .. }) { return !repeat && self.route_modifier(ev, one); }
         one.key_repeat = repeat;
         let shown = self.focus.keyboard() || self.focus.hovered();
@@ -18,6 +19,8 @@ impl<S: 'static> Runtime<S> {
         // Return and Escape that reach a field mid-composition belong to the input method: they
         // confirm or cancel it, and submit, blur and press nothing.
         if matches!(ev.key, crate::Key::Enter | crate::Key::Escape) && self.composing() { return true; }
+        if self.focused_input().is_some() && !self.playground_typing() && let Some(f) = self.on_field_key
+            && Tx::took(self.app_key(f, ev, one), one) { return true; }
         if self.element_key(ev, one) { return true; }
         one.physical_key = None;
         if self.default_button_key(ev, one) { return true; }

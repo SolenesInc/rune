@@ -72,6 +72,7 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
     let mut comp = app.compositor.take();
     let (srgb_blend, font_smoothing) = (app.srgb_blend, app.font_smoothing);
     let (on_focus, on_ime, on_mods) = (app.on_focus, app.on_ime, app.on_mods);
+    let on_field_key = app.on_field_key;
     let (on_reopen, on_open_url) = (app.on_reopen, app.on_open_url);
     // A `--realtime` run stands in for a window, so it starts the app's live work as one does.
     let mut on_ready = app.on_ready.take().filter(|_| args.realtime);
@@ -111,6 +112,7 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
     let chrome = rt.headless_chrome(chrome, titlebar, app_options.borderless);
     rt.on_focus = on_focus;
     rt.on_mods = on_mods;
+    rt.on_field_key = on_field_key;
     rt.app_ime.hook = on_ime;
     rt.transparent = transparent;
     rt.fit_height = fit_height;
