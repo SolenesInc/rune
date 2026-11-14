@@ -49,6 +49,7 @@ use rune::{Align, Color, Cursor, El, Family, Link, LinkPaint, Span, TextHighligh
 
 use crate::Kit;
 
+mod alert_icon;
 mod autolink;
 mod bidi;
 mod cache;
@@ -71,7 +72,7 @@ mod text_links;
 
 pub use drawn::{Drawn, DrawnStep, DrawnText};
 pub use find::{Case, find};
-pub use image::ImageFrame;
+pub use image::{ImageFrame, MissingImage};
 pub use style::MarkdownStyle;
 #[cfg(feature = "mermaid")] pub(crate) use style::DiagramPaint;
 
@@ -293,6 +294,7 @@ pub struct Markdown {
     link_favicon: Option<link_icon::FaviconWire>,
     images: Option<image::ImageWire>,
     on_image: Option<image::ImagePress>,
+    missing_image: Option<image::MissingFrame>,
     text_links: Option<TextLinks>,
 }
 
@@ -306,7 +308,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
+            diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, missing_image: None, text_links: None }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -576,6 +578,7 @@ impl Markdown {
             && self.link_favicon.is_none()
             && self.images.is_none()
             && self.on_image.is_none()
+            && self.missing_image.is_none()
             && self.text_links.is_none()
             && !(cfg!(feature = "mermaid") && self.src.contains("mermaid"));
         if can_cache {
@@ -623,7 +626,7 @@ impl Markdown {
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]
-            diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
+            diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, missing_image: self.missing_image, flow: Cell::default() };
         // The document reads the way its first words do; until any arrive, the way it was asked.
         let root = bidi::directed(r.blocks(&blocks, &maps, &keys, true), bidi::blocks_dir(&blocks).or(self.tentative)).selection_group(self.selectable);
         if !(self.selectable && self.copy_source) { return root; }

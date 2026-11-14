@@ -113,6 +113,7 @@ pub use markdown::DiagramFrame;
 pub use markdown::Highlight;
 #[cfg(feature = "markdown")]
 pub use markdown::ImageFrame;
+pub use markdown::MissingImage;
 #[cfg(feature = "markdown")]
 pub use markdown::Markdown;
 #[cfg(feature = "markdown")]
