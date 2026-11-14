@@ -388,6 +388,7 @@ impl TextInput {
 }
 
 /// A multi-line field (`Textarea`): 80 points tall at least, 13/1.35 type, 8 points of padding.
+/// Return breaks the line, as in a `<textarea>`; Cmd/Ctrl+Return calls [`TextArea::on_submit`].
 pub struct TextArea {
     edit: TextEdit,
     key: String,
@@ -529,7 +530,8 @@ impl TextArea {
             .color(ink)
             .rich_style(kit_rich_style(k))
             .placeholder(self.placeholder.clone(), hint)
-            .caret(ink, k.selection());
+            .caret(ink, k.selection())
+            .return_breaks_line();
         let field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled);
         let field = self.edits.apply(field, disabled);
         let line = style.line_px();

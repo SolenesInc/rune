@@ -14,6 +14,8 @@ pub struct InputSpec {
     pub selection: Color,
     /// One unwrapped line that scrolls sideways to keep the caret visible, like `<input>`.
     pub single_line: bool,
+    /// [`El::return_breaks_line`]: plain Return breaks the line, as in a `<textarea>`.
+    pub(crate) return_breaks_line: bool,
     /// `placeholder_color`, and `caret` with `selection`, came from [`El::placeholder`] and
     /// [`El::caret`]; the others follow the window's foreground ([`Cx::foreground`](crate::Cx::foreground)).
     pub(crate) placeholder_inked: bool,
@@ -52,8 +54,8 @@ impl std::fmt::Debug for InputSpec {
 ///
 /// Multi-line by default (see [`El::single_line`]). Plain Return in a paragraph submits (calling
 /// [`El::on_submit`], or pressing the [`El::default_button`] when none is set) while Shift+Return
-/// and Option+Return insert a line break; a document editor that wants plain Return to break
-/// paragraphs attaches `.on_submit(|s, _| s.field.insert("\n"))`.
+/// and Option+Return insert a line break; [`El::return_breaks_line`] makes plain Return break
+/// the line too, as in a `<textarea>`.
 pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
     // An app may have assigned `edit.text` directly: clamp stale marks, blocks and caret to it.
     let mut edit = edit.clone();
@@ -76,6 +78,7 @@ pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
         caret: Color::WHITE,
         selection: DEFAULT_SELECTION,
         single_line: false,
+        return_breaks_line: false,
         placeholder_inked: false,
         caret_inked: false,
         revealed_override: None,

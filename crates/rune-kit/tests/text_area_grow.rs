@@ -67,8 +67,8 @@ fn auto_grow_fits_lines_springs_and_then_scrolls() {
         "caret {caret:?} inside {:?}", viewport.rect);
     assert!(input.rect[1] < viewport.rect[1] - 2.0 * line, "scrolled to the last line");
 
-    // Enter still submits; clearing the draft shrinks it back to one row.
-    key(&mut rt, Key::Enter, Mods::default());
+    // Cmd+Enter submits; clearing the draft shrinks it back to one row.
+    key(&mut rt, Key::Enter, Mods { cmd: true, ..Mods::default() });
     assert_eq!(rt.state.sent, 1);
     key(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
     key(&mut rt, Key::Backspace, Mods::default());
