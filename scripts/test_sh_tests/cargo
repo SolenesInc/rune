@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stands in for cargo: starts a daemon that outlives the run, as a build that starts the sccache server does.
+setsid sleep 20 </dev/null >/dev/null 2>&1 &
+echo "$PPID-daemon $!" >> "$DAEMONS"
+exit "${FAKE_RC:-0}"
