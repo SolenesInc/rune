@@ -940,7 +940,7 @@ For an app's own perf log, with nothing changed about how its windows draw:
   `None` in timers, polls, updates and layout callbacks. The gap from it to the next `Drawn` frame's `at()` is the
   app's input-to-encode latency.
 - **`App::on_frame_drawn(|rt: &Runtime<S>| ..)`** runs after each `Drawn` frame with the runtime as it presented
-  that frame, so an app can watch its own motion in real use (`rt.elements()`, `rt.state`). **`rune::last_input()`**
+  that frame, so an app can watch its own motion in real use (`rt.elements()`, `rt.state()`). **`rune::last_input()`**
   is when the thread last took an input event from the platform, stamped at dispatch: input later than the previous
   frame landed in this one.
 
@@ -2445,6 +2445,27 @@ Without `libxkbcommon-x11-0` every windowed example panics at startup with
 `Library libxkbcommon-x11.so could not be loaded`; installing the package fixes
 it, and the app then runs under Xvfb. Headless `--snap` runs don't need a display or the XKB library.
 
+## Driving a runtime in tests
+
+`Runtime<S>` is a thin typed wrapper over `RuntimeCore`, which holds everything that doesn't
+name the app's state type and derefs from it, so `rt.frame(dt)`, `rt.find(key)` and
+`rt.elements()` read as before. The core is compiled once, whatever the number of state types,
+so a test file with many small states builds about as fast as one with a single state.
+
+```rust
+let mut rt = Runtime::new(State::default(), view, (400.0, 300.0), Env::new(true, 2.0));
+rt.app_mut().poll = Some(|s, _, _| { s.ticks += 1; true });  // poll, on_key, on_field_key
+rt.frame(0.0);
+rt.state_mut().count = 1;          // or rt.update(|s, tx| ..) to commit with motion
+assert_eq!(rt.state().count, 1);
+let core = &mut *rt;               // to borrow two core fields at once
+renderer.prepare(&device, &queue, &mut core.text.atlas, &core.instances, size);
+```
+
+Code that takes a runtime and never reads the state takes `&mut RuntimeCore`. Methods go in
+`impl RuntimeCore`; `scripts/state-free.sh` fails on an `impl` over `Runtime<S>` anywhere but
+`runtime/app_side.rs`, where the typed side lives.
+
 ## Agent tooling (headless, no window, same renderer, fixed virtual clock)
 
 ```sh
@@ -2740,7 +2761,7 @@ assert_eq!(rt.playground_state::<Upload>().unwrap().phase, "sending");
 for _ in 0..36 { rt.frame(1.0 / 60.0); }               // Play::after steps run as the clock reaches them
 rt.playground_trigger('f');                            // as the F key or its button does; 'r' replays
 let label = rt.playground_element("upload").and_then(|e| e.text);
-assert_eq!(rt.state.count, 0);                         // the real state, untouched
+assert_eq!(rt.state().count, 0);                       // the real state, untouched
 ```
 
 - `App::headless_runtime(size, env)` builds the runtime a headless render would, with the
@@ -2751,7 +2772,7 @@ assert_eq!(rt.state.count, 0);                         // the real state, untouc
   apply on two frames that advance no time, so a trigger's first step has run when they
   return. Later steps run as `rt.frame(dt)` moves the logical clock.
 - `playground_state::<P>()` is the stage's state: a scene's app state, or a story's own. It's
-  `None` while closed and on a page, whose stage is `rt.state`. `playground_element(key)` finds
+  `None` while closed and on a page, whose stage is `rt.state()`. `playground_element(key)` finds
   an element on the stage only, by key or path; `rt.find` and `rt.elements` see the whole
   window, the side column included.
 
