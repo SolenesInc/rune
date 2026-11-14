@@ -211,6 +211,16 @@ fn a_drawing_is_the_card_without_its_padding() {
     assert!(t.size[1] > d.size[1] + 20.0 && t.size[0] >= d.size[0], "the title adds a line: {:?} {:?}", t.size, d.size);
 }
 
+/// A drawing says how much it shrank to fit, so a viewer can tell a diagram too small to read.
+#[test]
+fn a_drawing_says_the_scale_it_draws_at() {
+    let narrow = DiagramStyle { max_width: 420.0, ..DiagramStyle::neutral(true) };
+    let shrunk = render_drawing(WIDE_SEQUENCE, &narrow, Hover::Off, narrow.text).expect("draws");
+    assert!((shrunk.scale - 0.6).abs() < 1e-4, "{}", shrunk.scale);
+    let roomy = DiagramStyle { max_width: 4000.0, ..narrow };
+    assert_eq!(render_drawing(WIDE_SEQUENCE, &roomy, Hover::Off, roomy.text).expect("draws").scale, 1.0);
+}
+
 /// Lines shrink with the drawing, as an SVG's do: a shrunk diagram's full-size pieces are the
 /// same as an unshrunk one's, so magnifying it never shows fat lines.
 #[test]

@@ -392,3 +392,54 @@ fn a_diagram_that_does_not_draw_comes_to_the_frame_as_its_source() {
     assert!(within("b0", "card") && !within("b0", "why"), "a drawn diagram isn't framed as source");
     assert!(within("b1", "source") && within("b1", "why"), "a fence shown as its source comes to the frame with it");
 }
+
+#[test]
+fn list_items_and_their_markers_and_deep_headings_take_their_own_font_and_colours() {
+    let (marker, deep) = (rune::oklch(0.6, 0.2, 260.0), rune::oklch(0.9, 0.0, 0.0));
+    let small = TextStyle { size: 11.0, line_height: 14.0, ..Kit::neutral(true).ty.body };
+    fn styled(src: &String, _: &mut Cx<String>) -> El {
+        let k = Kit::neutral(true);
+        let style = MarkdownStyle::from_kit(&k)
+            .list_font(TextStyle { size: 11.0, line_height: 14.0, ..k.ty.body })
+            .list_marker(rune::oklch(0.6, 0.2, 260.0))
+            .deep_heading(rune::oklch(0.9, 0.0, 0.0));
+        col().w_full().child(Markdown::new(src.clone()).render(&style))
+    }
+    let mut rt = Runtime::new("Above.\n\n- One\n- Two\n\n#### Deep\n".to_owned(), styled, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let shown = |t: &str| elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}"));
+    assert_eq!(shown("•").text_color, Some(marker));
+    assert_eq!(shown("Deep").text_color, Some(deep));
+    assert_eq!(shown("One").rect[3], small.line_height);
+    assert!(shown("Above.").rect[3] > small.line_height, "a paragraph outside a list keeps the body font");
+}
+
+#[test]
+fn alerts_show_their_icon_before_their_title() {
+    let rt = laid_out("> [!WARNING]\n> Careful.\n\n> [!TIP]\n> Try.\n");
+    let icons: Vec<_> = rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("icon")).collect();
+    assert_eq!(icons.len(), 2);
+    let elements = rt.elements();
+    let title = elements.iter().find(|e| e.text.as_deref() == Some("Warning")).expect("the title");
+    assert!(icons[0].rect[0] + icons[0].rect[2] <= title.rect[0], "the icon stands before the title");
+    assert_eq!(icons[0].text_color, title.text_color);
+}
+
+#[test]
+fn an_app_draws_an_image_with_no_picture_in_its_own_words() {
+    fn framed(src: &String, _: &mut Cx<String>) -> El {
+        col().w_full().child(
+            Markdown::new(src.clone())
+                .images(|_| None)
+                .missing_image_frame(|_, image| text(format!("[missing image: {} at {}]", image.alt, image.src)))
+                .build(&Kit::neutral(true)),
+        )
+    }
+    let mut rt = Runtime::new("![A chart](chart.png)\n\n![](plain.png)\n".to_owned(), framed, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let texts: Vec<_> = rt.elements().into_iter().filter_map(|e| e.text).collect();
+    assert!(texts.iter().any(|t| t == "[missing image: A chart at chart.png]"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "[missing image:  at plain.png]"), "an image without alt text comes too: {texts:?}");
+    assert!(!texts.iter().any(|t| t == "A chart"), "the default glyph and alt text are replaced: {texts:?}");
+}

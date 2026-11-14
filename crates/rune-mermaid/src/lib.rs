@@ -252,14 +252,18 @@ pub struct Drawing {
     /// The fill and border of the card it would draw in, for the viewer's frame.
     pub surface: Color,
     pub surface_border: Color,
+    /// How much smaller than its natural size it draws to fit `style.max_width`: 1 when it
+    /// fits, down to `style.min_scale`.
+    pub scale: f32,
 }
 
 /// [`render_with_hover`]'s title and drawing alone, laid out and fitted for `style.max_width`
 /// as its card would be.
 pub fn render_drawing(src: &str, style: &DiagramStyle, hover: Hover, color: Color) -> Option<Drawing> {
     let hover = (hover != Hover::Off).then_some((hover, color));
-    let (el, size) = scenes::built(src, style, hover, None).0?.drawing(style);
-    Some(Drawing { el, size, surface: style.surface, surface_border: style.surface_border })
+    let scene = scenes::built(src, style, hover, None).0?;
+    let (el, size) = scene.drawing(style);
+    Some(Drawing { el, size, surface: style.surface, surface_border: style.surface_border, scale: scene.scale })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

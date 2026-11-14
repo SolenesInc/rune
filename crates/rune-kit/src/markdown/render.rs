@@ -49,6 +49,7 @@ pub(super) struct Renderer {
     /// `Markdown::images` and `Markdown::on_image`.
     pub(super) images: Option<image::ImageWire>,
     pub(super) on_image: Option<image::ImagePress>,
+    pub(super) missing_image: Option<image::MissingFrame>,
     /// Where the blocks being drawn sit: list depth and a quote's text colour.
     pub(super) flow: Cell<Flow>,
 }
@@ -676,8 +677,8 @@ impl Renderer {
             _ => None,
         };
         match b {
-            Block::Para(inl) => self.para(inl, inl_map, s.body, self.flow.get().ink.unwrap_or(s.text)),
-            Block::Heading(l, inl) => self.para(inl, inl_map, s.headings[(*l as usize).clamp(1, 4) - 1], if *l >= 4 { s.muted } else { s.text }).role("heading").level(u32::from(*l)),
+            Block::Para(inl) => self.para(inl, inl_map, if self.flow.get().lists > 0 { s.list_font.unwrap_or(s.body) } else { s.body }, self.flow.get().ink.unwrap_or(s.text)),
+            Block::Heading(l, inl) => self.para(inl, inl_map, s.headings[(*l as usize).clamp(1, 4) - 1], if *l >= 4 { s.deep_heading.unwrap_or(s.muted) } else { s.text }).role("heading").level(u32::from(*l)),
             Block::Code(code) => {
                 let n = self.next_source.get();
                 self.next_source.set(n + 1);
@@ -750,7 +751,7 @@ impl Renderer {
                         Some(n) => format!("{}.", n + k as u64),
                         None => "•".into(),
                     };
-                    let marker = text(marker).font(s.body).color(s.muted).exact_lines().w(indent);
+                    let marker = text(marker).font(s.list_font.unwrap_or(s.body)).color(s.list_marker.unwrap_or(s.muted)).exact_lines().w(indent);
                     let marker = if s.list_outside { marker.align(Align::End).pr(space) } else { marker.align(Align::Center) };
                     // The item's place in the list says what its marker shows.
                     c = c.child(
@@ -805,7 +806,12 @@ impl Renderer {
                 self.flow.set(Flow { inset: flow.inset + 3.0 + q.pad, ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
-                let title = text(alert.title()).font(TextStyle { size: 15.0, weight: 600.0, ..s.body }).color(ink).mb(4.0);
+                let title = row()
+                    .gap(8.0)
+                    .items_center()
+                    .mb(4.0)
+                    .child(icon(alert_icon::of(*alert), 16.0).key("icon").color(ink).a11y_hidden())
+                    .child(text(alert.title()).font(TextStyle { size: 15.0, weight: 600.0, ..s.body }).color(ink));
                 let quote = bidi::directed(
                     row()
                         .role("note")

@@ -16,6 +16,8 @@
 //!     .build(&s.zoom, &kit, window)
 //! ```
 
+#[cfg(test)]
+mod fork_tests;
 pub mod gesture;
 mod glide;
 pub mod math;
@@ -220,6 +222,7 @@ pub struct Preview<S> {
     labels: [String; 4],
     format: fn(u32) -> String,
     controls: Option<rune::Transition>,
+    scaled: bool,
 }
 
 impl<S: 'static> Preview<S> {
@@ -235,7 +238,16 @@ impl<S: 'static> Preview<S> {
             labels: ["Zoom out".into(), "Zoom to fit".into(), "Zoom in".into(), "Close".into()],
             format: |n| format!("{n}%"),
             controls: None,
+            scaled: false,
         }
+    }
+
+    /// Lays `image` out at its `natural` size in points and draws it scaled to the zoom
+    /// ([`El::scale`]), for content that does not stretch to the size it is given, such as a
+    /// diagram's drawing. Without it the preview sizes `image` itself, as a picture stretches.
+    pub fn scale_content(mut self) -> Self {
+        self.scaled = true;
+        self
     }
 
     /// How the zoom bar comes and goes (as the image flies, or with the scrim).
@@ -276,7 +288,13 @@ impl<S: 'static> Preview<S> {
         let bar = self.bar(zoom, k);
         let scale = zoom.view().scale;
         // A glide's frames, a pinch and a pan move it to exactly where the view says.
-        let image = self.image.absolute(x, y).size(w, h).radius(k.radius.md * scale).instant_changes();
+        let image = if self.scaled {
+            let [nw, nh] = self.natural;
+            let drawn = self.image.absolute((w - nw) * 0.5, (h - nh) * 0.5).size(nw, nh).scale(w / nw.max(f32::EPSILON)).instant_changes();
+            el().absolute(x, y).size(w, h).child(drawn).instant_changes()
+        } else {
+            self.image.absolute(x, y).size(w, h).radius(k.radius.md * scale).instant_changes()
+        };
         let close = self.close.clone();
         let mut body_el = el()
             .key("image-preview-body")
