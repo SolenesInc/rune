@@ -20,6 +20,7 @@ mod matched_scroll;
 mod no_motion;
 mod one_snap;
 mod pick_reads;
+mod press_outside;
 mod picture_scale;
 mod pointer_drag;
 mod modal_press_through;

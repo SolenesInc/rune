@@ -25,6 +25,7 @@ pub(super) enum Action {
     /// `El::on_visible`: the element came on screen or left it.
     Visible(String, bool),
     Press(String, crate::PointerButton),
+    PressOutside(String),
     DoublePress(String),
     Link(String, usize),
     /// `El::on_link_secondary`: the text, its link and the press.
@@ -121,6 +122,7 @@ pub(super) fn live_only_handler(action: &Action) -> Option<&'static str> {
         Action::SelectionChange(..) => "on_selection_change",
         Action::Press(..) => "on_press",
         Action::DoublePress(_) => "on_double_press",
+        Action::PressOutside(_) => "on_press_outside",
         Action::Link(..) => "on_link",
         Action::LinkSecondary(..) => "on_link_secondary",
         Action::SecondaryPress(..) => "on_secondary_press",
@@ -140,7 +142,7 @@ pub(super) fn live_only_handler(action: &Action) -> Option<&'static str> {
 #[cfg(debug_assertions)]
 pub(super) fn action_path(action: &Action) -> Option<&str> {
     match action {
-        Action::PointerMove(path, ..) | Action::DrawnLayout(path, ..) | Action::Layout(path, _) | Action::Hover(path) | Action::HoverChange(path, _) | Action::SelectionChange(path, _) | Action::Press(path, _) | Action::DoublePress(path)
+        Action::PointerMove(path, ..) | Action::DrawnLayout(path, ..) | Action::Layout(path, _) | Action::Hover(path) | Action::HoverChange(path, _) | Action::SelectionChange(path, _) | Action::Press(path, _) | Action::PressOutside(path) | Action::DoublePress(path)
         | Action::Link(path, _) | Action::LinkSecondary(path, ..) | Action::SecondaryPress(path, _) | Action::Drag(path, ..) | Action::DragRepeat(path, ..) | Action::DragStart(path)
         | Action::DragEnd(path, _) | Action::Visible(path, _) => Some(path),
         Action::Wheel(_, chain, _) | Action::Gesture(chain, _) => chain.first().map(String::as_str),
@@ -402,6 +404,12 @@ impl<S: 'static> Runtime<S> {
                 let Some(f) = self.node(&path).and_then(|n| n.handlers.on_press.clone()) else { return false };
                 log_event!(self, "press {path}");
                 one.button = button;
+                f(states!(self), &mut one);
+                true
+            }
+            Action::PressOutside(path) => {
+                let Some(f) = self.node(&path).and_then(|n| n.handlers.on_press_outside.clone()) else { return false };
+                log_event!(self, "press outside {path}");
                 f(states!(self), &mut one);
                 true
             }

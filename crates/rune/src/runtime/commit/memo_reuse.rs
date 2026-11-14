@@ -333,6 +333,7 @@ fn same_handlers(
         on_spellcheck_languages,
         modal,
         on_press,
+        on_press_outside,
         on_double_press,
         on_secondary_press,
         on_hover,
@@ -377,6 +378,7 @@ fn same_handlers(
         }
         && opt_rc_eq(&a.on_spellcheck_languages, on_spellcheck_languages)
         && opt_rc_eq(&a.on_press, on_press)
+        && opt_rc_eq(&a.on_press_outside, on_press_outside)
         && opt_rc_eq(&a.on_double_press, on_double_press)
         && opt_rc_eq(&a.on_secondary_press, on_secondary_press)
         && opt_rc_eq(&a.on_hover, on_hover)

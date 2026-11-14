@@ -11,6 +11,13 @@ impl El {
         self.set_on_press_tx(f);
         self
     }
+    /// Runs `f` when a primary press lands outside where this element is drawn, before the
+    /// press acts. The press still goes where it was aimed, so a card that points at the
+    /// window can step aside for a click elsewhere without a modal's inert background.
+    pub fn on_press_outside<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.handlers.on_press_outside = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
+        self
+    }
     /// [`El::on_press_tx`] in place.
     pub fn set_on_press_tx<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> &mut Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));

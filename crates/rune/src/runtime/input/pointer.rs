@@ -186,6 +186,18 @@ impl<S: 'static> Runtime<S> {
         }
     }
 
+    /// Queues `on_press_outside` for each element drawn away from (x, y).
+    fn queue_presses_outside(&mut self, x: f32, y: f32) {
+        for i in 0..self.nodes.len() {
+            let n = &self.nodes[i];
+            if n.handlers.get().is_none_or(|h| h.on_press_outside.is_none()) || self.subtree_exiting(i) { continue; }
+            let Some(&[left, top, w, h]) = self.drawn.get(i) else { continue };
+            if x < left || x >= left + w || y < top || y >= top + h {
+                self.queue.push(Action::PressOutside(n.path.clone()));
+            }
+        }
+    }
+
     pub fn pointer_down(&mut self, x: f32, y: f32) {
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
@@ -198,6 +210,7 @@ impl<S: 'static> Runtime<S> {
         // A press is the hand's: hover follows the pointer through moving layout.
         self.release_hover_hold();
         self.focus.step(focus_machine::FocusEvent::Pointed);
+        self.queue_presses_outside(x, y);
         self.press_help(x, y);
         // A press cancels the waits to report an enter; the next move after it starts them again.
         self.press_hover_delays();

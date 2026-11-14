@@ -17,6 +17,8 @@ pub(crate) struct Handlers {
     pub on_spellcheck_languages: Option<LanguagesFn>,
     pub modal: Option<ModalSpec>,
     pub on_press: Option<PressFn>,
+    /// `El::on_press_outside`: a primary press landed outside where the element is drawn.
+    pub on_press_outside: Option<PressFn>,
     pub on_double_press: Option<PressFn>,
     pub on_secondary_press: Option<PointerFn>,
     pub on_hover: Option<PressFn>,
@@ -103,6 +105,7 @@ impl Empty for Handlers {
         on_spellcheck_languages: None,
         modal: None,
         on_press: None,
+        on_press_outside: None,
         on_double_press: None,
         on_secondary_press: None,
         on_hover: None,
