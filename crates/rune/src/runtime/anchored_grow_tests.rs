@@ -279,7 +279,7 @@ fn animate_layout_and_scrolled_sticky_subtree_agree_across_paint_caret_and_layou
     let caret = field_el.caret.expect("focused field inside anchored popover has caret");
     assert!(caret[0] >= pop[0] && caret[0] <= pop[0] + pop[2] && (caret[1] - pop[1]).abs() < 8.0,
         "caret {caret:?} sits inside drawn popover {pop:?}");
-    let laid = rt.state.seen_layout.expect("on_layout reported");
+    let laid = rt.state().seen_layout.expect("on_layout reported");
     assert!((laid[0] - pop[0]).abs() < 0.5 && (laid[1] - pop[1]).abs() < 0.5,
         "on_layout {laid:?} agrees with drawn popover {pop:?}");
 

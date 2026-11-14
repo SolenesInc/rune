@@ -26,7 +26,7 @@ pub(super) enum A11yAct {
 /// One scroll "item" in points: about a line of body text.
 const LINE: f32 = 40.0;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Queues what `request` asks for its frame, if it names an element that can do it. Returns
     /// whether it queued anything (the host then draws a frame).
     pub(crate) fn a11y_action(&mut self, request: &ActionRequest) -> bool {
@@ -136,7 +136,7 @@ impl<S: 'static> Runtime<S> {
             A11yAct::Step(delta) => {
                 let Some(f) = self.node(&path).and_then(|n| n.focus.step.clone()) else { return false };
                 log_event!(self, "a11y step {delta} {path}");
-                f(states!(self), delta, tx);
+                f(self.app.states(), delta, tx);
                 true
             }
             A11yAct::SetValue(value) => self.a11y_edit(path, tx, move |e| {

@@ -93,7 +93,7 @@ impl ModalFocus {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Feeds the modal focus machine what this commit shows: modals that went (innermost first),
     /// a modal that opened, and focus that left the top modal.
     pub(super) fn sync_modals(&mut self) {

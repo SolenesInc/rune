@@ -41,7 +41,7 @@ fn a_tap_animates_through_its_release() {
     rt.pointer_up(250.0, 10.0);
     rt.frame(1.0 / 120.0);
     let after = knob(&rt).rect[0];
-    assert_eq!(rt.state.phases, [Phase::Down, Phase::Up]);
+    assert_eq!(rt.state().phases, [Phase::Down, Phase::Up]);
     assert!(after > before && after < 249.0, "knob keeps springing after the release: {before} -> {after}");
     rt.frame(1.0);
     assert_eq!(knob(&rt).rect[0], 250.0);
@@ -55,7 +55,7 @@ fn a_release_somewhere_new_still_moves() {
     rt.frame(1.0);
     rt.pointer_up(120.0, 10.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.phases, [Phase::Down, Phase::Move, Phase::Up]);
+    assert_eq!(rt.state().phases, [Phase::Down, Phase::Move, Phase::Up]);
     assert_eq!(knob(&rt).rect[0], 120.0, "a move on release applies instantly");
 }
 
@@ -69,6 +69,6 @@ fn a_drag_that_comes_to_rest_releases_without_a_move() {
     rt.frame(1.0 / 120.0);
     rt.pointer_up(90.0, 10.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.phases, [Phase::Down, Phase::Move, Phase::Up]);
+    assert_eq!(rt.state().phases, [Phase::Down, Phase::Move, Phase::Up]);
     assert_eq!(knob(&rt).rect[0], 90.0);
 }

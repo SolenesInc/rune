@@ -61,7 +61,7 @@ fn code_selects_a_range_reads_it_and_clears_it() {
     act(&mut rt, |tx| tx.select_text("lone", 5..9));
     assert_eq!(rt.selected_text().as_deref(), Some("text"));
     rt.update(|s, tx| s.seen = tx.text_selection().cloned());
-    let seen = rt.state.seen.take().expect("a handler reads the selection");
+    let seen = rt.state_mut().seen.take().expect("a handler reads the selection");
     assert_eq!(seen.text(), "text");
     let [t] = seen.texts() else { panic!("{seen:?}") };
     assert!(t.path().ends_with("/lone") && t.key() == Some("lone"), "{t:?}");
@@ -80,7 +80,7 @@ fn code_selects_a_range_reads_it_and_clears_it() {
     act(&mut rt, |tx| tx.clear_text_selection());
     assert_eq!(rt.selected_text(), None);
     rt.update(|s, tx| s.seen = tx.text_selection().cloned());
-    assert_eq!(rt.state.seen, None);
+    assert_eq!(rt.state().seen, None);
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn selection_copy_says_what_copying_takes() {
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("SOURCE"));
     assert_eq!(ASKED.take(), [("a".to_owned(), 0..15, true), ("r/b".to_owned(), 0..6, true)], "paths relative to the element");
     rt.update(|s, tx| s.seen = tx.text_selection().cloned());
-    assert_eq!(rt.state.seen.as_ref().map(TextSelection::text), Some("first paragraph\nsecond"), "reading is as drawn");
+    assert_eq!(rt.state().seen.as_ref().map(TextSelection::text), Some("first paragraph\nsecond"), "reading is as drawn");
 
     // It returns None for part of the group: the drawn text, and it sees what isn't selected.
     act(&mut rt, |tx| tx.select_text("b", 0..3));
@@ -164,7 +164,7 @@ fn selection_copy_says_what_copying_takes() {
 
 /// An app's `on_key` that takes Cmd+A and Cmd+C copies the note its own way.
 fn app_takes_copy_keys(rt: &mut Runtime<S>) {
-    rt.on_key = Some(|s, ev, tx| match ev.key {
+    rt.app_mut().on_key = Some(|s, ev, tx| match ev.key {
         Key::Command(c @ ('a' | 'c')) => {
             s.app_keys.push(c);
             if c == 'c' { tx.copy("APP"); }
@@ -185,15 +185,15 @@ fn an_apps_on_key_takes_the_copy_keys_before_the_selection() {
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("APP"));
     command(&mut rt, 'a');
     assert_eq!(rt.selected_text().as_deref(), Some("lone"), "Cmd+A was the app's");
-    assert_eq!(rt.state.app_keys, ['c', 'a']);
+    assert_eq!(rt.state().app_keys, ['c', 'a']);
 
     // An app that passes them on leaves them to the selection.
-    rt.on_key = Some(|s, ev, _| { if let Key::Command(c) = ev.key { s.app_keys.push(c); } false });
+    rt.app_mut().on_key = Some(|s, ev, _| { if let Key::Command(c) = ev.key { s.app_keys.push(c); } false });
     command(&mut rt, 'a');
     assert_eq!(rt.selected_text().as_deref(), Some("lone text here"));
     command(&mut rt, 'c');
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("lone text here"));
-    assert_eq!(rt.state.app_keys, ['c', 'a', 'a', 'c'], "the app saw them first");
+    assert_eq!(rt.state().app_keys, ['c', 'a', 'a', 'c'], "the app saw them first");
 }
 
 #[test]
@@ -202,17 +202,17 @@ fn a_focused_field_keeps_its_copy_keys_from_the_app() {
     let clipboard = rune::clipboard::memory();
     rt.use_clipboard(&clipboard);
     app_takes_copy_keys(&mut rt);
-    rt.state.field = TextEdit::new("field words");
-    rt.state.field.focused = true;
+    rt.state_mut().field = TextEdit::new("field words");
+    rt.state_mut().field.focused = true;
     rt.invalidate();
     tick(&mut rt);
     command(&mut rt, 'a');
     command(&mut rt, 'c');
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("field words"));
-    assert!(rt.state.app_keys.is_empty(), "{:?}", rt.state.app_keys);
+    assert!(rt.state().app_keys.is_empty(), "{:?}", rt.state().app_keys);
 }
 
-fn heard(rt: &mut Runtime<S>) -> Vec<Heard> { std::mem::take(&mut rt.state.heard) }
+fn heard(rt: &mut Runtime<S>) -> Vec<Heard> { std::mem::take(&mut rt.state_mut().heard) }
 
 #[test]
 fn on_selection_change_hears_a_drag_start_change_and_clear_once_a_frame() {
@@ -283,8 +283,8 @@ fn on_selection_change_hears_code_and_selections_elsewhere_dont_reach_it() {
 #[test]
 fn a_focused_field_keeps_a_static_selection_across_commits() {
     let mut rt = runtime();
-    rt.state.field = TextEdit::new("field words");
-    rt.state.field.focused = true;
+    rt.state_mut().field = TextEdit::new("field words");
+    rt.state_mut().field.focused = true;
     rt.invalidate();
     tick(&mut rt);
     act(&mut rt, |tx| tx.select_text("lone", 0..4));
@@ -355,7 +355,7 @@ fn on_selection_change_calling_select_does_not_loop() {
     for _ in 0..5 {
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.calls, [Some("hello".to_owned())], "widening inside on_selection_change does not re-trigger it");
+    assert_eq!(rt.state().calls, [Some("hello".to_owned())], "widening inside on_selection_change does not re-trigger it");
     assert_eq!(rt.selected_text().as_deref(), Some("hello world"));
 }
 
@@ -381,14 +381,14 @@ fn keyed_selection_survives_when_an_unkeyed_ancestor_shifts_index() {
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.selected_text().as_deref(), Some("alpha"));
-    assert_eq!(std::mem::take(&mut rt.state.heard), [Heard(true, false, Some("alpha".into()))]);
+    assert_eq!(std::mem::take(&mut rt.state_mut().heard), [Heard(true, false, Some("alpha".into()))]);
 
     // Inserting an unkeyed sibling before the unkeyed wrapper shifts `#0/msg` to `#1/msg`.
     rt.update(|s, _| s.banner = true);
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.selected_text().as_deref(), Some("alpha"), "keyed text keeps its selection across unkeyed wrapper shift");
-    assert_eq!(rt.state.heard, [], "no bogus clear/start when the selection did not change");
+    assert_eq!(rt.state().heard, [], "no bogus clear/start when the selection did not change");
 }
 
 #[test]

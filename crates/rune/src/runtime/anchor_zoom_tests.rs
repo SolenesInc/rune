@@ -86,7 +86,7 @@ fn at_zoom_one_point_six_a_button_in_the_overlay_hits_where_it_draws() {
     rt.pointer_down(320.0, 255.0);
     rt.pointer_up(320.0, 255.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     assert_eq!(rt.element_at(320.0, 255.0).as_ref().and_then(|e| e.key()), Some("btn"));
 }
 

@@ -21,7 +21,7 @@ pub(crate) struct FieldMenu {
     languages: Option<(Vec<String>, crate::el::LanguagesFn)>,
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Opens field `path`'s menu at window point `at`, pressed at `local` in the field (points
     /// from its text's top-left), or from the keyboard (`None`).
     pub(super) fn field_menu(&mut self, path: String, at: (f32, f32), local: Option<(f32, f32)>, one: &mut Tx) -> bool {
@@ -38,7 +38,7 @@ impl<S: 'static> Runtime<S> {
         if self.focus.path() != Some(path.as_str()) {
             self.set_focus(Some(path.clone()), false);
         }
-        let e = access(states!(self));
+        let e = access(self.app.states());
         e.set_single_line(single);
         if let (Some((x, y)), Some(l)) = (local, layout.as_ref().map(TextLayout::view))
             && e.preedit().is_none()
@@ -138,7 +138,7 @@ impl<S: 'static> Runtime<S> {
             }
             "spellcheck" => {
                 if let Some((on, f)) = menu.toggle {
-                    f(states!(self), !on, one);
+                    f(self.app.states(), !on, one);
                 }
             }
             id if id.starts_with("language-") => {
@@ -148,7 +148,7 @@ impl<S: 'static> Runtime<S> {
                         None => current.push(tag.to_owned()),
                     }
                     crate::spell::set_languages(&current);
-                    keep(states!(self), current, one);
+                    keep(self.app.states(), current, one);
                     self.dirty = true;
                 }
             }

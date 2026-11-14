@@ -24,7 +24,7 @@ fn each_keyed_collapsible_is_pressed_and_focused_by_its_own_trigger() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert_eq!((rt.state.general, rt.state.advanced), (false, true));
+    assert_eq!((rt.state().general, rt.state().advanced), (false, true));
     assert!(rt.find("advanced-content").is_some() && rt.find("general-content").is_none());
 
     rt.update(|_, tx| tx.focus("general-trigger", true));

@@ -31,16 +31,16 @@ fn press_outside(through: bool) -> Runtime<Popover> {
 #[test]
 fn a_press_outside_a_press_through_modal_closes_it_and_presses_what_is_under_it() {
     let rt = press_outside(true);
-    assert!(!rt.state.open, "the press asked the modal to close");
-    assert_eq!(rt.state.pressed, 1, "the press went on to the control under it");
+    assert!(!rt.state().open, "the press asked the modal to close");
+    assert_eq!(rt.state().pressed, 1, "the press went on to the control under it");
     assert_eq!(rt.focused_key().as_deref(), Some("control"), "focus stays where the press put it");
 }
 
 #[test]
 fn a_press_outside_a_modal_only_closes_it_by_default() {
     let rt = press_outside(false);
-    assert!(!rt.state.open);
-    assert_eq!(rt.state.pressed, 0, "the press only closed the modal");
+    assert!(!rt.state().open);
+    assert_eq!(rt.state().pressed, 0, "the press only closed the modal");
 }
 
 struct Invoked { open: bool, toggled: u32 }
@@ -69,10 +69,10 @@ fn a_press_on_a_press_through_modals_invoker_leaves_the_modal_to_the_invoker() {
         rt.frame(t);
     };
     press(&mut rt, DT);
-    assert!(rt.state.open, "the first press opens the popover");
+    assert!(rt.state().open, "the first press opens the popover");
     press(&mut rt, 2.0 * DT);
-    assert!(!rt.state.open, "the second press closes it, and nothing opens it again");
-    assert_eq!(rt.state.toggled, 2, "each press reached the invoker once");
+    assert!(!rt.state().open, "the second press closes it, and nothing opens it again");
+    assert_eq!(rt.state().toggled, 2, "each press reached the invoker once");
 }
 
 struct Reading { through: bool }

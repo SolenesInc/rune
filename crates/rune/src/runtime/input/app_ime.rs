@@ -5,8 +5,8 @@ use zeroize::Zeroize;
 use super::*;
 
 /// `App::on_ime`, and the composition it was last sent, while it's open.
-pub(crate) struct AppIme<S> {
-    pub(crate) hook: Option<fn(&mut S, &Ime, &mut Tx) -> bool>,
+#[derive(Default)]
+pub(crate) struct AppIme {
     composition: AppComposition,
 }
 
@@ -18,13 +18,9 @@ enum AppComposition {
     Composing(String),
 }
 
-impl<S> Default for AppIme<S> {
-    fn default() -> Self { Self { hook: None, composition: AppComposition::Idle } }
-}
-
-impl<S> AppIme<S> {
+impl AppIme {
     /// The app's editor has a composition open: Return and Escape belong to the input method.
-    pub(super) fn composing(&self) -> bool { self.hook.is_some() && matches!(self.composition, AppComposition::Composing(_)) }
+    pub(super) fn composing(&self) -> bool { matches!(self.composition, AppComposition::Composing(_)) }
 
     /// Steps the composition with what the app is about to hear.
     fn step(&mut self, ev: &Ime) {
@@ -46,7 +42,7 @@ pub(super) fn area(r: [f32; 4], s: f32) -> [f32; 4] {
     [r[0] / s, r[1] / s, (r[2] - r[0]) / s, (r[3] - r[1]) / s]
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// An input method event goes to the focused text field, else to `App::on_ime`. A
     /// composition the app has open ends there even after a field took focus, and the input
     /// method turning on or off is only the app's to hear.
@@ -80,13 +76,8 @@ impl<S: 'static> Runtime<S> {
     }
 
     fn app_ime_event(&mut self, ev: &Ime, one: &mut Tx) -> bool {
-        let Some(f) = self.app_ime.hook else { return false };
+        if !self.app.has(app_side::Hook::Ime) { return false; }
         self.app_ime.step(ev);
-        let state = match &mut self.playground {
-            Some(playground) if !playground.stage_hears(&self.state) => None,
-            Some(playground) => playground.key_state(&mut self.state),
-            None => Some(&mut self.state),
-        };
-        state.is_some_and(|state| Tx::took(app_call!(f, state, ev, one), one))
+        self.app.ime(ev, one)
     }
 }

@@ -28,7 +28,7 @@ fn an_interactive_element_shows_hover_and_press() {
     assert!(info(&rt).press > 0.9, "press: {}", info(&rt).press);
     rt.pointer_up(50.0, 14.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
 }
 
 #[test]

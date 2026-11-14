@@ -124,21 +124,21 @@ fn main() {
         space: false, pan_at_press: [0.0, 0.0], selected: 7, toolbar: None,
     };
     let mut rt = Runtime::new(state, view, (600.0, CANVAS), Env::new(true, 1.0));
-    rt.on_key = Some(|s, e, _| {
+    rt.app_mut().on_key = Some(|s, e, _| {
         let space = e.key == Key::Text(" ".into());
         if space { s.space = true; }
         space
     });
     settle(&mut rt);
     let start = rect(&rt, "node7");
-    println!("node7 at {start:?}, toolbar {:?}", rt.state.toolbar);
+    println!("node7 at {start:?}, toolbar {:?}", rt.state().toolbar);
 
     // Wheel pan: a two-finger scroll moves the camera, never the page.
     rt.wheel_event(WheelEvent::new(-30.0, -20.0).at(200.0, 200.0).precise(true));
     settle(&mut rt);
     let panned = rect(&rt, "node7");
     assert!(near(panned[0], start[0] - 30.0) && near(panned[1], start[1] - 20.0), "wheel pan: {panned:?}");
-    assert_eq!(rt.state.toolbar, Some(panned), "the toolbar follows without a relayout");
+    assert_eq!(rt.state().toolbar, Some(panned), "the toolbar follows without a relayout");
     println!("wheel pan    -> node7 at {panned:?}");
 
     // Pinch about the node's corner: the corner stays under the pointer.
@@ -147,16 +147,16 @@ fn main() {
     settle(&mut rt);
     let zoomed = rect(&rt, "node7");
     assert!(near(zoomed[0], q[0]) && near(zoomed[1], q[1]) && near(zoomed[2], 160.0), "pinch: {zoomed:?}");
-    println!("pinch x2     -> node7 at {zoomed:?}, zoom {}", rt.state.zoom);
+    println!("pinch x2     -> node7 at {zoomed:?}, zoom {}", rt.state().zoom);
 
     // Space + drag pans; after Space's release the same drag doesn't.
     let space = KeyEvent { key: Key::Text(" ".into()), mods: Mods::default() };
     rt.key(space.clone());
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.space);
+    assert!(rt.state().space);
     // From the gap between the first four nodes, so the press lands on the canvas itself.
     let drag = |rt: &mut Runtime<Canvas>, button: PointerButton| {
-        let [x, y] = rt.state.screen([135.0, 110.0]);
+        let [x, y] = rt.state().screen([135.0, 110.0]);
         rt.pointer_move(x, y);
         rt.button_down(x, y, button);
         rt.pointer_move(x - 20.0, y - 10.0);
@@ -170,7 +170,7 @@ fn main() {
     println!("space drag   -> node7 at {spaced:?}");
     assert!(rt.key_up(space));
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.space, "the release ended the pan mode");
+    assert!(!rt.state().space, "the release ended the pan mode");
     drag(&mut rt, PointerButton::Primary);
     assert_eq!(rect(&rt, "node7"), spaced, "a plain drag after the release doesn't pan");
 
@@ -188,7 +188,7 @@ fn main() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.selected, 13, "a hit test at 2x lands on the drawn node");
+    assert_eq!(rt.state().selected, 13, "a hit test at 2x lands on the drawn node");
     let (fx, fy) = rt.find("focus").expect("focus");
     rt.pointer_down(fx, fy);
     rt.pointer_up(fx, fy);
@@ -200,7 +200,7 @@ fn main() {
     let row = rect(&rt, "layer13");
     assert!(near(focused[0] + focused[2] / 2.0, CANVAS / 2.0) && near(focused[1] + focused[3] / 2.0, CANVAS / 2.0), "centred: {focused:?}");
     assert!(gliding > row[1] && near(row[1], ROW), "the row glided to the top of the list: {gliding} then {row:?}");
-    assert_eq!(rt.state.toolbar, Some(focused));
+    assert_eq!(rt.state().toolbar, Some(focused));
     println!("focus        -> node13 at {focused:?}, layer13 row at y {}", row[1]);
     println!("ok");
 }

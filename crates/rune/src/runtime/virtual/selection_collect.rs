@@ -7,9 +7,9 @@ use super::{
 use crate::el::{SelectRequest, SelectionCopy};
 use crate::runtime::selectable::phase::{self, Selection};
 use crate::runtime::selectable::{CopyJoin, SelectedText, TextSelection, floor_boundary};
-use crate::runtime::{Node, Runtime, playground_host};
+use crate::runtime::{Node, RuntimeCore};
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub(crate) fn copy_virtual_text(&self) -> Option<String> {
         let h = self.selection_holder_end()?;
         let f = self.focus_holder_end(h)?;
@@ -47,7 +47,7 @@ impl<S: 'static> Runtime<S> {
         let (group_path, inert) = (v.selection.scope.group_path.as_deref(), v.selection.scope.inert);
         match v.selection.pins.source() {
             Some(Source::Rebuild(rows)) => {
-                let state = playground_host::handler_states_ref(&self.state, self.playground.as_deref());
+                let state = self.app.states_ref();
                 let mut row = (rows.build)(state, r).key(key.clone());
                 if !crate::input::key_diagnostics::clean(&row) {
                     let _ = crate::input::key_diagnostics::repair_at(&mut row, &format!("{list_path}/{key}"));

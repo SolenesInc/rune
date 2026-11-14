@@ -9,7 +9,7 @@ fn dissolve_prepass_only_runs_for_trees_with_dissolve_nodes() {
     }
     let mut rt = Runtime::new(false, view, (64.0, 32.0), Env::new(true, 1.0));
     for enabled in [false, true, false] {
-        rt.state = enabled; rt.invalidate(); rt.frame(0.0);
+        *rt.state_mut() = enabled; rt.invalidate(); rt.frame(0.0);
         assert_eq!(rt.has_dissolve, enabled);
         assert_eq!(rt.dissolve_scratch.is_empty(), !enabled);
         if enabled { assert!(rt.dissolve_scratch[0]); }
@@ -24,7 +24,7 @@ fn a_child_too_faint_to_paint_does_not_isolate_its_dissolve_parent() {
     let mut rt = Runtime::new(0.0005, view, (64.0, 32.0), Env::new(true, 1.0));
     rt.frame(0.0);
     assert!(!rt.dissolve_scratch[0]);
-    rt.state = 0.5; rt.invalidate();
+    *rt.state_mut() = 0.5; rt.invalidate();
     for _ in 0..60 { rt.frame(1.0 / 60.0); }
     assert!(rt.dissolve_scratch[0]);
 }
@@ -108,7 +108,7 @@ fn layout_motion_does_not_replace_explicit_transition_exit() {
     let (mut fast, mut slow) = (make(0.05), make(0.6));
     for rt in [&mut fast, &mut slow] {
         rt.frame(0.0);
-        rt.state.0 = false; rt.invalidate(); rt.frame(0.0);
+        rt.state_mut().0 = false; rt.invalidate(); rt.frame(0.0);
         rt.frame(0.1);
     }
     let opacity = |rt: &Runtime<(bool, f32)>| rt.elements().into_iter()
@@ -132,9 +132,9 @@ fn a_node_leaves_with_the_transition_of_its_last_render() {
     let (mut kept, mut turned) = (make(false), make(false));
     for rt in [&mut kept, &mut turned] {
         rt.frame(0.0);
-        rt.state.0 = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+        rt.state_mut().0 = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
     }
-    turned.state.1 = 1.0; turned.invalidate();
+    turned.state_mut().1 = 1.0; turned.invalidate();
     kept.frame(0.05); turned.frame(0.05);
     assert!(x(&turned) < 0.0, "still entering from the left: {}", x(&turned));
     assert!((x(&kept) - x(&turned)).abs() < 1e-4, "the running entrance is unaffected");
@@ -143,8 +143,8 @@ fn a_node_leaves_with_the_transition_of_its_last_render() {
     let mut rt = make(true);
     rt.frame(0.0); rt.frame(2.0);
     assert_eq!(x(&rt), 0.0);
-    rt.state.1 = 1.0; rt.invalidate(); rt.frame(0.0);
-    rt.state.0 = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.1);
+    rt.state_mut().1 = 1.0; rt.invalidate(); rt.frame(0.0);
+    rt.state_mut().0 = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.1);
     assert!(x(&rt) > 1.0, "leaves the way of its last render: {}", x(&rt));
 }
 
@@ -161,7 +161,7 @@ fn element_effects_include_ancestor_opacity_scale_and_exit_blur() {
     assert!((child.opacity - 0.25).abs() < 1e-6);
     assert!((child.scale - 0.4).abs() < 1e-6);
     assert_eq!(child.blur, 0.0);
-    rt.state = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+    *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
     let elements = rt.elements();
     let parent = elements.iter().find(|e| e.key.as_deref() == Some("parent")).unwrap();
     let child = elements.iter().find(|e| e.key.as_deref() == Some("child")).unwrap();
@@ -181,7 +181,7 @@ fn exiting_elements_are_flagged_and_gone_from_key_lookups() {
     rt.frame(0.0);
     assert!(rt.find("card").is_some() && rt.find("label").is_some());
     assert!(rt.elements().iter().all(|e| !e.exiting));
-    rt.state = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+    *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
     let elements = rt.elements();
     for key in ["card", "label"] {
         let e = elements.iter().find(|e| e.key.as_deref() == Some(key)).expect("still drawn while it exits");
@@ -226,7 +226,7 @@ fn presence_exits_stay_drawn_and_revive_mid_flight() {
     assert_eq!(rt.elements().len(), 2);
 
     // Remove the badge: it stays in the tree while its blur-replace exit runs.
-    rt.state = false;
+    *rt.state_mut() = false;
     rt.dirty = true;
     assert!(rt.frame(1.0 / 60.0));
     let badge = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("badge")).unwrap();
@@ -234,14 +234,14 @@ fn presence_exits_stay_drawn_and_revive_mid_flight() {
 
     // Revive mid-exit: continues without a jump.
     let before = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("badge")).unwrap().opacity;
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.dirty = true;
     rt.frame(1.0 / 60.0);
     let after = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("badge")).unwrap().opacity;
     assert!((after - before).abs() < 0.15, "{before} -> {after}");
 
     // Remove again and run until settled: unmounts only after opacity reaches 0.
-    rt.state = false;
+    *rt.state_mut() = false;
     rt.dirty = true;
     for _ in 0..120 {
         rt.frame(1.0 / 60.0);
@@ -275,7 +275,7 @@ impl Lab {
 const LAB_DT: f64 = 1.0 / 60.0;
 
 fn lab_set(rt: &mut Runtime<Lab>, f: impl FnOnce(&mut Lab)) {
-    f(&mut rt.state);
+    f(&mut rt.state_mut());
     rt.dirty = true;
 }
 
@@ -397,7 +397,7 @@ fn an_exiting_element_drops_its_own_time_scale() {
     }
     let mut rt = Runtime::new(true, view, (200.0, 100.0), Env::new(true, 1.0));
     assert!(!rt.frame(0.0));
-    rt.state = false;
+    *rt.state_mut() = false;
     rt.dirty = true;
     for _ in 0..3 { rt.frame(LAB_DT); }
     let card = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("card")).expect("exiting");

@@ -11,7 +11,7 @@ fn secure_input_masks_layout_inspector_and_unicode_pointer_indices() {
     edit.focused = true;
     let mut rt = Runtime::new(edit, view, (200.0, 40.0), Env::new(true, 1.0));
     rt.frame(0.0);
-    assert!(rt.state.is_secure() && rt.has_secure_focus());
+    assert!(rt.state().is_secure() && rt.has_secure_focus());
     assert!(rt.ime_area.is_none());
     assert!(rt.elements().iter().all(|e| e.text.is_none()));
     let n = rt.nodes.iter().find(|n| n.key.as_deref() == Some("secret")).unwrap();
@@ -21,14 +21,14 @@ fn secure_input_masks_layout_inspector_and_unicode_pointer_indices() {
     let caret = Cursor::from_byte_index(&layout, 6, Affinity::Downstream).geometry(&layout, 1.0);
     rt.queue.push(Action::Focus(path, caret.x0 as f32 + 0.1, ((caret.y0 + caret.y1) * 0.5) as f32));
     rt.frame(0.0);
-    assert_eq!(rt.state.focus, 3);
+    assert_eq!(rt.state().focus, 3);
     rt.paste("界"); rt.frame(0.0);
-    assert_eq!(rt.state.text, "hé界🙂");
+    assert_eq!(rt.state().text, "hé界🙂");
     rt.key(KeyEvent { key: crate::Key::Command('a'), mods: Default::default() }); rt.frame(0.0);
     rt.key(KeyEvent { key: crate::Key::Command('c'), mods: Default::default() }); rt.frame(0.0);
     assert!(rt.copy_request.is_none());
     rt.ime(Ime::Commit("ignored".into())); rt.frame(0.0);
-    assert_eq!(rt.state.text, "hé界🙂");
+    assert_eq!(rt.state().text, "hé界🙂");
     assert!(rt.events.iter().all(|e| !e.contains("hé")));
 }
 
@@ -135,7 +135,7 @@ fn secure_revealed_display_does_not_survive_in_layout_or_raster_caches() {
     rt.update(|s, _| s.clear());
     rt.frame(0.0);
     let n = rt.nodes.iter().find(|n| n.key.as_deref() == Some("secret")).unwrap();
-    assert!(rt.state.text.is_empty() && n.input.as_ref().unwrap().edit.text.is_empty());
+    assert!(rt.state().text.is_empty() && n.input.as_ref().unwrap().edit.text.is_empty());
     assert!(n.text.as_ref().unwrap().content.is_empty(), "clearing without exit wipes the display");
     assert_eq!(rt.text.cached_layout_count(), cached);
 }
@@ -161,7 +161,7 @@ fn revealed_secure_input_matches_plain_layout_and_keeps_protections() {
     let mut rt = Runtime::new(Form { plain, secret }, view, (240.0, 100.0), Env::new(true, 1.0));
     rt.frame(0.0);
 
-    assert!(rt.state.secret.is_secure() && rt.state.secret.is_revealed());
+    assert!(rt.state().secret.is_secure() && rt.state().secret.is_revealed());
     assert!(rt.has_secure_focus());
     assert!(rt.ime_area.is_none());
     let els = rt.elements();
@@ -205,23 +205,23 @@ fn revealed_secure_input_matches_plain_layout_and_keeps_protections() {
         rt.key(KeyEvent { key: crate::Key::Command(ch), mods: crate::Mods { cmd: true, ..Default::default() } });
         rt.frame(0.0);
         assert!(rt.copy_request.is_none(), "⌘{} on revealed field must never write to clipboard", ch.to_uppercase());
-        assert_eq!(rt.state.secret.text, "hé🙂 world");
+        assert_eq!(rt.state().secret.text, "hé🙂 world");
     }
     rt.ime(Ime::Preedit("comp".into(), Some((0, 4))));
     rt.ime(Ime::Commit("commit".into()));
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "hé🙂 world");
+    assert_eq!(rt.state().secret.text, "hé🙂 world");
     rt.key(KeyEvent { key: crate::Key::Text("X".into()), mods: Default::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "hX world");
+    assert_eq!(rt.state().secret.text, "hX world");
     rt.key(KeyEvent { key: crate::Key::Command('z'), mods: crate::Mods { cmd: true, ..Default::default() } });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "hX world", "no undo on revealed field");
+    assert_eq!(rt.state().secret.text, "hX world", "no undo on revealed field");
 
     let revealed_w = rt.nodes.iter().find(|n| n.key.as_deref() == Some("secret")).unwrap().text_layout.as_ref().and_then(crate::text::TextLayout::single).unwrap().full_width();
     rt.update(|s, _| { s.secret.set_selection(1, 4); s.secret.set_revealed(false); });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.range(), (1, 4), "toggling revealed keeps selection");
+    assert_eq!(rt.state().secret.range(), (1, 4), "toggling revealed keeps selection");
     let ns = rt.nodes.iter().find(|n| n.key.as_deref() == Some("secret")).unwrap();
     assert_eq!(ns.text.as_ref().unwrap().content, "••••••••");
     let hidden_w = ns.text_layout.as_ref().and_then(crate::text::TextLayout::single).unwrap().full_width();
@@ -290,7 +290,7 @@ fn multiline_secure_input_hides_length_and_lines_wraps_anywhere_and_conceals_on_
     rt_long.pointer_down(el_long.rect[0] + 4.0, el_long.rect[1] + 4.0);
     rt_long.pointer_up(el_long.rect[0] + 4.0, el_long.rect[1] + 4.0);
     rt_long.frame(0.0);
-    assert_eq!(rt_long.state.secret.focus, long_secret.len());
+    assert_eq!(rt_long.state().secret.focus, long_secret.len());
 
     // Revealing wraps unbroken lines at character boundaries within 180pt width.
     rt_long.update(|s, _| s.secret.set_revealed(true));
@@ -350,7 +350,7 @@ fn secure_multiline_conceal_snaps_geometry_scroll_and_bypasses_caches() {
     fn narrow(s: &crate::TextEdit, _: &mut Cx<crate::TextEdit>) -> El {
         crate::text_input(s, crate::TextStyle::new(14.0, 400.0)).wrap_anywhere().w(12.0)
     }
-    let mut narrow = Runtime::new(rt.state.clone(), narrow, (50.0, 100.0), Env::new(true, 1.0));
+    let mut narrow = Runtime::new(rt.state().clone(), narrow, (50.0, 100.0), Env::new(true, 1.0));
     narrow.frame(0.0);
     assert_eq!(narrow.nodes[0].text_layout.as_ref().and_then(crate::text::TextLayout::single).unwrap().len(), 1);
 }
@@ -384,6 +384,7 @@ fn wrap_anywhere_wraps_unbroken_tokens_keeps_word_breaks_and_lowers_min_content_
     let mut rt = Runtime::new((), view, (400.0, 500.0), Env::new(true, 1.0));
     rt.frame(0.0);
 
+    let rt = &mut *rt;
     let node = |k: &str| rt.nodes.iter().find(|n| n.key.as_deref() == Some(k)).unwrap();
     let el = |k: &str| rt.elements().into_iter().find(|e| e.key.as_deref() == Some(k)).unwrap();
 
@@ -653,7 +654,8 @@ fn secure_label_masks_reveals_conceals_and_never_leaks_plaintext() {
             let mut rt = Runtime::new(rev, card_view, (420.0, 230.0), Env::new(true, 2.0));
             rt.frame(0.0);
             let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (w, h));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (w, h));
             renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
             let target = Offscreen::new(&gpu.device, w, h);
             let mut enc = gpu.device.create_command_encoder(&Default::default());
@@ -757,11 +759,11 @@ fn hidden_multiline_pristine_composes_with_runtime_and_app_on_change() {
     rt.key(KeyEvent { key: Key::Home, mods: Mods::default() });
     rt.key(KeyEvent { key: Key::Text("x".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "x");
-    assert!(!rt.state.secret.is_pristine());
+    assert_eq!(rt.state().secret.text, "x");
+    assert!(!rt.state().secret.is_pristine());
     rt.key(KeyEvent { key: Key::Text("y".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "xy");
+    assert_eq!(rt.state().secret.text, "xy");
 
     // Keyboard focus does not consume pristine state either.
     let mut tabbed = Runtime::new(App::new("fictional-key"), view, (240.0, 120.0), Env::new(true, 1.0));
@@ -769,10 +771,10 @@ fn hidden_multiline_pristine_composes_with_runtime_and_app_on_change() {
     tabbed.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
     tabbed.frame(0.0);
     assert!(tabbed.elements().iter().any(|e| e.key.as_deref() == Some("secret") && e.focused));
-    assert!(tabbed.state.secret.is_pristine());
+    assert!(tabbed.state().secret.is_pristine());
     tabbed.key(KeyEvent { key: Key::Text("t".into()), mods: Mods::default() });
     tabbed.frame(0.0);
-    assert_eq!(tabbed.state.secret.text, "t");
+    assert_eq!(tabbed.state().secret.text, "t");
 
     // Case 2: Pasting after Show -> Hide (without editing) replaces the whole value, then appends.
     let mut rt = Runtime::new(App::new("old-fictional-private-key\nsecond-line"), view, (240.0, 120.0), Env::new(true, 1.0));
@@ -782,13 +784,13 @@ fn hidden_multiline_pristine_composes_with_runtime_and_app_on_change() {
     rt.frame(0.0);
     rt.update(|s, _| s.revealed = false);
     rt.frame(0.0);
-    assert!(rt.state.secret.is_pristine());
+    assert!(rt.state().secret.is_pristine());
     rt.paste("pasted-key\nline-2");
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "pasted-key\nline-2");
+    assert_eq!(rt.state().secret.text, "pasted-key\nline-2");
     rt.paste("\nline-3");
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "pasted-key\nline-2\nline-3");
+    assert_eq!(rt.state().secret.text, "pasted-key\nline-2\nline-3");
 
     // Case 3: Backspace while pristine empties the field; subsequent typing starts from "".
     let mut rt = Runtime::new(App::new("old-fictional-private-key\nsecond-line"), view, (240.0, 120.0), Env::new(true, 1.0));
@@ -796,9 +798,9 @@ fn hidden_multiline_pristine_composes_with_runtime_and_app_on_change() {
     focus_by_click(&mut rt);
     rt.key(KeyEvent { key: Key::Backspace, mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "");
-    assert!(!rt.state.secret.is_pristine());
+    assert_eq!(rt.state().secret.text, "");
+    assert!(!rt.state().secret.is_pristine());
     rt.key(KeyEvent { key: Key::Text("n".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.secret.text, "n");
+    assert_eq!(rt.state().secret.text, "n");
 }

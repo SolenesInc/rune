@@ -23,5 +23,5 @@ fn the_menu_key_opens_nothing_for_a_focused_link_whose_subtree_is_inert() {
         rt.key(KeyEvent { key, mods: Mods { shift, ..Mods::default() } });
         rt.frame(0.0);
     }
-    assert!(rt.state.menus.is_empty(), "{:?}", rt.state.menus);
+    assert!(rt.state().menus.is_empty(), "{:?}", rt.state().menus);
 }

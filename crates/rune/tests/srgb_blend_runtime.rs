@@ -33,7 +33,8 @@ fn pixel(gpu: &Gpu, rt: &mut Runtime<()>) -> [u8; 4] {
     let mut renderer = Renderer::new(&gpu.device, format);
     renderer.set_srgb_blend(rt.srgb_blend());
     let target = Offscreen::with_format(&gpu.device, 40, 40, format);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (40, 40));
+    let core = &mut **rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (40, 40));
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, rt.clear_color());
     target.copy(&mut encoder);
@@ -142,7 +143,8 @@ fn switching_format_keeps_the_glyph_atlas_and_extra_pipelines() {
     rt.frame(0.0);
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     renderer.add_format(&gpu.device, wgpu::TextureFormat::Rgba16Float);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (80, 40));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (80, 40));
     assert!(rt.text.atlas.dirty.is_none(), "initial prepare drained the atlas");
 
     rt.set_srgb_blend(true);
@@ -154,7 +156,8 @@ fn switching_format_keeps_the_glyph_atlas_and_extra_pipelines() {
     assert!(rt.text.atlas.dirty.is_none(), "switching blend format keeps the uploaded glyph atlas");
 
     let layer = Offscreen::with_format(&gpu.device, 80, 40, wgpu::TextureFormat::Rgba16Float);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (80, 40));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (80, 40));
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

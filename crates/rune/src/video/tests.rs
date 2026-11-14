@@ -413,7 +413,8 @@ mod headless {
 
     fn render(gpu: &Gpu, rt: &mut crate::Runtime<Video>) -> Vec<u8> {
         let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (64, 36));
+        let core = &mut **rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (64, 36));
         renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (64, 36));
         let target = Offscreen::new(&gpu.device, 64, 36);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());

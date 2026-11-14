@@ -7,7 +7,7 @@ use super::*;
 #[derive(Default)]
 pub(super) struct Pick(Option<String>);
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The selection group of text `i`, or the text itself when it's in none.
     fn select_unit(&self, i: usize) -> usize {
         self.group_of(i).unwrap_or(i)

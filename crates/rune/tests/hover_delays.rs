@@ -25,14 +25,14 @@ fn an_enter_waits_for_the_pointer_to_rest() {
     let mut rt = app();
     rt.pointer_move(8.0, 50.0);
     rt.frame(0.03);
-    assert!(rt.state.is_empty(), "not yet");
+    assert!(rt.state().is_empty(), "not yet");
     assert!(rt.wake_deadline().is_some(), "the wait asks for a frame");
     rt.frame(0.015);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     // Moving within it reports nothing more.
     rt.pointer_move(10.0, 60.0);
     rt.frame(0.1);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn a_pass_shorter_than_the_delay_reports_nothing() {
     rt.frame(0.02);
     rt.pointer_move(100.0, 50.0);
     rt.frame(0.1);
-    assert!(rt.state.is_empty());
+    assert!(rt.state().is_empty());
 }
 
 #[test]
@@ -50,17 +50,17 @@ fn a_leave_waits_out_its_grace_and_a_return_keeps_it() {
     let mut rt = app();
     rt.pointer_move(8.0, 50.0);
     rt.frame(0.05);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     rt.pointer_move(100.0, 50.0);
     rt.frame(0.05);
     rt.pointer_move(8.0, 50.0);
     rt.frame(0.2);
-    assert_eq!(rt.state, [true], "back within the grace");
+    assert_eq!(*rt.state(), [true], "back within the grace");
     rt.pointer_move(100.0, 50.0);
     rt.frame(0.09);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     rt.frame(0.02);
-    assert_eq!(rt.state, [true, false]);
+    assert_eq!(*rt.state(), [true, false]);
 }
 
 #[test]
@@ -70,13 +70,13 @@ fn a_press_cancels_the_wait_and_the_next_move_starts_it_again() {
     rt.frame(0.02);
     rt.pointer_down(8.0, 50.0);
     rt.frame(0.1);
-    assert!(rt.state.is_empty());
+    assert!(rt.state().is_empty());
     rt.pointer_up(8.0, 50.0);
     rt.pointer_move(9.0, 50.0);
     rt.frame(0.03);
-    assert!(rt.state.is_empty());
+    assert!(rt.state().is_empty());
     rt.frame(0.02);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
 }
 
 #[test]
@@ -87,14 +87,14 @@ fn blur_cancels_pending_enters_and_ends_shown_hover_without_a_grace() {
     rt.frame(0.02);
     rt.window_focus(false);
     rt.frame(0.2);
-    assert!(rt.state.is_empty(), "a pending enter cannot open under a still pointer once blurred");
+    assert!(rt.state().is_empty(), "a pending enter cannot open under a still pointer once blurred");
     rt.window_focus(true);
     rt.pointer_move(8.0, 50.0);
     rt.frame(0.05);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     rt.window_focus(false);
     rt.frame(0.0);
-    assert_eq!(rt.state, [true, false], "blur ends even a hover with exit grace");
+    assert_eq!(*rt.state(), [true, false], "blur ends even a hover with exit grace");
 }
 
 /// A window behind another still hears the pointer (macOS sends it moves too), so a tooltip
@@ -106,18 +106,18 @@ fn a_move_over_a_window_that_isnt_key_starts_the_wait() {
     rt.window_focus(false);
     rt.pointer_move(8.0, 50.0);
     rt.frame(0.03);
-    assert!(rt.state.is_empty(), "not yet");
+    assert!(rt.state().is_empty(), "not yet");
     rt.frame(0.015);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     rt.window_focus(true);
     rt.window_focus(false);
     rt.frame(0.0);
-    assert_eq!(rt.state, [true, false]);
+    assert_eq!(*rt.state(), [true, false]);
     rt.frame(0.2);
-    assert_eq!(rt.state, [true, false], "a still pointer doesn't reopen it");
+    assert_eq!(*rt.state(), [true, false], "a still pointer doesn't reopen it");
     rt.pointer_move(9.0, 50.0);
     rt.frame(0.05);
-    assert_eq!(rt.state, [true, false, true], "the next move does");
+    assert_eq!(*rt.state(), [true, false, true], "the next move does");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn leaving_the_window_cancels_a_pending_enter() {
     rt.frame(0.02);
     rt.pointer_leave();
     rt.frame(0.2);
-    assert!(rt.state.is_empty());
+    assert!(rt.state().is_empty());
 }
 
 /// `gone`: `None` keeps the zone; `Some(instant)` removes it, at once when `instant`, else
@@ -148,7 +148,7 @@ fn leaving(rest: f64, instant: bool) -> Vec<bool> {
     rt.frame(rest);
     rt.update(move |s, tx| { s.gone = Some(instant); if instant { tx.instant(); } });
     for _ in 0..60 { rt.frame(1.0 / 60.0); }
-    rt.state.heard
+    rt.state().heard.clone()
 }
 
 #[test]

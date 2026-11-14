@@ -232,16 +232,17 @@ mod tests {
 
         rt.pointer_move(280.0, 15.0);
         rt.frame(0.0);
-        rt.frame(rt.help_delay);
+        let core = &mut *rt;
+        core.frame(core.help_delay);
         assert!(rt.help_tooltip().is_some(), "tooltip shows on shifted sticky_left child");
         rt.pointer_down(280.0, 15.0);
         rt.pointer_up(280.0, 15.0);
         rt.frame(0.0);
-        assert_eq!(rt.state.pressed, 1, "shifted header action takes press after sideways scroll");
+        assert_eq!(rt.state().pressed, 1, "shifted header action takes press after sideways scroll");
 
         // `live_offset` on a sticky_left element translates from the stuck position rather than
         // being clamped away by the sticky edge.
-        rt.state.offset.set([-12.0, 4.0]);
+        rt.state().offset.set([-12.0, 4.0]);
         rt.frame(0.0);
         let h = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("header")).unwrap();
         assert_eq!((h.rect[0], h.rect[1], h.stuck), (-12.0, 4.0, 250.0));
@@ -389,7 +390,7 @@ fn target_shift(nodes: &[Node], scrolls: &HashMap<NodeId, ScrollState>, j: usize
     total
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Replay just one inherited fade edge without the nearest viewport's content-aware
     /// fade. Explicit clips inside it and fades outside it still apply. Recursion follows
     /// parents already painted this frame and needs no scratch allocation.

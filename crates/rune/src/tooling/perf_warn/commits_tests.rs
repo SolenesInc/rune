@@ -29,7 +29,7 @@ fn a_poll_that_commits_every_scroll_frame_warns_once_naming_poll() {
     take_log();
     fn view(_: &u32, _: &mut Cx<u32>) -> El { rows(|r, _| r) }
     let mut rt = runtime(0u32, view);
-    rt.poll = Some(|n, _, _| { *n += 1; true });
+    rt.app_mut().poll = Some(|n, _, _| { *n += 1; true });
     scroll(&mut rt, 20);
     let log: Vec<_> = take_log().into_iter().filter(|l| l.contains("of a scroll")).collect();
     assert_eq!(log.len(), 1, "{log:?}");
@@ -97,7 +97,7 @@ fn an_app_stepping_its_own_glide_with_instant_scrolls_warns() {
     take_log();
     fn view(_: &f32, _: &mut Cx<f32>) -> El { rows(|r, _| r) }
     let mut rt = runtime(0.0f32, view);
-    rt.poll = Some(|y, _, tx| {
+    rt.app_mut().poll = Some(|y, _, tx| {
         if *y < 300.0 {
             *y += 10.0;
             tx.scroll_to_instant("scroll", 0.0, *y);
@@ -117,7 +117,7 @@ fn instant_scrolls_with_no_commit_stay_quiet() {
     take_log();
     fn view(_: &f32, _: &mut Cx<f32>) -> El { rows(|r, _| r) }
     let mut rt = runtime(0.0f32, view);
-    rt.poll = Some(|y, _, tx| {
+    rt.app_mut().poll = Some(|y, _, tx| {
         if *y < 300.0 {
             *y += 10.0;
             tx.scroll_to_instant("scroll", 0.0, *y);

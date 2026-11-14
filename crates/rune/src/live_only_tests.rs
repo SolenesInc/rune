@@ -38,7 +38,7 @@ fn view(s: &S, _: &mut Cx<S>) -> El {
 fn app(misuse: bool) -> Runtime<S> {
     let state = S { count: 0, misuse, pan: Live::new([0.0, 0.0]), physical: 0 };
     let mut rt = Runtime::new(state, view, (200.0, 200.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, e, tx| { if e.key != Key::Right { return false; } s.nudge(tx); true });
+    rt.app_mut().on_key = Some(|s, e, tx| { if e.key != Key::Right { return false; } s.nudge(tx); true });
     rt.frame(0.0);
     rt
 }
@@ -87,7 +87,7 @@ fn a_physical_release_heard_at_rest_can_be_live_only() {
     assert!(rt.physical_with_fallback(event, None), "it still asks for a frame to draw");
     assert!(!rt.dirty);
     rt.frame(1.0 / 120.0);
-    assert_eq!((rt.state.physical, rt.stats.commits - before), (1, 0));
+    assert_eq!((rt.state().physical, rt.stats.commits - before), (1, 0));
     assert_eq!(camera_x(&rt), 10.0);
 }
 
@@ -124,7 +124,7 @@ fn the_check_ignores_a_change_another_event_made_in_the_same_frame() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 120.0);
-    assert_eq!((rt.state.count, rt.live_checks), (1, 1));
+    assert_eq!((rt.state().count, rt.live_checks), (1, 1));
     assert!(rt.live_only_warnings.is_empty(), "{:?}", rt.live_only_warnings);
 }
 
@@ -144,7 +144,7 @@ fn declined_element_key_does_not_hide_an_ancestor_change() {
     let before = rt.stats.commits;
     rt.key(KeyEvent { key: Key::Right, mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
     assert_eq!(rt.stats.commits, before + 1);
 }
 
@@ -153,7 +153,7 @@ fn live_only_does_not_cancel_poll_update_or_later_event_commits() {
     for source in 0..3 {
         let mut rt = app(false);
         rt.check_live_only(false);
-        if source == 0 { rt.poll = Some(|s, _, _| { s.count += 1; true }); }
+        if source == 0 { rt.app_mut().poll = Some(|s, _, _| { s.count += 1; true }); }
         if source == 1 { rt.update(|s, _| s.count += 1); }
         rt.key_up(KeyEvent { key: Key::Right, mods: Mods::default() });
         if source == 2 {
@@ -162,7 +162,7 @@ fn live_only_does_not_cancel_poll_update_or_later_event_commits() {
         }
         let before = rt.stats.commits;
         rt.frame(0.0);
-        assert_eq!(rt.state.count, 1);
+        assert_eq!(rt.state().count, 1);
         assert!(rt.stats.commits > before);
         assert_eq!(rt.nodes.iter().find(|n| n.key.as_deref() == Some("count")).unwrap().text.as_ref().unwrap().content, "1");
     }
@@ -184,14 +184,14 @@ fn live_values_published_by_poll_draw_in_that_frame_after_a_scroll_callback() {
     rt.wheel(50.0, 50.0, -20.0);
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.get(), [20.0, 0.0]);
+    assert_eq!(rt.state().get(), [20.0, 0.0]);
     assert!(!rt.live_pending(), "the scroll callback's publication was already drawn");
     let commits = rt.stats.commits;
     // A scroll-triggered animation continues through Live values, without rebuilding its view.
-    rt.poll = Some(|pan, _, _| { pan.set([pan.get()[0] + 5.0, 0.0]); false });
+    rt.app_mut().poll = Some(|pan, _, _| { pan.set([pan.get()[0] + 5.0, 0.0]); false });
     for frame in 1..=4 {
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.get()[0], 20.0 + frame as f32 * 5.0);
+        assert_eq!(rt.state().get()[0], 20.0 + frame as f32 * 5.0);
         let marker = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("marker")).unwrap();
         assert_eq!(marker.rect[0], 20.0 + frame as f32 * 5.0, "poll's position in frame {frame}");
         assert_eq!(rt.stats.commits, commits, "live animation does not rebuild the view");
@@ -205,7 +205,8 @@ fn debug_check_does_not_blame_live_only_for_layout_feedback_before_a_key() {
     // A layout callback changed view state, then a checked event, then another key
     // forces the queue's mid-frame commit rather than the final commit.
     rt.nodes[0].handlers.on_layout = Some(Rc::new(|s, _, _| s.cast::<S>().unwrap().count += 1));
-    rt.queue.push(Action::Layout(rt.nodes[0].path.clone(), [0.0; 4]));
+    let core = &mut *rt;
+    core.queue.push(Action::Layout(core.nodes[0].path.clone(), [0.0; 4]));
     rt.key_up(KeyEvent { key: Key::Right, mods: Mods::default() });
     rt.key(KeyEvent { key: Key::Left, mods: Mods::default() });
     rt.frame(0.0);
@@ -232,7 +233,7 @@ fn live_only_keeps_clipboard_scroll_and_wake_requests() {
     }
     let mut rt = Runtime::new((), view, (200.0, 200.0), Env::new(true, 1.0));
     rt.check_live_only(false);
-    rt.on_key = Some(|_, _, tx| {
+    rt.app_mut().on_key = Some(|_, _, tx| {
         tx.live_only(); tx.copy("copied"); tx.scroll_to_y("scroll", 300.0);
         tx.wake_after(std::time::Duration::from_secs(1)); true
     });
@@ -274,7 +275,7 @@ fn live_transform_refreshes_hover_paint_without_a_handler() {
     }
     let mut rt = Runtime::new(Live::new([100.0, 0.0]), view, (200.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0); rt.pointer_move(20.0, 20.0); rt.frame(0.0);
-    rt.state.set([0.0, 0.0]);
+    rt.state().set([0.0, 0.0]);
     assert!(rt.frame(0.0), "changed hover paint must schedule its sample frame");
     let id = rt.nodes.iter().find(|n| n.key.as_deref() == Some("moving")).unwrap().id;
     rt.frame(1.0 / 120.0);
@@ -291,7 +292,7 @@ fn a_commit_records_why_for_the_frame_log() {
         rt.key_up(KeyEvent { key: Key::Right, mods: Mods::default() });
         rt.frame(0.0);
         assert_eq!(rt.commit_why, 0, "a live-only key commits nothing");
-        if source == 0 { rt.poll = Some(|s, _, _| { s.count += 1; true }); }
+        if source == 0 { rt.app_mut().poll = Some(|s, _, _| { s.count += 1; true }); }
         if source == 1 {
             let (x, y) = rt.find("camera").unwrap();
             rt.pointer_down(x, y); rt.pointer_up(x, y);
@@ -306,7 +307,7 @@ struct Quiet;
 #[test]
 fn a_live_only_key_in_a_view_without_live_values_leaves_no_frame_owed() {
     let mut rt = Runtime::new(Quiet, |_: &Quiet, _: &mut Cx<Quiet>| el().size(100.0, 100.0), (200.0, 200.0), Env::new(true, 1.0));
-    rt.on_key = Some(|_, _, tx| { tx.live_only(); true });
+    rt.app_mut().on_key = Some(|_, _, tx| { tx.live_only(); true });
     rt.check_live_only(false);
     rt.frame(0.0);
     rt.frame(1.0);

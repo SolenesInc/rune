@@ -22,7 +22,7 @@ fn stream(deltas: &[&str], mut each: impl FnMut(&str, &Runtime<String>)) {
     for d in deltas {
         rt.update(|s, _| s.push_str(d));
         rt.frame(1.0 / 60.0);
-        let src = rt.state.clone();
+        let src = rt.state().clone();
         each(&src, &rt);
     }
 }

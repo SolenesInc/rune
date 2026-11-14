@@ -27,7 +27,7 @@ fn find(rt: &Runtime<S>, key: &str) -> ElementInfo {
 
 /// Last row's bottom minus the viewport's drawn bottom.
 fn gap(rt: &Runtime<S>) -> f32 {
-    let (last, view) = (find(rt, &format!("r{}", rt.state.rows - 1)), find(rt, "scroll"));
+    let (last, view) = (find(rt, &format!("r{}", rt.state().rows - 1)), find(rt, "scroll"));
     (view.rect[1] + view.rect[3]) - (last.rect[1] + last.rect[3])
 }
 
@@ -38,7 +38,7 @@ fn run(state: S, toggle: fn(&mut S)) -> (Vec<f32>, Runtime<S>) {
     rt.frame(0.0);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
     assert!(gap(&rt).abs() < 0.05, "starts at the bottom: {}", gap(&rt));
-    toggle(&mut rt.state);
+    toggle(&mut rt.state_mut());
     rt.invalidate();
     let mut gaps = Vec::new();
     for _ in 0..120 {
@@ -60,7 +60,7 @@ fn stays_on_the_bottom_while_the_viewport_resizes() {
         let (gaps, rt) = run(state, toggle);
         let worst = gaps.iter().fold(0.0f32, |m, g| m.max(g.abs()));
         assert!(worst < 0.6, "{what}: the last row left the bottom by {worst}: {gaps:?}");
-        assert_eq!(rt.state.reports, [true], "{what}: stays at the bottom throughout");
+        assert_eq!(rt.state().reports, [true], "{what}: stays at the bottom throughout");
     }
 }
 
@@ -78,13 +78,13 @@ fn a_glide_lands_through_a_resize_and_then_holds_the_bottom() {
     rt.pointer_up(5.0, 5.0);
     for _ in 0..4 { rt.frame(1.0 / 120.0); }
     // The banner opens mid-glide; the glide still lands on the bottom.
-    rt.state.banner = true;
+    rt.state_mut().banner = true;
     rt.invalidate();
     for _ in 0..240 { rt.frame(1.0 / 120.0); }
     assert!(gap(&rt).abs() < 0.05, "landed: {}", gap(&rt));
-    assert_eq!(rt.state.reports, [true, false, true]);
+    assert_eq!(rt.state().reports, [true, false, true]);
     // Stuck again, so closing it holds the bottom every frame.
-    rt.state.banner = false;
+    rt.state_mut().banner = false;
     rt.invalidate();
     for n in 0..120 {
         rt.frame(1.0 / 120.0);
@@ -95,5 +95,5 @@ fn a_glide_lands_through_a_resize_and_then_holds_the_bottom() {
     for _ in 0..30 { rt.frame(1.0 / 120.0); }
     let away = gap(&rt);
     assert!(away < -50.0, "{away}");
-    assert_eq!(rt.state.reports, [true, false, true, false]);
+    assert_eq!(rt.state().reports, [true, false, true, false]);
 }

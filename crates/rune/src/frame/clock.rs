@@ -167,7 +167,7 @@ impl FrameClock {
     /// rather than by how late this one was. Motion already running keeps real time.
     pub(crate) fn presented<S: 'static>(&mut self, rt: &mut Runtime<S>, done: Instant) {
         if let Effects::One(Effect::Delay(late, starts)) = self.step(Event::Present(done)) {
-            rt.scene.store_mut().delay(starts, late * f64::from(rt.time_scale));
+            { let core: &mut crate::runtime::RuntimeCore = &mut **rt; core.scene.store_mut().delay(starts, late * f64::from(core.time_scale)); }
         }
     }
 }
@@ -218,7 +218,7 @@ mod tests {
 
     fn runtime() -> Runtime<Pair> {
         let mut rt = Runtime::new(Pair { a: 12.0, b: 12.0, polls: 0 }, view, (400.0, 50.0), Env::default());
-        rt.poll = Some(|s, _, _| { s.polls += 1; false });
+        rt.app_mut().poll = Some(|s, _, _| { s.polls += 1; false });
         rt
     }
 
@@ -371,12 +371,12 @@ mod tests {
         clock.advance(&mut rt, start, false);
         rt.update(|s, _| s.a = 212.0);
         for k in 1..=3 { clock.advance(&mut rt, start + k * FRAME, false); }
-        let polls = rt.state.polls;
+        let polls = rt.state().polls;
         // `Window::show` settles everything, then the next frame is late with motion running.
         rt.settle_all();
         assert!(rt.animating);
         clock.advance(&mut rt, start + 3 * FRAME + Duration::from_millis(49), false);
-        assert_eq!(rt.state.polls - polls, 1, "poll runs once per presented frame");
+        assert_eq!(rt.state().polls - polls, 1, "poll runs once per presented frame");
         assert!(rt.settled, "the settle cut must survive into the presented frame");
         rt.scene.take_trace().unwrap().flush().unwrap();
         let frames = buffer.contents().lines().filter(|line| line.starts_with(r#"{"t":"#)).count();

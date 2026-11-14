@@ -199,7 +199,7 @@ fn subtract(a: [f32; 4], b: [f32; 4]) -> Vec<[f32; 4]> {
         .into_iter().filter(|r| r[2] > r[0] && r[3] > r[1]).collect()
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The host shows AppKit's tooltips: on macOS, while the view keeps the system look.
     fn native_help(&self) -> bool { self.help.native && self.defaults.help.is_none() }
 
@@ -614,7 +614,8 @@ mod tests {
         assert!(rt.observe_pointer(30.0, 30.0), "onto help");
         rt.frame(1.0 / 60.0);
         assert!(!rt.observe_pointer(31.0, 30.0), "still on it");
-        rt.frame(rt.help_delay);
+        let core = &mut *rt;
+        core.frame(core.help_delay);
         assert!(rt.help_tooltip().is_some());
         assert!(rt.observe_pointer(150.0, 150.0), "off it hides the tooltip");
     }
@@ -632,7 +633,8 @@ mod tests {
     fn rest(rt: &mut Runtime<f32>, x: f32, y: f32) -> Option<(String, [f32; 4])> {
         rt.pointer_move(x, y);
         rt.frame(1.0 / 60.0);
-        rt.frame(rt.help_delay + 0.1);
+        let core = &mut **rt;
+        core.frame(core.help_delay + 0.1);
         rt.help_tooltip().map(|(t, r)| (t.to_owned(), r))
     }
 

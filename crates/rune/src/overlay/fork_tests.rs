@@ -22,7 +22,7 @@ fn a_press_before_the_first_frame_after_show_reaches_the_view() {
     overlay.rt.pointer_move(120.0, 20.0);
     overlay.left_button(false, Some((120.0, 20.0)));
     present(&mut overlay, Instant::now());
-    let phases = &overlay.rt.state;
+    let phases = &overlay.rt.state();
     assert_eq!(phases.first(), Some(&crate::Phase::Down), "{phases:?}");
     assert_eq!(phases.last(), Some(&crate::Phase::Up), "{phases:?}");
 }

@@ -63,7 +63,7 @@ fn runtime() -> Runtime<S> {
     let mut rt = Runtime::new(s, view, (500.0, 400.0), Env::new(true, 2.0));
     // The app sees every key first and takes all but plain Cmd+A and Cmd+C, which it leaves to
     // the selection.
-    rt.on_key = Some(|s, ev, _| {
+    rt.app_mut().on_key = Some(|s, ev, _| {
         s.keys.push(format!("{:?} shift={} alt={}", ev.key, ev.mods.shift, ev.mods.alt));
         let m = ev.mods;
         !(matches!(ev.key, Key::Command('a' | 'c')) && !m.shift && !m.alt && !m.ctrl)
@@ -85,7 +85,7 @@ fn a_clickable_row_keeps_its_clicks_hover_press_and_menu() {
     // Hovering the text hovers the row (its handler and its paint) and still shows the I-beam.
     rt.pointer_move(g[2].0, g[2].1);
     tick(&mut rt);
-    assert_eq!(rt.state.row_hovers, 1);
+    assert_eq!(rt.state().row_hovers, 1);
     assert_eq!(find(&rt, "row").hover, 1.0);
     assert_eq!(rt.cursor(), Cursor::Text);
 
@@ -95,13 +95,13 @@ fn a_clickable_row_keeps_its_clicks_hover_press_and_menu() {
     assert!(find(&rt, "row").press > 0.0, "the row shows pressed");
     rt.pointer_up(g[2].0, g[2].1);
     tick(&mut rt);
-    assert_eq!(rt.state.row_presses, 1);
+    assert_eq!(rt.state().row_presses, 1);
     wait(&mut rt);
 
     // A double-click is the row's double press and selects the word.
     click(&mut rt, g[0]);
     click(&mut rt, g[0]);
-    assert_eq!((rt.state.row_presses, rt.state.row_doubles), (3, 1));
+    assert_eq!((rt.state().row_presses, rt.state().row_doubles), (3, 1));
     assert_eq!(rt.selected_text().as_deref(), Some("open"));
     wait(&mut rt);
 
@@ -109,13 +109,13 @@ fn a_clickable_row_keeps_its_clicks_hover_press_and_menu() {
     let left = find(&rt, "rowtext").rect[0] + 0.5;
     drag(&mut rt, (left, g[0].1), (g[6].0 + 3.0, g[6].1));
     assert_eq!(rt.selected_text().as_deref(), Some("open the"));
-    assert_eq!(rt.state.row_presses, 3);
+    assert_eq!(rt.state().row_presses, 3);
 
     // The row's own context menu wins over the text's Copy menu.
     rt.secondary_down(g[2].0, g[2].1);
     rt.secondary_up(g[2].0, g[2].1);
     tick(&mut rt);
-    assert_eq!(rt.state.row_menus, 1);
+    assert_eq!(rt.state().row_menus, 1);
     assert!(rt.popup_menu().is_none());
 }
 
@@ -124,7 +124,7 @@ fn dragging_a_draggable_row_drags_it_and_clicks_still_select() {
     let mut rt = runtime();
     let g = glyphs(&rt, "dragtext");
     drag(&mut rt, g[0], (g[0].0 + 60.0, g[0].1 + 40.0));
-    assert!(rt.state.drags >= 3, "down, moves and up reach the row: {}", rt.state.drags);
+    assert!(rt.state().drags >= 3, "down, moves and up reach the row: {}", rt.state().drags);
     assert_eq!(rt.selected_text(), None, "the drag moved the row, not a selection");
     wait(&mut rt);
     click(&mut rt, g[0]);
@@ -139,10 +139,10 @@ fn a_drag_select_on_text_with_its_own_press_doesnt_press() {
     let left = find(&rt, "own").rect[0] + 0.5;
     drag(&mut rt, (left, g[0].1), (g[4].0 + 3.0, g[4].1));
     assert_eq!(rt.selected_text().as_deref(), Some("press"));
-    assert_eq!(rt.state.own_presses, 0);
+    assert_eq!(rt.state().own_presses, 0);
     wait(&mut rt);
     click(&mut rt, g[1]);
-    assert_eq!(rt.state.own_presses, 1, "a click still presses it");
+    assert_eq!(rt.state().own_presses, 1, "a click still presses it");
 }
 
 #[test]
@@ -160,10 +160,10 @@ fn pressing_plain_words_beside_a_link_neither_focuses_nor_rebuilds() {
     // With a field focused, the press blurs it, as a click on other content does.
     let f = find(&rt, "field");
     click(&mut rt, (f.rect[0] + 10.0, f.rect[1] + f.rect[3] / 2.0));
-    assert!(rt.state.field.focused);
+    assert!(rt.state().field.focused);
     wait(&mut rt);
     click(&mut rt, g[1]);
-    assert!(!rt.state.field.focused, "the field lets go");
+    assert!(!rt.state().field.focused, "the field lets go");
     assert!(!find(&rt, "linked").focused, "and the text doesn't take focus");
 }
 
@@ -180,14 +180,14 @@ fn only_the_plain_chords_belong_to_the_selection() {
     // Shift or Option added: the app's shortcut, the selection untouched.
     chord(&mut rt, 'c', Mods { shift: true, ..Mods::default() });
     chord(&mut rt, 'a', Mods { alt: true, ..Mods::default() });
-    assert_eq!(rt.state.keys.len(), 2, "{:?}", rt.state.keys);
+    assert_eq!(rt.state().keys.len(), 2, "{:?}", rt.state().keys);
     assert!(clipboard.text().is_none());
     assert_eq!(rt.selected_text().as_deref(), Some("open"));
     if cfg!(target_os = "macos") {
         chord(&mut rt, 'a', Mods { ctrl: true, ..Mods::default() });
-        assert_eq!(rt.state.keys.len(), 3, "Cmd+Ctrl+A is the app's");
+        assert_eq!(rt.state().keys.len(), 3, "Cmd+Ctrl+A is the app's");
     }
-    let app = rt.state.keys.len();
+    let app = rt.state().keys.len();
     wait(&mut rt);
 
     // A single click makes the text the holder: Cmd+C has nothing to copy; Cmd+A, which the
@@ -197,7 +197,7 @@ fn only_the_plain_chords_belong_to_the_selection() {
     assert!(clipboard.text().is_none(), "an empty selection copies nothing");
     chord(&mut rt, 'a', Mods::default());
     assert_eq!(rt.selected_text().as_deref(), Some(ROW));
-    assert_eq!(rt.state.keys.len(), app + 2, "the app saw both first");
+    assert_eq!(rt.state().keys.len(), app + 2, "the app saw both first");
 
     // A click on nothing clears it; Cmd+A then goes back to the text last clicked.
     click(&mut rt, (480.0, 390.0));
@@ -237,7 +237,7 @@ fn a_selection_drops_when_its_text_changes_or_goes() {
     rt.pointer_down(g[1].0, g[1].1);
     tick(&mut rt);
     assert_eq!(rt.selected_text().as_deref(), Some("— a"));
-    rt.state.stale = "a —".into();
+    rt.state_mut().stale = "a —".into();
     rt.invalidate();
     tick(&mut rt);
     let e = find(&rt, "stale");
@@ -256,7 +256,7 @@ fn a_selection_drops_when_its_text_changes_or_goes() {
     click(&mut rt, g[0]);
     click(&mut rt, g[0]);
     assert!(rt.selected_text().is_some());
-    rt.state.stale_selectable = false;
+    rt.state_mut().stale_selectable = false;
     rt.invalidate();
     tick(&mut rt);
     assert_eq!(rt.text_selection(), None);
@@ -265,13 +265,13 @@ fn a_selection_drops_when_its_text_changes_or_goes() {
     wait(&mut rt);
 
     // Selected, then removed.
-    rt.state.stale_selectable = true;
+    rt.state_mut().stale_selectable = true;
     rt.invalidate();
     tick(&mut rt);
     click(&mut rt, g[0]);
     click(&mut rt, g[0]);
     assert!(rt.selected_text().is_some());
-    rt.state.stale_shown = false;
+    rt.state_mut().stale_shown = false;
     rt.invalidate();
     tick(&mut rt);
     assert_eq!(rt.text_selection(), None);

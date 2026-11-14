@@ -176,7 +176,7 @@ fn option_changes_land_at_once_by_default() {
     let fill = |rt: &Runtime<State>| find(rt, "commands-option-cmd-2").unwrap().fill.a;
     rt.pointer_move(row[0] + 10.0, row[1] + 10.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.active, Some(2));
+    assert_eq!(rt.state().active, Some(2));
     let hovered = fill(&rt);
     rt.frame(1.0 / 60.0);
     assert!(fill(&rt) > hovered, "the highlight still eases in: {hovered} → {}", fill(&rt));
@@ -201,7 +201,7 @@ fn active_index_scrolls_into_view_and_updates_listbox_accessibility() {
     // Moving active to the last item (via Up key in the outside field) reveals the offscreen row.
     rt.key(KeyEvent { key: Key::Up, mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.active, Some(39));
+    assert_eq!(rt.state().active, Some(39));
     let last = find(&rt, "commands-option-cmd-39").expect("active virtual row is mounted and revealed");
     assert!(last.visible[3] > 0.0, "last row visible rect {:?}", last.visible);
     assert!(last.item_selected);
@@ -218,16 +218,16 @@ fn hover_fires_on_active_click_fires_on_choose_and_outside_text_edit_keeps_focus
     // Typing while open goes straight to the outside TextEdit without moving focus into the popup.
     rt.key(KeyEvent { key: Key::Text("/re".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.composer.text, "/re");
-    assert!(rt.state.composer.focused);
+    assert_eq!(rt.state().composer.text, "/re");
+    assert!(rt.state().composer.focused);
     assert!(rt.elements().iter().filter(|e| e.role == "option").all(|e| !e.focusable && !e.focused));
 
     // Hovering option 2 fires on_active(s, 2).
     let (x2, y2) = rt.find("commands-option-cmd-2").unwrap();
     rt.pointer_move(x2, y2);
     rt.frame(0.0);
-    assert_eq!(rt.state.hovered, [2]);
-    assert_eq!(rt.state.active, Some(2));
+    assert_eq!(rt.state().hovered, [2]);
+    assert_eq!(rt.state().active, Some(2));
     assert_eq!(
         rt.elements().into_iter().find(|e| e.key.as_deref() == Some("viewport")).unwrap().label.as_deref(),
         Some("Commands")
@@ -238,18 +238,18 @@ fn hover_fires_on_active_click_fires_on_choose_and_outside_text_edit_keeps_focus
     rt.pointer_down(x1, y1);
     rt.pointer_up(x1, y1);
     rt.frame(0.0);
-    assert!(rt.state.chosen.is_empty());
-    assert!(rt.state.composer.focused);
+    assert!(rt.state().chosen.is_empty());
+    assert!(rt.state().composer.focused);
 
     // Clicking enabled option 2 fires on_choose and leaves focus in the outside TextEdit so typing continues.
     rt.pointer_down(x2, y2);
     rt.pointer_up(x2, y2);
     rt.frame(0.0);
-    assert_eq!(rt.state.chosen, ["cmd-2"]);
-    assert!(rt.state.composer.focused);
+    assert_eq!(rt.state().chosen, ["cmd-2"]);
+    assert!(rt.state().composer.focused);
     rt.key(KeyEvent { key: Key::Text("view".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.composer.text, "/review");
+    assert_eq!(rt.state().composer.text, "/review");
 }
 
 #[test]
@@ -261,11 +261,11 @@ fn hover_changes_do_not_scroll_now_or_on_the_next_frame() {
     let before = row.rect;
     rt.pointer_move(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.active, Some(8));
+    assert_eq!(rt.state().active, Some(8));
     for _ in 0..3 { rt.frame(1.0 / 60.0); }
     let after = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("commands-option-cmd-8")).unwrap().rect;
     assert_eq!(before, after, "hovering a partly clipped row must not reveal it");
-    assert_eq!(rt.state.hovered, [8]);
+    assert_eq!(rt.state().hovered, [8]);
 }
 
 #[test]
@@ -276,11 +276,11 @@ fn pressing_popup_padding_or_empty_state_keeps_the_composer_focused() {
         let popup = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("commands-content")).unwrap().rect;
         let (x, y) = (popup[0] + 1.0, popup[1] + 1.0);
         rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-        assert!(rt.state.composer.focused, "padding, count {count}");
+        assert!(rt.state().composer.focused, "padding, count {count}");
         if count == 0 {
             let (x, y) = rt.find("empty").unwrap();
             rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-            assert!(rt.state.composer.focused, "empty state");
+            assert!(rt.state().composer.focused, "empty state");
         }
     }
 }
@@ -308,5 +308,5 @@ fn ordinary_listbox_selection_does_not_reveal_and_press_still_blurs() {
     assert!(first(&rt).visible[3] > 0.0, "programmatic selection must not scroll");
     let (x, y) = rt.find("row-0").unwrap();
     rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-    assert!(!rt.state.composer.focused, "ordinary listbox presses still blur the field");
+    assert!(!rt.state().composer.focused, "ordinary listbox presses still blur the field");
 }

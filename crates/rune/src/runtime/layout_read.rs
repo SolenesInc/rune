@@ -320,7 +320,7 @@ pub(crate) fn moved(a: Option<[f32; 4]>, b: Option<[f32; 4]>) -> bool {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Node `i`'s laid-out rect `[x, y, w, h]` in window points, after its viewports' scrolling.
     fn laid_out(&self, nodes: &[Node], i: usize) -> [f32; 4] {
         self.placed(nodes, i, true)
@@ -652,8 +652,8 @@ mod tests {
         assert!(!rt.set_window_origin((400.0, 250.0)), "nothing laid out yet");
         rt.frame(0.0);
         frames(&mut rt, 4);
-        assert_eq!(rt.state.local, [[10.0, 10.0, 100.0, 40.0]]);
-        assert_eq!(rt.state.screen, [[410.0, 260.0, 100.0, 40.0]], "first layout, origin added");
+        assert_eq!(rt.state().local, [[10.0, 10.0, 100.0, 40.0]]);
+        assert_eq!(rt.state().screen, [[410.0, 260.0, 100.0, 40.0]], "first layout, origin added");
     }
 
     #[test]
@@ -667,27 +667,27 @@ mod tests {
         // A move draws a frame that delivers the new rect; on_layout hears nothing.
         assert!(rt.set_window_origin((1700.0, -80.0)), "queued, so the host draws");
         frames(&mut rt, 2);
-        assert_eq!(rt.state.screen.last(), Some(&[1710.0, -70.0, 100.0, 40.0]));
-        assert_eq!(rt.state.local.len(), 1, "on_layout is window points: unmoved");
+        assert_eq!(rt.state().screen.last(), Some(&[1710.0, -70.0, 100.0, 40.0]));
+        assert_eq!(rt.state().local.len(), 1, "on_layout is window points: unmoved");
 
         // Below half a point it waits, and the drift adds up until it counts.
         assert!(!rt.set_window_origin((1700.3, -80.0)));
         assert!(rt.set_window_origin((1700.6, -80.0)));
         frames(&mut rt, 2);
-        assert_eq!(rt.state.screen.len(), 3, "{:?}", rt.state.screen);
-        assert!((rt.state.screen[2][0] - 1710.6).abs() < 1e-3, "{:?}", rt.state.screen);
+        assert_eq!(rt.state().screen.len(), 3, "{:?}", rt.state().screen);
+        assert!((rt.state().screen[2][0] - 1710.6).abs() < 1e-3, "{:?}", rt.state().screen);
 
         // A drag's moves between two frames deliver only the latest.
         rt.set_window_origin((1800.0, 0.0));
         rt.set_window_origin((1900.0, 0.0));
         frames(&mut rt, 2);
-        assert_eq!(&rt.state.screen[3..], [[1910.0, 10.0, 100.0, 40.0]]);
+        assert_eq!(&rt.state().screen[3..], [[1910.0, 10.0, 100.0, 40.0]]);
         assert!(rt.stats.commits > commits, "handlers changed state");
 
         // Settled: nothing more runs.
-        let (screen, commits) = (rt.state.screen.len(), rt.stats.commits);
+        let (screen, commits) = (rt.state().screen.len(), rt.stats.commits);
         frames(&mut rt, 10);
-        assert_eq!((rt.state.screen.len(), rt.stats.commits), (screen, commits));
+        assert_eq!((rt.state().screen.len(), rt.stats.commits), (screen, commits));
     }
 
     #[test]
@@ -698,6 +698,6 @@ mod tests {
         rt.frame(0.0);
         frames(&mut rt, 2);
         assert!(!rt.set_window_origin((50.0, 50.0)));
-        assert_eq!(rt.state.local.len(), 1);
+        assert_eq!(rt.state().local.len(), 1);
     }
 }

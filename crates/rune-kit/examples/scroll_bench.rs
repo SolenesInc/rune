@@ -125,27 +125,27 @@ fn main() {
     let mut samples = Vec::with_capacity(frames);
     for i in 0..frames {
         rune::take_frame_phases();
-        let (commits, views, allocs) = (rt.stats.commits, rt.state.views.get(), procwatch::alloc::thread_allocations());
+        let (commits, views, allocs) = (rt.stats.commits, rt.state().views.get(), procwatch::alloc::thread_allocations());
         let shaped = rt.text.shaped;
         let start = rune::thread_cpu_ms();
         // Four seconds at 120 Hz. Reverse halfway, remaining away from the edges.
         // Growth starts bottom-pinned and scrolls up first; add one row every 12 frames.
-        if rt.state.workload == "growth" && i % 12 == 0 {
-            rt.state.rows += 1;
+        if rt.state().workload == "growth" && i % 12 == 0 {
+            rt.state_mut().rows += 1;
             rt.invalidate();
         }
-        if rt.state.workload == "card" {
-            rt.state.marker = (rt.state.marker + 1) % rt.state.notes.len();
+        if rt.state().workload == "card" {
+            rt.state_mut().marker = (rt.state().marker + 1) % rt.state().notes.len();
             rt.invalidate();
         }
-        let direction = if (i < frames / 2) != (rt.state.workload == "growth") { -1.0 } else { 1.0 };
+        let direction = if (i < frames / 2) != (rt.state().workload == "growth") { -1.0 } else { 1.0 };
         rt.wheel(380.0, 400.0, direction * 12.0);
         rt.frame(1.0 / fps);
         let cpu = rune::thread_cpu_ms() - start;
         let allocations = procwatch::alloc::thread_allocations() - allocs;
         let p = rune::take_frame_phases();
         let q = rune::PHASES;
-        let builds = (rt.state.views.get() - views) as f64;
+        let builds = (rt.state().views.get() - views) as f64;
         samples.push([cpu, p[q], p[q+1], p[q+2], p[q+3], p[q+4], p[q+5],
             (rt.stats.commits - commits) as f64, builds,
             rt.instances.len() as f64, allocations as f64, (rt.text.shaped - shaped) as f64]);

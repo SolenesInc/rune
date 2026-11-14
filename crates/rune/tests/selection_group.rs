@@ -163,14 +163,14 @@ fn links_open_and_show_the_hand_over_selectable_text() {
     tick(&mut rt);
     assert_eq!(rt.cursor(), Cursor::Pointer);
     click(&mut rt, at);
-    assert_eq!(rt.state.opened, ["docs"]);
+    assert_eq!(rt.state().opened, ["docs"]);
     assert_eq!(rt.selected_text(), None);
     // A drag through the link still selects.
     wait(&mut rt);
     let l = glyphs(&rt, "linked");
     drag(&mut rt, before(a[15]), before(l[5]));
     assert_eq!(rt.selected_text().as_deref(), Some(format!("ere\n{ITEM}\n{CODE}\nleft\tright\nsee do").as_str()));
-    assert_eq!(rt.state.opened, ["docs"]);
+    assert_eq!(rt.state().opened, ["docs"]);
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn appended_text_keeps_the_selection_and_a_changed_one_drops_it() {
     drag(&mut rt, before(a[15]), before(l[5]));
     let selected = rt.selected_text().unwrap();
     for word in [" and", " more", " words"] {
-        rt.state.tail.push_str(word);
+        rt.state_mut().tail.push_str(word);
         rt.invalidate();
         tick(&mut rt);
         assert_eq!(rt.selected_text().as_deref(), Some(selected.as_str()), "streaming after the selection keeps it");
@@ -194,7 +194,7 @@ fn appended_text_keeps_the_selection_and_a_changed_one_drops_it() {
     rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
     assert!(rt.selected_text().unwrap().ends_with("see docs now and more words"));
     // A change inside what's selected drops it.
-    rt.state.tail = String::new();
+    rt.state_mut().tail = String::new();
     rt.invalidate();
     tick(&mut rt);
     assert_eq!(rt.selected_text(), None);
@@ -206,7 +206,7 @@ fn a_draggable_row_drags_and_clicks_still_select() {
     let d0 = glyphs(&rt, "d0");
     let d1 = glyphs(&rt, "d1");
     drag(&mut rt, d0[0], d1[3]);
-    assert!(rt.state.drags >= 3, "the row drags: {}", rt.state.drags);
+    assert!(rt.state().drags >= 3, "the row drags: {}", rt.state().drags);
     assert_eq!(rt.selected_text(), None);
     wait(&mut rt);
     click(&mut rt, d1[5]);
@@ -225,7 +225,7 @@ fn a_drag_into_a_gap_reaches_no_further_than_the_pointer() {
     word_drag(&mut rt, a[7], (a[7].0, li.rect[1] - 4.0));
     assert_eq!(rt.selected_text().as_deref(), Some("paragraph here"));
     // Released there, it doesn't hang on the block below: that block going keeps it.
-    rt.state.hide_item = true;
+    rt.state_mut().hide_item = true;
     rt.invalidate();
     wait(&mut rt);
     assert_eq!(rt.selected_text().as_deref(), Some("paragraph here"));
@@ -245,7 +245,7 @@ fn a_change_between_the_ends_drops_the_selection() {
         let code = glyphs(&rt, "code");
         drag(&mut rt, before(a[5]), before(code[3]));
         assert_eq!(rt.selected_text().as_deref(), Some("paragraph here\nlist item\nlet "));
-        change(&mut rt.state);
+        change(&mut rt.state_mut());
         rt.invalidate();
         tick(&mut rt);
         assert_eq!(rt.selected_text(), None, "a text between rewritten or removed");
@@ -256,7 +256,7 @@ fn a_change_between_the_ends_drops_the_selection() {
     let code = glyphs(&rt, "code");
     drag(&mut rt, before(a[5]), before(code[0]));
     assert_eq!(rt.selected_text().as_deref(), Some("paragraph here\nlist item"));
-    rt.state.code_changed = true;
+    rt.state_mut().code_changed = true;
     rt.invalidate();
     tick(&mut rt);
     assert_eq!(rt.selected_text(), None);

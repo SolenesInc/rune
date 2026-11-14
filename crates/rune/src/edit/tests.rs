@@ -510,12 +510,12 @@ fn command_chord_reaches_on_key() {
     let mut pw = TextEdit::new("").secure();
     pw.focused = true;
     let mut rt = Runtime::new(Form { pw, keys: vec![] }, view, (200.0, 40.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
+    rt.app_mut().on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
     rt.frame(0.0);
     rt.key(chord(" ", Mods { cmd: true, shift: true, logo: true, ..Mods::default() })); rt.frame(0.0);
     rt.key(chord("x", Mods::default())); rt.frame(0.0);
-    assert_eq!(rt.state.pw.text, "x");
-    assert_eq!(rt.state.keys, [Key::Text(" ".into())]);
+    assert_eq!(rt.state().pw.text, "x");
+    assert_eq!(rt.state().keys, [Key::Text(" ".into())]);
 }
 
 #[cfg(target_os = "macos")]
@@ -914,7 +914,7 @@ fn spans_on_text_input_hold_through_ime_and_undo() {
     rt.frame(0.0);
     rt.key(KeyEvent { key: Key::Command('z'), mods: Mods { cmd: true, ..Mods::default() } });
     rt.frame(0.0);
-    assert_eq!(rt.state.edit.text, "let x = 1;");
+    assert_eq!(rt.state().edit.text, "let x = 1;");
     let spec_spans = &rt.nodes.iter().find(|n| n.key.as_deref() == Some("ed")).unwrap().text.as_ref().unwrap().spans;
     assert_eq!(spec_spans.len(), 1);
     assert_eq!((spec_spans[0].start, spec_spans[0].end), (0, 3));
@@ -964,21 +964,21 @@ fn runtime_routes_mark_shortcuts_list_tabs_and_renders_decorations() {
     rt.key(KeyEvent { key: Key::Command('i'), mods: Mods { cmd: true, ..Mods::default() } });
     rt.key(KeyEvent { key: Key::Command('u'), mods: Mods { cmd: true, ..Mods::default() } });
     rt.frame(0.0);
-    assert!(rt.state.edit.has_mark(&Mark::Bold));
-    assert!(rt.state.edit.has_mark(&Mark::Italic));
-    assert!(rt.state.edit.has_mark(&Mark::Underline));
+    assert!(rt.state().edit.has_mark(&Mark::Bold));
+    assert!(rt.state().edit.has_mark(&Mark::Italic));
+    assert!(rt.state().edit.has_mark(&Mark::Underline));
 
     // Tab inside a list item indents the list item instead of moving focus to "other"!
     rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
     rt.frame(0.0);
-    assert!(rt.state.edit.focused);
-    assert!(!rt.state.other.focused);
-    assert_eq!(rt.state.edit.blocks()[0], Block::Bullet(1));
+    assert!(rt.state().edit.focused);
+    assert!(!rt.state().other.focused);
+    assert_eq!(rt.state().edit.blocks()[0], Block::Bullet(1));
 
     // Shift+Tab outdents the list item back to Bullet(0).
     rt.key(KeyEvent { key: Key::Tab, mods: Mods { shift: true, ..Mods::default() } });
     rt.frame(0.0);
-    assert_eq!(rt.state.edit.blocks()[0], Block::Bullet(0));
+    assert_eq!(rt.state().edit.blocks()[0], Block::Bullet(0));
 }
 
 fn cmd(c: char) -> KeyEvent {

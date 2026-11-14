@@ -137,8 +137,8 @@ pub(crate) fn runtime_for<S: 'static>(spec: &AppSpec<S>, state: S, size: (f32, f
     let text = TextSystem::for_window(spec.fonts, spec.families);
     crate::marks::mark("text.fonts");
     let mut rt = Runtime::with_text(state, spec.view, size, env, text);
-    rt.poll = spec.poll;
-    rt.on_key = spec.on_key;
+    rt.app_mut().poll = spec.poll;
+    rt.app_mut().on_key = spec.on_key;
     rt.motion_needs_cause = true;
     rt.window_title.start(spec.title);
     rt.set_live_waker(waker.clone());
@@ -148,7 +148,7 @@ pub(crate) fn runtime_for<S: 'static>(spec: &AppSpec<S>, state: S, size: (f32, f
     }
     if let Some(f) = spec.setup {
         crate::marks::mark("app.setup");
-        f(&mut rt.state, waker);
+        f(&mut rt.state_mut(), waker);
         crate::marks::mark("app.setup.done");
     }
     rt

@@ -41,13 +41,13 @@ fn opening_pushes_the_page_over_and_closing_gives_it_back() {
     let mut rt = Runtime::new(T { knobs: Knobs::default() }, view, (1000.0, 700.0), Env::new(true, 1.0));
     settle(&mut rt);
     assert_eq!(page_w(&mut rt), 1000.0);
-    rt.state.knobs.show();
+    rt.state_mut().knobs.show();
     rt.invalidate();
     settle(&mut rt);
     assert_eq!(page_w(&mut rt), 1000.0 - crate::SIDE_W);
-    assert_eq!(rt.state.knobs.side_room(), crate::SIDE_W);
+    assert_eq!(rt.state().knobs.side_room(), crate::SIDE_W);
     assert!(rt.find("knobs-sec-0").is_some() && rt.find("knobs-sec-1").is_some(), "every group is a section");
-    rt.state.knobs.close();
+    rt.state_mut().knobs.close();
     rt.invalidate();
     settle(&mut rt);
     assert_eq!(page_w(&mut rt), 1000.0);
@@ -65,11 +65,11 @@ fn a_header_opens_its_group_and_picks_it() {
     settle(&mut rt);
     assert_eq!(body(&rt, "knobs-sec-1"), 0.0, "folded up front, though on screen");
     click(&mut rt, "knobs-sec-1/head");
-    assert!(rt.state.knobs.unfolded.contains("Right"));
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Right"));
+    assert!(rt.state().knobs.unfolded.contains("Right"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Right"));
     assert!(body(&rt, "knobs-sec-1") > 20.0);
     click(&mut rt, "knobs-sec-1/head");
-    assert!(rt.state.knobs.folded.contains("Right"));
+    assert!(rt.state().knobs.folded.contains("Right"));
     assert_eq!(body(&rt, "knobs-sec-1"), 0.0);
 }
 
@@ -81,8 +81,8 @@ fn the_panel_reopens_folded_but_for_the_group_last_opened() {
     settle(&mut rt);
     click(&mut rt, "knobs-sec-0/head");
     click(&mut rt, "knobs-sec-1/head");
-    rt.state.knobs.close();
-    rt.state.knobs.show();
+    rt.state_mut().knobs.close();
+    rt.state_mut().knobs.show();
     rt.invalidate();
     settle(&mut rt);
     assert_eq!(body(&rt, "knobs-sec-0"), 0.0);
@@ -97,10 +97,10 @@ fn using_a_knob_makes_its_group_the_panels() {
     settle(&mut rt);
     click(&mut rt, "knobs-sec-1/head");
     click(&mut rt, "knobs-sec-1/body/knobs-card/knobs-knob-0");
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Right"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Right"));
     click(&mut rt, "knobs-random");
-    assert!(rt.state.knobs.values.contains_key("Right pad"), "Random acts on the group in use");
-    assert!(!rt.state.knobs.values.contains_key("Left size"));
+    assert!(rt.state().knobs.values.contains_key("Right pad"), "Random acts on the group in use");
+    assert!(!rt.state().knobs.values.contains_key("Left size"));
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn the_edge_drags_to_resize() {
     rt.pointer_move(x - 60.0, y);
     rt.pointer_up(x - 60.0, y);
     settle(&mut rt);
-    assert_eq!(rt.state.knobs.side_w(), crate::SIDE_W + 60.0);
+    assert_eq!(rt.state().knobs.side_w(), crate::SIDE_W + 60.0);
     assert_eq!(page_w(&mut rt), 1000.0 - crate::SIDE_W - 60.0);
 }
 
@@ -198,33 +198,33 @@ fn press(rt: &mut Runtime<T>, key: rune::Key) {
 #[test]
 fn right_clicking_a_knob_puts_only_it_back() {
     let mut rt = open_left();
-    rt.state.knobs.set(&L, 8.0);
-    rt.state.knobs.set(&C, 2.0);
+    rt.state_mut().knobs.set(&L, 8.0);
+    rt.state_mut().knobs.set(&C, 2.0);
     let r = rect(&rt, "knobs-sec-0/body/knobs-card/knobs-knob-0");
     right_click(&mut rt, r[0] + 40.0, r[1] + r[3] / 2.0);
-    assert_eq!(rt.state.knobs.get(&L), 5.0, "back to its default");
-    assert_eq!(rt.state.knobs.get(&C), 2.0, "its neighbour keeps its value");
-    rt.state.knobs.undo();
-    assert_eq!(rt.state.knobs.get(&L), 8.0, "undoable");
+    assert_eq!(rt.state().knobs.get(&L), 5.0, "back to its default");
+    assert_eq!(rt.state().knobs.get(&C), 2.0, "its neighbour keeps its value");
+    rt.state_mut().knobs.undo();
+    assert_eq!(rt.state().knobs.get(&L), 8.0, "undoable");
 }
 
 #[test]
 fn a_hovered_group_header_offers_random_and_reset() {
     let mut rt = open_left();
-    rt.state.knobs.set(&L, 8.0);
-    rt.state.knobs.set(&R, 30.0);
+    rt.state_mut().knobs.set(&L, 8.0);
+    rt.state_mut().knobs.set(&R, 30.0);
     assert!(rt.find("knobs-sec-0/head/reset").is_none(), "the count shows until hovered");
     let h = rect(&rt, "knobs-sec-0/head");
     rt.pointer_move(h[0] + 40.0, h[1] + h[3] / 2.0);
     settle(&mut rt);
     click(&mut rt, "knobs-sec-0/head/reset");
-    assert_eq!(rt.state.knobs.get(&L), 5.0, "Reset puts the group back");
-    assert_eq!(rt.state.knobs.get(&R), 30.0, "and leaves other groups alone");
+    assert_eq!(rt.state().knobs.get(&L), 5.0, "Reset puts the group back");
+    assert_eq!(rt.state().knobs.get(&R), 30.0, "and leaves other groups alone");
     assert!(rt.find("knobs-sec-0/body/knobs-card/knobs-knob-0").is_some(), "without folding the group");
     click(&mut rt, "knobs-sec-0/head/random");
-    assert!(rt.state.knobs.values.contains_key("Left size"), "Random sets the group's knobs");
+    assert!(rt.state().knobs.values.contains_key("Left size"), "Random sets the group's knobs");
     right_click(&mut rt, h[0] + 40.0, h[1] + h[3] / 2.0);
-    assert!(!rt.state.knobs.values.contains_key("Left size"), "right-clicking the header resets it too");
+    assert!(!rt.state().knobs.values.contains_key("Left size"), "right-clicking the header resets it too");
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn clicking_a_choice_row_puts_the_arrows_on_its_options() {
     let r = rect(&rt, "knobs-sec-0/head");
     click(&mut rt, "knobs-sec-0/head");
     click(&mut rt, "knobs-sec-0/head");
-    assert_eq!(rt.state.knobs.at, Some(Node::Group(0)), "at {r:?}");
+    assert_eq!(rt.state().knobs.at, Some(Node::Group(0)), "at {r:?}");
     let row = rect(&rt, "knobs-sec-0/body/knobs-card/knobs-knob-1");
     let (x, y) = (row[0] + 20.0, row[1] + row[3] / 2.0);
     rt.pointer_move(x, y);
@@ -243,9 +243,9 @@ fn clicking_a_choice_row_puts_the_arrows_on_its_options() {
     rt.pointer_up(x, y);
     settle(&mut rt);
     press(&mut rt, rune::Key::Right);
-    assert_eq!(rt.state.knobs.get(&C), 1.0, "→ steps the clicked choice, not the group");
+    assert_eq!(rt.state().knobs.get(&C), 1.0, "→ steps the clicked choice, not the group");
     press(&mut rt, rune::Key::Right);
-    assert_eq!(rt.state.knobs.get(&C), 2.0);
+    assert_eq!(rt.state().knobs.get(&C), 2.0);
 }
 
 #[test]
@@ -254,11 +254,11 @@ fn moving_the_pointer_takes_the_highlight_from_the_keyboard() {
     click(&mut rt, "knobs-sec-0/head");
     click(&mut rt, "knobs-sec-0/head");
     press(&mut rt, rune::Key::Down);
-    assert!(rt.state.knobs.kbd, "the keyboard's row is lit");
+    assert!(rt.state().knobs.kbd, "the keyboard's row is lit");
     let row = rect(&rt, "knobs-sec-0/body/knobs-card/knobs-knob-1");
     rt.pointer_move(row[0] + 30.0, row[1] + row[3] / 2.0);
     settle(&mut rt);
-    assert!(!rt.state.knobs.kbd, "only the row under the pointer stays lit");
+    assert!(!rt.state().knobs.kbd, "only the row under the pointer stays lit");
     press(&mut rt, rune::Key::Down);
-    assert!(rt.state.knobs.kbd, "a key lights the keyboard's row again");
+    assert!(rt.state().knobs.kbd, "a key lights the keyboard's row again");
 }

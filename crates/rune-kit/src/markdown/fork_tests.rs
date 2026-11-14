@@ -166,7 +166,7 @@ fn a_details_block_opens_and_closes_from_its_summary_as_the_app_says() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.flipped, [at]);
+    assert_eq!(rt.state().flipped, [at]);
     assert_eq!(summary()(&rt).expanded, Some(true));
     assert!(names(&rt, "label").iter().any(|l| l == "Hidden body"));
 
@@ -326,14 +326,14 @@ fn a_highlight_is_a_button_over_its_glyphs_beside_the_links_inside_it() {
     let para = glyphs_in(&rt, "b0");
     // "Mark" is glyphs 0..4, "this" 4..8, "link" 8..12, "passage." 12..20.
     click(&mut rt, para[1]);
-    assert!(rt.state.heard.is_empty(), "outside the mark nothing is pressed");
+    assert!(rt.state().heard.is_empty(), "outside the mark nothing is pressed");
     click(&mut rt, para[5]);
     click(&mut rt, para[9]);
     click(&mut rt, para[14]);
     let code = glyphs_in(&rt, "b1");
     // "let" is glyphs 0..3, "mark" 3..7.
     click(&mut rt, code[4]);
-    assert_eq!(rt.state.heard, ["n1", "https://x.dev", "n1", "n2"], "the link inside the mark opens as a link");
+    assert_eq!(rt.state().heard, ["n1", "https://x.dev", "n1", "n2"], "the link inside the mark opens as a link");
     assert!(names(&rt, "button").iter().any(|n| n == "this "), "a mark is a button named by its words: {:?}", names(&rt, "button"));
     let (x0, y0) = (para[5].0 - 2.0, para[5].1);
     let (x1, y1) = para[16];
@@ -347,7 +347,7 @@ fn a_highlight_is_a_button_over_its_glyphs_beside_the_links_inside_it() {
     rt.pointer_up(x1, y1);
     rt.frame(10.0 / 60.0);
     assert!(rt.selected_text().is_some_and(|t| t.starts_with("his link pass")), "a drag from inside a mark selects: {:?}", rt.selected_text());
-    assert_eq!(rt.state.heard.len(), 4, "and presses nothing");
+    assert_eq!(rt.state().heard.len(), 4, "and presses nothing");
 }
 
 #[test]

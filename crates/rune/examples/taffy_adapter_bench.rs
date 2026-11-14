@@ -515,7 +515,7 @@ fn run_runtime_suite(samples: usize) {
     // 1. Kitchen-sink layout digest across initial frame + reorder/scale/remove mutation frame.
     let text = TextSystem::default();
     let mut rt = Runtime::with_text(AppState::new(Mode::KitchenSink, false, 1800), app_view, SIZE, Env::new(true, 2.0), text);
-    rt.on_key = Some(on_key);
+    rt.app_mut().on_key = Some(on_key);
     rt.frame(0.0);
     let keys = [
         "sink_root",
@@ -588,7 +588,7 @@ fn run_runtime_suite(samples: usize) {
             let h0 = live_heap_bytes();
             rune::take_frame_phases();
             let mut rt = Runtime::with_text(state, app_view, SIZE, Env::new(true, 2.0), t);
-            rt.on_key = Some(on_key);
+            rt.app_mut().on_key = Some(on_key);
             rt.frame(0.0);
             let phases_grid = rune::take_frame_phases();
             let p = rune::PHASES;

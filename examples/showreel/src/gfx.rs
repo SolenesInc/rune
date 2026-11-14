@@ -172,7 +172,8 @@ impl Compositor<State> for Gfx {
             fx.simulate(queue, f.encoder, None);
         }
         let clear = f.rt.clear_color();
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         f.ui.draw_with_backdrop(f.encoder, f.target, clear, &mut |phase, s: &EffectSite<'_>| {
             let Some(k) = at.iter().position(|n| *n == s.index) else { return };
             match phase {

@@ -74,6 +74,19 @@ pub struct Cx<S> {
 }
 
 impl<S> Cx<S> {
+    /// This context for a view over another state type, moved rather than copied: the runtime's
+    /// core builds a `Cx<()>`, and the typed side hands the app's view a `Cx<S>` and takes it back.
+    pub(crate) fn into_state<T>(self) -> Cx<T> {
+        let Cx {
+            env, titlebar_inset, chrome, caption_color, defaults, titlebar, system_accent, system_scroll_bars,
+            system_reduced_motion, reduced_motion, time_scale, zoom, caret, caret_read, layout, layout_reads, _s,
+        } = self;
+        Cx {
+            env, titlebar_inset, chrome, caption_color, defaults, titlebar, system_accent, system_scroll_bars,
+            system_reduced_motion, reduced_motion, time_scale, zoom, caret, caret_read, layout, layout_reads, _s: PhantomData,
+        }
+    }
+
     /// A copy of this context for a sub-view over another state type, or a scratch run of
     /// the same view: environment, settings and the reads made so far. Pass it back with
     /// [`Self::absorb`] to keep what the sub-view did, or drop it to discard that, as a host

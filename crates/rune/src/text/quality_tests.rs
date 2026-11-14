@@ -504,7 +504,7 @@ fn span_ring_subranges_case_elision_and_cache_changes() {
     assert_eq!(hovered.iter().find(|i| i.params[0] == 1.0).unwrap().rect, ring.rect);
     assert!(hovered.iter().all(|i| i.fill == Color::BLACK.premul(1.0)));
     rt.pointer_move(299.0, 79.0);
-    rt.state = Color::WHITE;
+    *rt.state_mut() = Color::WHITE;
     rt.invalidate();
     rt.settle_all();
     rt.frame(0.0);
@@ -545,7 +545,7 @@ fn span_ring_without_background_is_empty_and_reveal_fades_the_chip() {
     }
     let mut rt = Runtime::new("one".to_string(), view, (300.0, 80.0), Env::new(false, 1.0));
     rt.frame(0.0);
-    rt.state.push_str(" two");
+    rt.state_mut().push_str(" two");
     rt.invalidate();
     rt.frame(0.01);
     let initial = rt.instances.iter().find(|i| i.params[1] == KIND_RECT && i.params[0] == 1.0).unwrap().border[3];
@@ -607,7 +607,8 @@ fn span_ring_draws_inset_border_on_light_page_merges_runs_wraps_and_stays_on_hov
     let size = (400u32, 88u32);
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let target = Offscreen::new(&gpu.device, size.0, size.1);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, [0.0; 4]);
     target.copy(&mut encoder);
@@ -645,6 +646,7 @@ fn span_ring_draws_inset_border_on_light_page_merges_runs_wraps_and_stays_on_hov
         )
     }
     let mut partial_rt = Runtime::new((), partial, (200.0, 44.0), Env::new(false, 1.5));
+    let partial_rt = &mut *partial_rt;
     partial_rt.frame(0.0);
     let partial_chip = partial_rt.instances.iter().find(|i| i.params[1] == KIND_RECT && i.params[0] > 0.0).unwrap();
     renderer.prepare(&gpu.device, &gpu.queue, &mut partial_rt.text.atlas, &partial_rt.instances, size);
@@ -667,7 +669,7 @@ fn span_ring_draws_inset_border_on_light_page_merges_runs_wraps_and_stays_on_hov
 
     // Fading the text element scales both the fill and the ring border alpha.
     rt.pointer_move(0.0, 0.0);
-    rt.state = 0.5;
+    *rt.state_mut() = 0.5;
     rt.invalidate();
     rt.settle_all();
     rt.frame(0.0);

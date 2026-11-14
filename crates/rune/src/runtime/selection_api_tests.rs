@@ -33,6 +33,6 @@ fn a_physical_copy_in_the_same_frame_copies_what_code_selected() {
         Some(KeyEvent { key: Key::Command('c'), mods: cmd }),
     );
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.seen.as_deref(), Some("text"));
+    assert_eq!(rt.state().seen.as_deref(), Some("text"));
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("text"));
 }

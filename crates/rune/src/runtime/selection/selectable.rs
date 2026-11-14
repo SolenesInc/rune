@@ -204,7 +204,7 @@ pub(super) fn same_keyed_path(a: &str, b: &str) -> bool {
     ta == tb && ka.split('/').filter(|s| !s.starts_with('#')).eq(kb.split('/').filter(|s| !s.starts_with('#')))
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub(super) fn is_selectable(&self, i: usize) -> bool {
         let n = &self.nodes[i];
         n.input.is_none() && n.text.as_ref().is_some_and(|t| t.selectable && !t.redacted)

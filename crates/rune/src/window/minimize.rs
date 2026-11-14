@@ -80,7 +80,7 @@ pub(crate) fn step(state: &mut Minimize, event: MinimizeEvent) -> Effects<Minimi
     }
 }
 
-impl<S> Runtime<S> {
+impl crate::runtime::RuntimeCore {
     /// Steps the minimize the app asked for, saying whether this shell carries it out now. The
     /// one effect is a minimize, run once the window is as the turn leaves it.
     pub(crate) fn minimize_step(&mut self, event: MinimizeEvent) -> bool {

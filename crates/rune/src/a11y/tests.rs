@@ -105,20 +105,20 @@ fn actions_run_the_same_handlers_as_pointer_and_keys() {
     let click = request(&rt, "save", Ak::Click, None);
     assert!(rt.a11y_action(&click));
     rt.frame(0.0);
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     let menu = request(&rt, "save", Ak::ShowContextMenu, None);
     assert!(rt.a11y_action(&menu));
     rt.frame(0.0);
-    assert_eq!(rt.state.menu, 1);
+    assert_eq!(rt.state().menu, 1);
     let toggle = request(&rt, "wifi", Ak::Click, None);
     rt.a11y_action(&toggle);
     rt.frame(0.0);
-    assert!(rt.state.on);
+    assert!(rt.state().on);
     assert!(states(find(&rt.accessibility_json(), "wifi").unwrap()).contains(&"checked"));
     let expand = request(&rt, "more", Ak::Expand, None);
     assert!(rt.a11y_action(&expand));
     rt.frame(0.0);
-    assert!(rt.state.open);
+    assert!(rt.state().open);
     let expand_again = request(&rt, "more", Ak::Expand, None);
     assert!(!rt.a11y_action(&expand_again), "expanding an open disclosure does nothing");
     for _ in 0..3 {
@@ -126,15 +126,15 @@ fn actions_run_the_same_handlers_as_pointer_and_keys() {
         rt.a11y_action(&up);
         rt.frame(0.0);
     }
-    assert_eq!(rt.state.level, 3);
+    assert_eq!(rt.state().level, 3);
     let to_seven = request(&rt, "volume", Ak::SetValue, Some(ActionData::NumericValue(7.2)));
     assert!(rt.a11y_action(&to_seven), "a slider with a step takes a number");
     rt.frame(0.0);
-    assert_eq!(rt.state.level, 7, "set as steps through on_step, rounded to a step");
+    assert_eq!(rt.state().level, 7, "set as steps through on_step, rounded to a step");
     let set = request(&rt, "name", Ak::SetValue, Some(ActionData::Value("Ada".into())));
     assert!(rt.a11y_action(&set));
     rt.frame(0.0);
-    assert_eq!(rt.state.name.text, "Ada");
+    assert_eq!(rt.state().name.text, "Ada");
     let tree = rt.accessibility_json();
     let name = find(&tree, "name").unwrap();
     assert_eq!(name["value"], "Ada");
@@ -283,7 +283,7 @@ fn text_fields_expose_lines_caret_and_selection() {
     };
     assert!(rt.a11y_action(&request));
     rt.frame(0.0);
-    assert_eq!(rt.state.edit.range(), (11, 11));
+    assert_eq!(rt.state().edit.range(), (11, 11));
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn inline_links_are_their_own_nodes() {
     let click = request(&rt, "https://example.com/spec", Ak::Click, None);
     assert!(rt.a11y_action(&click));
     rt.frame(0.0);
-    assert_eq!(rt.state.opened, ["https://example.com/spec"]);
+    assert_eq!(rt.state().opened, ["https://example.com/spec"]);
 }
 
 #[test]

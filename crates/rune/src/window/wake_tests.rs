@@ -179,7 +179,7 @@ fn a_hidden_polls_minimize_survives_its_popup_callback_asking_again() {
     // the show. Drives the real poll, the real pop-up callback and the shell's take/return
     // wiring, so a shell that drops the return loses the final minimize here.
     let mut rt = Runtime::new(0u32, |_: &u32, _: &mut Cx<u32>| crate::el(), (100.0, 100.0), crate::Env::default());
-    rt.poll = Some(|asked: &mut u32, _, tx: &mut Tx| {
+    rt.app_mut().poll = Some(|asked: &mut u32, _, tx: &mut Tx| {
         if *asked > 0 { return false; }
         *asked += 1;
         tx.minimize();

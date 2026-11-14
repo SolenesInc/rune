@@ -94,7 +94,7 @@ fn run(scenario: usize, record: bool) -> Run {
         times.push(t0.elapsed().as_secs_f64() * 1000.0);
         allocs += allocations() - a0;
     }
-    assert_eq!(rt.state.rewind.frames() > 0, record);
+    assert_eq!(rt.state().rewind.frames() > 0, record);
     Run { times, allocs: allocs / FRAMES as u64 }
 }
 
@@ -114,7 +114,7 @@ fn minute() -> (usize, usize) {
         if i % 600 < 60 { rt.wheel(500.0, 400.0, -24.0); }
         rt.frame(1.0 / 60.0);
     }
-    (rt.state.rewind.bytes(), rt.state.rewind.frames())
+    (rt.state().rewind.bytes(), rt.state().rewind.frames())
 }
 
 fn main() {

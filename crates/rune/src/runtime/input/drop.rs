@@ -57,7 +57,7 @@ struct Target {
     rejected: Vec<PathBuf>,
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// A file drag from another app entered the window or moved over it, carrying `paths`; `at`
     /// is its position in points, or `None` when the platform doesn't say. The innermost
     /// [`El::on_drop_files`] under it that accepts the files hears `on_drop_hover(true)` next
@@ -231,7 +231,7 @@ impl<S: 'static> Runtime<S> {
         if let Some(aim) = target && let Some(f) = self.drop_move_fn(&aim) && let Some(p) = self.drop_point(&aim.0, at) {
             self.trace_event(format_args!("drop-move:{}", aim.0));
             tx.drop_point = Some(p);
-            f(states!(self), p, tx);
+            f(self.app.states(), p, tx);
             tx.drop_point = None;
             ran = true;
         }
@@ -256,7 +256,7 @@ impl<S: 'static> Runtime<S> {
             let kind = if *accepted { "drop-hover" } else { "drop-rejected-hover" };
             self.trace_event(format_args!("{kind}:{over}:{path}"));
             tx.drop_point = if over { self.drop_point(path, at) } else { None };
-            f(states!(self), over, tx);
+            f(self.app.states(), over, tx);
             tx.drop_point = None;
             ran = true;
         }
@@ -282,12 +282,12 @@ impl<S: 'static> Runtime<S> {
                 tx.drop_point = self.drop_point(&path, at);
                 if !files.is_empty() && let Some(f) = drop.on_drop {
                     self.trace_event(format_args!("drop-files:{}:{path}", files.len()));
-                    f(states!(self), &files, tx);
+                    f(self.app.states(), &files, tx);
                     ran = true;
                 }
                 if !rejected.is_empty() && let Some(f) = drop.on_reject {
                     self.trace_event(format_args!("drop-rejected:{}:{path}", rejected.len()));
-                    f(states!(self), &rejected, tx);
+                    f(self.app.states(), &rejected, tx);
                     ran = true;
                 }
                 tx.drop_point = None;

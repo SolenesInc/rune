@@ -22,14 +22,14 @@ fn shown_text(rt: &Runtime<Chat>) -> Option<String> {
 #[test]
 fn a_covered_window_builds_nothing_until_it_uncovers() {
     let mut rt = Runtime::new(Chat::default(), view, (200.0, 50.0), Env { system_dark: true, scale: 1.0 });
-    rt.poll = Some(|chat, _, _| { chat.polls += 1; let unread = chat.read < chat.messages; chat.read = chat.messages; unread });
+    rt.app_mut().poll = Some(|chat, _, _| { chat.polls += 1; let unread = chat.read < chat.messages; chat.read = chat.messages; unread });
     let start = Instant::now();
     rt.wall_start = Some(start);
     rt.frame(0.0);
     assert_eq!(shown_text(&rt).as_deref(), Some("0 0"));
     // As the host does for `WindowEvent::Occluded(true)`.
     rt.set_live_visible(false);
-    let (builds, commits, polls) = (BUILDS.get(), rt.stats.commits, rt.state.polls);
+    let (builds, commits, polls) = (BUILDS.get(), rt.stats.commits, rt.state().polls);
     for k in 1..=100 {
         rt.update(|chat, tx| { chat.messages += 1; tx.wake_after(Duration::from_millis(10)); });
         covered_step(&mut rt);
@@ -37,8 +37,8 @@ fn a_covered_window_builds_nothing_until_it_uncovers() {
         rt.wall_start = Some(start - k * Duration::from_millis(20));
         covered_step(&mut rt);
     }
-    assert_eq!((rt.state.messages, rt.state.read), (100, 100), "updates and poll ran");
-    assert_eq!(rt.state.polls - polls, 200, "poll runs for every update and timer");
+    assert_eq!((rt.state().messages, rt.state().read), (100, 100), "updates and poll ran");
+    assert_eq!(rt.state().polls - polls, 200, "poll runs for every update and timer");
     assert_eq!(rt.wake_deadline(), None, "due timers are spent on time");
     assert_eq!(BUILDS.get() - builds, 0, "no view builds while covered");
     assert_eq!(rt.stats.commits, commits, "no layout while covered");

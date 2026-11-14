@@ -362,7 +362,7 @@ impl Compositor<Cursed> for Gfx {
         // ---- state the compositor owns: the clock, flush timing, the demo pointer
         let mut dirty = false;
         {
-            let st = &mut rt.state;
+            let st = &mut rt.state_mut();
             st.now = now;
             if st.flush_requested {
                 st.flush_requested = false;
@@ -397,10 +397,10 @@ impl Compositor<Cursed> for Gfx {
             cache: rect("cache-card"),
             sel: rect("nav-sel"),
         };
-        let dark_theme = crate::ui::dark_theme(&rt.state, rt.env.system_dark);
+        let dark_theme = crate::ui::dark_theme(&rt.state(), rt.env.system_dark);
         let tint = rune_theme_opencode::kit(dark_theme).c.layer_03;
         let out = self.gags.frame(&In {
-            s: &rt.state,
+            s: &rt.state(),
             t,
             now,
             scale,

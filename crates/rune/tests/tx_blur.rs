@@ -25,7 +25,7 @@ fn runtime() -> Runtime<S> {
     let mut s = S::default();
     s.field.focused = true;
     let mut rt = Runtime::new(s, view, (200.0, 100.0), Env::default());
-    rt.on_key = Some(|s, _, _| { s.keys += 1; true });
+    rt.app_mut().on_key = Some(|s, _, _| { s.keys += 1; true });
     rt.frame(0.0);
     assert!(focused(&rt), "the model asked for focus");
     rt
@@ -40,14 +40,14 @@ fn press(rt: &mut Runtime<S>, key: Key) {
 fn a_submit_handler_blurs_its_field() {
     let mut rt = runtime();
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.submits, 1);
+    assert_eq!(rt.state().submits, 1);
     assert!(!focused(&rt), "nothing has focus");
-    assert!(!rt.state.field.focused, "the model hears it through on_edit");
+    assert!(!rt.state().field.focused, "the model hears it through on_edit");
     rt.frame(1.0 / 60.0);
     assert!(!focused(&rt), "and focus stays dropped");
     press(&mut rt, Key::Text("z".into()));
-    assert_eq!(rt.state.field.text.as_str(), "", "typing no longer reaches the field");
-    assert_eq!(rt.state.keys, 1, "keys go to the window");
+    assert_eq!(rt.state().field.text.as_str(), "", "typing no longer reaches the field");
+    assert_eq!(rt.state().keys, 1, "keys go to the window");
 }
 
 #[test]

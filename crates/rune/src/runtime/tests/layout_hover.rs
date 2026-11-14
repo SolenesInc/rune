@@ -69,7 +69,7 @@ fn resting(rows: Rows) -> Runtime<Rows> {
 fn sliding(growth: bool) -> Runtime<Rows> {
     let mut rt = resting(Rows { growth, ..Rows::default() });
     assert_eq!(shown(&rt), ["a5"]);
-    assert_eq!((&rt.state.enters[..], &rt.state.changes[..]), (&[5][..], &[(5, true)][..]));
+    assert_eq!((&rt.state().enters[..], &rt.state().changes[..]), (&[5][..], &[(5, true)][..]));
     rt.update(|s, _| s.open = true);
     rt
 }
@@ -97,8 +97,8 @@ fn rows_sliding_under_a_still_pointer_dont_take_its_hover() {
         let (moved, seen) = settle(&mut rt);
         assert!(moved > 5, "growth {growth}: the rows slid");
         assert_eq!(seen, ["a5", "a0"], "growth {growth}: no row passing under the pointer lit up");
-        assert_eq!(rt.state.enters, [5, 0], "growth {growth}");
-        assert_eq!(rt.state.changes, [(5, true), (5, false), (0, true)], "growth {growth}");
+        assert_eq!(rt.state().enters, [5, 0], "growth {growth}");
+        assert_eq!(rt.state().changes, [(5, true), (5, false), (0, true)], "growth {growth}");
         assert_eq!(row_at(&rt, 110.0), Some(0), "growth {growth}");
         assert_eq!(shown(&rt), ["a0"], "growth {growth}: once they settle, the row under the pointer has it");
         assert!(!rt.hover_hold.held() && !rt.hover_hold.released());
@@ -115,8 +115,8 @@ fn moving_the_pointer_during_a_slide_retargets_at_once() {
     assert_ne!(under, 5, "a row slid under the pointer");
     rt.pointer_move(100.0, 111.0);
     rt.frame(DT);
-    assert_eq!(rt.state.enters, [5, under]);
-    assert_eq!(rt.state.changes, [(5, true), (5, false), (under, true)]);
+    assert_eq!(rt.state().enters, [5, under]);
+    assert_eq!(rt.state().changes, [(5, true), (5, false), (under, true)]);
     let now = format!("a{}", row_at(&rt, 111.0).unwrap());
     assert!(shown(&rt).contains(&now), "{now}: {:?}", shown(&rt));
 }
@@ -128,11 +128,11 @@ fn the_hovered_row_leaving_mid_slide_lets_go() {
     rt.update(|s, _| s.gone = true);
     rt.frame(DT);
     rt.frame(DT);
-    assert_eq!(rt.state.changes, [(5, true), (5, false)], "the leaving row hears the pointer go");
+    assert_eq!(rt.state().changes, [(5, true), (5, false)], "the leaving row hears the pointer go");
     let (_, seen) = settle(&mut rt);
     assert!(seen.iter().all(|k| k == "a5" || k == "a0"), "nothing else lit up: {seen:?}");
-    assert_eq!(rt.state.enters, [5, 0]);
-    assert_eq!(rt.state.changes, [(5, true), (5, false), (0, true)]);
+    assert_eq!(rt.state().enters, [5, 0]);
+    assert_eq!(rt.state().changes, [(5, true), (5, false), (0, true)]);
 }
 
 #[test]
@@ -142,10 +142,10 @@ fn a_modal_opening_mid_slide_lets_go() {
     rt.update(|s, _| s.modal = true);
     rt.frame(DT);
     rt.frame(DT);
-    assert_eq!(rt.state.changes, [(5, true), (5, false)], "the inert row hears the pointer go");
+    assert_eq!(rt.state().changes, [(5, true), (5, false)], "the inert row hears the pointer go");
     settle(&mut rt);
     assert_eq!(shown(&rt), Vec::<String>::new());
-    assert_eq!(rt.state.enters, [5]);
+    assert_eq!(rt.state().enters, [5]);
 }
 
 #[test]
@@ -169,8 +169,8 @@ fn a_press_during_a_slide_still_shows_and_lets_go() {
 /// Each row's enters minus its leaves, from `on_hover_change`.
 fn inside(rt: &Runtime<Rows>) -> Vec<usize> {
     let mut net = [0i32; 12];
-    for &(k, on) in &rt.state.changes { net[k] += if on { 1 } else { -1 }; }
-    assert!(net.iter().all(|&n| n == 0 || n == 1), "every enter is heard once before its leave: {:?}", rt.state.changes);
+    for &(k, on) in &rt.state().changes { net[k] += if on { 1 } else { -1 }; }
+    assert!(net.iter().all(|&n| n == 0 || n == 1), "every enter is heard once before its leave: {:?}", rt.state().changes);
     (0..12).filter(|&k| net[k] == 1).collect()
 }
 
@@ -218,7 +218,7 @@ fn a_hold_keeps_all_three_hover_states_together() {
     };
     let spot = rt.nodes.iter().find(|n| n.named("spot")).unwrap().path.clone();
     assert_eq!(rt.hovered.as_deref(), Some(spot.as_str()));
-    assert_eq!((&rt.state.spot[..], target(&rt, "r5")), (&[true][..], Some(1.0)));
+    assert_eq!((&rt.state().spot[..], target(&rt, "r5")), (&[true][..], Some(1.0)));
     rt.update(|s, _| s.open = true);
     for _ in 0..6 { rt.frame(DT); }
     assert_ne!(row_at(&rt, 110.0), Some(5), "a row slid under the pointer");
@@ -228,10 +228,10 @@ fn a_hold_keeps_all_three_hover_states_together() {
     rt.frame(DT);
     rt.frame(DT);
     assert_eq!(target(&rt, "r5"), Some(1.0));
-    assert_eq!(rt.state.spot, [true], "the spot's leave waits with the rows' hover");
+    assert_eq!(rt.state().spot, [true], "the spot's leave waits with the rows' hover");
     assert_eq!(rt.hovered.as_deref(), Some(spot.as_str()), "and so does the hovered element");
     settle(&mut rt);
-    assert_eq!(rt.state.spot, [true, false]);
+    assert_eq!(rt.state().spot, [true, false]);
     assert_eq!(rt.hovered, None);
     assert_eq!((target(&rt, "r5"), target(&rt, "r0")), (Some(0.0), Some(1.0)));
 }

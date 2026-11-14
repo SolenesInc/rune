@@ -522,8 +522,8 @@ impl Walk {
         self.rt.queue.retain(|_| false);
         self.rt.clock = 0.0;
         self.now = 0.0;
-        if self.rt.state != Doc::default() {
-            let remounted = self.rt.state.remounted;
+        if *self.rt.state() != Doc::default() {
+            let remounted = self.rt.state().remounted;
             self.rt.update(|doc, _| *doc = Doc::default());
             if remounted { self.settle(); } else { self.rt.frame(0.0); }
             self.rt.clock = 0.0;

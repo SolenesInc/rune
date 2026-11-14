@@ -59,7 +59,8 @@ fn cached_blur_only_counts_passes_when_it_draws_the_layer() {
     let target = Offscreen::new(&gpu.device, 32, 32);
     for expected in [3, 0] {
         rt.frame(1.0 / 60.0);
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (32, 32));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (32, 32));
         let _ = pixels(&gpu, &renderer, &target);
         assert_eq!(renderer.layer_stats().extra_passes, expected);
     }
@@ -74,11 +75,11 @@ fn blur_live_springs_curves_and_zero_bypass() {
     rt.frame(0.0);
     assert_eq!(rt.instances.len(), 1);
     let commits = rt.stats.commits;
-    rt.state.set(2.0); rt.frame(0.0);
+    rt.state().set(2.0); rt.frame(0.0);
     assert_eq!(rt.instances[0].params[1], KIND_LAYER);
     assert_eq!(rt.instances[0].params[2], 4.0);
     assert_eq!(rt.instances[1].params[2], 0.0, "do not also blur each primitive");
-    rt.state.set(0.0); rt.frame(0.0);
+    rt.state().set(0.0); rt.frame(0.0);
     assert_eq!(rt.instances.len(), 1);
     assert_eq!(rt.stats.commits, commits);
 
@@ -86,7 +87,7 @@ fn blur_live_springs_curves_and_zero_bypass() {
         el().size(20.0, 16.0).fill(Color::WHITE).live_blur(value.smooth(crate::Spring::new(0.3, 0.0)))
     }
     let mut rt = Runtime::new(Live::new(0.0), smooth, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
-    rt.frame(0.0); rt.state.set(4.0); rt.frame(0.05);
+    rt.frame(0.0); rt.state().set(4.0); rt.frame(0.05);
     let first = rt.instances[0].params[2];
     assert!(first > 0.0 && first < 4.0);
     rt.frame(0.05);
@@ -97,7 +98,7 @@ fn blur_live_springs_curves_and_zero_bypass() {
             .blur_motion(rune_motion::Curve::ease_in_out(0.2))
     }
     let mut rt = Runtime::new(4.0, curve, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
-    rt.frame(0.0); rt.state = 0.0; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+    rt.frame(0.0); *rt.state_mut() = 0.0; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
     assert!(rt.instances[0].params[2] > 0.0 && rt.instances[0].params[2] < 4.0);
     for _ in 0..30 { rt.frame(1.0 / 60.0); }
     assert_eq!(rt.instances.len(), 1);
@@ -114,7 +115,8 @@ fn runtime_keeps_offscreen_blur_sources_and_presence_transitions() {
     let mut rt = Runtime::new((), offscreen, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
     rt.frame(0.0);
     assert!(rt.instances.iter().any(|i| i.params[1] == KIND_RECT && i.rect[0] < 0.0));
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (64, 48));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (64, 48));
     let out = pixels(&gpu, &renderer, &target);
     assert!(out[(18 * 64) * 4 + 3] > 0, "offscreen paint contributes to the visible halo");
 
@@ -123,7 +125,7 @@ fn runtime_keeps_offscreen_blur_sources_and_presence_transitions() {
             .transition(rune_motion::Transition::blur(4.0))))
     }
     let mut rt = Runtime::new(false, presence, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
-    rt.frame(0.0); rt.state = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+    rt.frame(0.0); *rt.state_mut() = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
     assert!(rt.instances.iter().any(|i| i.params[1] == KIND_LAYER && i.params[2] > 0.0));
     assert!(rt.instances.iter().filter(|i| i.params[1] == KIND_RECT).all(|i| i.params[2] == 0.0));
     for _ in 0..120 { rt.frame(1.0 / 120.0); }
@@ -138,7 +140,7 @@ fn later_live_blur_binding_replaces_the_earlier_source() {
     }
     let mut rt = Runtime::new((Live::new(1.0), Live::new(2.0)), view, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
     rt.frame(0.0);
-    rt.state.0.set(4.0); rt.frame(0.0);
+    rt.state().0.set(4.0); rt.frame(0.0);
     assert_eq!(rt.instances[0].params[2], 2.0);
 }
 
@@ -389,7 +391,8 @@ fn blur_replace_cost_and_appearance() {
                         }
                     }
                 }
-                renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+                let core = &mut *rt;
+                renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
                 if rows == 1 && alpha == 0.5 {
                     let out = pixels(&gpu, &renderer, &target);
                     let start = mode * out.len();

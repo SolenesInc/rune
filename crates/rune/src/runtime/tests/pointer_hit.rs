@@ -27,13 +27,13 @@ fn overlay_hit_regions_follow_live_geometry_and_ancestor_clips_in_the_same_frame
     rt.pointer_down(15.0, 10.0);
     rt.pointer_up(15.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.pressed, 1, "the native hit and Rune release must agree on the moved chip");
-    assert_eq!(rt.state.hovered, 1, "a chip moving under a stationary pointer enters hover once");
+    assert_eq!(rt.state().pressed, 1, "the native hit and Rune release must agree on the moved chip");
+    assert_eq!(rt.state().hovered, 1, "a chip moving under a stationary pointer enters hover once");
     assert!(!rt.has_pending_input(), "stationary hover must not generate an endless frame loop");
     rt.pointer_down(15.0, 10.0);
     rt.pointer_up(55.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.pressed, 1, "release inside the old layout but outside the drawn chip must cancel");
+    assert_eq!(rt.state().pressed, 1, "release inside the old layout but outside the drawn chip must cancel");
     opacity.set(0.0);
     rt.frame(0.0);
     assert!(rt.hit_regions().is_empty(), "transparent nodes and hover-only elements do not block native input");
@@ -52,7 +52,7 @@ fn overlay_pointer_observation_does_not_require_a_native_hit_region() {
     rt.frame(0.0);
     rt.pointer_move(20.0, 40.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, [PointerPress { x: 20.0, y: 40.0 }]);
+    assert_eq!(*rt.state(), [PointerPress { x: 20.0, y: 40.0 }]);
     assert!(rt.hit_regions().is_empty());
 }
 
@@ -65,7 +65,7 @@ fn overlay_idle_pointer_does_not_request_unchanged_frames() {
     rt.frame(0.0);
     assert!(rt.observe_pointer(5.0, 5.0), "enter must run the hover callback");
     rt.frame(0.0);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
     assert!(!rt.observe_pointer(6.0, 5.0), "movement within an unchanged chip needs no frame");
     assert!(!rt.observe_pointer(6.0, 5.0), "duplicate monitor/winit observations need no frame");
     assert!(!rt.observe_pointer(90.0, 90.0));
@@ -93,10 +93,10 @@ fn hit_tests_leave_out_the_right_and_bottom_edges() {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
-        let mut events = std::mem::take(&mut rt.state);
+        let mut events = std::mem::take(&mut *rt.state_mut());
         rt.pointer_leave();
         rt.frame(0.0);
-        rt.state.clear();
+        rt.state_mut().clear();
         events.sort();
         events.dedup();
         events
@@ -123,7 +123,7 @@ fn deleting_a_focused_row_does_not_call_its_stale_edit_accessor() {
     let path = rt.nodes.iter().find(|n| n.key.as_deref() == Some("delete")).unwrap().path.clone();
     rt.queue.push(Action::Press(path, crate::PointerButton::Primary));
     rt.frame(0.0);
-    assert!(rt.state.is_empty());
+    assert!(rt.state().is_empty());
     assert!(!rt.has_focus());
 }
 
@@ -145,8 +145,8 @@ fn secondary_only_children_preserve_primary_click_hover_and_background_blur() {
     rt.pointer_down(10.0, 10.0);
     rt.pointer_up(10.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, (1, 1, false));
-    rt.state.2 = true;
+    assert_eq!(*rt.state(), (1, 1, false));
+    rt.state_mut().2 = true;
     rt.invalidate();
     rt.frame(0.0);
     rt.focus.focus = crate::runtime::focus_machine::Focus::On { path: "previous-input".into(), hovered: false, from: None };
@@ -174,19 +174,19 @@ fn secondary_press_routes_to_ancestor_without_primary_and_cancels_outside() {
     rt.secondary_down(10.0, 10.0);
     rt.secondary_up(12.0, 12.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.0, 0);
-    assert_eq!(rt.state.1, [PointerPress { x: 12.0, y: 12.0 }]);
+    assert_eq!(rt.state().0, 0);
+    assert_eq!(rt.state().1, [PointerPress { x: 12.0, y: 12.0 }]);
     rt.secondary_down(10.0, 10.0);
     rt.secondary_up(90.0, 90.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.1.len(), 1);
+    assert_eq!(rt.state().1.len(), 1);
     rt.secondary_down(10.0, 10.0);
-    rt.state.2 = true;
+    rt.state_mut().2 = true;
     rt.invalidate();
     rt.frame(0.0);
     rt.secondary_up(12.0, 12.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.1.len(), 1);
+    assert_eq!(rt.state().1.len(), 1);
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn presses_land_inside_a_scrolled_view() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, [5]);
+    assert_eq!(rt.state().pressed, [5]);
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn a_double_press_follows_the_first_press_within_the_interval_and_tolerance() {
         rt.pointer_up(x, y);
         rt.frame(1.0 / 120.0);
     };
-    let counts = |rt: &Runtime<State>| (rt.state.presses, rt.state.doubles);
+    let counts = |rt: &Runtime<State>| (rt.state().presses, rt.state().doubles);
     let mut rt = Runtime::new(State::default(), view, (300.0, 100.0), Env::new(true, 1.0));
     rt.frame(0.0);
 
@@ -264,7 +264,7 @@ fn a_double_press_follows_the_first_press_within_the_interval_and_tolerance() {
     click(&mut rt, (50.0, 50.0));
     click(&mut rt, (150.0, 50.0));
     click(&mut rt, (50.0, 50.0));
-    assert_eq!((counts(&rt), rt.state.other), ((10, 2), 1), "a press elsewhere breaks the pair");
+    assert_eq!((counts(&rt), rt.state().other), ((10, 2), 1), "a press elsewhere breaks the pair");
 
     tick(&mut rt, 0.6);
     click(&mut rt, (50.0, 50.0));
@@ -330,7 +330,7 @@ fn an_element_with_only_a_double_press_is_a_press_target() {
         rt.pointer_up(50.0, 50.0);
         rt.frame(1.0 / 120.0);
     }
-    assert_eq!((rt.state.doubles, rt.state.behind), (1, 0));
+    assert_eq!((rt.state().doubles, rt.state().behind), (1, 0));
 }
 
 #[test]
@@ -352,7 +352,7 @@ fn presses_on_a_window_drag_region_move_the_window_but_not_its_buttons() {
         rt.pointer_up(x, y);
     }
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, 1, "the button inside the title bar still presses");
+    assert_eq!(rt.state().pressed, 1, "the button inside the title bar still presses");
 }
 
 #[test]
@@ -392,22 +392,22 @@ fn hover_change_spans_descendants_and_holds_through_a_press() {
     rt.frame(0.0);
     rt.pointer_move(80.0, 20.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.0, [true]);
+    assert_eq!(rt.state().0, [true]);
     rt.pointer_move(20.0, 20.0);
     rt.pointer_down(20.0, 20.0);
     rt.pointer_up(20.0, 20.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, (vec![true], 1, 1), "the child keeps its hover and press; entering it is not a leave");
+    assert_eq!(*rt.state(), (vec![true], 1, 1), "the child keeps its hover and press; entering it is not a leave");
     rt.pointer_down(20.0, 20.0);
     rt.pointer_move(20.0, 120.0);
     rt.pointer_leave();
     rt.frame(0.0);
-    assert_eq!(rt.state.0, [true], "a held press stays inside");
+    assert_eq!(rt.state().0, [true], "a held press stays inside");
     rt.pointer_up(20.0, 120.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.0, [true, false]);
+    assert_eq!(rt.state().0, [true, false]);
     rt.pointer_move(50.0, 20.0);
     rt.pointer_leave();
     rt.frame(0.0);
-    assert_eq!(rt.state.0, [true, false, true, false]);
+    assert_eq!(rt.state().0, [true, false, true, false]);
 }

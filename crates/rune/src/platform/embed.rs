@@ -201,11 +201,12 @@ impl<S: 'static> LayerHost<S> {
             };
             comp.render(&mut f);
         } else {
+            let core = &mut *self.rt;
             self.renderer.prepare(
                 &self.gpu.device,
                 &self.gpu.queue,
-                &mut self.rt.text.atlas,
-                &self.rt.instances,
+                &mut core.text.atlas,
+                &core.instances,
                 size,
             );
             self.renderer.draw(&mut encoder, &target, self.rt.clear_color());

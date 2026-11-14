@@ -46,18 +46,18 @@ fn a_drop_moves_the_row_and_a_cancel_doesnt() {
     rt.pointer_down(x, y);
     rt.pointer_move(x, y + 60.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.reorder.dragging(), rt.state.reorder.target()), (Some(1), Some(3)));
+    assert_eq!((rt.state().reorder.dragging(), rt.state().reorder.target()), (Some(1), Some(3)));
     rt.pointer_up(x, y + 60.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.dropped, [(1, 3)]);
-    assert_eq!(rt.state.reorder.dragging(), None);
+    assert_eq!(rt.state().dropped, [(1, 3)]);
+    assert_eq!(rt.state().reorder.dragging(), None);
 
     rt.pointer_down(x, y);
     rt.pointer_move(x, y + 60.0);
     rt.frame(1.0 / 60.0);
     rt.window_focus(false);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.dropped.len(), rt.state.reorder.dragging()), (1, None), "a cancel moves nothing");
+    assert_eq!((rt.state().dropped.len(), rt.state().reorder.dragging()), (1, None), "a cancel moves nothing");
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn a_row_whose_release_is_lost_lets_go_and_the_next_press_drags_its_own_row() {
     rt.pointer_down(x, y);
     rt.pointer_move(x, y + 60.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.reorder.dragging(), Some(1));
+    assert_eq!(rt.state().reorder.dragging(), Some(1));
     // The dragged row goes mid-drag, so its release never reaches it.
     rt.update(|s, _| s.ids.retain(|&id| id != 1));
     rt.frame(1.0 / 60.0);
@@ -78,7 +78,7 @@ fn a_row_whose_release_is_lost_lets_go_and_the_next_press_drags_its_own_row() {
     rt.pointer_move(x, 10.0);
     rt.pointer_move(x, 20.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.reorder.dragging(), None, "the list let go of the row once the pointer moved on");
+    assert_eq!(rt.state().reorder.dragging(), None, "the list let go of the row once the pointer moved on");
 
     // Row 3, now the list's third, drags down a place.
     for _ in 0..60 {
@@ -90,5 +90,5 @@ fn a_row_whose_release_is_lost_lets_go_and_the_next_press_drags_its_own_row() {
     rt.pointer_move(x, y + 30.0);
     rt.pointer_up(x, y + 30.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.dropped, [(2, 3)]);
+    assert_eq!(rt.state().dropped, [(2, 3)]);
 }

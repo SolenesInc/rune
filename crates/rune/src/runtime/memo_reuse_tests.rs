@@ -304,7 +304,7 @@ fn hover_press_focus_selection_env_blend_and_hot_clear_match_fresh_build() {
     step_both(&mut rt_m, &mut rt_f, 1.0 / 120.0, "press-down", |rt| rt.pointer_down(cx, cy));
     step_both(&mut rt_m, &mut rt_f, 1.0 / 120.0, "press-held-commit", |rt| rt.update(|s, _| s.tick += 1));
     step_both(&mut rt_m, &mut rt_f, 1.0 / 120.0, "press-up", |rt| rt.pointer_up(cx, cy));
-    assert_eq!(rt_m.state.tick, rt_f.state.tick);
+    assert_eq!(rt_m.state().tick, rt_f.state().tick);
 
     // Keyboard Tab focus across focusable memo cards.
     for t in 0..3 {
@@ -494,9 +494,9 @@ fn virtual_rows_inside_memos_layout_reads_live_values_and_duplicate_keys_match_f
 
     // Live values (`Live`, `LiveText`, `Pixels`) update across frames and across unrelated commits.
     step_both(&mut rt_m, &mut rt_f, 1.0 / 60.0, "live-update", |rt| {
-        rt.state.live_opacity.set(0.5);
-        rt.state.live_label.set("00:42");
-        rt.state.pixels.set(4, 4, vec![90u8; 64]);
+        rt.state().live_opacity.set(0.5);
+        rt.state().live_label.set("00:42");
+        rt.state().pixels.set(4, 4, vec![90u8; 64]);
     });
     step_both(&mut rt_m, &mut rt_f, 1.0 / 60.0, "commit-after-live", |rt| {
         rt.ime(Ime::Commit("!".into()));

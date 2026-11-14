@@ -24,7 +24,7 @@ fn popover_close_restores_its_trigger_before_exit_finishes() {
     }
     assert_eq!(rt.elements().into_iter().find(|e| e.focused).unwrap().key.as_deref(), Some("close"));
     rt.key(KeyEvent { key: Key::Text(" ".into()), mods: Default::default() }); rt.frame(0.0);
-    assert!(!rt.state.open);
+    assert!(!rt.state().open);
     assert_eq!(rt.elements().into_iter().find(|e| e.focused).unwrap().key.as_deref(), Some("open"));
     for _ in 0..60 { rt.frame(1.0 / 60.0); }
     assert_eq!(rt.elements().into_iter().find(|e| e.focused).unwrap().key.as_deref(), Some("open"));

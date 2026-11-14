@@ -24,7 +24,7 @@ fn select_portal_inside_dialog_accepts_an_option_outside_the_panel() {
     rt.frame(0.0);
     let (x, y) = rt.find("choice-trigger").unwrap();
     rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-    assert!(rt.state.select && rt.state.dialog);
+    assert!(rt.state().select && rt.state().dialog);
     for _ in 0..60 { rt.frame(1.0 / 60.0); }
     let elements = rt.elements();
     let panel = elements.iter().find(|e| e.key.as_deref() == Some("dialog-dialog")).unwrap();
@@ -35,8 +35,8 @@ fn select_portal_inside_dialog_accepts_an_option_outside_the_panel() {
         || y < panel.rect[1] || y > panel.rect[1] + panel.rect[3],
         "option ({x}, {y}) must be outside panel {:?}", panel.rect);
     rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-    assert_eq!(rt.state.value, "Second");
-    assert!(rt.state.dialog && !rt.state.select);
+    assert_eq!(rt.state().value, "Second");
+    assert!(rt.state().dialog && !rt.state().select);
 }
 
 #[test]

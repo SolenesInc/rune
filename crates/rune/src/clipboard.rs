@@ -120,7 +120,7 @@ enum Request {
     Read { purpose: Purpose, reply: mpsc::Sender<Reply>, wake: Waker },
 }
 impl Purpose {
-    fn paste<S: 'static>(rt: &Runtime<S>, target: Option<String>) -> Self {
+    fn paste(rt: &crate::runtime::RuntimeCore, target: Option<String>) -> Self {
         let forms = rt.paste_forms(target.as_deref());
         Purpose::Paste(target, forms)
     }
@@ -160,7 +160,7 @@ impl Default for Client {
 }
 impl Client {
     pub fn connect(&mut self, wake: Waker) { self.wake = wake; }
-    pub fn read<S: 'static>(&self, rt: &Runtime<S>) {
+    pub fn read(&self, rt: &crate::runtime::RuntimeCore) {
         let purpose = Purpose::paste(rt, rt.paste_target());
         if let Some(m) = &rt.clipboard {
             if let Some(reply) = m.answer(purpose) && self.sender.send(reply).is_ok() { (self.wake)(); }
@@ -168,14 +168,14 @@ impl Client {
         }
         self.read_for(purpose);
     }
-    pub fn receive<S: 'static>(&self, rt: &mut Runtime<S>) -> bool {
+    pub fn receive(&self, rt: &mut crate::runtime::RuntimeCore) -> bool {
         let mut received = self.changed.swap(false, Ordering::SeqCst);
         for reply in self.replies.try_iter() { deliver(rt, reply); received = true; }
         received
     }
 }
 
-fn deliver<S: 'static>(rt: &mut Runtime<S>, reply: Reply) {
+fn deliver(rt: &mut crate::runtime::RuntimeCore, reply: Reply) {
     match reply.purpose {
         Purpose::Paste(target, _) => rt.paste_result(target, reply.content),
         Purpose::Read(id) => rt.read_result(id, reply.content),
@@ -184,7 +184,7 @@ fn deliver<S: 'static>(rt: &mut Runtime<S>, reply: Reply) {
 
 /// Applies a runtime's clipboard requests to its memory clipboard, if it has one. Runs after
 /// every frame, so headless runtimes write too.
-pub(crate) fn flush_memory<S: 'static>(rt: &mut Runtime<S>) {
+pub(crate) fn flush_memory(rt: &mut crate::runtime::RuntimeCore) {
     let Some(m) = rt.clipboard.clone() else { return };
     if std::mem::take(&mut rt.clear_secret_request) { m.handle(Request::Clear(None)); }
     if let Some(copy) = rt.copy_request.take() {
@@ -198,7 +198,7 @@ pub(crate) fn flush_memory<S: 'static>(rt: &mut Runtime<S>) {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl crate::runtime::RuntimeCore {
     /// Use a shared in-memory clipboard (`clipboard::memory()`) instead of the OS one: copies,
     /// secret clears and pastes go to it, in headless runs too. For tests.
     pub fn use_clipboard(&mut self, clipboard: &MemoryClipboard) { self.clipboard = Some(clipboard.clone()); }
@@ -606,20 +606,20 @@ mod tests {
             rt
         });
         a.update(|s, tx| *s = Some(tx.copy_secret("from a", LONG))); a.frame(0.0);
-        assert!(a.state.as_ref().unwrap().holds());
+        assert!(a.state().as_ref().unwrap().holds());
         b.update(|s, tx| *s = Some(tx.copy_secret("from b", LONG))); b.frame(0.0);
         assert_eq!(text(&m).as_deref(), Some("from b"));
-        assert_eq!(a.state.as_ref().unwrap().state(), SecretState::Replaced);
+        assert_eq!(a.state().as_ref().unwrap().state(), SecretState::Replaced);
         a.update(|_, tx| tx.clear_secret_clipboard()); a.frame(0.0);
         assert_eq!(text(&m), None, "either window clears the latest secret");
-        assert_eq!(b.state.as_ref().unwrap().state(), SecretState::Cleared);
+        assert_eq!(b.state().as_ref().unwrap().state(), SecretState::Cleared);
 
         a.update(|s, tx| *s = Some(tx.copy_secret("no frame", LONG)));
         assert_eq!(text(&m).as_deref(), Some("no frame"), "update writes without waiting for a frame");
 
         let mut headless = Runtime::new(None, view, (100.0, 100.0), Env::new(true, 1.0));
         headless.update(|s, tx| *s = Some(tx.copy_secret("nowhere", LONG))); headless.frame(0.0);
-        assert_eq!(headless.state.as_ref().unwrap().state(), SecretState::Pending, "no clipboard, no write");
+        assert_eq!(headless.state().as_ref().unwrap().state(), SecretState::Pending, "no clipboard, no write");
     }
 
     #[test]
@@ -679,7 +679,7 @@ mod tests {
         rt.update(on_close);
         assert_eq!((held.state(), text(&m)), (SecretState::Cleared, None));
 
-        rt.poll = Some(|_, _, tx| { tx.clear_secret_clipboard(); false });
+        rt.app_mut().poll = Some(|_, _, tx| { tx.clear_secret_clipboard(); false });
         let held = copy(&m, "secret", LONG);
         rt.poll_hidden();
         assert_eq!((held.state(), text(&m)), (SecretState::Cleared, None));
@@ -694,7 +694,7 @@ mod tests {
         rt.update(|s, tx| *s = Some(tx.copy_secret("stale", LONG)));
         rt.update(|_, tx| tx.clear_secret_clipboard());
         assert!(rt.copy_request.is_none() && rt.clear_secret_request);
-        assert_eq!(rt.state.as_ref().unwrap().state(), SecretState::Replaced);
+        assert_eq!(rt.state().as_ref().unwrap().state(), SecretState::Replaced);
 
         // The same in one handler, and with a memory clipboard on the next flush.
         let m = memory();
@@ -702,7 +702,7 @@ mod tests {
         rt.update(|s, tx| { *s = Some(tx.copy_secret("stale", LONG)); tx.clear_secret_clipboard(); });
         rt.frame(0.0);
         assert_eq!(text(&m), None);
-        assert_eq!(rt.state.as_ref().unwrap().state(), SecretState::Replaced);
+        assert_eq!(rt.state().as_ref().unwrap().state(), SecretState::Replaced);
     }
 
     #[test]

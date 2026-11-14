@@ -171,7 +171,7 @@ fn a_sample_beating_the_next_press_cancels_the_old_drag_where_the_button_rose() 
     let (x, y) = lost.expect("the old press lost its release");
     rt.pointer_release_lost(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.last(), Some(&(crate::Phase::Up, true, 50.0)));
+    assert_eq!(rt.state().last(), Some(&(crate::Phase::Up, true, 50.0)));
 }
 
 #[test]
@@ -195,5 +195,5 @@ fn a_press_lost_before_any_sample_cancels_at_its_own_down_and_keeps_the_run() {
     let (x, y) = down.unwrap();
     rt.pointer_down(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state, [(crate::Phase::Down, false, 50.0, 1), (crate::Phase::Up, true, 50.0, 1), (crate::Phase::Down, false, 51.0, 2)]);
+    assert_eq!(*rt.state(), [(crate::Phase::Down, false, 50.0, 1), (crate::Phase::Up, true, 50.0, 1), (crate::Phase::Down, false, 51.0, 2)]);
 }

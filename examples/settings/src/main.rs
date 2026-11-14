@@ -50,13 +50,13 @@ fn cancelling_the_speed_slider_restores_its_value_before_a_track_press() {
     rt.pointer_down(x + 60.0, y);
     rt.pointer_move(x + 70.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.speed > 0.5);
+    assert!(rt.state().speed > 0.5);
     rt.key(rune::KeyEvent { key: rune::Key::Escape, mods: rune::Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.speed, 0.5);
+    assert_eq!(rt.state().speed, 0.5);
     rt.pointer_up(x + 70.0, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.speed, 0.5);
+    assert_eq!(rt.state().speed, 0.5);
 }
 
 /// Everything a component needs to paint itself.

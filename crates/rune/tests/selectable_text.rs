@@ -123,7 +123,7 @@ fn drag_double_and_triple_click_select_without_moving_layout() {
     let other = centre(&find(&rt, "other"));
     click(&mut rt, other);
     assert_eq!(rt.text_selection(), None);
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     assert!(boxes(&rt, highlight()).is_empty());
 }
 
@@ -173,7 +173,7 @@ fn links_open_and_plain_words_select() {
     tick(&mut rt);
     assert_eq!(rt.cursor(), Cursor::Pointer, "a hand over the link");
     click(&mut rt, centre(&docs));
-    assert_eq!(rt.state.opened, ["docs"]);
+    assert_eq!(rt.state().opened, ["docs"]);
     assert_eq!(rt.selected_text(), None, "clicking a link selects nothing");
     wait(&mut rt);
 
@@ -181,7 +181,7 @@ fn links_open_and_plain_words_select() {
     click(&mut rt, g[0]);
     click(&mut rt, g[0]);
     assert_eq!(rt.selected_text().as_deref(), Some("read"));
-    assert_eq!(rt.state.opened, ["docs"]);
+    assert_eq!(rt.state().opened, ["docs"]);
 }
 
 #[test]
@@ -205,9 +205,9 @@ fn bidi_text_selects_by_logical_words() {
 #[test]
 fn the_highlight_matches_a_text_fields() {
     let mut rt = runtime();
-    rt.state.field.focused = true;
-    rt.state.field.anchor = 0;
-    rt.state.field.focus = 5;
+    rt.state_mut().field.focused = true;
+    rt.state_mut().field.anchor = 0;
+    rt.state_mut().field.focus = 5;
     rt.invalidate();
     tick(&mut rt);
     let field = boxes(&rt, highlight());

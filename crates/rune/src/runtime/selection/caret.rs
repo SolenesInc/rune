@@ -3,7 +3,7 @@
 //! is re-measured in the same commit when an edit moves it.
 use super::*;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Any vertical shift from ancestor growth rows whose presented height has not settled to layout.
     pub(super) fn stack_row_dy(&self, nodes: &[Node], i: usize) -> f32 {
         let mut dy = 0.0;
@@ -215,20 +215,20 @@ mod tests {
         blocks[190].focused = true;
         let mut rt = Runtime::new(blocks, blocks_view, (640.0, 500.0), Env::new(true, 2.0));
         rt.frame(0.0);
-        assert!(rt.state[180].focused, "the first offscreen path wins simultaneous requests");
-        assert!(!rt.state[190].focused);
+        assert!(rt.state()[180].focused, "the first offscreen path wins simultaneous requests");
+        assert!(!rt.state()[190].focused);
         rt.update(|s, _| s[180].focused = false);
         rt.frame(0.0);
         assert!(rt.focus.path().is_none(), "explicitly blurred offscreen input stays blurred");
         rt.update(|s, _| s[190].focused = true);
         rt.frame(0.0);
-        assert!(rt.state[190].focused);
+        assert!(rt.state()[190].focused);
         rt.update(|s, _| { s.truncate(100); });
         rt.frame(0.0);
         assert!(rt.focus.path().is_none(), "deleted offscreen input loses focus");
         rt.update(|s, tx| { s.extend(make_blocks(140, None)); tx.scroll_into_view("b190"); });
         rt.frame(0.0);
-        assert!(!rt.state[190].focused, "reusing a deleted path must not restore focus");
+        assert!(!rt.state()[190].focused, "reusing a deleted path must not restore focus");
     }
 
     #[test]
@@ -236,21 +236,21 @@ mod tests {
         // Focus an initially offscreen far block before the first frame, then reveal and type.
         let mut rt = Runtime::new(make_blocks(240, Some(150)), blocks_view, (640.0, 500.0), Env::new(true, 2.0));
         rt.frame(0.0);
-        assert!(rt.state[150].focused, "offscreen focused field keeps focus across initial commit");
+        assert!(rt.state()[150].focused, "offscreen focused field keeps focus across initial commit");
         rt.update(|_, tx| tx.scroll_into_view("b150"));
         rt.frame(1.0 / 120.0);
         assert_caret_aligned(&rt, "b150", "revealed b150");
 
-        let before = rt.state[150].text.clone();
+        let before = rt.state()[150].text.clone();
         for (step, ch) in ["!", "?", "#"].into_iter().enumerate() {
             rt.ime(Ime::Commit(ch.into()));
             rt.frame(1.0 / 120.0);
             assert_caret_aligned(&rt, "b150", &format!("b150 type {step}"));
         }
-        assert_eq!(rt.state[150].text, format!("{before}!?#"));
+        assert_eq!(rt.state()[150].text, format!("{before}!?#"));
 
         // Focus the last block (239) via update + scroll_into_view and type in the same frame and next frames.
-        let end_before = rt.state[239].text.clone();
+        let end_before = rt.state()[239].text.clone();
         rt.update(|s, tx| {
             s[150].focused = false;
             s[239].focused = true;
@@ -261,7 +261,7 @@ mod tests {
             rt.frame(1.0 / 120.0);
             assert_caret_aligned(&rt, "b239", &format!("b239 type {step}"));
         }
-        assert_eq!(rt.state[239].text, format!("{end_before}abc"));
+        assert_eq!(rt.state()[239].text, format!("{end_before}abc"));
     }
 
     #[test]
@@ -272,17 +272,17 @@ mod tests {
         rt.frame(1.0 / 120.0);
         assert_caret_aligned(&rt, "b180", "initial reveal b180");
 
-        let base = rt.state[180].text.clone();
+        let base = rt.state()[180].text.clone();
         rt.ime(Ime::Commit(" alpha".into()));
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state[180].text, format!("{base} alpha"));
+        assert_eq!(rt.state()[180].text, format!("{base} alpha"));
         assert_caret_aligned(&rt, "b180", "after alpha");
 
         // Scroll all the way up to the top so b180 leaves the mounted window, measuring rows above.
         for step in 0..45 {
             rt.wheel(320.0, 250.0, 600.0);
             rt.frame(1.0 / 120.0);
-            assert!(rt.state[180].focused, "step {step}: b180 stays focused while scrolling away");
+            assert!(rt.state()[180].focused, "step {step}: b180 stays focused while scrolling away");
             if let Some(el) = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("b180")) {
                 let caret = el.caret.expect("mounted b180 has caret");
                 assert!(
@@ -298,7 +298,7 @@ mod tests {
         for step in 0..45 {
             rt.wheel(320.0, 250.0, -600.0);
             rt.frame(1.0 / 120.0);
-            assert!(rt.state[180].focused, "step {step} down: b180 stays focused while scrolling back");
+            assert!(rt.state()[180].focused, "step {step} down: b180 stays focused while scrolling back");
             if let Some(el) = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("b180")) {
                 let caret = el.caret.expect("remounted b180 has caret");
                 assert!(
@@ -324,7 +324,7 @@ mod tests {
 
         rt.ime(Ime::Commit(" beta".into()));
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state[180].text, format!("{base} alpha beta"));
+        assert_eq!(rt.state()[180].text, format!("{base} alpha beta"));
         assert_caret_aligned(&rt, "b180", "after beta");
     }
 

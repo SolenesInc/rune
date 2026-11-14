@@ -108,12 +108,12 @@ fn a_trigger_runs_by_its_key_and_r_replays() {
 #[test]
 fn a_scene_trigger_acts_on_the_stage_and_never_the_real_state() {
     let mut rt = runtime(playground());
-    rt.state.count = 4;
+    rt.state_mut().count = 4;
     rt.open_playground("Pad/Full", None);
     rt.playground_trigger('d');
     assert_eq!(rt.playground_state::<Pad>().map(|s| s.count), Some(6), "on its first variant, Few");
     assert_eq!(rt.playground_element("count").and_then(|e| e.text).as_deref(), Some("count 6"));
-    assert_eq!(rt.state.count, 4, "the real state is untouched");
+    assert_eq!(rt.state().count, 4, "the real state is untouched");
 }
 
 #[test]
@@ -130,10 +130,10 @@ fn a_variant_opens_with_its_own_setup() {
 #[test]
 fn a_story_from_real_reads_the_real_state_and_leaves_it() {
     let mut rt = runtime(playground());
-    rt.state.count = 7;
+    rt.state_mut().count = 7;
     rt.open_playground("Progress/Mine", None);
     assert_eq!(rt.playground_state::<Upload>().map(|u| u.bytes), Some(7));
-    assert_eq!(rt.state.count, 7);
+    assert_eq!(rt.state().count, 7);
 }
 
 fn compare(stage: &Pad, real: &Pad, _: &mut Cx<Pad>) -> El {
@@ -149,13 +149,13 @@ fn only_keep_from_a_side_real_control_writes_the_real_state() {
     rt.open_playground("Full", None);
     rt.playground_trigger('d');
     rt.frame(DT);
-    assert_eq!(rt.state.count, 0, "the trigger changed the stage only");
+    assert_eq!(rt.state().count, 0, "the trigger changed the stage only");
     assert!(rt.playground_element("compare").is_none(), "the side column isn't the stage");
     let (x, y) = rt.find("keep").expect("the side column's control");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(DT);
-    assert_eq!(rt.state.count, 6, "kept");
+    assert_eq!(rt.state().count, 6, "kept");
     let compare = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("compare")).and_then(|e| e.text);
     assert_eq!(compare.as_deref(), Some("stage 6 real 6"));
 }

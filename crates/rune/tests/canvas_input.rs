@@ -72,22 +72,22 @@ fn a_wheel_handler_hears_deltas_before_the_scroll_view_around_it() {
     let cmd = Mods { cmd: true, ..Mods::default() };
     rt.wheel_event(WheelEvent::new(-10.0, -20.0).at(80.0, 90.0).mods(cmd).precise(true));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.pan, (-10.0, -20.0));
-    let e = rt.state.wheels[0];
+    assert_eq!(rt.state().pan, (-10.0, -20.0));
+    let e = rt.state().wheels[0];
     assert_eq!((e.x, e.y, e.mods, e.precise), (30.0, 40.0, cmd, true), "the pointer in the canvas's own points");
     assert_eq!(y_of(&rt, "canvas"), 50.0, "the page didn't scroll");
 
     // The gesture stays the canvas's when the pointer leaves it, as a scroll keeps its axis.
     rt.wheel_xy(150.0, 280.0, 0.0, -30.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.pan.1, y_of(&rt, "canvas")), (-50.0, 50.0));
+    assert_eq!((rt.state().pan.1, y_of(&rt, "canvas")), (-50.0, 50.0));
 
     // Off the canvas a new gesture scrolls the page, which the canvas never hears.
     new_gesture(&mut rt);
-    let heard = rt.state.wheels.len();
+    let heard = rt.state().wheels.len();
     rt.wheel_xy(150.0, 280.0, 0.0, -30.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.wheels.len(), y_of(&rt, "canvas")), (heard, 20.0));
+    assert_eq!((rt.state().wheels.len(), y_of(&rt, "canvas")), (heard, 20.0));
 }
 
 #[test]
@@ -96,16 +96,16 @@ fn a_declined_delta_scrolls_and_the_gesture_stays_a_scroll() {
     rt.wheel_xy(150.0, 150.0, 0.0, -30.0);
     rt.frame(1.0 / 60.0);
     assert_eq!(y_of(&rt, "canvas"), 20.0, "the canvas declined it, so the page scrolled");
-    assert_eq!(rt.state.wheels.len(), 1);
+    assert_eq!(rt.state().wheels.len(), 1);
     // The page has the gesture now: the canvas, taking deltas again, doesn't hear the rest.
-    rt.state.takes = true;
+    rt.state_mut().takes = true;
     rt.wheel_xy(150.0, 150.0, 0.0, -10.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.wheels.len(), y_of(&rt, "canvas")), (1, 10.0));
+    assert_eq!((rt.state().wheels.len(), y_of(&rt, "canvas")), (1, 10.0));
     // Without phases, a delta wholly on the other axis (Shift + wheel) starts a new gesture.
     rt.wheel_xy(150.0, 150.0, -15.0, 0.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.wheels.len(), rt.state.pan.0), (2, -15.0));
+    assert_eq!((rt.state().wheels.len(), rt.state().pan.0), (2, -15.0));
 }
 
 #[test]
@@ -116,9 +116,9 @@ fn momentum_follows_the_handler_that_took_the_gesture() {
     // Momentum begins at once, after the pointer moved off the canvas.
     rt.wheel_event(WheelEvent::new(0.0, -5.0).at(150.0, 280.0).phase(GesturePhase::Began));
     rt.frame(1.0 / 60.0);
-    let phases: Vec<_> = rt.state.wheels.iter().map(|e| (e.phase, e.momentum, e.dy)).collect();
+    let phases: Vec<_> = rt.state().wheels.iter().map(|e| (e.phase, e.momentum, e.dy)).collect();
     assert_eq!(phases, [(GesturePhase::Began, false, -10.0), (GesturePhase::Ended, false, 0.0), (GesturePhase::Began, true, -5.0)]);
-    assert_eq!((rt.state.pan.1, y_of(&rt, "canvas")), (-15.0, 50.0));
+    assert_eq!((rt.state().pan.1, y_of(&rt, "canvas")), (-15.0, 50.0));
 }
 
 #[test]
@@ -130,9 +130,9 @@ fn pinch_rotation_and_smart_magnify_arrive_in_the_handlers_points() {
     // Off the canvas nothing hears them.
     rt.magnify_event(MagnifyEvent::new(0.5).at(20.0, 20.0));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.zoom, [(0.25, 20.0, 30.0)]);
-    assert_eq!(rt.state.turns, [15.0]);
-    assert_eq!(rt.state.smart, [(50.0, 10.0)]);
+    assert_eq!(rt.state().zoom, [(0.25, 20.0, 30.0)]);
+    assert_eq!(rt.state().turns, [15.0]);
+    assert_eq!(rt.state().smart, [(50.0, 10.0)]);
 }
 
 #[test]
@@ -144,24 +144,24 @@ fn the_middle_button_drags_only_elements_that_take_it() {
     rt.pointer_move(90.0, 100.0);
     rt.button_up(90.0, 100.0, PointerButton::Middle);
     rt.frame(1.0 / 60.0);
-    let drags = &rt.state.drags;
+    let drags = &rt.state().drags;
     assert_eq!(drags.first(), Some(&(Phase::Down, PointerButton::Middle, 0.0, 0.0)));
     assert!(drags.contains(&(Phase::Move, PointerButton::Middle, 20.0, 30.0)));
     assert_eq!(drags.last(), Some(&(Phase::Up, PointerButton::Middle, 20.0, 30.0)));
     assert!(drags.iter().all(|d| d.1 == PointerButton::Middle));
-    assert_eq!(rt.state.presses, [PointerButton::Middle], "released over it, as a primary drag would be");
+    assert_eq!(rt.state().presses, [PointerButton::Middle], "released over it, as a primary drag would be");
 
     // A middle click outside it presses nothing.
     rt.button_down(20.0, 20.0, PointerButton::Middle);
     rt.button_up(20.0, 20.0, PointerButton::Middle);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.presses.len(), 1);
+    assert_eq!(rt.state().presses.len(), 1);
 
     // The primary button presses it as before, as the primary.
     rt.pointer_down(150.0, 150.0);
     rt.pointer_up(150.0, 150.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.presses, [PointerButton::Middle, PointerButton::Primary]);
+    assert_eq!(rt.state().presses, [PointerButton::Middle, PointerButton::Primary]);
 
     // An element that didn't opt in never hears the middle, back or forward buttons.
     let (x, y) = rt.find("plain").unwrap();
@@ -173,7 +173,7 @@ fn the_middle_button_drags_only_elements_that_take_it() {
         rt.button_up(x, y, button);
     }
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.plain_drags, rt.state.plain_presses), (0, 0));
+    assert_eq!((rt.state().plain_drags, rt.state().plain_presses), (0, 0));
 
     // Back and forward buttons press elements that opted in.
     for button in [PointerButton::Back, PointerButton::Forward] {
@@ -181,53 +181,53 @@ fn the_middle_button_drags_only_elements_that_take_it() {
         rt.button_up(150.0, 150.0, button);
     }
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.presses, [PointerButton::Middle, PointerButton::Primary, PointerButton::Back, PointerButton::Forward]);
+    assert_eq!(rt.state().presses, [PointerButton::Middle, PointerButton::Primary, PointerButton::Back, PointerButton::Forward]);
 }
 
 #[test]
 fn a_key_release_goes_to_the_focused_element_then_up_to_the_root() {
     let mut rt = app(S::default());
     let space = KeyEvent { key: Key::Text(" ".into()), mods: Mods::default() };
-    rt.state.space = true;
+    rt.state_mut().space = true;
     assert!(rt.key_up(space.clone()));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.ups, [("shape", Key::Text(" ".into()), Mods::default()), ("root", Key::Text(" ".into()), Mods::default())], "with nothing focused, every handler hears it, the deepest first");
-    assert!(!rt.state.space);
+    assert_eq!(rt.state().ups, [("shape", Key::Text(" ".into()), Mods::default()), ("root", Key::Text(" ".into()), Mods::default())], "with nothing focused, every handler hears it, the deepest first");
+    assert!(!rt.state().space);
 
     let (x, y) = rt.find("shape").unwrap();
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    rt.state.ups.clear();
+    rt.state_mut().ups.clear();
     let shift = Mods { shift: true, ..Mods::default() };
     rt.key_up(KeyEvent { key: Key::Escape, mods: shift });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.ups, [("shape", Key::Escape, shift), ("root", Key::Escape, shift)], "the focused element first, then its ancestors");
+    assert_eq!(rt.state().ups, [("shape", Key::Escape, shift), ("root", Key::Escape, shift)], "the focused element first, then its ancestors");
 
     // A key pressed while `shape` had focus still delivers its release to `shape` after a
     // canvas click blurs `shape`.
-    rt.state.ups.clear();
+    rt.state_mut().ups.clear();
     rt.key(space.clone());
     rt.pointer_down(150.0, 150.0);
     rt.pointer_up(150.0, 150.0);
     rt.key_up(space.clone());
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.ups, [("shape", Key::Text(" ".into()), Mods::default()), ("root", Key::Text(" ".into()), Mods::default())]);
+    assert_eq!(rt.state().ups, [("shape", Key::Text(" ".into()), Mods::default()), ("root", Key::Text(" ".into()), Mods::default())]);
 
     // IME composition (and the Enter or Escape release that ends it) never leaks to `on_key_up`.
     let (fx, fy) = rt.find("field").unwrap();
     rt.pointer_down(fx, fy);
     rt.pointer_up(fx, fy);
     rt.frame(1.0 / 60.0);
-    rt.state.ups.clear();
+    rt.state_mut().ups.clear();
     rt.ime(Ime::Preedit("ni".into(), Some((2, 2))));
     rt.key_up(KeyEvent { key: Key::Text("i".into()), mods: Mods::default() });
     rt.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
     rt.ime(Ime::Commit("你".into()));
     rt.key_up(KeyEvent { key: Key::Enter, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.ups.is_empty(), "IME key releases must not leak: {:?}", rt.state.ups);
-    assert_eq!(rt.state.edit.text, "你");
+    assert!(rt.state().ups.is_empty(), "IME key releases must not leak: {:?}", rt.state().ups);
+    assert_eq!(rt.state().edit.text, "你");
 }
 
 #[test]

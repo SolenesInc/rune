@@ -44,7 +44,8 @@ impl Compositor<()> for Dusk {
         let placements: Vec<_> = slots.iter().map(|(_, i, _)| FxSlot::default().scale(i.params[3]).clip(i.clip, i.fade)).collect();
         fx.prepare_with_slots(device, queue, &FxFrame { viewport: [size.0, size.1], scale: 1.0, layers: &layers, backdrop: None, sources: &[] }, &placements);
         let clear = f.rt.clear_color();
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         let formats = &self.formats;
         f.ui.draw_with_backdrop(f.encoder, f.target, clear, &mut |phase, s: &EffectSite<'_>| match phase {
             EffectPhase::Backdrop(enc) => {

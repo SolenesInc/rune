@@ -152,7 +152,7 @@ pub(super) fn quiet_step<T: 'static>(rt: &mut Runtime<T>, clock: &mut FrameClock
 /// marked the overlay dirty since, and no input, live value, timer, playground or poll (which
 /// runs on every frame drawn) waits. An overlay without a compositor draws nothing then.
 pub(super) fn rests<T: 'static>(rt: &Runtime<T>, runtime_idle: bool, dirty: bool) -> bool {
-    runtime_idle && !dirty && rt.poll.is_none() && rt.playground.is_none() && rt.wake_deadline().is_none() && rt.rests()
+    runtime_idle && !dirty && rt.app().poll.is_none() && rt.app().playground.is_none() && rt.wake_deadline().is_none() && rt.rests()
 }
 
 /// `step` for a runtime that `rests`: its clocks (`clock`, `t`) move to the frame as a step
@@ -162,7 +162,7 @@ pub(super) fn rest<T: 'static>(rt: &mut Runtime<T>, clock: &mut FrameClock, comp
     rt.frame_target = Some(frame_time);
     rt.clock = rt.wall_start.map_or(rt.clock + elapsed, |t0| t0.elapsed().as_secs_f64());
     rt.t += elapsed * rt.time_scale as f64;
-    rt.scene.set_time(rt.t);
+    { let core: &mut crate::runtime::RuntimeCore = &mut **rt; core.scene.set_time(core.t); }
     (false, elapsed)
 }
 
@@ -185,7 +185,7 @@ pub(super) fn render_frame<T: 'static>(f: &mut Frame<'_, T>, compositor: &mut Op
         c.render(f);
         c.animating()
     } else {
-        f.ui.prepare(f.device, f.queue, &mut f.rt.text.atlas, &f.rt.instances, f.size);
+        { let core: &mut crate::runtime::RuntimeCore = &mut f.rt; f.ui.prepare(f.device, f.queue, &mut core.text.atlas, &core.instances, f.size); }
         f.ui.draw(f.encoder, f.target, [0.0; 4]);
         false
     }

@@ -53,7 +53,7 @@ fn editing() -> Runtime<T> {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     settle(&mut rt);
-    assert!(rt.state.knobs.filtering, "a click starts filtering");
+    assert!(rt.state().knobs.filtering, "a click starts filtering");
     rt
 }
 
@@ -66,26 +66,26 @@ fn idle() -> Runtime<T> {
 }
 
 fn caret(rt: &Runtime<T>) -> (usize, usize) {
-    rt.state.knobs.edit().range()
+    rt.state().knobs.edit().range()
 }
 
 #[test]
 fn typing_filters_and_the_caret_moves_without_stepping_a_knob() {
     let mut rt = editing();
-    assert!(rt.find("knobs-filter-input").is_some() && rt.state.knobs.edit().focused);
+    assert!(rt.find("knobs-filter-input").is_some() && rt.state().knobs.edit().focused);
     type_str(&mut rt, "rigt");
-    assert_eq!(rt.state.knobs.query, "rigt");
+    assert_eq!(rt.state().knobs.query, "rigt");
     tap(&mut rt, Key::Left);
     assert_eq!(caret(&rt), (3, 3), "← moves the caret");
     type_str(&mut rt, "h");
-    assert_eq!(rt.state.knobs.query, "right");
-    assert_eq!(rt.state.knobs.at(), Some(Node::Knob(1, 0)), "the keyboard is on the first match");
-    let before = rt.state.knobs.clone();
+    assert_eq!(rt.state().knobs.query, "right");
+    assert_eq!(rt.state().knobs.at(), Some(Node::Knob(1, 0)), "the keyboard is on the first match");
+    let before = rt.state().knobs.clone();
     tap(&mut rt, Key::Right);
     tap(&mut rt, Key::Left);
     tap(&mut rt, Key::Left);
-    assert_eq!(rt.state.knobs.values, before.values, "← → step no knob");
-    assert_eq!((rt.state.knobs.folded.clone(), rt.state.knobs.unfolded.clone()), (before.folded, before.unfolded), "and fold nothing");
+    assert_eq!(rt.state().knobs.values, before.values, "← → step no knob");
+    assert_eq!((rt.state().knobs.folded.clone(), rt.state().knobs.unfolded.clone()), (before.folded, before.unfolded), "and fold nothing");
     press(&mut rt, Key::Left, Mods { shift: true, ..Mods::default() });
     assert_eq!(caret(&rt), (2, 3), "⇧← extends the selection");
 }
@@ -98,7 +98,7 @@ fn select_all_then_typing_replaces_the_query() {
     press(&mut rt, k, m);
     assert_eq!(caret(&rt), (0, 5));
     type_str(&mut rt, "left");
-    assert_eq!(rt.state.knobs.query, "left");
+    assert_eq!(rt.state().knobs.query, "left");
 }
 
 #[test]
@@ -106,32 +106,32 @@ fn word_and_line_deletes_and_paste_work() {
     let mut rt = editing();
     type_str(&mut rt, "right pad");
     press(&mut rt, Key::Backspace, Mods { alt: true, ..Mods::default() });
-    assert_eq!(rt.state.knobs.query, "right ");
+    assert_eq!(rt.state().knobs.query, "right ");
     press(&mut rt, Key::Left, Mods { alt: true, ..Mods::default() });
     assert_eq!(caret(&rt), (0, 0), "⌥← jumps a word");
     press(&mut rt, Key::Right, Mods { cmd: true, ..Mods::default() });
     assert_eq!(caret(&rt), (6, 6), "⌘→ goes to the end");
     press(&mut rt, Key::Backspace, Mods { cmd: true, ..Mods::default() });
-    assert_eq!(rt.state.knobs.query, "");
+    assert_eq!(rt.state().knobs.query, "");
     rt.paste("gap");
     settle(&mut rt);
-    assert_eq!(rt.state.knobs.query, "gap");
+    assert_eq!(rt.state().knobs.query, "gap");
     type_str(&mut rt, "/");
-    assert_eq!(rt.state.knobs.query, "gap/", "a / is text while editing");
-    assert!(rt.state.knobs.filtering);
+    assert_eq!(rt.state().knobs.query, "gap/", "a / is text while editing");
+    assert!(rt.state().knobs.filtering);
 }
 
 #[test]
 fn down_while_typing_moves_the_row() {
     let mut rt = editing();
     type_str(&mut rt, "right");
-    assert_eq!(rt.state.knobs.at(), Some(Node::Knob(1, 0)));
+    assert_eq!(rt.state().knobs.at(), Some(Node::Knob(1, 0)));
     tap(&mut rt, Key::Down);
-    assert_eq!(rt.state.knobs.at(), Some(Node::Knob(1, 1)));
-    assert!(rt.state.knobs.filtering && rt.state.knobs.edit().focused, "the field keeps focus");
+    assert_eq!(rt.state().knobs.at(), Some(Node::Knob(1, 1)));
+    assert!(rt.state().knobs.filtering && rt.state().knobs.edit().focused, "the field keeps focus");
     tap(&mut rt, Key::Up);
-    assert_eq!(rt.state.knobs.at(), Some(Node::Knob(1, 0)));
-    assert_eq!(rt.state.knobs.query, "right");
+    assert_eq!(rt.state().knobs.at(), Some(Node::Knob(1, 0)));
+    assert_eq!(rt.state().knobs.query, "right");
 }
 
 #[test]
@@ -139,34 +139,34 @@ fn escape_and_return_stop_filtering_then_clear_then_close() {
     let mut rt = editing();
     type_str(&mut rt, "right");
     tap(&mut rt, Key::Enter);
-    assert!(!rt.state.knobs.filtering && rt.state.knobs.query == "right", "Return stops and keeps the matches");
+    assert!(!rt.state().knobs.filtering && rt.state().knobs.query == "right", "Return stops and keeps the matches");
     assert!(rt.find("knobs-filter-input").is_none());
     tap(&mut rt, Key::Text("/".into()));
-    assert!(rt.state.knobs.filtering, "/ starts again");
+    assert!(rt.state().knobs.filtering, "/ starts again");
     tap(&mut rt, Key::Escape);
-    assert!(!rt.state.knobs.filtering && rt.state.knobs.query == "right");
+    assert!(!rt.state().knobs.filtering && rt.state().knobs.query == "right");
     tap(&mut rt, Key::Escape);
-    assert!(rt.state.knobs.query.is_empty() && rt.state.knobs.open, "a second Esc clears");
+    assert!(rt.state().knobs.query.is_empty() && rt.state().knobs.open, "a second Esc clears");
     tap(&mut rt, Key::Escape);
-    assert!(!rt.state.knobs.open, "a third closes");
+    assert!(!rt.state().knobs.open, "a third closes");
 }
 
 #[test]
 fn with_the_field_idle_the_arrows_step_and_fold_again() {
     let mut rt = idle();
-    assert_eq!(rt.state.knobs.at(), Some(Node::Knob(1, 0)));
+    assert_eq!(rt.state().knobs.at(), Some(Node::Knob(1, 0)));
     tap(&mut rt, Key::Right);
-    assert_eq!(rt.state.knobs.get(&R), 21.0, "→ steps the knob: focus went back to the panel");
+    assert_eq!(rt.state().knobs.get(&R), 21.0, "→ steps the knob: focus went back to the panel");
     tap(&mut rt, Key::Left);
-    assert_eq!(rt.state.knobs.get(&R), 20.0);
-    rt.state.knobs.set_query("");
+    assert_eq!(rt.state().knobs.get(&R), 20.0);
+    rt.state_mut().knobs.set_query("");
     rt.invalidate();
     settle(&mut rt);
-    rt.state.knobs.set_at(Some(Node::Group(1)), GROUPS);
+    rt.state_mut().knobs.set_at(Some(Node::Group(1)), GROUPS);
     tap(&mut rt, Key::Left);
-    assert!(rt.state.knobs.folded.contains("Right"), "← folds a header");
+    assert!(rt.state().knobs.folded.contains("Right"), "← folds a header");
     tap(&mut rt, Key::Text("/".into()));
-    assert!(rt.state.knobs.filtering, "/ starts when the field is idle");
+    assert!(rt.state().knobs.filtering, "/ starts when the field is idle");
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn clicking_away_ends_editing() {
     type_str(&mut rt, "gap");
     click_panel(&mut rt);
     tap(&mut rt, Key::Right);
-    assert!(!rt.state.knobs.filtering, "the arrows are the panel's again");
+    assert!(!rt.state().knobs.filtering, "the arrows are the panel's again");
 }
 
 fn click_panel(rt: &mut Runtime<T>) {
@@ -190,9 +190,9 @@ fn click_panel(rt: &mut Runtime<T>) {
 #[test]
 fn query_set_by_the_app_shows_in_the_field() {
     let mut rt = editing();
-    rt.state.knobs.set_query("pad");
+    rt.state_mut().knobs.set_query("pad");
     rt.invalidate();
     settle(&mut rt);
     type_str(&mut rt, "s");
-    assert_eq!(rt.state.knobs.query, "pads", "typing continues from the set text");
+    assert_eq!(rt.state().knobs.query, "pads", "typing continues from the set text");
 }

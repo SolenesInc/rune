@@ -54,13 +54,13 @@ pub(super) enum CommitKind {
     Remount,
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Which way this commit measures. Both shortcuts need everything the view reads to be as
     /// the last commit built it, checked here once for both.
     pub(super) fn commit_kind(&self, tx: &Tx) -> CommitKind {
         let unchanged = self.state_unchanged && !tx.commit.lands() && !self.reuse.read_moved
             && self.reuse.scale == self.env.scale && self.reuse.srgb == Some(self.srgb_blend)
-            && self.playground.is_none() && !self.patch_pending()
+            && self.app.playground().is_none() && !self.patch_pending()
             // Exiting nodes left the layout tree.
             && self.layout.live_count() == self.nodes.len();
         if !unchanged { return CommitKind::Rebuild; }
@@ -118,7 +118,7 @@ impl<S: 'static> Runtime<S> {
     }
 }
 
-impl<S: 'static> Measurement<'_, S> {
+impl Measurement<'_> {
     /// Lays the last commit's nodes out again at the viewport, in its layout tree. None when a
     /// virtual list's window has to move, which only the view can build.
     fn relayout(mut self) -> Option<Measured> {

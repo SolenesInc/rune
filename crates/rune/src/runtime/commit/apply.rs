@@ -2,7 +2,7 @@
 //! live bindings and retained exits.
 use super::*;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The mutation phase cannot accept an El or an unfinished measurement pass.
     pub(super) fn apply(&mut self, measured: Measured, tx: &Tx) {
         let _apply_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Apply);

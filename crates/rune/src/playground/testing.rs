@@ -2,7 +2,7 @@
 //! [`Runtime::open_playground`] opens a story the way `--playground NAME --variant V` does.
 
 use super::*;
-use crate::{App, ElementInfo, Env, Runtime};
+use crate::{App, ElementInfo, Env, Runtime, RuntimeCore};
 
 impl<S: 'static> App<S> {
     /// A runtime for this app with no window, as a headless render builds it: the state from
@@ -18,13 +18,13 @@ impl<S: 'static> App<S> {
         let (spec, state, _) = self.into_parts(None);
         let mut rt = crate::tooling::runtime_for(&spec, state, size, env, std::sync::Arc::new(|| {}));
         if let Some(playground) = playground.filter(Playground::is_enabled) {
-            rt.playground = Some(Box::new(Live::new(playground, &spec, false)));
+            rt.app_mut().playground = Some(Box::new(Live::new(playground, &spec, false)));
         }
         rt.headless_chrome(chrome, titlebar, borderless);
-        rt.on_focus = on_focus;
-        rt.app_ime.hook = on_ime;
-        rt.on_mods = on_mods;
-        rt.on_field_key = on_field_key;
+        rt.app_mut().on_focus = on_focus;
+        rt.app_mut().on_ime = on_ime;
+        rt.app_mut().on_mods = on_mods;
+        rt.app_mut().on_field_key = on_field_key;
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
         rt.set_srgb_blend(srgb_blend);
@@ -32,7 +32,7 @@ impl<S: 'static> App<S> {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Opens the playground at `story` (its `"Group/Name"` path, its name, or its path's
     /// [`slug`](crate::playground::slug)), on `variant` (by number from 1, or by name) if given,
     /// as `--playground NAME --variant V` and [`Tx::open_playground_at`] do. Like a handler's
@@ -45,8 +45,8 @@ impl<S: 'static> Runtime<S> {
     /// Panics without a playground (see [`App::headless_runtime`]), or when it has no such
     /// story or variant, listing those it has.
     pub fn open_playground(&mut self, story: &str, variant: Option<&str>) {
-        let live = self.playground.as_mut().expect(NO_PLAYGROUND);
-        live.open_at(Some(story), variant).unwrap_or_else(|e| panic!("{e}"));
+        let live = self.app.playground_mut().expect(NO_PLAYGROUND);
+        live.open_at(story, variant).unwrap_or_else(|e| panic!("{e}"));
         self.settle_playground(Request::Open(Some(story.to_owned())));
     }
 
@@ -56,18 +56,15 @@ impl<S: 'static> Runtime<S> {
     ///
     /// Panics when the playground isn't open, or its story has no trigger on `key`.
     pub fn playground_trigger(&mut self, key: char) {
-        let live = self.playground.as_ref().filter(|p| p.is_open()).unwrap_or_else(|| panic!("the playground isn't open: call Runtime::open_playground first"));
-        let Some(request) = live.trigger_request(key) else {
-            let keys: Vec<String> = live.triggers().iter().map(|(k, label)| format!("{k:?} ({label})")).collect();
-            panic!("{:?} has no trigger on {key:?}; it has: {}", live.path(live.selected), keys.join(", "));
-        };
-        self.settle_playground(request);
+        let request = self.app.playground().map_or(Err(NOT_OPEN.to_owned()), |live| live.trigger_or_why(key));
+        self.settle_playground(request.unwrap_or_else(|e| panic!("{e}")));
     }
 
     /// Queues `request` as a handler does, then takes two frames that advance no time: the
     /// first applies it, the second runs the steps it made due now.
     fn settle_playground(&mut self, request: Request) {
-        self.update(move |_, tx| tx.playground.push(request));
+        let mut request = Some(request);
+        self.update_app(&mut |_, tx| { tx.playground.extend(request.take()); true });
         self.frame(0.0);
         self.frame(0.0);
     }
@@ -77,14 +74,14 @@ impl<S: 'static> Runtime<S> {
     /// `self.state`), or when `P` isn't the stage's type. `self.state` stays the app's real
     /// state throughout.
     pub fn playground_state<P: 'static>(&self) -> Option<&P> {
-        self.playground.as_ref()?.stage_state()?.downcast_ref()
+        self.app.playground()?.stage_state()?.downcast_ref()
     }
 
     /// The element keyed or pathed `key` on the open story's stage, as of the last frame: its
     /// rect, text, role and the rest. The playground's list and side column aren't searched;
     /// [`Runtime::find`] and [`Runtime::elements`] see the whole window.
     pub fn playground_element(&self, key: &str) -> Option<ElementInfo> {
-        if !self.playground.as_ref().is_some_and(|p| p.is_open()) { return None; }
+        if !self.app.playground().is_some_and(|p| p.is_open()) { return None; }
         let all = self.elements();
         let i = stage_element(&all, key)?;
         all.into_iter().nth(i)
@@ -92,6 +89,7 @@ impl<S: 'static> Runtime<S> {
 }
 
 const NO_PLAYGROUND: &str = "this runtime has no playground: build it with App::headless_runtime from an App whose App::playground is enabled";
+const NOT_OPEN: &str = "the playground isn't open: call Runtime::open_playground first";
 
 /// The index in `all` of the element keyed or pathed `key` on the stage, not exiting.
 pub(crate) fn stage_element(all: &[ElementInfo], key: &str) -> Option<usize> {
@@ -102,10 +100,19 @@ pub(crate) fn stage_element(all: &[ElementInfo], key: &str) -> Option<usize> {
 
 impl<S: 'static> Live<S> {
     /// The open stage's own state: a scene's, or a story's.
-    fn stage_state(&self) -> Option<&dyn Any> {
+    pub(crate) fn stage_state(&self) -> Option<&dyn Any> {
         if !self.is_open() { return None; }
         if let Some(scene) = self.scene() { return Some(&scene.state); }
         self.own().map(|(own, stage)| own.state_ref(stage))
+    }
+
+    /// What the open story's trigger on `key` asks for, or why there's none.
+    pub(crate) fn trigger_or_why(&self, key: char) -> Result<Request, String> {
+        if !self.is_open() { return Err(NOT_OPEN.to_owned()); }
+        self.trigger_request(key).ok_or_else(|| {
+            let keys: Vec<String> = self.triggers().iter().map(|(k, label)| format!("{k:?} ({label})")).collect();
+            format!("{:?} has no trigger on {key:?}; it has: {}", self.path(self.selected), keys.join(", "))
+        })
     }
 }
 

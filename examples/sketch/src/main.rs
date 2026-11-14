@@ -53,7 +53,7 @@ mod tests {
         rt.pointer_move(x + 30.0, y + 10.0);
         rt.pointer_up(x + 30.0, y + 10.0);
         rt.frame(0.0);
-        assert_eq!(rt.state.strokes.len(), 1);
-        assert!(rt.state.strokes[0].len() >= 2, "{:?}", rt.state.strokes);
+        assert_eq!(rt.state().strokes.len(), 1);
+        assert!(rt.state().strokes[0].len() >= 2, "{:?}", rt.state().strokes);
     }
 }

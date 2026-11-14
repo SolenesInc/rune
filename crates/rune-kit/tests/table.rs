@@ -132,7 +132,7 @@ fn dragging_a_header_edge_resizes_within_the_column_bounds() {
         rt.frame(0.0);
     };
     drag(&mut rt, 30.0);
-    assert_eq!(rt.state.table.column_width("size"), Some(130.0));
+    assert_eq!(rt.state().table.column_width("size"), Some(130.0));
     assert_eq!(header(&rt, "size").rect[2], 130.0, "the column draws at its new width");
     assert_eq!(header(&rt, "name").rect[2], W - 210.0, "and the flex column gives way");
     let handle = find(&rt, |e| e.label.as_deref() == Some("Resize Size")).remove(0).rect;
@@ -143,14 +143,14 @@ fn dragging_a_header_edge_resizes_within_the_column_bounds() {
     rt.frame(0.0);
     rt.pointer_up(x2 + 400.0, y2);
     rt.frame(0.0);
-    assert_eq!(rt.state.table.column_width("size"), Some(180.0), "clamped to the max");
+    assert_eq!(rt.state().table.column_width("size"), Some(180.0), "clamped to the max");
     rt.pointer_down(x2, y2);
     rt.frame(0.0);
     rt.pointer_move(x2 - 400.0, y2);
     rt.frame(0.0);
     rt.pointer_up(x2 - 400.0, y2);
     rt.frame(0.0);
-    assert_eq!(rt.state.table.column_width("size"), Some(60.0), "clamped to the min");
+    assert_eq!(rt.state().table.column_width("size"), Some(60.0), "clamped to the min");
     assert!(size.rect[2] == 100.0);
     assert!(find(&rt, |e| e.label.as_deref() == Some("Resize Kind")).is_empty(), "a fixed column has no handle");
 }
@@ -160,19 +160,19 @@ fn a_header_click_sorts_and_shows_the_direction() {
     let mut rt = runtime(App::new(50, false));
     let r = header(&rt, "size").rect;
     click(&mut rt, r[0] + 20.0, r[1] + r[3] * 0.5);
-    assert_eq!(rt.state.sorts, [("size".to_owned(), SortDir::Ascending)]);
-    assert_eq!(rt.state.table.sort(), Some(("size", SortDir::Ascending)));
+    assert_eq!(rt.state().sorts, [("size".to_owned(), SortDir::Ascending)]);
+    assert_eq!(rt.state().table.sort(), Some(("size", SortDir::Ascending)));
     assert_eq!(header(&rt, "size").label.as_deref(), Some("Size"));
     assert_eq!(sort_read(&rt, "size"), "ascending");
-    assert!(rt.state.files.windows(2).all(|w| w[0].size <= w[1].size));
+    assert!(rt.state().files.windows(2).all(|w| w[0].size <= w[1].size));
     click(&mut rt, r[0] + 20.0, r[1] + r[3] * 0.5);
-    assert_eq!(rt.state.table.sort(), Some(("size", SortDir::Descending)));
+    assert_eq!(rt.state().table.sort(), Some(("size", SortDir::Descending)));
     assert_eq!(sort_read(&rt, "size"), "descending");
     assert_eq!(header(&rt, "name").label.as_deref(), Some("Name"));
     assert_eq!(sort_read(&rt, "name"), "");
     let r = header(&rt, "kind").rect;
     click(&mut rt, r[0] + 20.0, r[1] + r[3] * 0.5);
-    assert_eq!(rt.state.sorts.len(), 2, "a column that doesn't sort ignores clicks");
+    assert_eq!(rt.state().sorts.len(), 2, "a column that doesn't sort ignores clicks");
 }
 
 #[test]
@@ -185,12 +185,12 @@ fn cancelling_a_column_resize_restores_the_original_width_policy() {
         rt.pointer_down(x, y);
         rt.pointer_move(x + 40.0, y);
         rt.frame(0.0);
-        assert_ne!(rt.state.table.column_width("size"), initial);
+        assert_ne!(rt.state().table.column_width("size"), initial);
         press(&mut rt, Key::Escape);
-        assert_eq!(rt.state.table.column_width("size"), initial);
+        assert_eq!(rt.state().table.column_width("size"), initial);
         rt.pointer_up(x + 40.0, y);
         rt.frame(0.0);
-        assert_eq!(rt.state.table.column_width("size"), initial);
+        assert_eq!(rt.state().table.column_width("size"), initial);
     }
 }
 
@@ -200,24 +200,24 @@ fn keys_move_the_selection_and_return_opens() {
     press(&mut rt, Key::Tab);
     assert_eq!(rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key).as_deref(), Some("table"));
     press(&mut rt, Key::Down);
-    assert_eq!(rt.state.table.cursor(), Some("f0"));
+    assert_eq!(rt.state().table.cursor(), Some("f0"));
     press(&mut rt, Key::Down);
     press(&mut rt, Key::Down);
-    assert_eq!(rt.state.table.cursor(), Some("f2"));
+    assert_eq!(rt.state().table.cursor(), Some("f2"));
     press(&mut rt, Key::PageDown);
-    let page = rt.state.table.cursor().unwrap()[1..].parse::<usize>().unwrap() - 2;
+    let page = rt.state().table.cursor().unwrap()[1..].parse::<usize>().unwrap() - 2;
     assert!((5..12).contains(&page), "Page Down moves about a screen of rows: {page}");
     press(&mut rt, Key::End);
-    assert_eq!(rt.state.table.cursor(), Some("f199"));
+    assert_eq!(rt.state().table.cursor(), Some("f199"));
     for f in 1..30 {
         rt.frame(f as f64 / 60.0);
     }
     let row = find(&rt, |e| e.role == "row" && e.item_selected).remove(0);
     assert!(row.visible[3] > 20.0, "End scrolls the last row into view");
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.opened, ["f199"]);
+    assert_eq!(rt.state().opened, ["f199"]);
     press(&mut rt, Key::Home);
-    assert_eq!(rt.state.table.selected().collect::<Vec<_>>(), ["f0"]);
+    assert_eq!(rt.state().table.selected().collect::<Vec<_>>(), ["f0"]);
 }
 
 #[test]
@@ -227,11 +227,11 @@ fn shift_extends_and_cmd_a_selects_all_in_a_multi_select_table() {
     press(&mut rt, Key::Down);
     press_with(&mut rt, Key::Down, Mods { shift: true, ..Mods::default() });
     press_with(&mut rt, Key::Down, Mods { shift: true, ..Mods::default() });
-    let mut sel: Vec<&str> = rt.state.table.selected().collect();
+    let mut sel: Vec<&str> = rt.state().table.selected().collect();
     sel.sort();
     assert_eq!(sel, ["f0", "f1", "f2"]);
     press_with(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
-    assert_eq!(rt.state.table.selected_len(), 30);
+    assert_eq!(rt.state().table.selected_len(), 30);
 }
 
 #[test]
@@ -241,7 +241,7 @@ fn a_selection_follows_its_row_through_a_sort() {
     rt.frame(0.0);
     let r = header(&rt, "size").rect;
     click(&mut rt, r[0] + 20.0, r[1] + r[3] * 0.5);
-    assert_eq!(rt.state.table.selected().collect::<Vec<_>>(), ["f7"]);
+    assert_eq!(rt.state().table.selected().collect::<Vec<_>>(), ["f7"]);
 }
 
 #[test]
@@ -277,13 +277,13 @@ fn shrinking_rows_under_a_selection_stays_consistent() {
     let mut rt = runtime(App::new(20, true));
     press(&mut rt, Key::Tab);
     press(&mut rt, Key::End);
-    assert_eq!(rt.state.table.cursor(), Some("f19"));
+    assert_eq!(rt.state().table.cursor(), Some("f19"));
     rt.update(|s, _| s.files.truncate(5));
     rt.frame(0.0);
     press(&mut rt, Key::Down);
-    assert_eq!(rt.state.table.cursor(), Some("f0"), "a removed cursor starts at the top on Down");
+    assert_eq!(rt.state().table.cursor(), Some("f0"), "a removed cursor starts at the top on Down");
     press_with(&mut rt, Key::End, Mods { shift: true, ..Mods::default() });
-    assert_eq!(rt.state.table.selected_len(), 5);
+    assert_eq!(rt.state().table.selected_len(), 5);
 }
 
 // Benchmark ---------------------------------------------------------------------------------

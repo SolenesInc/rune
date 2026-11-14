@@ -580,7 +580,8 @@ impl<S: 'static> Host<S> {
             let size = (l.config.width, l.config.height);
             c.render(&mut Frame { device: &gpu.device, queue: &gpu.queue, encoder: &mut enc, target: &view, format: target_format, size, dt: 0.0, update_ms: 0.0, rt: &mut *rt, ui: &mut *renderer });
         } else {
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (l.config.width, l.config.height));
+            let core = &mut **rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (l.config.width, l.config.height));
             renderer.draw(&mut enc, &view, rt.clear_color());
         }
         // A copy of the frame, for the drift count once it's the one the window commits to.

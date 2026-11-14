@@ -21,7 +21,8 @@ fn render<S: 'static>(state: S, view: fn(&S, &mut Cx<S>) -> El, w: u32, h: u32, 
     let target = Offscreen::with_format(&gpu.device, dw, dh, FORMAT);
     let mut rt = Runtime::new(state, view, (w as f32, h as f32), Env::new(true, scale));
     rt.frame(0.0);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (dw, dh));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (dw, dh));
     let mut enc = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut enc, &target.view, [0.0; 4]);
     target.copy(&mut enc);
@@ -161,7 +162,7 @@ fn a_moving_element_glides_and_lands_snapped() {
     let mut rt = Runtime::new(false, view, (40.0, 40.0), Env::new(true, 2.0));
     rt.frame(0.0);
     assert_eq!(fills(&rt)[0][1], 2.0);
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.invalidate();
     let mut ys = Vec::new();
     for _ in 0..120 {
@@ -235,7 +236,7 @@ fn a_scale_settling_at_one_lands_snapped_without_a_jump() {
     }
     let mut rt = Runtime::new(false, view, (60.0, 60.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.invalidate();
     let mut frames = Vec::new();
     for _ in 0..120 {
@@ -268,7 +269,7 @@ fn a_trailing_child_holds_its_place_against_a_widening_parent() {
     rt.frame(0.0);
     let gap = |f: &[[f32; 4]]| (f[0][0] + f[0][2]) - (f[1][0] + f[1][2]);
     let before = gap(&fills(&rt));
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.invalidate();
     let (mut moved, mut last) = (false, before);
     let mut gaps = Vec::new();
@@ -368,7 +369,7 @@ fn a_scale_spring_glides_exact_and_lands_snapped() {
     }
     let mut rt = Runtime::new(false, view, (160.0, 120.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.invalidate();
     let mut frames = Vec::new();
     for _ in 0..160 {
@@ -522,7 +523,7 @@ fn a_knob_glides_into_and_out_of_its_centred_rest() {
     rt.frame(0.0);
     for offset in [3.1, 0.0] {
         let before = fills(&rt)[1];
-        rt.state.1 = offset;
+        rt.state_mut().1 = offset;
         rt.invalidate();
         let mut bottoms = vec![before[1] + before[3]];
         for _ in 0..120 {
@@ -552,7 +553,7 @@ fn a_knob_keeps_even_gaps_while_its_track_slides() {
     let mut rt = Runtime::new(0.0, view, (80.0, 60.0), Env::new(true, 1.25));
     rt.frame(0.0);
     for slide in [7.3, 0.0] {
-        rt.state = slide;
+        *rt.state_mut() = slide;
         rt.invalidate();
         let mut tops = vec![fills(&rt)[1][1]];
         for _ in 0..120 {
@@ -582,12 +583,12 @@ fn a_still_knob_eases_with_its_track_growing_around_it() {
         let mut rt = Runtime::new(20.0, growing, (80.0, 60.0), Env::new(true, 1.25));
         rt.frame(0.0);
         let start = fills(&rt)[1];
-        rt.state = 20.8;
+        *rt.state_mut() = 20.8;
         rt.invalidate();
         let mut knobs = vec![start];
         for i in 0..120 {
             if retarget == Some(i) {
-                rt.state = 22.4;
+                *rt.state_mut() = 22.4;
                 rt.invalidate();
             }
             rt.frame(1.0 / 120.0);

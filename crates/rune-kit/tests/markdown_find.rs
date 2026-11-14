@@ -327,8 +327,8 @@ fn highlights_round_trip_paints_marks_and_scrolls_into_view() {
 
     // Switch query to "target" (5 matches across paragraph, inline code, list, table, and code block)
     // and scroll to the last match.
-    rt.state.query = "target".to_owned();
-    rt.state.active = 4;
+    rt.state_mut().query = "target".to_owned();
+    rt.state_mut().active = 4;
     rt.invalidate();
     rt.frame(0.0);
     let labels: Vec<_> = rt

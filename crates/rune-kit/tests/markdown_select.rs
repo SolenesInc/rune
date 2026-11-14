@@ -99,7 +99,7 @@ fn a_link_opens_on_a_click() {
     rt.pointer_down(at.0, at.1);
     rt.pointer_up(at.0, at.1);
     tick(&mut rt);
-    assert_eq!(rt.state.opened, ["https://x.dev/a"]);
+    assert_eq!(rt.state().opened, ["https://x.dev/a"]);
     assert_eq!(rt.selected_text(), None);
 }
 
@@ -111,8 +111,8 @@ fn a_selection_survives_its_message_and_the_next_streaming_in() {
     drag(&mut rt, before(para[1]), before(alpha[2]));
     assert_eq!(rt.selected_text().as_deref(), Some("ello world and link.\n\n- al"));
     for more in [" streams", " in\n\nand", " on"] {
-        rt.state.msgs[1].push_str(more);
-        rt.state.msgs[0].push_str(more);
+        rt.state_mut().msgs[1].push_str(more);
+        rt.state_mut().msgs[0].push_str(more);
         rt.invalidate();
         tick(&mut rt);
         assert_eq!(rt.selected_text().as_deref(), Some("ello world and link.\n\n- al"), "after {more:?}");
@@ -124,7 +124,7 @@ fn a_selection_survives_its_message_and_the_next_streaming_in() {
     second.sort_by(|a, b| a.0.total_cmp(&b.0));
     drag(&mut rt, before(second[0]), before(second[6]));
     assert_eq!(rt.selected_text().as_deref(), Some("Second "));
-    rt.state.msgs[1].push_str(" more words");
+    rt.state_mut().msgs[1].push_str(" more words");
     rt.invalidate();
     tick(&mut rt);
     assert_eq!(rt.selected_text().as_deref(), Some("Second "));

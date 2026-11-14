@@ -110,7 +110,8 @@ fn edge_pixels_fade_by_the_hidden_extent() {
     let size = ((200.0 * SCALE) as u32, (300.0 * SCALE) as u32);
     let target = Offscreen::new(&gpu.device, size.0, size.1);
     let mut alpha_at = |rt: &mut Runtime<List>, y: f32| {
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+        let core = &mut **rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut encoder, &target.view, [0.0; 4]);
         target.copy(&mut encoder);

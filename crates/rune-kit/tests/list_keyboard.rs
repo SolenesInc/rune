@@ -45,7 +45,7 @@ fn rows_with_an_action_are_one_tab_stop_with_arrow_navigation() {
     press(&mut rt, Key::Down);
     assert_eq!(focused(&rt).as_deref(), Some("item2"));
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.picked, Some(2));
+    assert_eq!(rt.state().picked, Some(2));
     press(&mut rt, Key::Tab);
     let in_list = |rt: &Runtime<State>| focused(rt).is_some_and(|k| k.starts_with("item"));
     assert!(!in_list(&rt), "Tab leaves the list");

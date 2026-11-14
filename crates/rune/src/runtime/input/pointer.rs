@@ -4,7 +4,7 @@ use super::*;
 /// How far (points, per axis) a click may travel and still pair into a double click.
 pub(super) const CLICK_SLOP: f32 = 4.0;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub fn pointer_move(&mut self, x: f32, y: f32) { self.move_pointer(x, y, true); }
 
     /// `drag_move` false keeps a held drag from getting a `Phase::Move`: a release at the
@@ -155,7 +155,7 @@ impl<S: 'static> Runtime<S> {
         let press = held.at;
         let Some(i) = self.live_index(&path) else { return false };
         let Some(f) = self.nodes[i].handlers.drag_out.clone() else { return false };
-        let Some(item) = f(playground_host::handler_states_ref(&self.state, self.playground.as_deref())).filter(|item| !item.is_empty()) else { return false };
+        let Some(item) = f(self.app.states_ref()).filter(|item| !item.is_empty()) else { return false };
         let n = &self.nodes[i];
         let r = self.drawn.get(i).copied().unwrap_or([n.target[0], n.target[1], n.target[2] - n.target[0], n.target[3] - n.target[1]]);
         let clip = self.screen_clip_of_parent(n.parent).map(|v| v / self.env.scale);

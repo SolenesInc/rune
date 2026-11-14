@@ -179,16 +179,16 @@ fn a_row_leaving_the_tree_under_a_held_glide_hears_the_pointer_leave() {
     rt.pointer_move(100.0, 110.0);
     rt.frame(1.0 / 120.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state, [(5, true)]);
+    assert_eq!(*rt.state(), [(5, true)]);
     rt.update(|_, tx| tx.scroll_to("scroll", 0.0, 3000.0));
     rt.frame(1.0 / 120.0);
     assert!(rt.hover_hold.held());
     assert!(!rt.nodes.iter().any(|n| n.named("r5") && !rt.is_exiting(n.id)), "the glide's cut unmounts the row");
     for _ in 0..120 {
         rt.frame(1.0 / 120.0);
-        if rt.state.contains(&(5, false)) { break; }
+        if rt.state().contains(&(5, false)) { break; }
     }
-    assert!(rt.state.contains(&(5, false)), "the row heard the leave before it was pruned: {:?}", rt.state);
+    assert!(rt.state().contains(&(5, false)), "the row heard the leave before it was pruned: {:?}", rt.state());
     assert!(rt.hover_hold.held(), "while the glide still holds hover");
 }
 
@@ -225,7 +225,8 @@ fn a_held_nudge_draws_no_frames_until_its_wake() {
     assert!(!rt.animating, "a frame while it waits still asks for none");
     assert_eq!(shown(&rt), ["a5"]);
     assert_eq!(rt.wake_deadline(), Some(due), "and the wake still stands");
-    rt.frame(due - rt.clock);
+    let core = &mut *rt;
+    core.frame(due - core.clock);
     assert_eq!(shown(&rt), ["a25"], "the wake's frame resolves hover once, at the pointer");
     assert!(!rt.hover_hold.held());
 }
@@ -242,7 +243,8 @@ fn a_scroll_again_before_the_hold_ends_still_wakes_at_its_own_due() {
     assert_eq!(shown(&rt), ["a5"], "both holds keep hover where it was");
     let due = rt.wake_deadline().expect("the second hold wakes a frame");
     assert!((due - rt.clock - NUDGE_HOLD).abs() < 1e-6, "due one hold after the second scroll, not the first: {due} at {}", rt.clock);
-    rt.frame(due - rt.clock);
+    let core = &mut *rt;
+    core.frame(due - core.clock);
     assert_eq!(shown(&rt), ["a25"], "its frame resolves hover once, at the pointer");
 }
 
@@ -261,7 +263,7 @@ fn an_app_stepping_its_own_glide_holds_a_still_pointers_hover_until_it_stops() {
     rt.pointer_move(100.0, 110.0);
     rt.frame(1.0 / 120.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state, [(5, true)]);
+    assert_eq!(*rt.state(), [(5, true)]);
     // The app glides 400 points itself, an instant scroll each frame.
     let mut flashes = 0;
     for f in 1..=100 {
@@ -271,10 +273,10 @@ fn an_app_stepping_its_own_glide_holds_a_still_pointers_hover_until_it_stops() {
             .filter_map(|e| e.key).collect();
         flashes += usize::from(shown != ["a5"]);
     }
-    let commits = rt.state.len() - 1;
-    assert_eq!((commits, flashes), (0, 0), "no hover commits or chrome under the still pointer mid-scroll: {:?}", rt.state);
+    let commits = rt.state().len() - 1;
+    assert_eq!((commits, flashes), (0, 0), "no hover commits or chrome under the still pointer mid-scroll: {:?}", rt.state());
     for _ in 0..30 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state, [(5, true), (5, false), (25, true)], "once it stops, hover resolves once at the pointer");
+    assert_eq!(*rt.state(), [(5, true), (5, false), (25, true)], "once it stops, hover resolves once at the pointer");
     assert!(!rt.hover_hold.held(), "and lets go");
 }
 
@@ -300,7 +302,7 @@ fn a_glide_to_an_offset_runs_no_hover_handler_under_a_still_pointer_until_it_lan
         rt.pointer_move(100.0, 110.0);
         rt.frame(1.0 / 120.0);
         rt.frame(1.0 / 120.0);
-        assert_eq!((&rt.state.changes[..], &rt.state.enters[..]), (&[(5, true)][..], &[5][..]));
+        assert_eq!((&rt.state().changes[..], &rt.state().enters[..]), (&[(5, true)][..], &[5][..]));
         rt.update_if(move |_, tx| {
             match spring {
                 Some(spring) => tx.scroll_to_with("scroll", 0.0, 400.0, spring),
@@ -316,10 +318,10 @@ fn a_glide_to_an_offset_runs_no_hover_handler_under_a_still_pointer_until_it_lan
             frames += 1;
         }
         assert!(frames > 5, "{spring:?}: it glided");
-        assert_eq!(rt.stats.commits, commits, "{spring:?}: no hover handler ran mid-glide: {:?}", rt.state.changes);
+        assert_eq!(rt.stats.commits, commits, "{spring:?}: no hover handler ran mid-glide: {:?}", rt.state().changes);
         for _ in 0..30 { rt.frame(1.0 / 120.0); }
-        assert_eq!(rt.state.changes, [(5, true), (5, false), (25, true)], "{spring:?}: once it lands, hover resolves once at the pointer");
-        assert_eq!(rt.state.enters, [5, 25], "{spring:?}");
+        assert_eq!(rt.state().changes, [(5, true), (5, false), (25, true)], "{spring:?}: once it lands, hover resolves once at the pointer");
+        assert_eq!(rt.state().enters, [5, 25], "{spring:?}");
         assert!(!rt.hover_hold.held());
     }
 }

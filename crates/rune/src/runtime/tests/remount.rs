@@ -314,5 +314,5 @@ fn virtual_remount_keeps_view_and_mounted_row_memos_and_evicts_culled_ones() {
     rt.pointer_down(cx, cy);
     rt.pointer_up(cx, cy);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.clicked, Some(expected_idx));
+    assert_eq!(rt.state().clicked, Some(expected_idx));
 }

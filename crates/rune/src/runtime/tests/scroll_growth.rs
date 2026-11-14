@@ -18,7 +18,7 @@ fn growth_rows_grow_and_sticky_scroll_lands_at_bottom() {
     let last = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r9")).unwrap();
     assert!((last.rect[1] + last.rect[3] - 300.0).abs() < 0.05, "{:?}", last.rect);
     // A new row grows from 0 and the end stays pinned.
-    rt.state = 11;
+    *rt.state_mut() = 11;
     rt.dirty = true;
     rt.frame(1.0 / 60.0);
     assert!(rt.animating);
@@ -427,10 +427,10 @@ fn a_shrink_glide_never_reports_far_from_the_end_it_heads_for() {
     rt.frame(1.0 / 120.0);
     rt.wheel(100.0, 100.0, 200.0);
     for _ in 0..30 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state.1, [false], "200 above the end is near");
+    assert_eq!(rt.state().1, [false], "200 above the end is near");
     rt.update(|s, _| s.0 = 15);
     for _ in 0..120 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state.1, [false], "gliding to the new end stays near");
+    assert_eq!(rt.state().1, [false], "gliding to the new end stays near");
 }
 
 /// The glide lands on the new end before the rows' last fraction of a point has collapsed.
@@ -476,8 +476,8 @@ fn far_reading(rows: usize, tall: f32, up: f32) -> Runtime<(usize, f32, Vec<bool
     rt.frame(1.0 / 120.0);
     rt.wheel(100.0, 100.0, up);
     for _ in 0..30 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state.2.last(), Some(&true), "{up} above the end is far");
-    rt.state.2.clear();
+    assert_eq!(rt.state().2.last(), Some(&true), "{up} above the end is far");
+    rt.state_mut().2.clear();
     rt
 }
 
@@ -489,7 +489,7 @@ fn a_landed_glide_over_a_collapsing_tall_row_stays_near() {
     rt.update(|s, _| s.1 = 0.0);
     for _ in 0..360 { rt.frame(1.0 / 120.0); }
     assert_eq!(rt.scrolls.values().next().unwrap().offset, 700.0, "the glide lands on the new end");
-    assert_eq!(rt.state.2, [false], "a tall row collapsing under a landed glide stays near");
+    assert_eq!(rt.state().2, [false], "a tall row collapsing under a landed glide stays near");
 }
 
 /// Rows coming back partway end a shrink glide short of the presented end: the reader is near
@@ -508,5 +508,5 @@ fn rows_regrowing_under_a_shrink_glide_stay_near() {
     rt.frame(1.0 / 120.0);
     assert!(rt.scrolls.values().next().unwrap().glide().is_none(), "rows coming back past the offset end the glide");
     for _ in 0..240 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state.2, [false], "the regrown end is near, while the rows still collapse to it");
+    assert_eq!(rt.state().2, [false], "the regrown end is near, while the rows still collapse to it");
 }

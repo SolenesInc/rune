@@ -104,12 +104,12 @@ fn element_at_follows_the_turned_box_and_agrees_with_presses() {
 
     for (x, y) in [(60.0, 52.0), (120.0, 80.0), (130.0, 30.0), (80.0, 40.0), (140.0, 90.0), (71.7, 24.6)] {
         let picked_bar = matches!(key_at(&rt, x, y).as_deref(), Some("bar" | "inner"));
-        rt.state.0.clear();
+        rt.state_mut().0.clear();
         rt.pointer_move(x, y);
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
-        assert_eq!(rt.state.0 == ["bar"], picked_bar, "({x}, {y}): press {:?}", rt.state.0);
+        assert_eq!(rt.state().0 == ["bar"], picked_bar, "({x}, {y}): press {:?}", rt.state().0);
     }
 }
 
@@ -141,7 +141,7 @@ fn a_canvas_handler_picks_its_last_presented_children_before_rebuilding() {
     rt.pointer_down(120.0, 80.0);
     rt.pointer_up(120.0, 80.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.picked.as_deref(), Some("bar"));
+    assert_eq!(rt.state().picked.as_deref(), Some("bar"));
     assert!(!rt.contains("canvas/bar", 120.0, 80.0));
 }
 
@@ -257,11 +257,11 @@ fn sticky_and_anchored_elements_pick_in_paint_order_after_scrolling() {
     rt.frame(0.0);
     for (y, expected) in [(15.0, "header"), (35.0, "popup"), (65.0, "row")] {
         assert_eq!(rt.element_at(20.0, y).unwrap().key(), Some(expected));
-        rt.state.0.clear();
+        rt.state_mut().0.clear();
         rt.pointer_down(20.0, y);
         rt.pointer_up(20.0, y);
         rt.frame(0.0);
-        assert_eq!(rt.state.0, [expected]);
+        assert_eq!(rt.state().0, [expected]);
     }
 }
 
@@ -308,8 +308,8 @@ fn pick_transparent_finds_opacity_zero_elements_but_not_exiting_ones() {
     }
     rt.update(|s, tx| { read(s, false, tx); read(s, true, tx); });
     rt.frame(0.0);
-    assert_ne!(rt.state.plain.as_deref(), Some("clear"));
-    assert_eq!(rt.state.with.as_deref(), Some("clear"));
+    assert_ne!(rt.state().plain.as_deref(), Some("clear"));
+    assert_eq!(rt.state().with.as_deref(), Some("clear"));
 
     // An exiting element is skipped even with the option.
     let (x, y) = (10.0, 110.0);

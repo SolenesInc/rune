@@ -63,7 +63,7 @@ impl Mode {
     fn horizontal(self) -> bool { matches!(self, Mode::Pan { horizontal: true, .. }) }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// One touch event at (x, y) in window points, `time` in seconds on any steady clock. A
     /// host with touches calls this for every one; `id` tells fingers apart.
     pub fn touch(&mut self, id: u64, phase: TouchPhase, x: f32, y: f32, time: f64) {
@@ -177,7 +177,7 @@ mod tests {
         rt.touch(1, TouchPhase::Moved, 103.0, 72.0, 0.02);
         rt.touch(1, TouchPhase::Ended, 103.0, 72.0, 0.05);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.taps, [0]);
+        assert_eq!(rt.state().taps, [0]);
         assert_eq!(rt.pointer(), None);
         assert!(!rt.touching());
     }
@@ -186,7 +186,7 @@ mod tests {
     fn a_drag_on_a_list_scrolls_it_without_clicking_and_flings_on() {
         let mut rt = rig();
         swipe(&mut rt, (100.0, 200.0), -100.0, 5);
-        assert!(rt.state.taps.is_empty(), "a pan presses nothing");
+        assert!(rt.state().taps.is_empty(), "a pan presses nothing");
         let lifted = offset(&rt);
         assert!(lifted >= 90.0, "the list followed the finger: {lifted}");
         for _ in 0..30 { rt.frame(1.0 / 60.0); }
@@ -210,7 +210,7 @@ mod tests {
         rt.touch(1, TouchPhase::Moved, 60.0, 30.0, 0.01);
         rt.touch(1, TouchPhase::Ended, 60.0, 30.0, 0.02);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.drags.last(), Some(&40.0));
+        assert_eq!(rt.state().drags.last(), Some(&40.0));
         assert_eq!(offset(&rt), 0.0);
     }
 
@@ -222,7 +222,7 @@ mod tests {
         rt.touch(2, TouchPhase::Ended, 100.0, 110.0, 0.01);
         rt.touch(1, TouchPhase::Cancelled, 100.0, 70.0, 0.02);
         rt.frame(1.0 / 60.0);
-        assert!(rt.state.taps.is_empty());
+        assert!(rt.state().taps.is_empty());
         assert!(!rt.touching());
     }
 

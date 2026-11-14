@@ -74,7 +74,7 @@ fn view(s: &S, _: &mut Cx<S>) -> El {
 
 fn app(live: bool) -> Runtime<S> {
     let mut rt = Runtime::new(S::new(live), view, (400.0, 400.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, e, tx| {
+    rt.app_mut().on_key = Some(|s, e, tx| {
         let dx = match e.key { Key::Left => -10.0, Key::Right => 10.0, _ => return false };
         s.camera([s.pan[0] + dx, s.pan[1]], s.zoom, tx);
         true
@@ -132,15 +132,15 @@ fn live_only_handlers_move_the_canvas_without_re_running_the_view() {
     assert!(rt.live_only_events() >= 6, "{}", rt.live_only_events());
 
     // The camera moved what's drawn: node 0 shows where the camera puts it.
-    let [px, py] = rt.state.pan;
-    let z = rt.state.zoom;
+    let [px, py] = rt.state().pan;
+    let z = rt.state().zoom;
     let at = |x: f32, y: f32| [200.0 + (x - 200.0) * z + px, 200.0 + (y - 200.0) * z + py];
     let [x, y] = at(20.0, 100.0);
     let node = rect(&rt, "node0");
     assert!(near(node, [x, y, 40.0 * z, 40.0 * z]), "node0 {node:?}, from {start:?}");
 
     // `on_drawn_layout_tx` reported where it shows, and its live-only toolbar followed it.
-    assert!(near(*rt.state.drawn.last().unwrap(), node), "{:?}", rt.state.drawn.last());
+    assert!(near(*rt.state().drawn.last().unwrap(), node), "{:?}", rt.state().drawn.last());
     let toolbar = rect(&rt, "toolbar");
     assert!(near(toolbar, [node[0], node[1] - 30.0, 60.0, 24.0]), "toolbar {toolbar:?}");
 
@@ -152,7 +152,7 @@ fn live_only_handlers_move_the_canvas_without_re_running_the_view() {
     rt.pointer_down(140.0, 120.0);
     rt.pointer_up(140.0, 120.0);
     settle(&mut rt);
-    assert_eq!(rt.state.pressed, [1]);
+    assert_eq!(rt.state().pressed, [1]);
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn a_declined_event_takes_back_its_live_only() {
     let before = rt.stats.commits;
     rt.magnify_event(MagnifyEvent::new(0.5).at(50.0, 50.0));
     rt.frame(1.0 / 120.0);
-    assert_eq!((rt.state, rt.stats.commits - before, rt.live_only_events()), (1, 1, 0), "the outer handler took it and committed");
+    assert_eq!((*rt.state(), rt.stats.commits - before, rt.live_only_events()), (1, 1, 0), "the outer handler took it and committed");
 }
 
 #[test]
@@ -203,20 +203,20 @@ fn pointer_move_and_secondary_press_give_local_points_on_a_zoomed_canvas() {
     rt.secondary_down(110.0, 30.0);
     rt.secondary_up(110.0, 30.0);
     rt.frame(1.0 / 120.0);
-    let p = rt.state.moves[0];
+    let p = rt.state().moves[0];
     assert_eq!((p.x, p.y, p.window_x, p.window_y), (80.0, 40.0, 110.0, 30.0));
     assert_eq!(p.window(), PointerPress { x: 110.0, y: 30.0 });
-    let m = rt.state.menus[0];
+    let m = rt.state().menus[0];
     assert_eq!((m.x, m.y, m.window()), (80.0, 40.0, PointerPress { x: 110.0, y: 30.0 }));
 
     // The original builders still give window points.
-    rt.state.windows.clear();
+    rt.state_mut().windows.clear();
     rt.pointer_move(150.0, 270.0);
     rt.frame(1.0 / 120.0);
     rt.secondary_down(150.0, 270.0);
     rt.secondary_up(150.0, 270.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.windows, [PointerPress { x: 150.0, y: 270.0 }, PointerPress { x: 150.0, y: 270.0 }]);
+    assert_eq!(rt.state().windows, [PointerPress { x: 150.0, y: 270.0 }, PointerPress { x: 150.0, y: 270.0 }]);
 }
 
 #[test]
@@ -224,7 +224,7 @@ fn pointer_move_local_can_be_live_only() {
     let mut rt = app(true);
     let ran = commits(&mut rt, |rt| { rt.pointer_move(120.0, 80.0); rt.frame(1.0 / 120.0); rt.pointer_move(130.0, 90.0); });
     assert_eq!(ran, 0);
-    let last = *rt.state.moves.last().unwrap();
+    let last = *rt.state().moves.last().unwrap();
     assert_eq!((last.x, last.y), (130.0, 90.0), "the canvas sits at the window's origin");
     let c = rect(&rt, "crosshair");
     assert!(near(c, [130.0, 90.0, 1.0, 1.0]), "the crosshair drew where the pointer is: {c:?}");
@@ -242,14 +242,14 @@ fn live_transform_refreshes_hover_under_a_stationary_pointer() {
         (200.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0);
     rt.pointer_move(20.0, 20.0); rt.frame(0.0);
-    rt.state.pan.set([0.0, 0.0]);
+    rt.state().pan.set([0.0, 0.0]);
     assert!(rt.frame(0.0), "hover reports need another frame even for an immediate live transform");
     rt.frame(0.0);
-    assert_eq!(rt.state.changes, [true]);
-    assert_eq!(rt.state.enters, 1);
-    rt.state.pan.set([100.0, 0.0]);
+    assert_eq!(rt.state().changes, [true]);
+    assert_eq!(rt.state().enters, 1);
+    rt.state().pan.set([100.0, 0.0]);
     assert!(rt.frame(0.0)); rt.frame(0.0);
-    assert_eq!(rt.state.changes, [true, false]);
+    assert_eq!(rt.state().changes, [true, false]);
 }
 
 #[test]
@@ -269,7 +269,7 @@ fn nested_live_and_static_scales_keep_local_points_per_runtime() {
         // Nested scales multiply to one, but both anchors still move the origin.
         let (x, y) = (r[0] + 25.0, r[1] + 35.0);
         rt.pointer_move(x, y); rt.secondary_down(x, y); rt.secondary_up(x, y); rt.frame(0.0);
-        for p in [rt.state.moves[0], rt.state.menus[0]] {
+        for p in [rt.state().moves[0], rt.state().menus[0]] {
             assert!((p.x - 25.0).abs() < 0.01 && (p.y - 35.0).abs() < 0.01, "{p:?}");
             assert_eq!((p.window_x, p.window_y), (x, y));
         }
@@ -295,7 +295,7 @@ fn live_only_drag_keeps_capture_outside_the_moving_element() {
     assert!(rt.pressing());
     rt.pointer_up(350.0, 350.0); rt.frame(0.0);
     assert!(!rt.pressing());
-    assert_eq!(rt.state.phases, [Phase::Down, Phase::Move, Phase::Move, Phase::Up]);
+    assert_eq!(rt.state().phases, [Phase::Down, Phase::Move, Phase::Move, Phase::Up]);
     assert_eq!(rt.stats.commits, before);
 }
 
@@ -327,13 +327,13 @@ fn follow(live: bool) -> (u64, usize, Runtime<Follow>) {
     let mut rt = Runtime::new(Follow { live, marker: Live::new([0.0, 0.0]), heard: 0 }, follow_view, (300.0, 400.0), Env::new(true, 1.0));
     rt.check_live_only(false);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
-    let (commits, heard) = (rt.stats.commits, rt.state.heard);
+    let (commits, heard) = (rt.stats.commits, rt.state().heard);
     for _ in 0..30 {
         rt.wheel(100.0, 100.0, -3.0);
         rt.frame(1.0 / 120.0);
     }
     rt.frame(1.0 / 120.0);
-    (rt.stats.commits - commits, rt.state.heard - heard, rt)
+    (rt.stats.commits - commits, rt.state().heard - heard, rt)
 }
 
 #[test]

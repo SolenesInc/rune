@@ -91,7 +91,7 @@ fn run(rt: &mut Runtime<Shimmer>, frames: usize) -> f32 {
     let mut worst = 0.0f32;
     let dt = 1.0 / 120.0;
     for _ in 0..frames {
-        rt.state.now += dt;
+        rt.state_mut().now += dt;
         rt.invalidate();
         rt.frame(dt);
         worst = worst_of(rt, worst);
@@ -133,10 +133,10 @@ fn a_shimmer_that_stops_and_starts_again_keeps_its_bright_copy_on_the_label() {
                 let mut rt = shimmer_rt(s);
                 rt.frame(0.0);
                 run(&mut rt, (stop_at * 120.0) as usize);
-                rt.state.on = false;
+                rt.state_mut().on = false;
                 run(&mut rt, off_frames);
-                rt.state.on = true;
-                rt.state.since = rt.state.now;
+                rt.state_mut().on = true;
+                rt.state_mut().since = rt.state().now;
                 let w = run(&mut rt, (period(&s) * 2.5 * 120.0) as usize);
                 if !(w.abs() < GLYPH_PX) { bad.push((tail, off_frames, stop_at, w)); }
             }
@@ -162,13 +162,13 @@ fn a_shimmer_stopped_while_waiting_restarts_in_step() {
             let mut rt = shimmer_rt(s);
             rt.frame(0.0);
             run(&mut rt, (stop_at * 120.0) as usize);
-            rt.state.on = false;
+            rt.state_mut().on = false;
             run(&mut rt, (gap * 120.0) as usize);
-            rt.state.on = true;
-            rt.state.since = rt.state.now;
+            rt.state_mut().on = true;
+            rt.state_mut().since = rt.state().now;
             let mut worst = 0.0f32;
             for _ in 0..(period(&s) * 1.5 * 120.0) as usize {
-                rt.state.now += 1.0 / 120.0;
+                rt.state_mut().now += 1.0 / 120.0;
                 rt.invalidate();
                 rt.frame(1.0 / 120.0);
                 if let Some((a, b)) = loop_offsets(&rt) {
@@ -195,11 +195,11 @@ fn a_shimmer_under_a_hovering_pointer_and_late_frames_stays_in_step() {
         for k in 0..900 {
             let r = rnd();
             let (catch_up, dt) = if r < 0.05 { (0.15 + rnd() * 0.3, 1.0 / 120.0) } else if r < 0.15 { (1.0 / 60.0, 1.0 / 120.0) } else { (0.0, 1.0 / 120.0) };
-            rt.state.now = rt.clock + catch_up + dt;
+            rt.state_mut().now = rt.clock + catch_up + dt;
             if rnd() < 0.2 { rt.invalidate(); }
             if rnd() < 0.3 { rt.pointer_move(150.0 + rnd() as f32 * 120.0, 20.0 + rnd() as f32 * 20.0); }
-            if k == 300 { rt.state.on = false; rt.invalidate(); }
-            if k == 300 + (seed as usize % 3) * 4 + 1 { rt.state.on = true; rt.state.since = rt.state.now - 0.3; rt.invalidate(); }
+            if k == 300 { rt.state_mut().on = false; rt.invalidate(); }
+            if k == 300 + (seed as usize % 3) * 4 + 1 { rt.state_mut().on = true; rt.state_mut().since = rt.state().now - 0.3; rt.invalidate(); }
             rt.frame_split(catch_up, dt);
             if let Some((a, b)) = loop_offsets(&rt) { if (a + b).abs() > worst.abs() { worst = a + b; } }
             glyph = worst_of(&rt, glyph);
@@ -235,17 +235,17 @@ fn window(rt: &mut Runtime<Shimmer>, secs: f64, events: &mut Vec<(f64, Ev)>, wor
                 quiet_from = quiet_from.max(rt.clock + 1.5);
                 match ev {
                     Ev::Stall(g) => g,
-                    Ev::Stop => { rt.state.on = false; 1.0 / 120.0 }
-                    Ev::Start => { rt.state.on = true; rt.state.since = rt.clock; 1.0 / 120.0 }
+                    Ev::Stop => { rt.state_mut().on = false; 1.0 / 120.0 }
+                    Ev::Start => { rt.state_mut().on = true; rt.state_mut().since = rt.clock; 1.0 / 120.0 }
                     Ev::Covered(g) | Ev::RestartCovered(g) => {
                         rt.set_live_visible(false);
                         let end = rt.clock + g;
                         let restart = matches!(ev, Ev::RestartCovered(_));
-                        if restart { rt.state.on = false; }
+                        if restart { rt.state_mut().on = false; }
                         while rt.clock < end {
                             rt.clock += 0.05;
-                            rt.state.now = rt.clock;
-                            if restart && !rt.state.on && rt.clock >= end - g / 2.0 { rt.state.on = true; rt.state.since = rt.clock; }
+                            rt.state_mut().now = rt.clock;
+                            if restart && !rt.state().on && rt.clock >= end - g / 2.0 { rt.state_mut().on = true; rt.state_mut().since = rt.clock; }
                             rt.invalidate();
                             rt.hidden_wake();
                         }
@@ -259,7 +259,7 @@ fn window(rt: &mut Runtime<Shimmer>, secs: f64, events: &mut Vec<(f64, Ev)>, wor
         };
         let step = crate::frame::clock::split(gap, rt.animating);
         if !covered { rt.clock += (gap - step.total()).max(0.0); }
-        rt.state.now = rt.clock + step.total();
+        rt.state_mut().now = rt.clock + step.total();
         rt.invalidate();
         rt.frame_split(step.catch_up, step.dt);
         // A copy mounted mid-pass waits at its start for the next pass, while the window runs.
@@ -267,7 +267,7 @@ fn window(rt: &mut Runtime<Shimmer>, secs: f64, events: &mut Vec<(f64, Ev)>, wor
             .is_some_and(|l| l.pending_start(rt.t).is_some());
         if waiting("/sheen") != waiting("/lit") { continue; }
         if let Some((a, b)) = loop_offsets(rt) && (a + b).abs() > worst.0.abs() { worst.0 = a + b; }
-        if rt.clock >= quiet_from && rt.state.on { worst.1 = worst_of(rt, worst.1); }
+        if rt.clock >= quiet_from && rt.state().on { worst.1 = worst_of(rt, worst.1); }
     }
 }
 
@@ -311,11 +311,11 @@ fn host(rt: &mut Runtime<Shimmer>, until: f64, events: &mut Vec<(f64, fn(&mut Sh
     while rt.clock < until {
         let next = events.first().map_or(f64::INFINITY, |e| e.0);
         let dt_now = dt.min((next - rt.clock).max(0.0));
-        rt.state.now = rt.clock + dt_now;
+        rt.state_mut().now = rt.clock + dt_now;
         if events.first().is_some_and(|e| e.0 <= rt.clock + dt_now + 1e-9) {
             let (_, f) = events.remove(0);
-            f(&mut rt.state);
-            rt.state.since = if rt.state.on && rt.state.since < 0.0 { rt.state.now } else { rt.state.since };
+            f(&mut rt.state_mut());
+            rt.state_mut().since = if rt.state().on && rt.state().since < 0.0 { rt.state().now } else { rt.state().since };
             rt.invalidate();
         }
         let animating = rt.frame(dt_now);

@@ -52,7 +52,7 @@ fn el(rt: &Runtime<S>, key: &str) -> ElementInfo {
     rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap()
 }
 
-fn heard(rt: &mut Runtime<S>) -> Vec<Heard> { std::mem::take(&mut rt.state.heard) }
+fn heard(rt: &mut Runtime<S>) -> Vec<Heard> { std::mem::take(&mut rt.state_mut().heard) }
 
 /// Code's selection is heard, and read, the frame after the handler's commit.
 fn act(rt: &mut Runtime<S>, f: impl FnOnce(&mut rune::Tx)) {
@@ -125,12 +125,12 @@ fn a_view_not_reading_selection_rects_does_not_rerun_as_a_drag_moves() {
 fn backward_says_which_way_the_selection_was_made() {
     let mut rt = runtime();
     drag_a(&mut rt, 0.1, 0.9);
-    assert_eq!(rt.state.backward, Some(false));
+    assert_eq!(rt.state().backward, Some(false));
     let a = el(&rt, "a");
     rt.pointer_up(a.rect[0] + a.rect[2] * 0.9, a.rect[1] + 5.0);
     tick(&mut rt);
     drag_a(&mut rt, 0.9, 0.1);
-    assert_eq!(rt.state.backward, Some(true), "dragged to the left");
+    assert_eq!(rt.state().backward, Some(true), "dragged to the left");
     // Into another text of the group, upward.
     let (a, b) = (el(&rt, "a"), el(&rt, "b"));
     rt.pointer_up(a.rect[0] + 5.0, a.rect[1] + 5.0);
@@ -140,9 +140,9 @@ fn backward_says_which_way_the_selection_was_made() {
     tick(&mut rt);
     rt.pointer_move(a.rect[0] + 20.0, a.rect[1] + 5.0);
     tick(&mut rt);
-    assert_eq!(rt.state.backward, Some(true), "dragged up into the text above");
+    assert_eq!(rt.state().backward, Some(true), "dragged up into the text above");
     act(&mut rt, |tx| tx.select_text("b", 3..9));
-    assert_eq!(rt.state.backward, Some(false), "code selects forward");
+    assert_eq!(rt.state().backward, Some(false), "code selects forward");
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn a_press_on_a_keeps_text_selection_element_keeps_the_selection_and_focus() {
     tick(&mut rt);
     rt.pointer_up(x, y);
     tick(&mut rt);
-    assert_eq!(rt.state.presses, 1, "the press still lands");
+    assert_eq!(rt.state().presses, 1, "the press still lands");
     assert_eq!(rt.selected_text().as_deref(), Some("first"), "the selection survives");
     assert!(el(&rt, "field").focused, "focus stays put");
     assert!(!el(&rt, "toolbar").focused, "a focusable toolbar doesn't take it");

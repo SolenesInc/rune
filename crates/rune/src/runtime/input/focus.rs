@@ -69,7 +69,7 @@ fn sync_input_focus(input: &mut crate::el::InputSpec, states: crate::states::Sta
     changed
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub(super) fn active_modal(&self) -> Option<usize> {
         self.modal_scope.as_ref().map(|m| m.index)
     }
@@ -185,7 +185,7 @@ impl<S: 'static> Runtime<S> {
         if tx.key_repeat { return true; }
         let f = self.nodes[i].handlers.on_press.clone().unwrap();
         log_event!(self, "default {}", self.nodes[i].path);
-        f(states!(self), tx);
+        f(self.app.states(), tx);
         true
     }
     /// The focus group `i` is an item of. A control inside an item (a tab's close button) is
@@ -295,11 +295,11 @@ impl<S: 'static> Runtime<S> {
         let mut changed = moved && self.physical_focus_lost();
         for n in &mut self.nodes {
             if let Some(input) = &mut n.input {
-                changed |= sync_input_focus(input, states!(self), path.as_deref() == Some(n.path.as_str()));
+                changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(n.path.as_str()));
             }
         }
         for (p, input) in &mut self.virtual_inputs {
-            changed |= sync_input_focus(input, states!(self), path.as_deref() == Some(p.as_str()));
+            changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(p.as_str()));
         }
         for effect in self.focus.step(focus_machine::FocusEvent::Set { path, keyboard }) {
             match effect {
@@ -538,7 +538,7 @@ impl<S: 'static> Runtime<S> {
             if repeat { return true; }
             let f = self.nodes[i].handlers.modal.as_ref().unwrap().dismiss.clone();
             self.set_focus(None, self.focus.keyboard());
-            f(states!(self), tx);
+            f(self.app.states(), tx);
             return true;
         }
         if ev.key == Key::Function(6) {
@@ -585,10 +585,10 @@ impl<S: 'static> Runtime<S> {
                 Key::PageDown => Some(-10), Key::PageUp => Some(10),
                 _ => None,
             };
-            if let Some(delta) = delta { step(states!(self), delta, tx); return true; }
+            if let Some(delta) = delta { step(self.app.states(), delta, tx); return true; }
             if matches!(ev.key, Key::Home | Key::End) {
                 let Some(f) = self.nodes[i].focus.step_limit.clone() else { return false };
-                f(states!(self), ev.key == Key::End, tx);
+                f(self.app.states(), ev.key == Key::End, tx);
                 return true;
             }
         }
@@ -624,13 +624,13 @@ impl<S: 'static> Runtime<S> {
                 let path = n.path.clone();
                 self.set_focus(Some(path.clone()), true);
                 tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
-                if let Some(f) = action { f(states!(self), tx); }
+                if let Some(f) = action { f(self.app.states(), tx); }
                 return true;
             }
         } else if self.nodes[i].role == "combobox" && self.nodes[i].input.is_none() && matches!(ev.key, Key::Up | Key::Down) {
             // A popup button opens on its arrows as well as Space (NSPopUpButton).
             if repeat { return true; }
-            if let Some(f) = self.nodes[i].handlers.on_press.clone() { f(states!(self), tx); }
+            if let Some(f) = self.nodes[i].handlers.on_press.clone() { f(self.app.states(), tx); }
             return true;
         }
         // Space presses the focused control. Return presses only rows and links; for a button
@@ -641,7 +641,7 @@ impl<S: 'static> Runtime<S> {
             if self.nodes[i].focus.highlight.is_some() && !shown { self.focus.step(focus_machine::FocusEvent::Pointed); return true; }
             if repeat { return true; }
             if self.link_key(i, tx) { return true; }
-            if let Some(f) = self.nodes[i].handlers.on_press.clone() { f(states!(self), tx); }
+            if let Some(f) = self.nodes[i].handlers.on_press.clone() { f(self.app.states(), tx); }
             return true;
         }
         false
@@ -738,9 +738,9 @@ mod tests {
         rt.key(KeyEvent { key: Key::Text("x".into()), mods: Mods::default() });
         rt.frame(0.0);
         assert_eq!(focused(&rt), "next");
-        assert_eq!(rt.state.next.text, "x", "the first key must not use the previous frame's focus");
-        assert_eq!(rt.state.first.text, "");
-        assert!(!rt.state.first.focused && rt.state.next.focused);
+        assert_eq!(rt.state().next.text, "x", "the first key must not use the previous frame's focus");
+        assert_eq!(rt.state().first.text, "");
+        assert!(!rt.state().first.focused && rt.state().next.focused);
         assert!(rt.ime_area.is_some());
         rt.update(|s, _| s.hidden = true); rt.frame(0.0);
         assert!(rt.ime_area.is_none(), "authored hidden inputs must not enable IME");
@@ -758,8 +758,8 @@ mod tests {
         rt.ime(crate::Ime::Preedit("pending".into(), None)); rt.frame(0.0);
         rt.ime_reset = false;
         rt.finish_composition(); rt.frame(0.0);
-        assert!(rt.state.preedit().is_none() && rt.state.focused && rt.ime_reset);
-        assert_eq!(rt.state.text, "committedpending");
+        assert!(rt.state().preedit().is_none() && rt.state().focused && rt.ime_reset);
+        assert_eq!(rt.state().text, "committedpending");
     }
 
     #[test]
@@ -783,10 +783,10 @@ mod tests {
         assert!(rt.node(path.as_deref().unwrap()).is_none());
         assert_eq!(rt.focus.owned(), path);
         rt.key(KeyEvent { key: Key::Text("offscreen".into()), mods: Mods::default() }); rt.frame(0.0);
-        assert_eq!(rt.state[0].text, "offscreen");
+        assert_eq!(rt.state()[0].text, "offscreen");
         let (x, y) = rt.find("other").unwrap();
         rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-        assert!(!rt.state[0].focused);
+        assert!(!rt.state()[0].focused);
         rt.wheel(100.0, 100.0, 2000.0); rt.frame(0.0);
         assert_eq!(focused(&rt), "other");
         assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("row-0")));
@@ -810,26 +810,26 @@ mod tests {
         let mut first = TextEdit::new("hello"); first.focused = true;
         let mut rt = Runtime::new(Form { first, search: TextEdit::new(""), open: false, app_keys: 0 }, view,
             (300.0, 300.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, _, _| { s.app_keys += 1; true });
+        rt.app_mut().on_key = Some(|s, _, _| { s.app_keys += 1; true });
         rt.frame(0.0);
         rt.ime(crate::Ime::Preedit("pending".into(), None)); rt.frame(0.0);
-        rt.state.open = true; rt.state.search.focused = true; rt.invalidate(); rt.frame(0.0);
-        assert!(rt.state.search.focused);
-        assert!(!rt.state.first.focused);
-        assert!(rt.state.first.preedit().is_none());
+        rt.state_mut().open = true; rt.state_mut().search.focused = true; rt.invalidate(); rt.frame(0.0);
+        assert!(rt.state().search.focused);
+        assert!(!rt.state().first.focused);
+        assert!(rt.state().first.preedit().is_none());
         assert!(rt.ime_reset);
         assert!(!rt.focus.keyboard());
         rt.key(KeyEvent { key: Key::Text("query".into()), mods: Mods::default() }); rt.frame(0.0);
-        assert_eq!(rt.state.search.text, "query");
-        assert_eq!(rt.state.first.text, "hellopending");
-        assert_eq!(rt.state.app_keys, 0);
+        assert_eq!(rt.state().search.text, "query");
+        assert_eq!(rt.state().first.text, "hellopending");
+        assert_eq!(rt.state().app_keys, 0);
         rt.key(KeyEvent { key: Key::Function(5), mods: Mods::default() }); rt.frame(0.0);
-        assert_eq!(rt.state.app_keys, 1);
+        assert_eq!(rt.state().app_keys, 1);
         rt.ime(crate::Ime::Preedit("pending".into(), None)); rt.frame(0.0);
         rt.pointer_down(290.0, 290.0); rt.pointer_up(290.0, 290.0); rt.frame(0.0);
         assert!(rt.focus.path().is_none());
-        assert!(!rt.state.search.focused);
-        assert!(rt.state.search.preedit().is_none());
+        assert!(!rt.state().search.focused);
+        assert!(rt.state().search.preedit().is_none());
     }
 
     #[test]
@@ -839,8 +839,8 @@ mod tests {
         key(&mut rt, Key::Tab, false); assert_eq!(focused(&rt), "opener");
         key(&mut rt, Key::Tab, false); assert_eq!(focused(&rt), "radio0");
         key(&mut rt, Key::Right, false); assert_eq!(focused(&rt), "radio2");
-        assert_eq!((rt.state.selected, rt.state.picks), (2, 1));
-        key(&mut rt, Key::Text(" ".into()), false); assert_eq!(rt.state.picks, 2);
+        assert_eq!((rt.state().selected, rt.state().picks), (2, 1));
+        key(&mut rt, Key::Text(" ".into()), false); assert_eq!(rt.state().picks, 2);
         key(&mut rt, Key::Tab, false); assert_eq!(focused(&rt), "early");
         key(&mut rt, Key::Tab, true); assert_eq!(focused(&rt), "radio2");
         let (x, y) = rt.find("early").unwrap();
@@ -868,20 +868,20 @@ mod tests {
         key(&mut rt, Key::Text(" ".into()), false); assert_eq!(focused(&rt), "one");
         let (x, y) = rt.find("one").unwrap();
         rt.secondary_down(x, y); rt.secondary_up(x, y); rt.frame(0.0);
-        assert_eq!(rt.state.secondary_picks, 0, "secondary events must not bubble past a modal");
+        assert_eq!(rt.state().secondary_picks, 0, "secondary events must not bubble past a modal");
         key(&mut rt, Key::Tab, true); assert_eq!(focused(&rt), "two");
         key(&mut rt, Key::Tab, false); assert_eq!(focused(&rt), "one");
         key(&mut rt, Key::Text(" ".into()), false); assert_eq!(focused(&rt), "inner");
         let (x, y) = rt.find("opener").unwrap();
         rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-        assert!(rt.state.nested); assert_eq!(focused(&rt), "inner");
+        assert!(rt.state().nested); assert_eq!(focused(&rt), "inner");
         key(&mut rt, Key::Escape, false); assert_eq!(focused(&rt), "one");
         key(&mut rt, Key::Escape, false); assert_eq!(focused(&rt), "opener");
-        assert!(!rt.state.open);
+        assert!(!rt.state().open);
         key(&mut rt, Key::Text(" ".into()), false);
-        rt.state.nested = false; rt.invalidate(); rt.frame(0.0);
+        rt.state_mut().nested = false; rt.invalidate(); rt.frame(0.0);
         rt.pointer_down(5.0, 280.0); rt.pointer_up(5.0, 280.0); rt.frame(0.0);
-        assert!(!rt.state.open); assert_eq!(focused(&rt), "opener");
+        assert!(!rt.state().open); assert_eq!(focused(&rt), "opener");
         assert!(!rt.elements().iter().any(|e| e.focus_visible));
     }
 
@@ -903,13 +903,13 @@ mod tests {
             rt.frame(0.0);
             let (x, y) = rt.find("opener").unwrap();
             rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
-            assert!(rt.state.open);
+            assert!(rt.state().open);
             let now = |rt: &Runtime<Form>| rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key);
             assert_eq!(now(&rt).as_deref(), Some("field"), "the field's own focus request wins inside the modal");
             if escape { press(&mut rt, Key::Escape) } else { rt.update(|s, _| s.open = false); rt.frame(0.0); }
-            assert!(!rt.state.open);
+            assert!(!rt.state().open);
             assert_eq!(now(&rt).as_deref(), Some("opener"), "closing (escape: {escape}) returns focus to the opener");
-            if escape { assert!(!rt.state.field.focused, "Escape blurs the field before it goes"); }
+            if escape { assert!(!rt.state().field.focused, "Escape blurs the field before it goes"); }
         }
     }
 
@@ -936,7 +936,7 @@ mod tests {
         rt.update(|s, _| { s.open = false; s.field.focused = false; s.search.focused = true; });
         rt.frame(0.0);
         assert_eq!(focused(&rt), "search", "the handler's focus request outside the modal wins over the opener");
-        assert!(rt.state.search.focused);
+        assert!(rt.state().search.focused);
         // The same when the sheet goes in the frame, with no exit.
         rt.update(|s, _| { s.search.focused = false; s.open = true; s.field.focused = true; });
         rt.frame(0.0);
@@ -945,7 +945,7 @@ mod tests {
         rt.update(|s, tx| { tx.instant(); s.open = false; s.field.focused = false; s.search.focused = true; });
         rt.frame(0.0);
         assert_eq!(now(&rt).as_deref(), Some("search"), "an instant close keeps the request too");
-        assert!(rt.state.search.focused);
+        assert!(rt.state().search.focused);
     }
 
     #[test]
@@ -983,7 +983,7 @@ mod tests {
             assert!(rt.focus.path().is_none(), "pointer-down blurs before pointer-up closes");
             if explicit { rt.update(|_, tx| tx.blur()); rt.frame(0.0); }
             rt.pointer_up(x, y); rt.frame(0.0);
-            assert!(!rt.state.open);
+            assert!(!rt.state().open);
             assert_eq!(rt.focus.path().is_some(), !explicit);
             if !explicit { assert_eq!(focused(&rt), "opener"); }
         }
@@ -1038,7 +1038,7 @@ mod tests {
         assert_eq!(focused(&rt), "Alpha");
         assert_eq!(highlighted(&rt), None, "a pointer-opened menu shows no highlight yet");
         press(&mut rt, Key::Enter);
-        assert!(rt.state.open && rt.state.picks.is_empty(), "Return chooses no hidden highlight");
+        assert!(rt.state().open && rt.state().picks.is_empty(), "Return chooses no hidden highlight");
         press(&mut rt, Key::Down);
         assert_eq!(highlighted(&rt).as_deref(), Some("Alpha"), "the first arrow reveals the highlight");
         press(&mut rt, Key::Down); assert_eq!(focused(&rt), "Beta");
@@ -1047,9 +1047,9 @@ mod tests {
         press(&mut rt, Key::Down); assert_eq!(focused(&rt), "Alpha");
         press(&mut rt, Key::Up); assert_eq!(focused(&rt), "Charlie");
         press(&mut rt, Key::Home); assert_eq!(focused(&rt), "Alpha");
-        assert!(rt.state.picks.is_empty(), "moving does not choose");
+        assert!(rt.state().picks.is_empty(), "moving does not choose");
         press(&mut rt, Key::Escape);
-        assert!(!rt.state.open);
+        assert!(!rt.state().open);
         assert_eq!(focused(&rt), "popup");
     }
 
@@ -1076,8 +1076,8 @@ mod tests {
         press(&mut rt, Key::Text("b".into())); assert_eq!(focused(&rt), "Bravo");
         press(&mut rt, Key::Text("b".into())); assert_eq!(focused(&rt), "Beta");
         press(&mut rt, Key::Enter);
-        assert_eq!(rt.state.picks, [1]);
-        assert!(!rt.state.open);
+        assert_eq!(rt.state().picks, [1]);
+        assert!(!rt.state().open);
     }
 
     #[test]
@@ -1103,10 +1103,10 @@ mod tests {
         let mut rt = menu_runtime(Menu { follows: true, ..Default::default() });
         press(&mut rt, Key::Tab); assert_eq!(focused(&rt), "popup");
         press(&mut rt, Key::Down);
-        assert!(rt.state.open, "Down opens a popup button");
+        assert!(rt.state().open, "Down opens a popup button");
         assert_eq!(focused(&rt), "Alpha");
         press(&mut rt, Key::Down); press(&mut rt, Key::Down);
-        assert_eq!(rt.state.picks, [1, 2], "each move presses the item it reaches");
+        assert_eq!(rt.state().picks, [1, 2], "each move presses the item it reaches");
     }
 
     #[test]
@@ -1139,7 +1139,7 @@ mod tests {
             col().size(200.0, 200.0).child(button("switch")).child(el().size(30.0, 30.0).focusable(true))
         }
         let mut rt = Runtime::new(Keys::default(), view, (200.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, tx| {
+        rt.app_mut().on_key = Some(|s, ev, tx| {
             s.seen.push(tx.focused().map(str::to_owned));
             // System Settings: plain Down changes the pane only while no control has focus.
             if ev.key == Key::Down && tx.focused().is_none() { s.pane += 1; return true; }
@@ -1147,15 +1147,15 @@ mod tests {
         });
         rt.frame(0.0);
         press(&mut rt, Key::Down);
-        assert_eq!(rt.state.pane, 1);
+        assert_eq!(rt.state().pane, 1);
         press(&mut rt, Key::Tab);
         assert_eq!(focused(&rt), "switch");
         press(&mut rt, Key::Down);
-        assert_eq!(rt.state.pane, 1, "Down the focused switch passed on doesn't change the pane");
+        assert_eq!(rt.state().pane, 1, "Down the focused switch passed on doesn't change the pane");
         press(&mut rt, Key::Tab);
         press(&mut rt, Key::Down);
         // The first Tab reaches on_key before focus moves; the second never does.
-        assert_eq!(rt.state.seen, [None, None, Some("switch".into()), Some("#1".into())]);
+        assert_eq!(rt.state().seen, [None, None, Some("switch".into()), Some("#1".into())]);
     }
 
     #[test]
@@ -1223,9 +1223,9 @@ mod tests {
             root
         }
         let mut rt = Runtime::new(Keys::default(), view, (300.0, 300.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, _| { if ev.key == Key::Enter { s.log.push("on_key"); } false });
+        rt.app_mut().on_key = Some(|s, ev, _| { if ev.key == Key::Enter { s.log.push("on_key"); } false });
         rt.frame(0.0);
-        let log = |rt: &mut Runtime<Keys>| std::mem::take(&mut rt.state.log);
+        let log = |rt: &mut Runtime<Keys>| std::mem::take(&mut rt.state_mut().log);
         hold(&mut rt, Key::Enter);
         assert_eq!(log(&mut rt), ["continue"], "nothing focused: the default button, once per press");
         let tab_to = |rt: &mut Runtime<Keys>, key: &str| {
@@ -1247,10 +1247,10 @@ mod tests {
         tab_to(&mut rt, "row");
         press(&mut rt, Key::Enter);
         assert_eq!(log(&mut rt), ["row"], "a list row takes Return");
-        rt.state.sheet = true; rt.invalidate(); rt.frame(0.0);
+        rt.state_mut().sheet = true; rt.invalidate(); rt.frame(0.0);
         press(&mut rt, Key::Enter);
         assert_eq!(log(&mut rt), ["done"], "a modal's default button, not the one behind it");
-        assert!(!rt.state.sheet);
+        assert!(!rt.state().sheet);
     }
 
     #[test]
@@ -1262,7 +1262,7 @@ mod tests {
             col().size(200.0, 200.0).child(row().role("toolbar").focus_group().child(button("before")).child(slider))
         }
         let mut rt = Runtime::new(Keys { value: 50, ..Keys::default() }, view, (200.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); false });
+        rt.app_mut().on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); false });
         rt.set_tab_visits_controls(true);
         rt.frame(0.0);
         assert_eq!(rt.elements().into_iter().find(|e| e.key.as_deref() == Some("volume")).unwrap().role, "slider");
@@ -1270,26 +1270,26 @@ mod tests {
         assert_eq!(focused(&rt), "before");
         press(&mut rt, Key::Right);
         assert_eq!(focused(&rt), "volume", "on_step makes it focusable");
-        assert!(rt.state.steps.is_empty());
+        assert!(rt.state().steps.is_empty());
         for key in [Key::Left, Key::Down, Key::Right, Key::Up, Key::PageDown, Key::PageUp] { press(&mut rt, key); }
-        assert_eq!(std::mem::take(&mut rt.state.steps), [-1, -1, 1, 1, -10, 10]);
+        assert_eq!(std::mem::take(&mut rt.state_mut().steps), [-1, -1, 1, 1, -10, 10]);
         assert_eq!(focused(&rt), "volume", "the toolbar's arrows don't take focus off it");
         hold(&mut rt, Key::Right);
-        assert_eq!((std::mem::take(&mut rt.state.steps), rt.state.value), (vec![1, 1, 1], 53), "held arrows repeat");
+        assert_eq!((std::mem::take(&mut rt.state_mut().steps), rt.state().value), (vec![1, 1, 1], 53), "held arrows repeat");
         press(&mut rt, Key::End);
-        assert_eq!(rt.state.value, 100);
+        assert_eq!(rt.state().value, 100);
         press(&mut rt, Key::Home);
-        assert_eq!(rt.state.value, 0);
-        rt.state.page = true; rt.invalidate(); rt.frame(0.0);
-        rt.state.app.clear();
-        rt.state.value = 50;
+        assert_eq!(rt.state().value, 0);
+        rt.state_mut().page = true; rt.invalidate(); rt.frame(0.0);
+        rt.state_mut().app.clear();
+        rt.state_mut().value = 50;
         press(&mut rt, Key::Home);
-        assert_eq!(rt.state.value, 50, "without on_step_limit Home and End aren't the slider's");
+        assert_eq!(rt.state().value, 50, "without on_step_limit Home and End aren't the slider's");
         assert_eq!(focused(&rt), "volume", "nor the toolbar's: they go on to the app");
         rt.key(KeyEvent { key: Key::Right, mods: Mods { shift: true, ..Mods::default() } }); rt.frame(0.0);
-        assert!(rt.state.steps.is_empty(), "a modified arrow isn't a step");
+        assert!(rt.state().steps.is_empty(), "a modified arrow isn't a step");
         assert_eq!(focused(&rt), "volume", "and doesn't move the toolbar's focus");
-        assert_eq!(std::mem::take(&mut rt.state.app), [Key::Home, Key::Right]);
+        assert_eq!(std::mem::take(&mut rt.state_mut().app), [Key::Home, Key::Right]);
     }
 
     #[test]
@@ -1302,7 +1302,7 @@ mod tests {
                     .child(button("banana").label("banana").on_press(|s: &mut Keys| s.log.push("banana"))))
         }
         let mut rt = Runtime::new(Keys::default(), view, (200.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); false });
+        rt.app_mut().on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); false });
         rt.set_tab_visits_controls(true);
         rt.frame(0.0);
         let shifted = |rt: &mut Runtime<Keys>, key: Key| {
@@ -1316,8 +1316,8 @@ mod tests {
         shifted(&mut rt, Key::Enter);
         shifted(&mut rt, Key::Down);
         assert_eq!(focused(&rt), "apple", "Shift-Down is the app's (to extend a selection, say)");
-        assert!(rt.state.log.is_empty(), "Shift-Space and Shift-Return press nothing");
-        assert_eq!(rt.state.app, [Key::Tab, Key::Text(" ".into()), Key::Enter, Key::Down], "the first Tab found nothing focused");
+        assert!(rt.state().log.is_empty(), "Shift-Space and Shift-Return press nothing");
+        assert_eq!(rt.state().app, [Key::Tab, Key::Text(" ".into()), Key::Enter, Key::Down], "the first Tab found nothing focused");
         shifted(&mut rt, Key::Text("B".into()));
         assert_eq!(focused(&rt), "banana", "a capital still type-selects");
         shifted(&mut rt, Key::Tab);
@@ -1335,7 +1335,7 @@ mod tests {
                 .child(button("continue").default_button().on_press(|s: &mut Keys| s.log.push("continue")))
         }
         let mut rt = Runtime::new(Keys::default(), view, (300.0, 300.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, _| { if ev.key == Key::Escape { s.log.push("escape"); } false });
+        rt.app_mut().on_key = Some(|s, ev, _| { if ev.key == Key::Escape { s.log.push("escape"); } false });
         rt.frame(0.0);
         for (field, after) in [("field", "continue"), ("named", "submit")] {
             for _ in 0..4 { if rt.elements().iter().any(|e| e.focused && e.key.as_deref() == Some(field)) { break; } press(&mut rt, Key::Tab); }
@@ -1343,13 +1343,13 @@ mod tests {
             rt.ime(crate::Ime::Preedit("ka".into(), None)); rt.frame(0.0);
             press(&mut rt, Key::Enter);
             press(&mut rt, Key::Escape);
-            assert!(rt.state.log.is_empty(), "{field}: the composition's Return and Escape: {:?}", rt.state.log);
+            assert!(rt.state().log.is_empty(), "{field}: the composition's Return and Escape: {:?}", rt.state().log);
             assert_eq!(focused(&rt), field, "Escape cancels the composition, not the field's focus");
             rt.ime(crate::Ime::Commit("か".into())); rt.frame(0.0);
             press(&mut rt, Key::Enter);
-            assert_eq!(std::mem::take(&mut rt.state.log), [after], "{field}: Return once it's committed");
+            assert_eq!(std::mem::take(&mut rt.state_mut().log), [after], "{field}: Return once it's committed");
         }
-        assert_eq!((rt.state.field.text.as_str(), rt.state.named.text.as_str()), ("か", "か"));
+        assert_eq!((rt.state().field.text.as_str(), rt.state().named.text.as_str()), ("か", "か"));
     }
 
     #[test]
@@ -1361,7 +1361,7 @@ mod tests {
                 .on_link(|_: &mut Keys, _, _| {}))
         }
         let mut rt = Runtime::new(Keys::default(), view, (300.0, 100.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, _, tx| { s.seen.push(tx.focused().map(str::to_owned)); false });
+        rt.app_mut().on_key = Some(|s, _, tx| { s.seen.push(tx.focused().map(str::to_owned)); false });
         rt.set_tab_visits_controls(true);
         rt.frame(0.0);
         press(&mut rt, Key::Tab);
@@ -1369,9 +1369,9 @@ mod tests {
         assert_eq!(link.key.as_deref(), Some("docs"));
         let rings = rt.instances.iter().filter(|i| i.fill == [0.0; 4] && i.border[3] > 0.0 && i.params[1] == KIND_RECT).count();
         assert_eq!(rings, 0, "the link's own look shows its focus, not a ring round the paragraph");
-        assert_eq!(rt.state.seen, [None], "Tab with nothing focused");
+        assert_eq!(rt.state().seen, [None], "Tab with nothing focused");
         press(&mut rt, Key::Text("x".into()));
-        assert_eq!(rt.state.seen, [None, Some("docs".to_owned())]);
+        assert_eq!(rt.state().seen, [None, Some("docs".to_owned())]);
     }
 
     #[test]
@@ -1438,7 +1438,7 @@ mod tests {
         assert_eq!(focused(&rt), "row2", "a shortcut's selection takes the focus with it");
         assert!(rt.elements().iter().any(|e| e.focused && e.focus_visible), "and keeps the keyboard ring");
         key(&mut rt, Key::Up, false);
-        assert_eq!((focused(&rt).as_str(), rt.state.selected), ("row1", 1));
+        assert_eq!((focused(&rt).as_str(), rt.state().selected), ("row1", 1));
     }
 
     #[derive(Default)]
@@ -1470,7 +1470,7 @@ mod tests {
     }
     fn held_runtime(state: Held) -> Runtime<Held> {
         let mut rt = Runtime::new(state, held_view, (300.0, 300.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, _, _| { s.app += 1; false });
+        rt.app_mut().on_key = Some(|s, _, _| { s.app += 1; false });
         rt.frame(0.0); rt
     }
     /// A first press and two auto-repeats.
@@ -1484,29 +1484,29 @@ mod tests {
         let mut rt = held_runtime(Held::default());
         press(&mut rt, Key::Tab); assert_eq!(focused(&rt), "press");
         hold(&mut rt, Key::Text(" ".into()));
-        assert_eq!(rt.state.presses, 1, "Space presses a button once per press");
+        assert_eq!(rt.state().presses, 1, "Space presses a button once per press");
         hold(&mut rt, Key::Enter);
-        assert_eq!(rt.state.presses, 1, "Return passes a focused button by");
+        assert_eq!(rt.state().presses, 1, "Return passes a focused button by");
         press(&mut rt, Key::Tab); assert_eq!(focused(&rt), "popup");
         hold(&mut rt, Key::Down);
-        assert_eq!(rt.state.opens, 1, "arrows open a popup button once");
-        assert!(rt.state.menu);
+        assert_eq!(rt.state().opens, 1, "arrows open a popup button once");
+        assert!(rt.state().menu);
         assert_eq!(focused(&rt), "Bravo", "held arrows keep moving inside the open menu");
         hold(&mut rt, Key::Enter);
-        assert_eq!(rt.state.picks, [2], "a menu item chooses once");
+        assert_eq!(rt.state().picks, [2], "a menu item chooses once");
         assert_eq!(focused(&rt), "popup");
-        assert_eq!(rt.state.opens, 1, "the repeat does not reopen the popup that took focus back");
+        assert_eq!(rt.state().opens, 1, "the repeat does not reopen the popup that took focus back");
         press(&mut rt, Key::Tab); assert_eq!(focused(&rt), "field");
         hold(&mut rt, Key::Enter);
-        assert_eq!(rt.state.submits, 1, "a field submits once per press");
+        assert_eq!(rt.state().submits, 1, "a field submits once per press");
         hold(&mut rt, Key::Text("x".into()));
         hold(&mut rt, Key::Backspace);
-        assert_eq!(rt.state.field.text, "", "held keys type and delete");
-        let app = rt.state.app;
+        assert_eq!(rt.state().field.text, "", "held keys type and delete");
+        let app = rt.state().app;
         hold(&mut rt, Key::Escape);
         assert!(!rt.has_focus(), "Escape blurs the field");
-        assert_eq!(rt.state.app, app, "and its repeats reach nothing once focus has gone");
-        rt.state.app = 0;
+        assert_eq!(rt.state().app, app, "and its repeats reach nothing once focus has gone");
+        rt.state_mut().app = 0;
         press(&mut rt, Key::Tab); assert_eq!(focused(&rt), "press");
         hold(&mut rt, Key::Tab);
         assert_eq!(focused(&rt), "plain", "held Tab keeps moving focus");
@@ -1522,7 +1522,7 @@ mod tests {
             hold(&mut rt, key);
             assert_eq!(highlighted(&rt), None, "a repeat must not reveal the highlight");
         }
-        assert!(rt.state.open && rt.state.picks.is_empty());
+        assert!(rt.state().open && rt.state().picks.is_empty());
     }
 
     #[test]
@@ -1530,12 +1530,12 @@ mod tests {
         let mut rt = held_runtime(Held { modals: 2, ..Held::default() });
         assert_eq!(focused(&rt), "in-two");
         hold(&mut rt, Key::Escape);
-        assert_eq!(rt.state.modals, 1);
+        assert_eq!(rt.state().modals, 1);
         assert_eq!(focused(&rt), "in-one");
         hold(&mut rt, Key::Escape);
-        assert_eq!(rt.state.modals, 0);
+        assert_eq!(rt.state().modals, 0);
         assert!(!rt.has_focus());
-        assert_eq!(rt.state.app, 0, "repeats never fall through to the app after a dismissal");
+        assert_eq!(rt.state().app, 0, "repeats never fall through to the app after a dismissal");
     }
 
     #[test]
@@ -1547,7 +1547,8 @@ mod tests {
         }
         let mut rt = Runtime::new((), view, (200.0, 300.0), Env::new(true, 1.0));
         rt.frame(0.0);
-        rt.set_focus(Some(rt.nodes.iter().find(|n| n.key.as_deref() == Some("item0")).unwrap().path.clone()), true);
+        let core = &mut *rt;
+        core.set_focus(Some(core.nodes.iter().find(|n| n.key.as_deref() == Some("item0")).unwrap().path.clone()), true);
         rt.frame(0.0);
         let shown = |rt: &Runtime<()>, key: &str| {
             let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap();

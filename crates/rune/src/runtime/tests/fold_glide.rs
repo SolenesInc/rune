@@ -20,7 +20,7 @@ fn shut_secs(fold: bool) -> f32 {
     }
     let mut rt = Runtime::new((true, fold), folded, (400.0, 900.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state.0 = false;
+    rt.state_mut().0 = false;
     rt.dirty = true;
     for k in 1..240 {
         rt.frame(1.0 / 120.0);
@@ -52,7 +52,7 @@ fn opening(zoom: f32) -> Vec<(f32, f32)> {
     let mut rt = Runtime::new((false, zoom), folded, (400.0, 300.0), Env::new(true, 2.0));
     rt.frame(0.0);
     rt.frame(1.0 / 120.0);
-    rt.state.0 = true;
+    rt.state_mut().0 = true;
     rt.dirty = true;
     (0..60).map(|_| {
         rt.frame(1.0 / 120.0);
@@ -79,7 +79,7 @@ fn a_fold_moves_only_what_shows_of_it() {
     let mut rt = Runtime::new(false, folded, (400.0, 300.0), Env::new(true, 2.0));
     rt.frame(0.0);
     rt.frame(1.0 / 120.0);
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.dirty = true;
     let mut heights = Vec::new();
     for _ in 0..60 {
@@ -452,7 +452,7 @@ fn after_removal(fold: bool, n: usize) -> Vec<f32> {
     }
     let mut rt = Runtime::new((true, fold), view, (400.0, 600.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state.0 = false;
+    rt.state_mut().0 = false;
     rt.dirty = true;
     (0..n).map(|_| {
         rt.frame(1.0 / 120.0);
@@ -482,7 +482,7 @@ fn block(opening: bool, frames: usize) -> Vec<([f32; 3], f32)> {
     }
     let mut rt = Runtime::new(!opening, view, (400.0, 600.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state = opening;
+    *rt.state_mut() = opening;
     rt.dirty = true;
     (0..frames).map(|_| {
         rt.frame(1.0 / 120.0);

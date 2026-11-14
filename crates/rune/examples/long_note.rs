@@ -147,7 +147,8 @@ impl Draw {
     fn draw(&mut self, rt: &mut Runtime<State>) -> f64 {
         let t = Instant::now();
         self.renderer.upload_images(&self.gpu.device, &self.gpu.queue, &mut rt.images);
-        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut rt.text.atlas, &rt.instances, (self.out.width, self.out.height));
+        let core = &mut **rt;
+        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut core.text.atlas, &core.instances, (self.out.width, self.out.height));
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
         self.renderer.draw(&mut encoder, &self.out.view, rt.clear_color());
         self.renderer.submit(&self.gpu.queue, encoder);
@@ -221,7 +222,7 @@ fn find(rt: &Runtime<State>, key: &str) -> rune::runtime::ElementInfo {
 
 /// The focused field's key.
 fn field(rt: &Runtime<State>) -> String {
-    match rt.state.blocks.iter().position(|b| b.focused) {
+    match rt.state().blocks.iter().position(|b| b.focused) {
         Some(i) => format!("b{i}"),
         None => "editor".into(),
     }
@@ -311,14 +312,14 @@ fn main() {
             rt.ime(Ime::Commit("w".into()));
             settle(&mut rt, &mut d);
             let enter = case == "enter_mid";
-            let before = doc_len(&rt.state);
+            let before = doc_len(&rt.state());
             let rows: Vec<_> = (0..samples).map(|_| {
                 // Two characters typed in one untimed frame, so each Backspace reaches a text
                 // the layout cache hasn't seen (and a block's field never runs out).
                 if !enter { rt.ime(Ime::Commit("qz".into())); rt.frame(1.0 / 120.0); }
                 timed(&mut rt, &mut d, |rt| press(rt, if enter { Key::Enter } else { Key::Backspace }))
             }).collect();
-            let after = doc_len(&rt.state);
+            let after = doc_len(&rt.state());
             assert_eq!(after - before, samples, "{case}: one byte per press");
             report(kb, case, &rows);
         }
@@ -334,7 +335,7 @@ fn main() {
                 pastes.push(timed(&mut rt, &mut d, |rt| rt.paste(format!("{i:03}{paste}"))));
                 undos.push(timed(&mut rt, &mut d, |rt| cmd(rt, Key::Command('z'))));
             }
-            assert_eq!(doc_len(&rt.state), text.len() + 1, "every paste undone");
+            assert_eq!(doc_len(&rt.state()), text.len() + 1, "every paste undone");
             report(kb, "paste_2k", &pastes);
             report(kb, "undo", &undos);
         }
@@ -348,10 +349,10 @@ fn main() {
             }
             let mut steps = 0;
             loop {
-                let before = doc_len(&rt.state);
+                let before = doc_len(&rt.state());
                 cmd(&mut rt, Key::Command('z'));
                 rt.frame(1.0 / 120.0);
-                if doc_len(&rt.state) == before { break; }
+                if doc_len(&rt.state()) == before { break; }
                 steps += 1;
             }
             println!("UNDO size={kb}k edits=100 undo_steps_kept={steps}");
@@ -397,7 +398,7 @@ fn main() {
                 settle(&mut rt, &mut d);
                 rows.push(timed(&mut rt, &mut d, |rt| cmd(rt, Key::Down)));
                 settle(&mut rt, &mut d);
-                visible &= rt.state.note.focus == rt.state.note.text.len() && caret_in_view(&rt).is_some();
+                visible &= rt.state().note.focus == rt.state().note.text.len() && caret_in_view(&rt).is_some();
             }
             println!("CARET size={kb}k case=cmd_down at_end_in_view={visible}");
             assert!(visible, "cmd_down: caret at the end and in view");
@@ -412,12 +413,12 @@ fn main() {
             for i in 0..samples.min(30) {
                 rt.wheel(SIZE.0 / 2.0, SIZE.1 / 2.0, -900.0);
                 settle(&mut rt, &mut d);
-                let before = (editor_y(&rt), rt.state.note.focus);
+                let before = (editor_y(&rt), rt.state().note.focus);
                 let y = v[1] + v[3] - 40.0 - (i % 5) as f32 * LINE;
                 rows.push(timed(&mut rt, &mut d, |rt| { rt.pointer_down(200.0, y); rt.pointer_up(200.0, y); }));
                 settle(&mut rt, &mut d);
                 worst_jump = worst_jump.max((editor_y(&rt) - before.0).abs());
-                if rt.state.note.focus != before.1 && caret_in_view(&rt).is_some() { moved += 1; }
+                if rt.state().note.focus != before.1 && caret_in_view(&rt).is_some() { moved += 1; }
             }
             println!("CARET size={kb}k case=click clicks={} caret_landed_in_view={moved} worst_jump_pt={worst_jump:.1}", rows.len());
             report(kb, "click", &rows);

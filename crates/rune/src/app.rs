@@ -1009,19 +1009,19 @@ mod tests {
     #[test]
     fn window_panel_focus_is_local_deduplicated_and_runs_without_frames() {
         let mut rt = Runtime::new(Vec::new(), |_: &Vec<bool>, _: &mut Cx<Vec<bool>>| el(), (100.0, 100.0), Env::default());
-        rt.on_focus = Some(|seen, focused, tx| { seen.push(focused); if !focused { tx.close_window(); } });
+        rt.app_mut().on_focus = Some(|seen, focused, tx| { seen.push(focused); if !focused { tx.close_window(); } });
         let mut other = Runtime::new(Vec::new(), |_: &Vec<bool>, _: &mut Cx<Vec<bool>>| el(), (100.0, 100.0), Env::default());
-        other.on_focus = rt.on_focus;
+        other.app_mut().on_focus = rt.app().on_focus;
         rt.window_focus(true);
         rt.window_focus(true);
         rt.window_focus(false);
         rt.window_focus(false);
-        assert_eq!(rt.state, [true, false]);
+        assert_eq!(*rt.state(), [true, false]);
         assert_eq!(rt.shell_request, Some(Shell::Close));
-        assert!(other.state.is_empty());
+        assert!(other.state().is_empty());
         other.window_focus(false);
-        assert_eq!(other.state, [false]);
-        other.on_focus = None;
+        assert_eq!(*other.state(), [false]);
+        other.app_mut().on_focus = None;
         other.frame(0.0);
         assert!(!other.stale());
         other.window_focus(true);
@@ -1175,7 +1175,7 @@ mod tests {
     #[test]
     fn minimize_reaches_the_shell_from_handlers_updates_and_handles() {
         let mut rt = Runtime::new(0u32, |_: &u32, _: &mut Cx<u32>| el(), (100.0, 100.0), Env::default());
-        rt.on_focus = Some(|_, focused, tx| if !focused { tx.minimize(); });
+        rt.app_mut().on_focus = Some(|_, focused, tx| if !focused { tx.minimize(); });
         rt.window_focus(true);
         assert!(!rt.minimize.latched());
         rt.window_focus(false);
@@ -1222,11 +1222,11 @@ mod tests {
         assert_eq!(rt.shell_request.take(), Some(Shell::Close), "an unhandled ⌘W closes as the button would");
         press(&mut rt, Code::KeyM, 'm', Unhandled::Minimize);
         assert!(rt.minimize_step(crate::window::MinimizeEvent::Taken) && rt.shell_request.is_none());
-        rt.on_key = Some(|n, ev, _| { *n += 1; ev.is_command('w') });
+        rt.app_mut().on_key = Some(|n, ev, _| { *n += 1; ev.is_command('w') });
         press(&mut rt, Code::KeyW, 'w', Unhandled::Close);
-        assert_eq!((rt.state, rt.shell_request), (1, None), "the app's own ⌘W wins, once");
+        assert_eq!((*rt.state(), rt.shell_request), (1, None), "the app's own ⌘W wins, once");
         press(&mut rt, Code::KeyM, 'm', Unhandled::Minimize);
-        assert_eq!(rt.state, 2, "the app saw ⌘M first");
+        assert_eq!(*rt.state(), 2, "the app saw ⌘M first");
         assert!(rt.minimize.latched(), "and didn't take it");
     }
 
@@ -1311,7 +1311,7 @@ mod tests {
             crate::el::row().child(el().key("box").size(10.0 + s.locked as f32, 10.0))
         }
         let mut rt = Runtime::new(Lock::default(), view, (200.0, 200.0), Env { system_dark: true, scale: 1.0 });
-        rt.poll = Some(|s: &mut Lock, _, tx: &mut Tx| {
+        rt.app_mut().poll = Some(|s: &mut Lock, _, tx: &mut Tx| {
             let Some(n) = s.inbox.as_ref().and_then(|inbox| inbox.try_iter().last()) else { return false };
             s.locked = n;
             tx.wake_after(std::time::Duration::from_secs(60));
@@ -1319,7 +1319,7 @@ mod tests {
         });
         rt.wall_start = Some(std::time::Instant::now());
         let (send, inbox) = std::sync::mpsc::channel();
-        rt.state.inbox = Some(inbox);
+        rt.state_mut().inbox = Some(inbox);
         rt.frame(0.0);
         let width = |rt: &Runtime<Lock>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("box")).unwrap().rect[2];
         assert_eq!(width(&rt), 10.0);
@@ -1328,7 +1328,7 @@ mod tests {
         send.send(30).unwrap();
         assert!(rt.poll_hidden(), "a hidden launcher renders when poll reports a change");
         assert!(!rt.poll_hidden());
-        assert_eq!(rt.state.locked, 30, "poll drained the inbox without a frame");
+        assert_eq!(rt.state().locked, 30, "poll drained the inbox without a frame");
         assert_eq!(width(&rt), 10.0, "nothing laid out, animated or presented while hidden");
         assert!(rt.wake_deadline().is_some(), "poll's own timers still schedule while hidden");
 
@@ -1343,7 +1343,7 @@ mod tests {
     #[test]
     fn an_update_arriving_without_frames_arms_its_timer() {
         let mut rt = Runtime::new(0_u32, |_: &u32, _: &mut Cx<u32>| el(), (100.0, 100.0), Env { system_dark: true, scale: 1.0 });
-        rt.poll = Some(|polls: &mut u32, _, _: &mut Tx| { *polls += 1; false });
+        rt.app_mut().poll = Some(|polls: &mut u32, _, _: &mut Tx| { *polls += 1; false });
         rt.wall_start = Some(std::time::Instant::now());
         rt.frame(0.0);
         assert_eq!(rt.wake_deadline(), None);
@@ -1362,7 +1362,7 @@ mod tests {
         use std::time::{Duration, Instant};
         for with_poll in [true, false] {
             let mut rt = Runtime::new(0_u32, |_: &u32, _: &mut Cx<u32>| el(), (100.0, 100.0), Env { system_dark: true, scale: 1.0 });
-            if with_poll { rt.poll = Some(|polls: &mut u32, _, _: &mut Tx| { *polls += 1; true }); }
+            if with_poll { rt.app_mut().poll = Some(|polls: &mut u32, _, _: &mut Tx| { *polls += 1; true }); }
             let t0 = Instant::now();
             rt.wall_start = Some(t0);
             rt.frame(0.0);

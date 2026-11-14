@@ -137,7 +137,7 @@ impl<S: 'static> Frame<'_, S> {
     /// The default frame: every instance into the target, cleared to the window colour.
     pub fn draw_ui(&mut self) {
         let clear = self.rt.clear_color();
-        self.ui.prepare(self.device, self.queue, &mut self.rt.text.atlas, &self.rt.instances, self.size);
+        { let core: &mut crate::runtime::RuntimeCore = &mut self.rt; self.ui.prepare(self.device, self.queue, &mut core.text.atlas, &core.instances, self.size); }
         self.ui.draw(self.encoder, self.target, clear);
     }
 }

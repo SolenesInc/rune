@@ -36,13 +36,13 @@ fn a_right_click_on_a_link_opens_its_menu_and_elsewhere_the_rows() {
         assert_eq!(rt.cursor(), Cursor::Pointer, "selectable {selectable}");
 
         right_click(&mut rt, at.0, at.1);
-        assert_eq!(rt.state.link_menus, [("https://x.dev/a".to_owned(), at.0, at.1)], "selectable {selectable}");
-        assert_eq!(rt.state.row_menus, 0, "the link took it (selectable {selectable})");
-        assert!(rt.state.opened.is_empty());
+        assert_eq!(rt.state().link_menus, [("https://x.dev/a".to_owned(), at.0, at.1)], "selectable {selectable}");
+        assert_eq!(rt.state().row_menus, 0, "the link took it (selectable {selectable})");
+        assert!(rt.state().opened.is_empty());
 
         right_click(&mut rt, 16.0, at.1);
-        assert_eq!(rt.state.row_menus, 1, "plain text goes to the row (selectable {selectable})");
-        assert_eq!(rt.state.link_menus.len(), 1);
+        assert_eq!(rt.state().row_menus, 1, "plain text goes to the row (selectable {selectable})");
+        assert_eq!(rt.state().link_menus.len(), 1);
     }
 }
 
@@ -56,8 +56,8 @@ fn the_menu_key_on_a_focused_link_opens_its_menu_at_its_bottom_left() {
     assert!(link.focused);
     rt.key(KeyEvent { key: Key::ContextMenu, mods: Mods::default() });
     tick(&mut rt);
-    assert_eq!(rt.state.link_menus, [("https://x.dev/a".to_owned(), link.rect[0], link.rect[1] + link.rect[3])]);
-    assert_eq!(rt.state.row_menus, 0);
+    assert_eq!(rt.state().link_menus, [("https://x.dev/a".to_owned(), link.rect[0], link.rect[1] + link.rect[3])]);
+    assert_eq!(rt.state().row_menus, 0);
 }
 
 fn link_center(rt: &Runtime<S>, url: &str) -> (f32, f32) {
@@ -74,8 +74,8 @@ fn a_right_click_that_moves_to_another_link_opens_no_menu() {
     rt.pointer_move(b.0, b.1);
     rt.secondary_up(b.0, b.1);
     tick(&mut rt);
-    assert!(rt.state.link_menus.is_empty(), "{:?}", rt.state.link_menus);
-    assert_eq!(rt.state.row_menus, 0);
+    assert!(rt.state().link_menus.is_empty(), "{:?}", rt.state().link_menus);
+    assert_eq!(rt.state().row_menus, 0);
     right_click(&mut rt, b.0, b.1);
-    assert_eq!(rt.state.link_menus, [("https://x.dev/b".to_owned(), b.0, b.1)]);
+    assert_eq!(rt.state().link_menus, [("https://x.dev/b".to_owned(), b.0, b.1)]);
 }

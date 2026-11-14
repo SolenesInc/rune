@@ -128,11 +128,11 @@ impl<S: 'static> Window<S> {
         let dark = own.theme.as_deref() != Some("light");
         let mut rt = crate::tooling::runtime_for(&spec, state, size, Env::new(dark, scale), Arc::new(|| {}));
         crate::playground::attach(&mut rt, playground, &spec, own.playground.clone(), own.variant.clone(), false);
-        rt.on_focus = on_focus;
-        rt.on_mods = on_mods;
-        rt.on_field_key = on_field_key;
-        rt.on_visibility = on_visibility;
-        rt.app_ime.hook = on_ime;
+        rt.app_mut().on_focus = on_focus;
+        rt.app_mut().on_mods = on_mods;
+        rt.app_mut().on_field_key = on_field_key;
+        rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_ime = on_ime;
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
         if let Some(bars) = own.scroll_bars.or(args.scroll_bars) { rt.set_system_scroll_bars(bars); }
@@ -393,7 +393,7 @@ impl<S: 'static> Member for Window<S> {
             };
             c.render(&mut f);
         } else {
-            renderer.prepare(&gpu.device, &gpu.queue, &mut self.rt.text.atlas, &self.rt.instances, px);
+            { let core: &mut crate::runtime::RuntimeCore = &mut self.rt; renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, px); }
             renderer.draw(&mut enc, view, self.rt.clear_color());
         }
         renderer.submit(&gpu.queue, enc);

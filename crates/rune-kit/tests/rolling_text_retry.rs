@@ -28,10 +28,10 @@ fn layout_read_retries_keep_the_changed_glyphs_enter_and_direction() {
         let mut rt = Runtime::new(State { value: 9, reads, views: Cell::new(0) }, view, (400.0, 120.0), Env::new(true, 2.0));
         rt.frame(0.0);
         for value in [8, 9] {
-            let before = rt.state.views.get();
+            let before = rt.state().views.get();
             rt.update(|s, _| s.value = value);
             rt.frame(1.0 / 120.0);
-            assert!(rt.state.views.get() >= before + 2, "the layout read retried the view");
+            assert!(rt.state().views.get() >= before + 2, "the layout read retried the view");
             let digit = rt.elements().into_iter().find(|e| !e.exiting && e.key.as_deref().is_some_and(|k| k.starts_with("retry-count."))).unwrap();
             assert!(digit.opacity < 0.5, "the new digit fades in, even after a retry: {}", digit.opacity);
             let dy = digit.rect[1] - digit.target[1];

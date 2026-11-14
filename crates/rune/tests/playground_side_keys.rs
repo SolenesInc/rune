@@ -410,5 +410,5 @@ fn a_scene_takes_keys_on_its_stage_state() {
     press(&mut rt, Key::Right);
     press(&mut rt, Key::Up);
     assert_eq!(says(&rt, "meter-side"), "active 55");
-    assert_eq!(rt.state.level, 0, "the real state is untouched");
+    assert_eq!(rt.state().level, 0, "the real state is untouched");
 }

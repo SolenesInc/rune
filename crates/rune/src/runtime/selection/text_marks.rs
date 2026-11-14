@@ -45,7 +45,7 @@ impl<S> Cx<S> {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The marks the view declared, as (node, start, end) for each mounted text that still
     /// holds its marked bytes, in node order.
     pub(super) fn mark_ranges(&self) -> Vec<(usize, usize, usize)> {

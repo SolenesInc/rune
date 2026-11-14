@@ -128,7 +128,8 @@ fn run_case(gpu: &Gpu, out: &Offscreen, case: &str) {
             break;
         }
     }
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
     {
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &out.view, rt.clear_color());
@@ -149,7 +150,7 @@ fn run_case(gpu: &Gpu, out: &Offscreen, case: &str) {
             let k = 0.25 * 16.0f32.powf(u);
             zoom.set(k);
         } else {
-            rt.state.font_scale = 0.6 + u * 1.4;
+            rt.state_mut().font_scale = 0.6 + u * 1.4;
             rt.invalidate();
         }
         let t0 = Instant::now();
@@ -157,7 +158,8 @@ fn run_case(gpu: &Gpu, out: &Offscreen, case: &str) {
         let b_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
         let e0 = Instant::now();
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &out.view, rt.clear_color());
         renderer.submit(&gpu.queue, enc);
@@ -186,7 +188,7 @@ fn run_case(gpu: &Gpu, out: &Offscreen, case: &str) {
             "settled live_scale must re-rasterize crisp 1:1 glyphs"
         );
     } else {
-        rt.state.font_scale = 1.0;
+        rt.state_mut().font_scale = 1.0;
         rt.invalidate();
         rt.frame(1.0 / 120.0);
         let glyphs = rt.instances.iter().filter(|i| i.params[1] == KIND_GLYPH).count();

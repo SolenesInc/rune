@@ -13,28 +13,28 @@ fn copy(real: &Real) -> Real {
 #[test]
 fn fresh_scenes_start_from_the_real_state_on_each_choice_and_replay() {
     let mut rt = runtime_with(base().fresh(copy), None, true);
-    rt.state.count = 7;
+    rt.state_mut().count = 7;
     open(&mut rt, "holding");
     assert_eq!(shows(&rt, "count"), "count 7", "from the real state, then the scene fn");
     open(&mut rt, "big");
     assert_eq!(shows(&rt, "count"), "count 100", "the scene fn still applies");
-    rt.state.count = 9;
+    rt.state_mut().count = 9;
     open(&mut rt, "holding");
     assert_eq!(shows(&rt, "count"), "count 9");
-    rt.state.count = 11;
+    rt.state_mut().count = 11;
     letter(&mut rt, "r");
     assert_eq!(shows(&rt, "count"), "count 11", "R starts from it again");
-    assert_eq!(rt.state.count, 11, "and never writes to it");
+    assert_eq!(rt.state().count, 11, "and never writes to it");
 }
 
 #[test]
 fn a_story_from_real_derives_its_state_when_it_shows_and_on_replay() {
     let story = Story::from_real("Lab/Derived", |r: &Real| Lab { ticks: r.count, presses: 0 }, lab);
     let mut rt = runtime_with(base().story(story), None, true);
-    rt.state.count = 3;
+    rt.state_mut().count = 3;
     open(&mut rt, "Derived");
     assert_eq!(shows(&rt, "lab"), "ticks 3 presses 0");
-    rt.state.count = 4;
+    rt.state_mut().count = 4;
     letter(&mut rt, "j");
     letter(&mut rt, "k");
     assert_eq!(shows(&rt, "lab"), "ticks 3 presses 0", "kept while the playground's open");
@@ -52,23 +52,23 @@ fn a_story_from_another_apps_state_is_refused() {
 fn keep_copies_the_stage_back_before_a_replay_a_switch_and_back() {
     let keep = base().fresh(copy).keep(|stage, real| real.count = stage.count);
     let mut rt = runtime_with(keep, None, true);
-    rt.state.count = 5;
+    rt.state_mut().count = 5;
     open(&mut rt, "Still");
     tap(&mut rt, "inc");
-    assert_eq!((shows(&rt, "count"), rt.state.count), ("count 6".into(), 5), "tuned on the stage only");
+    assert_eq!((shows(&rt, "count"), rt.state().count), ("count 6".into(), 5), "tuned on the stage only");
     escape(&mut rt);
     letter(&mut rt, "r");
-    assert_eq!((shows(&rt, "count"), rt.state.count), ("count 6".into(), 6), "kept, and the replay starts from it");
+    assert_eq!((shows(&rt, "count"), rt.state().count), ("count 6".into(), 6), "kept, and the replay starts from it");
     tap(&mut rt, "inc");
     escape(&mut rt);
     letter(&mut rt, "j");
-    assert_eq!(rt.state.count, 7, "kept on a switch");
+    assert_eq!(rt.state().count, 7, "kept on a switch");
     letter(&mut rt, "k");
     assert_eq!(shows(&rt, "count"), "count 7", "which the next scene starts from");
     tap(&mut rt, "inc");
     escape(&mut rt);
     escape(&mut rt);
-    assert_eq!(rt.state.count, 8, "and on Back");
+    assert_eq!(rt.state().count, 8, "and on Back");
     assert_eq!(shows(&rt, "count"), "count 8");
 }
 
@@ -94,7 +94,7 @@ fn a_fresh_stage_shares_the_real_waker_and_a_wake_from_another_thread_reaches_it
     attach(&mut rt, Some(fresh), &spec, Some(Some("Still".into())), None, false);
     rt.frame(0.0);
     rt.frame(DT);
-    let stage = &rt.playground.as_ref().unwrap().scene().expect("a scene's stage").state;
+    let stage = &rt.app().playground.as_ref().map(|p| p.live()).unwrap().scene().expect("a scene's stage").state;
     let (waker, inbox) = (stage.waker.clone().expect("the real waker"), stage.inbox.clone().unwrap());
     let before = wakes.load(Ordering::SeqCst);
     std::thread::spawn(move || {
@@ -106,7 +106,7 @@ fn a_fresh_stage_shares_the_real_waker_and_a_wake_from_another_thread_reaches_it
     assert_eq!(wakes.load(Ordering::SeqCst), before + 1, "the wake reached the window's waker");
     rt.frame(DT);
     assert_eq!(shows(&rt, "count"), "count 41", "and the next frame's poll of the stage took it");
-    assert_eq!(rt.state.count, 0, "the real state's inbox is its own");
+    assert_eq!(rt.state().count, 0, "the real state's inbox is its own");
 }
 
 fn compare(stage: &Real, real: &Real, _: &mut Cx<Real>) -> El {
@@ -119,15 +119,15 @@ fn compare(stage: &Real, real: &Real, _: &mut Cx<Real>) -> El {
 fn a_side_view_reads_the_real_state_and_keep_writes_the_preview_back() {
     let playground = base().fresh(copy).keep(|stage, real| real.count = stage.count).side_real("Still", compare);
     let mut rt = runtime_with(playground, None, true);
-    rt.state.count = 3;
+    rt.state_mut().count = 3;
     open(&mut rt, "Still");
     assert_eq!(shows(&rt, "compare"), "stage 3 real 3");
     tap(&mut rt, "inc");
     assert_eq!(shows(&rt, "compare"), "stage 4 real 3", "the stage previews; the app's own choice shows beside it");
-    let generation = rt.playground.as_ref().unwrap().generation;
+    let generation = rt.app().playground.as_ref().map(|p| p.live()).unwrap().generation;
     tap(&mut rt, "keep");
     assert_eq!(shows(&rt, "compare"), "stage 4 real 4");
-    assert_eq!((rt.state.count, rt.playground.as_ref().unwrap().generation), (4, generation), "kept, and the stage stays");
+    assert_eq!((rt.state().count, rt.app().playground.as_ref().map(|p| p.live()).unwrap().generation), (4, generation), "kept, and the stage stays");
 }
 
 #[test]
@@ -137,12 +137,12 @@ fn a_replay_while_closed_makes_no_stage_for_the_next_open_to_keep() {
     open(&mut rt, "big");
     rt.update(|_, tx| tx.close_playground());
     rt.frame(DT);
-    rt.state.count = 5;
+    rt.state_mut().count = 5;
     rt.update(|_, tx| tx.replay_playground());
     rt.frame(DT);
-    assert!(rt.playground.as_ref().unwrap().scene().is_none(), "closed, a replay does nothing");
+    assert!(rt.app().playground.as_ref().map(|p| p.live()).unwrap().scene().is_none(), "closed, a replay does nothing");
     rt.update(|_, tx| tx.toggle_playground());
     rt.frame(DT);
-    assert_eq!(rt.state.count, 5, "opening keeps nothing back from a stage nobody saw");
+    assert_eq!(rt.state().count, 5, "opening keeps nothing back from a stage nobody saw");
     assert_eq!(shows(&rt, "count"), "count 100", "and the story opens fresh");
 }

@@ -102,7 +102,7 @@ fn sticky_top_and_bottom_hold_push_out_hit_above_siblings_and_report_drawn_layou
     let h0 = find(&rt, "hdr-0");
     assert_eq!(h0.rect, [0.0, 12.0, 300.0, 30.0]);
     assert_eq!(h0.stuck, 0.0);
-    assert_eq!(rt.state.drawn_y, 12.0);
+    assert_eq!(rt.state().drawn_y, 12.0);
     let base_instances = rt.instances.len();
 
     // Fractional scroll at 120 Hz: offset = 16.5, natural top = -4.5 < 8.0, so it sticks at 8.0
@@ -114,7 +114,7 @@ fn sticky_top_and_bottom_hold_push_out_hit_above_siblings_and_report_drawn_layou
     assert!((h0.stuck - 12.5).abs() < 1e-3, "stuck shift is 12.5: {}", h0.stuck);
     assert!(rt.instances.len() > base_instances, "stuck_shadow draws while stuck");
     rt.frame(1.0 / 120.0);
-    assert!((rt.state.drawn_y - 8.0).abs() < 1e-3, "on_drawn_layout sees the stuck y");
+    assert!((rt.state().drawn_y - 8.0).abs() < 1e-3, "on_drawn_layout sees the stuck y");
 
     // Scroll to offset = 92: row-0 now spans -50..170, directly under hdr-0 at y=8..38.
     rt.wheel(100.0, 100.0, -75.5);
@@ -129,12 +129,12 @@ fn sticky_top_and_bottom_hold_push_out_hit_above_siblings_and_report_drawn_layou
     rt.pointer_down(20.0, 15.0);
     rt.pointer_up(20.0, 15.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.hits, vec!["hdr-0-btn"]);
+    assert_eq!(rt.state().hits, vec!["hdr-0-btn"]);
 
     rt.pointer_down(200.0, 20.0);
     rt.pointer_up(200.0, 20.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.hits, vec!["hdr-0-btn", "hdr-0"]);
+    assert_eq!(rt.state().hits, vec!["hdr-0-btn", "hdr-0"]);
 
     // sec-0's content box ends at 262 (272 - 10pt bottom padding). Once offset > 262 - 8 - 30 = 224,
     // sec-0's bottom edge pushes hdr-0 up. At offset = 242, hdr-0's bottom is at 262 - 242 = 20, so y = -10.
@@ -492,8 +492,8 @@ fn live_viewport_and_ancestor_transforms_keep_header_and_overlay_together() {
     rt.frame(0.0);
     rt.wheel(100.0, 100.0, -100.0);
     rt.frame(0.0);
-    rt.state.offset.set([30.0, 40.0]);
-    rt.state.scale.set(0.8);
+    rt.state().offset.set([30.0, 40.0]);
+    rt.state().scale.set(0.8);
     rt.frame(1.0 / 120.0);
     let (h, v, tip) = (find(&rt, "hdr"), find(&rt, "scroll"), find(&rt, "tip"));
     assert!((h.rect[1] - v.rect[1] - 8.0 * 0.8 * 0.8).abs() < 0.05, "{h:?} {v:?}");
@@ -949,7 +949,7 @@ fn three_columns(s: &ThreeColumns, _: &mut Cx<ThreeColumns>) -> El {
 
 fn pixels<S: 'static>(gpu: &Gpu, renderer: &mut Renderer, rt: &mut Runtime<S>, size: (u32, u32)) -> Vec<u8> {
     let target = Offscreen::new(&gpu.device, size.0, size.1);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+    { let rt: &mut rune::RuntimeCore = &mut *rt; renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size); }
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, [0.0; 4]);
     target.copy(&mut encoder);

@@ -159,7 +159,7 @@ mod live {
             w = rect(&rt)[2];
         }
         // Past the end, inside "é", or empty: skipped, and the frame still draws.
-        let e = rt.state.body.find('é').unwrap();
+        let e = rt.state().body.find('é').unwrap();
         rt.update(|s, _| s.pills = vec![4..13, e + 1..e + 2, 30..400, 20..20]);
         rt.frame(2.0 / 60.0);
         assert_eq!(pilled(&rt), [(7..16, "@reviewer".into())]);

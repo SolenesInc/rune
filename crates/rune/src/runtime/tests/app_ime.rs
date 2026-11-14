@@ -20,8 +20,8 @@ fn view(s: &Editor, _: &mut Cx<Editor>) -> El {
 
 fn editor() -> Runtime<Editor> {
     let mut rt = Runtime::new(Editor { caret: true, ..Default::default() }, view, (300.0, 200.0), Env::new(true, 1.0));
-    rt.app_ime.hook = Some(|s, ev, _| { s.log.push(format!("{ev:?}")); true });
-    rt.on_key = Some(|s, ev, _| { s.log.push(format!("key {:?}", ev.key)); true });
+    rt.app_mut().on_ime = Some(|s, ev, _| { s.log.push(format!("{ev:?}")); true });
+    rt.app_mut().on_key = Some(|s, ev, _| { s.log.push(format!("key {:?}", ev.key)); true });
     rt.frame(0.0);
     rt
 }
@@ -56,7 +56,7 @@ fn the_app_hears_the_composition_and_typing_arrives_once() {
     rt.ime(Ime::Commit("家".into()));
     rt.frame(0.0);
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.log, [
+    assert_eq!(rt.state().log, [
         "key Text(\"a\")", "Enabled", "Preedit(\"か\", Some((0, 3)))", "Commit(\"家\")", "key Enter",
     ], "plain typing is a key; Return and Escape mid-composition are the input method's");
 }
@@ -74,16 +74,16 @@ fn a_focused_field_takes_the_input_method_but_the_apps_composition_ends_in_the_a
     rt.ime(Ime::Preedit("ね".into(), None));
     rt.ime(Ime::Commit("猫".into()));
     rt.frame(0.0);
-    assert_eq!(rt.state.log, ["Preedit(\"か\", None)", "Preedit(\"\", None)", "Disabled"]);
-    assert_eq!(rt.state.field.text, "猫", "the field's own composition stays the field's");
+    assert_eq!(rt.state().log, ["Preedit(\"か\", None)", "Preedit(\"\", None)", "Disabled"]);
+    assert_eq!(rt.state().field.text, "猫", "the field's own composition stays the field's");
 }
 
 #[test]
 fn without_on_ime_an_ime_cursor_hears_nothing() {
     let mut rt = editor();
-    rt.app_ime.hook = None;
+    rt.app_mut().on_ime = None;
     rt.ime(Ime::Preedit("か".into(), None));
     rt.frame(0.0);
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.log, ["key Enter"], "nothing composing holds Return back");
+    assert_eq!(rt.state().log, ["key Enter"], "nothing composing holds Return back");
 }

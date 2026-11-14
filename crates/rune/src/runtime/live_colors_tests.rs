@@ -57,15 +57,15 @@ fn text_border_shadow_and_gradient_colours_change_without_a_view_rerun() {
     let card = paint(&rt, "card");
     assert_eq!(card.colors[C_BORDER], Color::WHITE, "the binding wins over the authored colour");
     assert_eq!(paint(&rt, "ink").colors[C_TEXT], Color::WHITE);
-    let (views, commits) = (rt.state.views.get(), rt.stats.commits);
-    rt.state.ink.set(RED);
-    rt.state.edge.set(GREEN);
-    rt.state.glow.set(BLUE);
-    rt.state.top.set(RED);
-    rt.state.bottom.set(GREEN);
+    let (views, commits) = (rt.state().views.get(), rt.stats.commits);
+    rt.state().ink.set(RED);
+    rt.state().edge.set(GREEN);
+    rt.state().glow.set(BLUE);
+    rt.state().top.set(RED);
+    rt.state().bottom.set(GREEN);
     assert!(rt.live_pending());
     rt.frame(1.0 / 120.0);
-    assert_eq!((rt.state.views.get(), rt.stats.commits, rt.stats.shaped), (views, commits, 0));
+    assert_eq!((rt.state().views.get(), rt.stats.commits, rt.stats.shaped), (views, commits, 0));
     let card = paint(&rt, "card");
     assert_eq!(card.colors[C_BORDER], GREEN);
     assert_eq!(card.colors[C_SHADOW], BLUE);
@@ -85,7 +85,7 @@ fn text_border_shadow_and_gradient_colours_change_without_a_view_rerun() {
 #[test]
 fn a_smoothed_border_colour_springs_then_lands_exactly() {
     let mut rt = runtime(true);
-    rt.state.edge.set(BLUE);
+    rt.state().edge.set(BLUE);
     rt.frame(0.03);
     let mid = paint(&rt, "card").colors[C_BORDER];
     assert!(mid.r > 0.0 && mid.r < 1.0 && mid.b == 1.0, "moving: {mid:?}");

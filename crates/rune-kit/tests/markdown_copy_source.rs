@@ -89,7 +89,7 @@ fn short(_: &Keys, _: &mut Cx<Keys>) -> El {
 fn an_apps_on_key_sees_cmd_a_before_a_clicked_note() {
     for takes in [true, false] {
         let mut rt = Runtime::new(Keys { takes, keys: Vec::new() }, short, (300.0, 200.0), Env::new(true, 2.0));
-        rt.on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); s.takes && ev.key == Key::Command('a') });
+        rt.app_mut().on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); s.takes && ev.key == Key::Command('a') });
         rt.frame(0.0);
         let a = rt.elements().into_iter().find(|e| e.path.ends_with("note/b0")).expect("the first paragraph");
         let (x, y) = (a.rect[0] + 3.0, a.rect[1] + a.rect[3] / 2.0);
@@ -99,7 +99,7 @@ fn an_apps_on_key_sees_cmd_a_before_a_clicked_note() {
         rt.frame(1.0 / 60.0);
         rt.key(KeyEvent { key: Key::Command('a'), mods: Mods { cmd: true, ..Mods::default() } });
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.keys, [Key::Command('a')], "takes={takes}");
+        assert_eq!(rt.state().keys, [Key::Command('a')], "takes={takes}");
         let want = if takes { None } else { Some("a\n\nb") };
         assert_eq!(rt.selected_text().as_deref(), want, "takes={takes}: passed on, the note selects all");
     }

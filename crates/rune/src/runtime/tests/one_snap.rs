@@ -56,6 +56,7 @@ impl Bench {
     }
 
     fn draw<S: 'static>(&mut self, rt: &mut Runtime<S>, clear: [f64; 4]) -> Vec<u8> {
+        let rt = &mut **rt;
         self.renderer.prepare(
             &self.gpu.device,
             &self.gpu.queue,

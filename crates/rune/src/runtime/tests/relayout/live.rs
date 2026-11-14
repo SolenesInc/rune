@@ -45,12 +45,12 @@ fn resizing_during_a_live_spring_keeps_its_progress_and_velocity() {
     let mut reference = Runtime::new(Bindings { spring: true, ..Bindings::default() }, view, (700.0, 600.0), Env::new(true, 2.0));
     for r in [&mut rt, &mut reference] {
         r.frame(0.0);
-        r.state.offset.set([90.0, 110.0]);
+        r.state().offset.set([90.0, 110.0]);
     }
     for i in 0..90 {
         if i == 8 { // Reverse while both springs are still moving.
-            rt.state.offset.set([20.0, 30.0]);
-            reference.state.offset.set([20.0, 30.0]);
+            rt.state().offset.set([20.0, 30.0]);
+            reference.state().offset.set([20.0, 30.0]);
         }
         assert_eq!(resize(&mut rt, 700.0 - i as f32, 2.0), 0);
         reference.frame(1.0 / 120.0);
@@ -67,7 +67,7 @@ fn a_layout_read_retry_restores_the_moved_live_nodes() {
     let mut rt = Runtime::new(Bindings::default(), reading, (700.0, 600.0), Env::new(true, 2.0));
     rt.frame(0.0);
     assert!(resize(&mut rt, 500.0, 2.0) > 0, "changed layout reads still run the view");
-    rt.state.offset.set([30.0, 50.0]);
+    rt.state().offset.set([30.0, 50.0]);
     rt.frame(1.0 / 120.0);
     assert_eq!(rt.scene.get(node(&rt, "bound").id, prop::OFFSET), Some(rune_motion::Vec2::new(30.0, 50.0)));
     assert_eq!(node(&rt, "bound").vis.fill, Color::WHITE);
@@ -99,7 +99,7 @@ fn resize_keeps_live_bindings_without_running_the_view() {
         full.update(|_, tx| tx.instant());
         assert_eq!(resize(&mut full, w, 2.0), 1);
         compare(&rt, &full);
-        for state in [&rt.state, &full.state] {
+        for state in [&rt.state(), &full.state()] {
             state.offset.set([w / 20.0, 15.0]);
             state.rect.set([10.0, w / 10.0, 8.0, 40.0]);
             state.opacity.set(w / 1000.0);

@@ -54,9 +54,9 @@ fn a_scale_change_springs_to_rest_and_hits_follow_it() {
     settle(&mut rt);
     assert_eq!(rect(&rt, "a"), [75.0, 60.0, 50.0, 20.0], "rests at half size about the centre");
     click(&mut rt, 60.0, 55.0);
-    assert!(rt.state.pressed.is_empty(), "outside the drawn rect");
+    assert!(rt.state().pressed.is_empty(), "outside the drawn rect");
     click(&mut rt, 80.0, 65.0);
-    assert_eq!(rt.state.pressed, ["a"]);
+    assert_eq!(rt.state().pressed, ["a"]);
 }
 
 #[test]
@@ -228,12 +228,12 @@ fn rotate_springs_turns_the_subtree_in_a_layer_and_hits_where_it_shows() {
     rt.pointer_down(145.0, 60.0);
     rt.pointer_up(145.0, 60.0);
     rt.frame(0.0);
-    assert!(rt.state, "missed the old right end");
+    assert!(rt.state(), "missed the old right end");
     rt.pointer_move(100.0, 15.0);
     rt.pointer_down(100.0, 15.0);
     rt.pointer_up(100.0, 15.0);
     rt.frame(0.0);
-    assert!(!rt.state, "hit the turned top end");
+    assert!(!rt.state(), "hit the turned top end");
 
     let mut rt = Runtime::new(false, view, (200.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0);
@@ -278,14 +278,14 @@ fn rotated_hit_test_uses_turned_box_not_upright_bounds() {
     rt.pointer_down(130.0, 30.0);
     rt.pointer_up(130.0, 30.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, ["bg"], "empty corner of upright bbox must not steal presses from behind");
+    assert_eq!(*rt.state(), ["bg"], "empty corner of upright bbox must not steal presses from behind");
 
     // (120, 80) lies right along the +45° diagonal from (100, 60).
     rt.pointer_move(120.0, 80.0);
     rt.pointer_down(120.0, 80.0);
     rt.pointer_up(120.0, 80.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, ["bg", "bar"]);
+    assert_eq!(*rt.state(), ["bg", "bar"]);
 }
 
 #[test]
@@ -313,14 +313,14 @@ fn clip_inside_rotated_element_and_rotated_element_inside_rounded_clip() {
     rt.pointer_down(80.0, 80.0);
     rt.pointer_up(80.0, 80.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, ["inner"]);
+    assert_eq!(*rt.state(), ["inner"]);
 
     // In the protruding part of `inner` clipped away by `rot_clip` (80, 120): must not hit.
     rt.pointer_move(80.0, 120.0);
     rt.pointer_down(80.0, 120.0);
     rt.pointer_up(80.0, 120.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, ["inner"], "protruding part of child is clipped by rotated parent");
+    assert_eq!(*rt.state(), ["inner"], "protruding part of child is clipped by rotated parent");
 
     // The turned layer inside `outer_round` carries both the turn (`border[1] != 0`) and the packed rounded clip (`fade[3] != 0`).
     let turned_layer = rt.instances.iter()

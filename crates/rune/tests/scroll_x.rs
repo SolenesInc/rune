@@ -311,7 +311,8 @@ fn a_gesture_begun_outside_the_strip_stays_vertical_over_it() {
     let (tile, head) = (x_of(&rt, "tile0"), y_of(&rt, "head"));
     rt.wheel_began();
     rt.wheel_xy(150.0, 280.0, -30.0, 0.0);
-    rt.wheel_xy(150.0, strip_y(&rt), -30.0, -1.0);
+    let y = strip_y(&rt);
+    rt.wheel_xy(150.0, y, -30.0, -1.0);
     rt.wheel_ended();
     rt.frame(1.0 / 60.0);
     assert_eq!((x_of(&rt, "tile0"), y_of(&rt, "head")), (tile, head - 1.0));

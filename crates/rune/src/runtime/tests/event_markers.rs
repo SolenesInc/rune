@@ -21,11 +21,11 @@ fn a_live_window_records_no_input_markers_unless_tracing() {
     rt.record_events = false;
     rt.frame(0.0);
     tap(&mut rt);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
     assert!(rt.events.is_empty(), "nothing reads them: {:?}", rt.events);
     rt.trace_channels = Some(Default::default());
     tap(&mut rt);
-    assert_eq!(rt.state, 2);
+    assert_eq!(*rt.state(), 2);
     assert_eq!(presses(&rt), 1, "a trace reads them: {:?}", rt.events);
 }
 
@@ -35,7 +35,7 @@ fn unread_input_markers_stay_bounded() {
     rt.frame(0.0);
     let taps = event_log::CAP + 40;
     for _ in 0..taps { tap(&mut rt); }
-    assert_eq!(rt.state, taps);
+    assert_eq!(*rt.state(), taps);
     assert!(rt.events.len() <= event_log::CAP, "{} unread markers", rt.events.len());
     assert!(presses(&rt) >= event_log::CAP / 2, "the newest stay");
     assert!(rt.events.last().is_some_and(|e| e.starts_with("press ")));

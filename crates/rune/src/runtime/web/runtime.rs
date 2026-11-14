@@ -70,10 +70,10 @@ mod tests {
             "start":1, "end":3, "text":"é", "anchor":2, "focus":2});
         rt.web_edit(&event);
         rt.frame(0.0);
-        assert_eq!((&*rt.state.0.text, rt.state.1, rt.state.0.focus), ("aéc", 1, 3));
+        assert_eq!((&*rt.state().0.text, rt.state().1, rt.state().0.focus), ("aéc", 1, 3));
         rt.web_edit(&event);
         rt.frame(0.0);
-        assert_eq!((&*rt.state.0.text, rt.state.1), ("aéc", 1));
+        assert_eq!((&*rt.state().0.text, rt.state().1), ("aéc", 1));
         assert_eq!(byte_at("a🦀c", 2), None);
     }
 
@@ -138,22 +138,22 @@ mod tests {
         let mut event = json!({"kind":"preedit", "key":key, "base":5, "expected":"hello ",
             "start":0, "end":6, "text":"hello", "anchor":5, "focus":5});
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "🦀 hello ");
-        assert_eq!(rt.state.display().0, "🦀 hello", "preedit replaces the word, not appends");
+        assert_eq!(rt.state().text, "🦀 hello ");
+        assert_eq!(rt.state().display().0, "🦀 hello", "preedit replaces the word, not appends");
         event["text"] = json!("help");
         event["anchor"] = json!(4); event["focus"] = json!(4);
         rt.web_edit(&event);
-        assert_eq!(rt.state.display().0, "🦀 help");
+        assert_eq!(rt.state().display().0, "🦀 help");
         event["kind"] = json!("edit");
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "🦀 help");
-        assert!(rt.state.preedit().is_none());
-        assert_eq!(rt.state.focus, rt.state.text.len());
+        assert_eq!(rt.state().text, "🦀 help");
+        assert!(rt.state().preedit().is_none());
+        assert_eq!(rt.state().focus, rt.state().text.len());
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "🦀 help", "stale context rejected");
+        assert_eq!(rt.state().text, "🦀 help", "stale context rejected");
         event["base"] = json!(1);
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "🦀 help", "base must be a UTF-8 boundary");
+        assert_eq!(rt.state().text, "🦀 help", "base must be a UTF-8 boundary");
     }
 
     #[test]
@@ -168,14 +168,14 @@ mod tests {
         let mut event = json!({"kind":"edit", "key":key, "base":2, "expected":"🦀 ",
             "start":1, "end":2, "text":"x", "anchor":1, "focus":1});
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "é🦀 tail", "mid-surrogate offsets rejected");
+        assert_eq!(rt.state().text, "é🦀 tail", "mid-surrogate offsets rejected");
         event["start"] = json!(0); event["end"] = json!(4);
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "é🦀 tail", "replacement must stay inside expected context");
+        assert_eq!(rt.state().text, "é🦀 tail", "replacement must stay inside expected context");
         event["end"] = json!(2);
         rt.web_edit(&event);
-        assert_eq!(rt.state.text, "éx tail");
-        assert_eq!(rt.state.focus, 3);
+        assert_eq!(rt.state().text, "éx tail");
+        assert_eq!(rt.state().focus, 3);
     }
 
     #[test]
@@ -183,14 +183,14 @@ mod tests {
         type Seen = Vec<(crate::Key, Option<crate::PhysicalKeyCode>, bool)>;
         fn view(_: &Seen, _: &mut Cx<Seen>) -> El { crate::el() }
         let mut rt = Runtime::new(Seen::new(), view, (100.0, 100.0), Env::default());
-        rt.on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.physical_key(), tx.key_repeat())); true });
+        rt.app_mut().on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.physical_key(), tx.key_repeat())); true });
         rt.frame(0.0);
         for (key, code, repeat) in [("/", "Digit7", false), ("/", "Slash", true), (":", "Period", false), ("k", "KeyK", false)] {
             rt.web_key(&json!({"kind":"key", "key":key, "code":code, "meta":true, "shift":true, "repeat":repeat}));
             rt.frame(0.0);
         }
         use crate::PhysicalKeyCode::*;
-        assert_eq!(rt.state, [
+        assert_eq!(*rt.state(), [
             (crate::Key::Command('/'), Some(Digit7), false),
             (crate::Key::Command('/'), Some(Slash), true),
             (crate::Key::Command(':'), Some(Period), false),
@@ -209,7 +209,7 @@ fn byte_at(text: &str, utf16: usize) -> Option<usize> {
     (units == utf16).then_some(text.len())
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub(crate) fn web_context(&self, mirror: &mut Mirror) -> bool {
         match self.focused_input().filter(|i| i.access.is_some()) {
             Some(input) => mirror.update(self.focus.path().unwrap_or_default(), Some(&input.edit)),

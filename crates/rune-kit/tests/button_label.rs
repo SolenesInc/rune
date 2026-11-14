@@ -61,7 +61,7 @@ fn the_button_springs_with_its_rolling_label_and_keeps_its_accessible_label() {
     let to = rect(&runtime("Importing…", false), "button");
     assert!(from[2] - to[2] > 10.0, "the label shrinks: {from:?} → {to:?}");
 
-    rt.state.label = "Importing…".into();
+    rt.state_mut().label = "Importing…".into();
     rt.invalidate();
     rt.frame(0.0);
     assert_eq!(info(&rt).label.as_deref(), Some("Importing…"));
@@ -101,7 +101,7 @@ fn a_rolling_button_with_an_icon_and_neighbour_springs_without_jumps() {
     let rest_icon_gap = icon_gap(&rt);
     let cancel_from = rect(&rt, "cancel")[0];
 
-    rt.state = "Importing…".into();
+    *rt.state_mut() = "Importing…".into();
     rt.invalidate();
     rt.frame(0.0);
     let mut cancel_xs = vec![rect(&rt, "cancel")[0]];

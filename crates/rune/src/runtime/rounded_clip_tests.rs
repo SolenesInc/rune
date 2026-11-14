@@ -69,7 +69,8 @@ fn per_corner_video_clip_matches_the_primitive_mask() {
         for video in [false, true] {
             let mut rt = Runtime::new((surface.clone(), video, continuous), view, (64.0, 48.0), Env::new(true, 1.0));
             rt.frame(0.0);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (64, 48));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (64, 48));
             renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (64, 48));
             outs.push(pixels(&gpu, &renderer, &target));
         }
@@ -126,7 +127,8 @@ fn rounded_clip_direct_nested_and_rectangular_intersections() {
     for mode in 0..3 {
         let mut rt = Runtime::new(mode, view, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
         rt.frame(0.0);
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (64, 48));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (64, 48));
         if mode == 0 { assert_eq!(renderer.layer_stats().extra_passes, 0, "ordinary rounded clip stays direct"); }
         let out = pixels(&gpu, &renderer, &target);
         for y in 0..48 { for x in 0..64 {
@@ -160,8 +162,9 @@ fn rounded_clip_blurred_exiting_chip_stays_inside_capsule() {
     for (row, offset) in [0.0, 26.0, 32.0].into_iter().enumerate() {
         let mut outputs = Vec::new();
         for rt in [&mut plain, &mut clipped] {
-            rt.state.1.set([offset, 0.0]); rt.frame(0.0);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (896, 176));
+            rt.state().1.set([offset, 0.0]); rt.frame(0.0);
+            let core = &mut **rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (896, 176));
             outputs.push(pixels(&gpu, &renderer, &target));
         }
         let mut retained = false;
@@ -260,7 +263,8 @@ fn rounded_clip_native_video_inherits_capsule_without_a_layer() {
         planes: [vec![255; 4], vec![]] }, 1).unwrap();
     let mut rt = Runtime::new(surface, view, (64.0, 48.0), Env { scale: 1.0, system_dark: true });
     rt.frame(0.0);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (64, 48));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (64, 48));
     renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (64, 48));
     assert_eq!(renderer.layer_stats().extra_passes, 0);
     let out = pixels(&gpu, &renderer, &target);
@@ -294,7 +298,8 @@ fn rounded_clip_live_truncated_text_preserves_corner_centres() {
             let mut outputs = Vec::new();
             for rt in [&mut plain, &mut clipped] {
                 rt.frame(0.0);
-                renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+                let core = &mut **rt;
+                renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
                 outputs.push(pixels(&gpu, &renderer, &target));
             }
             let mut cut = false;
@@ -338,7 +343,8 @@ fn live_text_clear_of_rounded_corners_draws_without_a_layer() {
             for rt in [&mut plain, &mut clipped] {
                 rt.frame(0.0);
                 assert!(rt.instances.iter().all(|i| i.params[1] != KIND_LAYER), "scale={scale} words={words}: no layer");
-                renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+                let core = &mut **rt;
+                renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
                 outputs.push(pixels(&gpu, &renderer, &target));
             }
             // The glyphs match; the card's own edge differs, a hard clip over its feathered fill.
@@ -364,7 +370,7 @@ fn rounded_clip_and_dissolve_follow_retained_presence() {
     let mut rt = Runtime::new(true, view, (80.0, 40.0), Env { scale: 2.0, system_dark: true });
     rt.frame(0.0);
     assert!(rt.instances.iter().all(|i| i.params[1] != KIND_LAYER));
-    rt.state = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.04);
+    *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.04);
     assert!(rt.instances.iter().any(|i| i.params[1] == KIND_LAYER && i.params[0] == 1.0 && f32::from_bits(i.fade[3]) == 40.0));
     assert!(rt.instances.iter().any(|i| i.params[1] == KIND_LAYER && i.params[2] > 0.0));
     for _ in 0..120 { rt.frame(1.0 / 120.0); }
@@ -389,7 +395,8 @@ fn rounded_clip_leaves_central_scroll_rectangles_on_the_direct_path() {
         for rounded in [false, true] {
             let mut rt = Runtime::new((rounded, horizontal), view, (96.0, 64.0), Env::new(true, 1.0));
             rt.frame(0.0);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (96, 64));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (96, 64));
             assert_eq!(renderer.layer_stats().targets, 0);
             frames.push(pixels(&gpu, &renderer, &target));
         }
@@ -416,7 +423,8 @@ fn rounded_clip_single_line_input_keeps_the_original_mask() {
             let mut rt = Runtime::new((rounded, crate::TextEdit::new("MMMMMMMMMMMM")), view,
                 (96.0, 56.0), Env::new(true, scale));
             rt.frame(0.0);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
             frames.push(pixels(&gpu, &renderer, &target));
         }
         assert!(frames[0].chunks_exact(4).any(|p| p[3] > 0));
@@ -524,7 +532,8 @@ fn per_corner_continuous_card_clips_image_child_and_nested_layers() {
             );
             rt.frame(0.0);
             renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (128, 96));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (128, 96));
             if mode == 1 {
                 assert_eq!(renderer.layer_stats().extra_passes, 0, "mixed continuous clip stays on the direct path");
             } else if mode == 2 {
@@ -569,7 +578,8 @@ fn per_corner_continuous_card_clips_image_child_and_nested_layers() {
     let mut rt = Runtime::new(card_img, nested, (128.0, 96.0), Env::new(true, 1.0));
     rt.frame(0.0);
     renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (128, 96));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (128, 96));
     assert_eq!(renderer.layer_stats().extra_passes, 1, "nested distinct per-corner clips open one outer layer");
     let out = pixels(&gpu, &renderer, &target);
     for (x, y) in [(24, 20), (103, 20), (103, 75), (24, 75)] {

@@ -108,23 +108,23 @@ mod tests {
         press(&mut rt, Key::Escape, false);
         press(&mut rt, Key::Down, false);
         assert_eq!(knob(&rt, &PAD), 33.0, "after Esc, ↓ moves in the list again");
-        assert_eq!(rt.state.knobs.get(&RADIUS), RADIUS.default, "the real state is untouched");
+        assert_eq!(rt.state().knobs.get(&RADIUS), RADIUS.default, "the real state is untouched");
     }
 
     #[test]
     fn cmd_shift_k_opens_the_panel_and_a_knob_changes_the_card() {
         let mut rt = Runtime::new(State::default(), view, (820.0, 520.0), Env::new(true, 1.0));
-        rt.on_key = Some(on_key);
+        rt.app_mut().on_key = Some(on_key);
         rt.frame(0.0);
         let ev = KeyEvent { key: Key::Command('k'), mods: Mods { cmd: true, shift: true, ..Mods::default() } };
         rt.key(ev);
         for _ in 0..40 {
             rt.frame(1.0 / 60.0);
         }
-        assert!(rt.state.knobs.open && rt.find("knobs-top").is_some());
-        rt.state.knobs.set(&RADIUS, 30.0);
+        assert!(rt.state().knobs.open && rt.find("knobs-top").is_some());
+        rt.state_mut().knobs.set(&RADIUS, 30.0);
         rt.invalidate();
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.knobs.get(&RADIUS), 30.0);
+        assert_eq!(rt.state().knobs.get(&RADIUS), 30.0);
     }
 }

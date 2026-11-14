@@ -63,9 +63,9 @@ fn an_offset_springs_without_moving_siblings_and_hits_follow_it() {
     assert_eq!(rect(&rt, "a")[1], 40.0);
     // `b` comes later in the tree, so it takes the press where they overlap.
     click(&mut rt, 50.0, 60.0);
-    assert_eq!(rt.state.pressed, ["b"]);
+    assert_eq!(rt.state().pressed, ["b"]);
     click(&mut rt, 50.0, 10.0);
-    assert_eq!(rt.state.pressed, ["b"], "nothing is left where `a` was");
+    assert_eq!(rt.state().pressed, ["b"], "nothing is left where `a` was");
 
     rt.set_system_reduced_motion(true);
     rt.update(|s, _| s.shift = 0.0);
@@ -83,14 +83,14 @@ fn a_raised_element_paints_and_takes_presses_above_later_siblings() {
     rt.set_system_reduced_motion(true);
     rt.frame(0.0);
     click(&mut rt, 50.0, 50.0);
-    assert_eq!(rt.state.pressed, ["a"], "the raised element is on top where they overlap");
+    assert_eq!(rt.state().pressed, ["a"], "the raised element is on top where they overlap");
     let order: Vec<_> = rt.elements().into_iter().filter_map(|e| e.key).collect();
     assert_eq!(&order[..2], ["a", "b"], "tree order is unchanged");
 
     rt.update(|s, _| s.raise = false);
     rt.frame(0.0);
     click(&mut rt, 50.0, 50.0);
-    assert_eq!(rt.state.pressed, ["a", "b"]);
+    assert_eq!(rt.state().pressed, ["a", "b"]);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn hover_change_hears_an_element_that_appears_under_a_still_pointer() {
     for _ in 0..30 {
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.hover, [true], "the pointer is inside without moving");
+    assert_eq!(rt.state().hover, [true], "the pointer is inside without moving");
 }
 
 mod reorder {
@@ -240,7 +240,7 @@ mod drag_animated {
         }
         let mut rt = Runtime::new(S { animated: false, shift: 0.0 }, live_view, (200.0, 200.0), Env::new(true, 1.0));
         rt.check_live_only(false);
-        rt.on_key = Some(|s, _, tx| { s.shift = 40.0; tx.motion(Spring::new(0.6, 0.0)); true });
+        rt.app_mut().on_key = Some(|s, _, tx| { s.shift = 40.0; tx.motion(Spring::new(0.6, 0.0)); true });
         rt.frame(0.0);
         rt.pointer_down(20.0, 20.0);
         rt.frame(0.0);
@@ -285,7 +285,7 @@ mod double_press_on_a_drag {
             rt.pointer_up(50.0, 20.0);
         }
         rt.frame(1.0 / 60.0);
-        assert!(rt.state.wide, "double pressed");
+        assert!(rt.state().wide, "double pressed");
         let w = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("pane")).unwrap().rect[2];
         assert!(w > 100.0 && w < 200.0, "on its spring, not at once: {w}");
     }

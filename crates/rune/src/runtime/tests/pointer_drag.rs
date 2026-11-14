@@ -16,8 +16,8 @@ fn a_drag_reports_pointer_travel_when_its_window_moves() {
     rt.pointer_move(15.0, 10.0);
     rt.pointer_up(15.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.last(), Some(&(35.0, 4.0)), "travel is measured on screen, not in the moving window");
-    assert!(rt.state.contains(&(30.0, 4.0)));
+    assert_eq!(rt.state().last(), Some(&(35.0, 4.0)), "travel is measured on screen, not in the moving window");
+    assert!(rt.state().contains(&(30.0, 4.0)));
 }
 
 #[test]
@@ -32,10 +32,10 @@ fn taking_the_pointer_away_ends_a_held_drag_cancelled() {
     rt.pointer_move(40.0, 10.0);
     rt.cancel_pointer();
     rt.frame(0.0);
-    assert_eq!(rt.state.last(), Some(&(Phase::Up, true)));
+    assert_eq!(rt.state().last(), Some(&(Phase::Up, true)));
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.iter().filter(|d| d.0 == Phase::Up).count(), 1, "the release after it does nothing");
+    assert_eq!(rt.state().iter().filter(|d| d.0 == Phase::Up).count(), 1, "the release after it does nothing");
 }
 
 #[derive(Default)]
@@ -57,11 +57,11 @@ fn a_lost_release_cancels_a_held_drag_where_the_button_rose() {
     rt.frame(0.0);
     assert!(!rt.pointer_captured());
     assert_eq!(rt.pointer(), Some((60.0, 10.0)));
-    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, true, 60.0)));
-    assert_eq!(rt.state.presses, 0, "a press whose release was lost clicks nothing when it dragged");
+    assert_eq!(rt.state().drags.last(), Some(&(Phase::Up, true, 60.0)));
+    assert_eq!(rt.state().presses, 0, "a press whose release was lost clicks nothing when it dragged");
     rt.pointer_up(60.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.iter().filter(|d| d.0 == Phase::Up).count(), 1, "a late Up does nothing");
+    assert_eq!(rt.state().drags.iter().filter(|d| d.0 == Phase::Up).count(), 1, "a late Up does nothing");
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn a_lost_release_before_the_next_press_leaves_that_press_alone() {
     assert!(rt.pointer_captured(), "the new press holds");
     rt.pointer_up(20.0, 10.0);
     rt.frame(0.0);
-    let ups: Vec<_> = rt.state.drags.iter().filter(|d| d.0 == Phase::Up).map(|d| d.1).collect();
+    let ups: Vec<_> = rt.state().drags.iter().filter(|d| d.0 == Phase::Up).map(|d| d.1).collect();
     assert_eq!(ups, [true, false], "the old drag is cancelled, the new one ends normally");
 }
 
@@ -99,7 +99,7 @@ fn a_lost_release_that_moved_ends_the_run_of_clicks() {
         rt.pointer_release_lost(released, 10.0);
         rt.pointer_down(10.0, 10.0);
         rt.frame(0.0);
-        assert_eq!(rt.state.last(), Some(&(Phase::Down, clicks)), "moved to {seen:?}, released at {released}");
+        assert_eq!(rt.state().last(), Some(&(Phase::Down, clicks)), "moved to {seen:?}, released at {released}");
     }
 }
 
@@ -112,7 +112,7 @@ fn a_stationary_escape_keeps_the_run_of_clicks() {
     rt.pointer_up(10.0, 10.0);
     rt.pointer_down(10.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.last(), Some(&(Phase::Down, 2)));
+    assert_eq!(rt.state().last(), Some(&(Phase::Down, 2)));
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn a_lost_release_without_a_drag_still_releases_the_press() {
     rt.pointer_release_lost(10.0, 10.0);
     rt.frame(0.0);
     assert!(!rt.pointer_captured());
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
 }
 
 #[test]
@@ -141,10 +141,10 @@ fn native_escape_with_a_logical_fallback_cancels_the_drag() {
     rt.physical_key_input(crate::PhysicalInput::Key { key: crate::PhysicalKeyCode::Escape,
         mods: crate::Mods::default(), pressed: true, repeat: false }, KeyEvent { key: crate::Key::Escape, mods: crate::Mods::default() }, None);
     rt.frame(0.0);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
     rt.pointer_up(10.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, [true]);
+    assert_eq!(*rt.state(), [true]);
 }
 
 #[derive(Default)]
@@ -185,7 +185,7 @@ fn crossing_the_threshold_hands_a_drag_out_to_the_host_and_releases_the_pointer(
     assert!(rt.take_drag_out().is_none(), "one request per press");
     rt.pointer_up(40.0, 30.0);
     rt.frame(0.0);
-    assert_eq!((rt.state.presses, rt.state.drags), (0, 0), "neither on_press nor on_drag runs");
+    assert_eq!((rt.state().presses, rt.state().drags), (0, 0), "neither on_press nor on_drag runs");
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn a_drag_out_released_before_the_threshold_is_a_press() {
     rt.pointer_up(11.0, 11.0);
     rt.frame(0.0);
     assert!(rt.take_drag_out().is_none());
-    assert_eq!((rt.state.presses, rt.state.drags), (1, 0), "on_drag never runs on a drag-out element");
+    assert_eq!((rt.state().presses, rt.state().drags), (1, 0), "on_drag never runs on a drag-out element");
     assert!(rt.events.iter().all(|e| !e.starts_with("drag-out")));
 }
 
@@ -235,7 +235,7 @@ fn a_drag_out_that_offers_nothing_stays_a_press() {
     rt.pointer_move(20.0, 10.0);
     rt.pointer_up(20.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn hosts_without_os_drags_keep_on_drag() {
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.0);
     assert!(rt.take_drag_out().is_none());
-    assert!(rt.state.drags > 0, "on_drag runs as before");
+    assert!(rt.state().drags > 0, "on_drag runs as before");
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn a_reported_drag_end_reaches_on_drag_end_next_frame() {
     sink.borrow_mut().push((start.path, crate::DragOutcome::Copied));
     assert!(rt.drag_ends_pending());
     rt.frame(0.0);
-    assert_eq!(rt.state.ended, [crate::DragOutcome::Copied]);
+    assert_eq!(rt.state().ended, [crate::DragOutcome::Copied]);
     assert!(!rt.drag_ends_pending());
     assert!(rt.events.iter().any(|e| e.starts_with("drag-end Copied ")));
     assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("file") && e.drag_out));
@@ -281,16 +281,16 @@ fn on_drag_start_runs_once_the_drag_is_handed_over_and_before_its_end() {
     let mut rt = drag_out_rt(true);
     rt.pointer_move(12.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.starts, 0, "not before the threshold");
+    assert_eq!(rt.state().starts, 0, "not before the threshold");
     rt.pointer_move(40.0, 10.0);
     let start = rt.take_drag_out().unwrap();
-    assert_eq!(rt.state.starts, 0, "handlers run between frames, after the host took the drag image");
+    assert_eq!(rt.state().starts, 0, "handlers run between frames, after the host took the drag image");
     rt.frame(0.0);
-    assert!(rt.state.dragging && rt.state.starts == 1);
+    assert!(rt.state().dragging && rt.state().starts == 1);
     rt.drag_end_sink().borrow_mut().push((start.path, crate::DragOutcome::Cancelled));
     rt.frame(0.0);
-    assert!(!rt.state.dragging);
-    assert_eq!((rt.state.starts, rt.state.ended.as_slice()), (1, &[crate::DragOutcome::Cancelled][..]));
+    assert!(!rt.state().dragging);
+    assert_eq!((rt.state().starts, rt.state().ended.as_slice()), (1, &[crate::DragOutcome::Cancelled][..]));
 }
 
 #[test]
@@ -300,8 +300,8 @@ fn a_drag_start_and_end_reported_together_run_in_order() {
     let start = rt.take_drag_out().unwrap();
     rt.drag_end_sink().borrow_mut().push((start.path, crate::DragOutcome::Copied));
     rt.frame(0.0);
-    assert!(!rt.state.dragging, "the end runs after the start");
-    assert_eq!((rt.state.starts, rt.state.ended.as_slice()), (1, &[crate::DragOutcome::Copied][..]));
+    assert!(!rt.state().dragging, "the end runs after the start");
+    assert_eq!((rt.state().starts, rt.state().ended.as_slice()), (1, &[crate::DragOutcome::Copied][..]));
 }
 
 #[test]
@@ -309,11 +309,11 @@ fn a_drag_out_no_host_took_ends_cancelled_on_the_next_frame() {
     let mut rt = drag_out_rt(true);
     rt.pointer_move(40.0, 10.0);
     rt.frame(0.0);
-    assert!(!rt.state.dragging);
-    assert_eq!(rt.state.log, ["start", "end Cancelled"]);
+    assert!(!rt.state().dragging);
+    assert_eq!(rt.state().log, ["start", "end Cancelled"]);
     assert!(rt.events.iter().any(|e| e.starts_with("drag-end Cancelled ")));
     rt.frame(0.0);
-    assert_eq!(rt.state.log.len(), 2, "exactly one end");
+    assert_eq!(rt.state().log.len(), 2, "exactly one end");
 }
 
 #[test]
@@ -323,7 +323,7 @@ fn a_cancelled_press_ends_a_drag_out_no_host_took() {
     rt.cancel_pointer();
     assert!(rt.take_drag_out().is_none(), "the cancel ended the request");
     rt.frame(0.0);
-    assert_eq!(rt.state.log, ["start", "end Cancelled"]);
+    assert_eq!(rt.state().log, ["start", "end Cancelled"]);
 }
 
 #[test]
@@ -335,7 +335,7 @@ fn untaken_drags_started_in_one_turn_end_in_order() {
     rt.pointer_down(10.0, 10.0);
     rt.pointer_move(40.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.log, ["start", "end Cancelled", "start", "end Cancelled"]);
+    assert_eq!(rt.state().log, ["start", "end Cancelled", "start", "end Cancelled"]);
 }
 
 #[test]
@@ -351,11 +351,11 @@ fn a_stale_sessions_end_runs_before_the_next_drags_start() {
     // macOS reports a session it never ended when the next one replaces it.
     rt.drag_end_sink().borrow_mut().push((first.path, crate::DragOutcome::Cancelled));
     rt.frame(0.0);
-    assert_eq!(rt.state.log, ["start", "end Cancelled", "start"]);
-    assert!(rt.state.dragging, "the second drag is still running");
+    assert_eq!(rt.state().log, ["start", "end Cancelled", "start"]);
+    assert!(rt.state().dragging, "the second drag is still running");
     rt.drag_end_sink().borrow_mut().push((second.path, crate::DragOutcome::Copied));
     rt.frame(0.0);
-    assert_eq!(rt.state.log, ["start", "end Cancelled", "start", "end Copied"]);
+    assert_eq!(rt.state().log, ["start", "end Cancelled", "start", "end Copied"]);
 }
 
 #[test]
@@ -537,8 +537,8 @@ fn a_drag_counts_its_run_of_clicks() {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.1);
-        let downs: Vec<u32> = rt.state.iter().filter(|e| e.0 == Phase::Down).map(|e| e.1).collect();
-        rt.state.clear();
+        let downs: Vec<u32> = rt.state().iter().filter(|e| e.0 == Phase::Down).map(|e| e.1).collect();
+        rt.state_mut().clear();
         downs[0]
     };
     let presses: Vec<u32> = (0..4).map(|i| click(&mut rt, 10.0 + i as f32, 10.0)).collect();
@@ -552,8 +552,8 @@ fn a_drag_counts_its_run_of_clicks() {
     rt.pointer_move(40.0, 10.0);
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.1);
-    assert!(rt.state.iter().all(|e| e.1 == 2), "every phase of a double-click drag says 2: {:?}", rt.state);
-    rt.state.clear();
+    assert!(rt.state().iter().all(|e| e.1 == 2), "every phase of a double-click drag says 2: {:?}", rt.state());
+    rt.state_mut().clear();
     assert_eq!(click(&mut rt, 20.0, 10.0), 1, "a press that dragged ends the run");
 
     rt.frame(1.0);
@@ -563,7 +563,7 @@ fn a_drag_counts_its_run_of_clicks() {
     rt.pointer_down(10.0, 10.0);
     rt.pointer_up(10.0, 10.0);
     rt.frame(0.1);
-    assert!(rt.state.contains(&(Phase::Up, 0)), "on_double_press still runs: {:?}", rt.state);
+    assert!(rt.state().contains(&(Phase::Up, 0)), "on_double_press still runs: {:?}", rt.state());
 }
 
 #[test]
@@ -577,31 +577,31 @@ fn a_held_press_hears_its_drag_again_until_released() {
             }
         })
     }
-    let repeats = |rt: &Runtime<State>| rt.state.iter().filter(|e| e.1).count();
+    let repeats = |rt: &Runtime<State>| rt.state().iter().filter(|e| e.1).count();
     let mut rt = Runtime::new(Vec::new(), view, (200.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0);
     rt.pointer_move(10.0, 10.0);
     rt.pointer_down(10.0, 10.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state, vec![(Phase::Down, false, 10.0)]);
+    assert_eq!(*rt.state(), vec![(Phase::Down, false, 10.0)]);
     assert!(rt.wake_deadline().is_some(), "a still window wakes for the repeat");
     for _ in 0..15 { rt.frame(1.0 / 60.0); }
     assert_eq!(repeats(&rt), 0, "not before the delay");
     for _ in 0..4 { rt.frame(1.0 / 60.0); }
     assert_eq!(repeats(&rt), 1);
-    assert_eq!(rt.state.last(), Some(&(Phase::Move, true, 10.0)), "a still pointer is heard again");
+    assert_eq!(rt.state().last(), Some(&(Phase::Move, true, 10.0)), "a still pointer is heard again");
 
     rt.pointer_move(30.0, 10.0);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.contains(&(Phase::Move, false, 30.0)), "the hand's move isn't a repeat");
+    assert!(rt.state().contains(&(Phase::Move, false, 30.0)), "the hand's move isn't a repeat");
     for _ in 0..12 { rt.frame(1.0 / 60.0); }
-    assert!(repeats(&rt) >= 4, "then every interval: {:?}", rt.state);
-    assert_eq!(rt.state.last().map(|e| (e.1, e.2)), Some((true, 30.0)), "where the pointer is now");
+    assert!(repeats(&rt) >= 4, "then every interval: {:?}", rt.state());
+    assert_eq!(rt.state().last().map(|e| (e.1, e.2)), Some((true, 30.0)), "where the pointer is now");
 
     rt.pointer_up(30.0, 10.0);
     rt.frame(1.0 / 60.0);
-    let heard = rt.state.len();
+    let heard = rt.state().len();
     for _ in 0..30 { rt.frame(1.0 / 60.0); }
-    assert_eq!(rt.state.len(), heard, "the release ends it");
-    assert_eq!(rt.state.last().map(|e| e.0), Some(Phase::Up));
+    assert_eq!(rt.state().len(), heard, "the release ends it");
+    assert_eq!(rt.state().last().map(|e| e.0), Some(Phase::Up));
 }

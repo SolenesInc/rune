@@ -32,8 +32,8 @@ fn each_field_s_editor_takes_the_key_the_app_gives_it() {
         rt.ime(Ime::Commit("a".into()));
         rt.frame(0.0);
         let focused = rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key);
-        rt.state.focused.push(focused.unwrap_or_default());
+        rt.state_mut().focused.push(focused.unwrap_or_default());
     }
-    assert_eq!(rt.state.focused, ["name", "notes", "title"]);
-    assert_eq!((rt.state.name.text.as_str(), rt.state.notes.text.as_str(), rt.state.title.text.as_str()), ("a", "a", "a"));
+    assert_eq!(rt.state().focused, ["name", "notes", "title"]);
+    assert_eq!((rt.state().name.text.as_str(), rt.state().notes.text.as_str(), rt.state().title.text.as_str()), ("a", "a", "a"));
 }

@@ -30,48 +30,48 @@ fn physical(rt: &mut Runtime<State>, key: Code, mods: Mods, pressed: bool, repea
 fn click_and_chord_in_one_frame_capture_physical_key_and_ignore_repeat() {
     let mut rt = runtime(); click(&mut rt, "shortcut");
     physical(&mut rt, Code::KeyQ, Mods { ctrl: true, ..Mods::default() }, true, false);
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+q");
-    assert!(!rt.state.recorder.is_recording());
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+q");
+    assert!(!rt.state().recorder.is_recording());
     physical(&mut rt, Code::KeyQ, Mods::default(), true, true);
-    assert_eq!(rt.state.changes, 1);
+    assert_eq!(rt.state().changes, 1);
 }
 
 #[test]
 fn held_modifiers_preview_release_cancel_and_clear() {
     let mut rt = runtime(); click(&mut rt, "shortcut");
     rt.physical_input(PhysicalInput::Modifiers(Mods { ctrl: true, shift: true, ..Mods::default() })); rt.frame(0.0);
-    assert_eq!(rt.state.recorder.keycaps().len(), 2);
+    assert_eq!(rt.state().recorder.keycaps().len(), 2);
     physical(&mut rt, Code::ShiftLeft, Mods { ctrl: true, ..Mods::default() }, false, false);
-    assert_eq!(rt.state.recorder.keycaps().len(), 1);
-    assert_eq!(rt.state.changes, 0);
+    assert_eq!(rt.state().recorder.keycaps().len(), 1);
+    assert_eq!(rt.state().changes, 0);
     physical(&mut rt, Code::Escape, Mods::default(), true, false);
-    assert!(!rt.state.recorder.is_recording());
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+k");
+    assert!(!rt.state().recorder.is_recording());
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+k");
     click(&mut rt, "shortcut");
     physical(&mut rt, Code::Backspace, Mods::default(), true, false);
-    assert!(rt.state.recorder.shortcut().is_none());
-    assert_eq!(rt.state.changes, 1);
+    assert!(rt.state().recorder.shortcut().is_none());
+    assert_eq!(rt.state().changes, 1);
 }
 
 #[test]
 fn conflicts_keep_old_binding_and_unchanged_chords_skip_registration() {
-    let mut rt = runtime(); rt.state.reject = true; click(&mut rt, "shortcut");
+    let mut rt = runtime(); rt.state_mut().reject = true; click(&mut rt, "shortcut");
     physical(&mut rt, Code::KeyJ, Mods { ctrl: true, ..Mods::default() }, true, false);
-    assert_eq!(rt.state.recorder.error(), Some(&ShortcutError::Conflict));
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+k");
-    assert!(rt.state.recorder.is_recording());
+    assert_eq!(rt.state().recorder.error(), Some(&ShortcutError::Conflict));
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+k");
+    assert!(rt.state().recorder.is_recording());
     physical(&mut rt, Code::KeyK, Mods { ctrl: true, ..Mods::default() }, true, false);
-    assert!(rt.state.recorder.error().is_none());
-    assert!(!rt.state.recorder.is_recording());
-    assert_eq!(rt.state.changes, 1);
+    assert!(rt.state().recorder.error().is_none());
+    assert!(!rt.state().recorder.is_recording());
+    assert_eq!(rt.state().changes, 1);
     click(&mut rt, "shortcut");
     physical(&mut rt, Code::Backspace, Mods::default(), true, false);
-    assert_eq!(rt.state.recorder.error(), Some(&ShortcutError::Conflict));
-    assert!(rt.state.recorder.shortcut().is_some());
+    assert_eq!(rt.state().recorder.error(), Some(&ShortcutError::Conflict));
+    assert!(rt.state().recorder.shortcut().is_some());
     physical(&mut rt, Code::Escape, Mods::default(), true, false);
-    assert!(rt.state.recorder.error().is_none());
-    assert!(!rt.state.recorder.is_recording());
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+k");
+    assert!(rt.state().recorder.error().is_none());
+    assert!(!rt.state().recorder.is_recording());
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+k");
 }
 
 #[test]
@@ -79,44 +79,44 @@ fn keyboard_activation_and_both_kinds_of_blur() {
     let mut rt = runtime();
     rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
     rt.key(KeyEvent { key: Key::Text(" ".into()), mods: Mods::default() }); rt.frame(0.0);
-    assert!(rt.state.recorder.is_recording());
+    assert!(rt.state().recorder.is_recording());
     click(&mut rt, "other"); rt.frame(0.0);
-    assert!(!rt.state.recorder.is_recording());
+    assert!(!rt.state().recorder.is_recording());
     click(&mut rt, "shortcut"); rt.physical_input(PhysicalInput::FocusLost); rt.frame(0.0);
-    assert!(!rt.state.recorder.is_recording());
-    assert_eq!(rt.state.changes, 0);
+    assert!(!rt.state().recorder.is_recording());
+    assert_eq!(rt.state().changes, 0);
 }
 
 #[test]
 fn disabling_a_focused_recorder_cancels_capture() {
     let mut rt = runtime(); click(&mut rt, "shortcut"); rt.frame(0.0);
-    assert!(rt.state.recorder.is_recording());
-    rt.state.disabled = true; rt.invalidate(); rt.frame(0.0);
-    assert!(!rt.state.recorder.is_recording());
+    assert!(rt.state().recorder.is_recording());
+    rt.state_mut().disabled = true; rt.invalidate(); rt.frame(0.0);
+    assert!(!rt.state().recorder.is_recording());
     physical(&mut rt, Code::KeyJ, Mods::default(), true, false);
-    assert_eq!(rt.state.changes, 0);
+    assert_eq!(rt.state().changes, 0);
 }
 
 #[test]
 fn a_refused_chord_stays_on_the_keycaps_with_a_message_naming_it() {
-    let mut rt = runtime(); rt.state.reject = true; click(&mut rt, "shortcut");
+    let mut rt = runtime(); rt.state_mut().reject = true; click(&mut rt, "shortcut");
     let ctrl = Mods { ctrl: true, ..Mods::default() };
     physical(&mut rt, Code::KeyJ, ctrl, true, false);
     let refused: rune::Shortcut = "ctrl+j".parse().unwrap();
-    assert_eq!(rt.state.recorder.refused(), Some(&refused));
+    assert_eq!(rt.state().recorder.refused(), Some(&refused));
     // Releasing the key and its modifier keeps showing what was refused.
     physical(&mut rt, Code::KeyJ, ctrl, false, false);
     rt.physical_input(PhysicalInput::Modifiers(Mods::default())); rt.frame(0.0);
-    assert_eq!(rt.state.recorder.keycaps(), refused.keycaps());
+    assert_eq!(rt.state().recorder.keycaps(), refused.keycaps());
     let chord = refused.keycaps().join(if cfg!(target_os = "macos") { "" } else { "+" });
     assert!(shows(&rt, &format!("{chord} is already in use.")));
-    rt.state.worded = true; rt.invalidate(); rt.frame(0.0);
+    rt.state_mut().worded = true; rt.invalidate(); rt.frame(0.0);
     assert!(shows(&rt, "Conflict: ctrl+j"));
     // A new modifier starts the next chord.
     rt.physical_input(PhysicalInput::Modifiers(Mods { alt: true, ..Mods::default() })); rt.frame(0.0);
-    assert!(rt.state.recorder.refused().is_none() && rt.state.recorder.error().is_none());
-    assert_eq!(rt.state.recorder.keycaps().len(), 1);
-    assert!(rt.state.recorder.is_recording());
+    assert!(rt.state().recorder.refused().is_none() && rt.state().recorder.error().is_none());
+    assert_eq!(rt.state().recorder.keycaps().len(), 1);
+    assert!(rt.state().recorder.is_recording());
 }
 
 #[test]
@@ -128,42 +128,42 @@ fn a_chord_without_a_modifier_is_refused_before_on_change_but_f_keys_pass() {
         rt.physical_input(PhysicalInput::Modifiers(Mods::default())); rt.frame(0.0);
         physical(&mut rt, key, mods, true, false);
         physical(&mut rt, key, mods, false, false);
-        assert_eq!(rt.state.changes, 0, "{key:?} never reaches on_change");
-        assert!(matches!(rt.state.recorder.error(), Some(ShortcutError::InvalidAccelerator(_))), "{key:?}");
-        assert_eq!(rt.state.recorder.refused().map(|s| s.physical_key()), Some(key));
+        assert_eq!(rt.state().changes, 0, "{key:?} never reaches on_change");
+        assert!(matches!(rt.state().recorder.error(), Some(ShortcutError::InvalidAccelerator(_))), "{key:?}");
+        assert_eq!(rt.state().recorder.refused().map(|s| s.physical_key()), Some(key));
         assert!(shows(&rt, add), "{key:?}");
-        assert!(rt.state.recorder.is_recording());
+        assert!(rt.state().recorder.is_recording());
     }
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+k");
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+k");
     physical(&mut rt, Code::F5, Mods::default(), true, false);
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "f5");
-    assert_eq!(rt.state.changes, 1);
-    rt.state.unmodified = true; rt.invalidate(); rt.frame(0.0);
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "f5");
+    assert_eq!(rt.state().changes, 1);
+    rt.state_mut().unmodified = true; rt.invalidate(); rt.frame(0.0);
     click(&mut rt, "shortcut");
     physical(&mut rt, Code::Space, Mods::default(), true, false);
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "space");
-    assert_eq!(rt.state.changes, 2);
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "space");
+    assert_eq!(rt.state().changes, 2);
 }
 
 #[test]
 fn recording_the_same_chord_retries_it_after_mark_unregistered() {
-    let mut rt = runtime(); rt.state.reject = true;
-    rt.state.recorder.mark_unregistered();
+    let mut rt = runtime(); rt.state_mut().reject = true;
+    rt.state_mut().recorder.mark_unregistered();
     let ctrl = Mods { ctrl: true, ..Mods::default() };
     click(&mut rt, "shortcut");
     physical(&mut rt, Code::KeyK, ctrl, true, false);
-    assert_eq!(rt.state.changes, 1, "an unregistered chord is proposed again");
-    assert_eq!(rt.state.recorder.error(), Some(&ShortcutError::Conflict));
+    assert_eq!(rt.state().changes, 1, "an unregistered chord is proposed again");
+    assert_eq!(rt.state().recorder.error(), Some(&ShortcutError::Conflict));
     physical(&mut rt, Code::KeyK, ctrl, false, false);
-    rt.state.reject = false;
+    rt.state_mut().reject = false;
     rt.physical_input(PhysicalInput::Modifiers(Mods::default())); rt.frame(0.0);
     physical(&mut rt, Code::KeyK, ctrl, true, false);
     physical(&mut rt, Code::KeyK, ctrl, false, false);
-    assert_eq!(rt.state.changes, 2);
-    assert!(!rt.state.recorder.is_recording() && rt.state.recorder.error().is_none());
+    assert_eq!(rt.state().changes, 2);
+    assert!(!rt.state().recorder.is_recording() && rt.state().recorder.error().is_none());
     // Registered again: the same chord is a no-op once more.
     click(&mut rt, "shortcut");
     physical(&mut rt, Code::KeyK, ctrl, true, false);
-    assert_eq!(rt.state.changes, 2);
-    assert_eq!(rt.state.recorder.shortcut().unwrap().to_string(), "ctrl+k");
+    assert_eq!(rt.state().changes, 2);
+    assert_eq!(rt.state().recorder.shortcut().unwrap().to_string(), "ctrl+k");
 }

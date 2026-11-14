@@ -49,10 +49,10 @@ fn close(a: [f32; 4], b: [f32; 4]) -> bool {
 }
 
 fn check(rt: &Runtime<S>, when: &str) {
-    let seen = rt.state.seen.borrow().unwrap_or_else(|| panic!("{when}: read saw nothing"));
-    let mark = mark_of(rt, rt.state.hit_row);
+    let seen = rt.state().seen.borrow().unwrap_or_else(|| panic!("{when}: read saw nothing"));
+    let mark = mark_of(rt, rt.state().hit_row);
     assert!(close(seen, mark), "{when}: read {seen:?}, mark at {mark:?}");
-    for (i, seen) in rt.state.seen_rows.borrow().iter().enumerate() {
+    for (i, seen) in rt.state().seen_rows.borrow().iter().enumerate() {
         let seen = seen.unwrap_or_else(|| panic!("{when}: row{i} read saw nothing"));
         let row = row_of(rt, i);
         assert!(close(seen, row), "{when}: row{i} read {seen:?}, row at {row:?}");
@@ -67,10 +67,10 @@ fn reads_follow_scrolls_and_commits(extra_reads: usize) {
     check(&rt, "first layout");
 
     for dy in [-120.0, -160.0, 200.0] {
-        let before = mark_of(&rt, rt.state.hit_row)[1];
+        let before = mark_of(&rt, rt.state().hit_row)[1];
         rt.wheel(100.0, 100.0, dy);
         settle(&mut rt);
-        assert_ne!(mark_of(&rt, rt.state.hit_row)[1], before, "the wheel scrolled");
+        assert_ne!(mark_of(&rt, rt.state().hit_row)[1], before, "the wheel scrolled");
         check(&rt, &format!("wheeled {dy}"));
     }
 

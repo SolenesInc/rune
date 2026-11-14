@@ -33,7 +33,7 @@ pub(super) fn place(center: bool, offset: f64, top: f64, height: f64, viewport: 
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Scrolls so row or highlight `r.key` shows, or sits centred when `r.center`. A virtual row
     /// placed by estimates may measure differently once mounted, along with the rows around it,
     /// so this places it again from what the commit measured until it stays put. Those commits

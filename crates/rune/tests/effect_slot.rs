@@ -120,7 +120,8 @@ impl Compositor<()> for Flat {
         let (device, queue, size) = (f.device, f.queue, f.size);
         let clear = f.rt.clear_color();
         let count = f.rt.instances.len() as u32;
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         let mut hook = |pass: &mut wgpu::RenderPass<'_>, s: &EffectSite<'_>| self.draw(device, queue, pass, s);
         f.ui.encode_layers_with(f.encoder, &mut hook);
         let mut pass = f.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -327,7 +328,8 @@ impl Compositor<()> for ScaleProbe {
         let clear = f.rt.clear_color();
         let count = f.rt.instances.len() as u32;
         let marks = f.rt.marks.clone();
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         let log = &self.0;
         let mut hook = |_: &mut wgpu::RenderPass<'_>, s: &EffectSite<'_>| {
             assert_eq!(s.scale, s.instance.params[3]);
@@ -386,7 +388,8 @@ impl Compositor<()> for BackdropProbe {
         let (device, queue, size) = (f.device, f.queue, f.size);
         let clear = f.rt.clear_color();
         let marks = f.rt.marks.clone();
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         let log = &self.0;
         f.ui.draw_with_backdrop(f.encoder, f.target, clear, &mut |phase, s| {
             let phase_name = match phase {
@@ -452,7 +455,8 @@ impl Compositor<()> for CacheSlotProbe {
         let frame_no = self.frame_no;
         let (device, queue, size) = (f.device, f.queue, f.size);
         let clear = f.rt.clear_color();
-        f.ui.prepare(device, queue, &mut f.rt.text.atlas, &f.rt.instances, size);
+        let core = &mut **f.rt;
+        f.ui.prepare(device, queue, &mut core.text.atlas, &core.instances, size);
         let stats = f.ui.layer_stats();
         let flat = &mut self.flat;
         let log = &self.log;

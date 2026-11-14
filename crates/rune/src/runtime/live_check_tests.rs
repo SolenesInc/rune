@@ -63,7 +63,7 @@ fn hover_rows_at_rest_are_not_a_view_change() {
         for _ in 0..3 { rt.frame(1.0 / 60.0); }
     }
     assert!(rt.live_checks >= 6, "the moves were checked: {}", rt.live_checks);
-    assert_eq!(rt.state.changes, 0);
+    assert_eq!(rt.state().changes, 0);
     assert!(rt.live_only_warnings.is_empty(), "{:#?}", rt.live_only_warnings);
 }
 
@@ -79,7 +79,7 @@ fn a_leave_and_an_enter_in_one_frame_blame_neither_when_the_enter_changes_state(
     let checks = rt.live_checks;
     rt.pointer_move(200.0, row_y(3));
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.copy, rt.state.changes, rt.live_checks - checks), (Side::Old, 1, 1));
+    assert_eq!((rt.state().copy, rt.state().changes, rt.live_checks - checks), (Side::Old, 1, 1));
     assert!(rt.live_only_warnings.is_empty(), "{:#?}", rt.live_only_warnings);
     let fill = |rt: &Runtime<Rows>, key: &str| rt.nodes.iter().find(|n| n.key.as_deref() == Some(key)).unwrap().vis.fill;
     assert_eq!(fill(&rt, "r3"), Color::BLACK, "the commit built the new copy side");
@@ -93,7 +93,7 @@ fn a_leave_and_an_enter_in_one_frame_blame_neither_when_the_enter_changes_state(
     rt.queue.push(Action::HoverChange(enter, true));
     rt.queue.push(Action::HoverChange(leave, false));
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.copy, rt.state.changes), (Side::New, 2));
+    assert_eq!((rt.state().copy, rt.state().changes), (Side::New, 2));
     assert!(rt.live_only_warnings.is_empty(), "{:#?}", rt.live_only_warnings);
     assert_eq!(fill(&rt, "r4"), Color::BLACK);
 }
@@ -113,7 +113,7 @@ fn dragging_a_text_selection_across_hover_rows_blames_no_hover_handler() {
     }
     rt.pointer_up(200.0, row_y(5));
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.selections > 1 && rt.live_checks >= 4, "{} selections, {} checks", rt.state.selections, rt.live_checks);
+    assert!(rt.state().selections > 1 && rt.live_checks >= 4, "{} selections, {} checks", rt.state().selections, rt.live_checks);
     assert!(rt.live_only_warnings.is_empty(), "{:#?}", rt.live_only_warnings);
 }
 
@@ -137,7 +137,7 @@ fn case_view(s: &Case, _: &mut Cx<Case>) -> El {
 
 fn case_app(case: u8) -> Runtime<Case> {
     let mut rt = Runtime::new(Case { case, changed: false }, case_view, (400.0, 400.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, _, tx| { s.changed = !s.changed; tx.live_only(); true });
+    rt.app_mut().on_key = Some(|s, _, tx| { s.changed = !s.changed; tx.live_only(); true });
     rt.frame(0.0);
     rt
 }
@@ -178,7 +178,7 @@ fn the_warning_repeats_only_for_another_element_or_property() {
     }
     assert_eq!(rt.live_checks, 4);
     assert_eq!(rt.live_only_warnings.len(), 1, "the same handler, element and property: {:#?}", rt.live_only_warnings);
-    rt.state.case = 0;
+    rt.state_mut().case = 0;
     rt.frame(0.5);
     rt.key(KeyEvent { key: Key::Right, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
@@ -197,7 +197,7 @@ fn a_selection_handler_after_a_checked_event_is_not_blamed_on_it() {
             .child(text(s.heard.to_string()).key("heard"))
     }
     let mut rt = Runtime::new(Sel { heard: 0 }, view, (400.0, 200.0), Env::new(true, 1.0));
-    rt.on_key = Some(|_, _, tx| { tx.live_only(); true });
+    rt.app_mut().on_key = Some(|_, _, tx| { tx.live_only(); true });
     rt.frame(0.0);
     let (x, y) = rt.find("t").unwrap();
     rt.pointer_down(x - 150.0, y);
@@ -205,12 +205,12 @@ fn a_selection_handler_after_a_checked_event_is_not_blamed_on_it() {
     for _ in 0..30 { rt.frame(1.0 / 60.0); }
     // Still dragging: a checked live-only key, and the drag grows the selection in one frame.
     rt.frame(0.5);
-    let (heard, checks) = (rt.state.heard, rt.live_checks);
+    let (heard, checks) = (rt.state().heard, rt.live_checks);
     rt.key(KeyEvent { key: Key::Function(5), mods: Mods::default() });
     rt.pointer_move(x + 100.0, y);
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.live_checks - checks, 1);
-    assert!(rt.state.heard > heard, "the selection handler ran");
+    assert!(rt.state().heard > heard, "the selection handler ran");
     assert!(rt.live_only_warnings.is_empty(), "{:#?}", rt.live_only_warnings);
 }
 

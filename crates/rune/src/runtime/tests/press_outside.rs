@@ -18,9 +18,9 @@ fn a_press_away_from_an_element_tells_it_and_still_reaches_its_target() {
         rt.frame(1.0);
     };
     press(&mut rt, 20.0, 20.0);
-    assert_eq!((rt.state.outside, rt.state.pressed), (0, 0), "a press on the card is inside it");
+    assert_eq!((rt.state().outside, rt.state().pressed), (0, 0), "a press on the card is inside it");
     press(&mut rt, 20.0, 60.0);
-    assert_eq!((rt.state.outside, rt.state.pressed), (1, 1), "the button still hears its press");
+    assert_eq!((rt.state().outside, rt.state().pressed), (1, 1), "the button still hears its press");
     press(&mut rt, 80.0, 150.0);
-    assert_eq!(rt.state.outside, 2, "a press on empty space is outside too");
+    assert_eq!(rt.state().outside, 2, "a press on empty space is outside too");
 }

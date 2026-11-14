@@ -103,7 +103,7 @@ fn view(s: &S, cx: &mut Cx<S>) -> El {
 
 fn runtime(s: S) -> Runtime<S> {
     let mut rt = Runtime::new(s, view, (1000.0, 600.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, ev, _| {
+    rt.app_mut().on_key = Some(|s, ev, _| {
         let hit = is_sidebar_toggle(ev);
         if hit {
             s.sidebar.toggle();
@@ -141,23 +141,23 @@ fn dragging_the_grip_clamps_collapses_and_double_click_resets() {
     rt.pointer_down(x, y);
     rt.pointer_move(x + 60.0, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.sidebar.width(), 300.0, "follows the pointer");
+    assert_eq!(rt.state().sidebar.width(), 300.0, "follows the pointer");
     assert_eq!(find(&rt, "sidebar-pane").rect[2], 300.0, "a drag doesn't spring");
     rt.pointer_move(x + 600.0, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.sidebar.width(), 420.0, "clamps to the maximum");
+    assert_eq!(rt.state().sidebar.width(), 420.0, "clamps to the maximum");
     rt.pointer_move(x - 140.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_open() && rt.state.sidebar.width() == 180.0, "clamps to the minimum");
+    assert!(rt.state().sidebar.is_open() && rt.state().sidebar.width() == 180.0, "clamps to the minimum");
     rt.pointer_move(x - 200.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_open(), "below half the minimum it collapses");
+    assert!(!rt.state().sidebar.is_open(), "below half the minimum it collapses");
     rt.pointer_move(x - 20.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_open(), "and dragging back out opens it");
+    assert!(rt.state().sidebar.is_open(), "and dragging back out opens it");
     rt.pointer_up(x - 20.0, y);
     settle(&mut rt);
-    assert_eq!(rt.state.sidebar.width(), 220.0);
+    assert_eq!(rt.state().sidebar.width(), 220.0);
 
     let (x, y) = rt.find("sidebar-grip").expect("grip");
     for _ in 0..2 {
@@ -165,7 +165,7 @@ fn dragging_the_grip_clamps_collapses_and_double_click_resets() {
         rt.pointer_up(x, y);
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.sidebar.width(), 240.0, "double-click resets the width");
+    assert_eq!(rt.state().sidebar.width(), 240.0, "double-click resets the width");
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn the_shortcut_collapses_on_a_spring_and_reduced_motion_snaps() {
     let mut rt = runtime(state());
     rt.key(toggle_shortcut());
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_open());
+    assert!(!rt.state().sidebar.is_open());
     let w = find(&rt, "sidebar-pane").rect[2];
     assert!(w > 0.0 && w < 240.0, "mid-spring: {w}");
     settle(&mut rt);
@@ -186,7 +186,7 @@ fn the_shortcut_collapses_on_a_spring_and_reduced_motion_snaps() {
     rt.set_system_reduced_motion(true);
     rt.key(toggle_shortcut());
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_open());
+    assert!(rt.state().sidebar.is_open());
     assert_eq!(find(&rt, "sidebar-pane").rect[2], 240.0, "Reduce Motion snaps it open");
     assert!(!is_sidebar_toggle(&KeyEvent { key: Key::Command('b'), mods: Mods { cmd: true, ..Mods::default() } }));
 }
@@ -198,18 +198,18 @@ fn the_list_is_one_tab_stop_whose_arrows_and_typing_move_the_selection() {
     press(&mut rt, Key::Tab);
     assert_eq!(focused(&rt).as_deref(), Some("row1"), "Tab lands on the selected row");
     press(&mut rt, Key::Down);
-    assert_eq!((focused(&rt).as_deref(), rt.state.picked), (Some("row2"), 2), "selection follows focus");
+    assert_eq!((focused(&rt).as_deref(), rt.state().picked), (Some("row2"), 2), "selection follows focus");
     for _ in 0..4 {
         press(&mut rt, Key::Down);
     }
-    assert_eq!(rt.state.picked, 3, "stops at the end");
+    assert_eq!(rt.state().picked, 3, "stops at the end");
     press(&mut rt, Key::Home);
-    assert_eq!(rt.state.picked, 0);
+    assert_eq!(rt.state().picked, 0);
     press(&mut rt, Key::Text("c".into()));
-    assert_eq!(rt.state.picked, 2, "type-select");
-    rt.state.picked = 0;
+    assert_eq!(rt.state().picked, 2, "type-select");
+    rt.state_mut().picked = 0;
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.picked, 2, "Return presses the focused row");
+    assert_eq!(rt.state().picked, 2, "Return presses the focused row");
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn long_lists_build_only_the_rows_near_the_viewport() {
     assert!(rt.find("row0").is_some() && rt.find("row4999").is_none());
     press(&mut rt, Key::Tab);
     press(&mut rt, Key::Down);
-    assert_eq!(rt.state.picked, 2, "the keyboard works in a virtualised list");
+    assert_eq!(rt.state().picked, 2, "the keyboard works in a virtualised list");
 
     // During the sidebar's disclosure spring, rows outside the viewport must not lay out.
     let t_spring = std::time::Instant::now();
@@ -283,7 +283,7 @@ fn roles_and_labels_describe_the_shell() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     settle(&mut rt);
-    assert!(rt.state.collapsed);
+    assert!(rt.state().collapsed);
     assert_eq!(find(&rt, "section-header").expanded, Some(false), "the header reads collapsed");
     assert!(rt.find("row0").is_none(), "a collapsed section hides its rows");
 }
@@ -314,7 +314,7 @@ fn the_title_bar_clears_the_traffic_lights_and_drags_the_window() {
         rt.pointer_up(x, y);
         rt.frame(1.0 / 60.0);
     }
-    assert!(rt.state.sidebar.is_open(), "the toggle button opened the sidebar again");
+    assert!(rt.state().sidebar.is_open(), "the toggle button opened the sidebar again");
 }
 
 #[test]
@@ -328,7 +328,7 @@ fn collapsing_the_sidebar_moves_focus_out_and_blurs_rename() {
     rt.frame(1.0 / 60.0);
     assert_eq!(focused(&rt).as_deref(), Some("sidebar-toggle"), "focus leaves the collapsed sidebar");
     press(&mut rt, Key::Down);
-    assert_eq!(rt.state.picked, 1, "arrows no longer move a collapsed sidebar's selection");
+    assert_eq!(rt.state().picked, 1, "arrows no longer move a collapsed sidebar's selection");
 
     // Reopen and start an inline rename, then collapse: the rename input must blur.
     rt.key(toggle_shortcut());
@@ -343,10 +343,10 @@ fn collapsing_the_sidebar_moves_focus_out_and_blurs_rename() {
 
     rt.key(toggle_shortcut());
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.edit.focused, "collapsing the sidebar blurs its rename field");
+    assert!(!rt.state().edit.focused, "collapsing the sidebar blurs its rename field");
     assert_eq!(focused(&rt).as_deref(), Some("sidebar-toggle"));
     press(&mut rt, Key::Text("X".into()));
-    assert_eq!(rt.state.edit.text, "Bravo", "typing after collapse does not edit the hidden field");
+    assert_eq!(rt.state().edit.text, "Bravo", "typing after collapse does not edit the hidden field");
 }
 
 #[test]
@@ -356,13 +356,13 @@ fn hiding_the_sidebar_keeps_focus_in_a_toolbar_search() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert!(rt.state.toolbar_edit.focused);
+    assert!(rt.state().toolbar_edit.focused);
     rt.key(toggle_shortcut());
     rt.frame(0.0);
-    assert!(!rt.state.sidebar.is_open());
-    assert!(rt.state.toolbar_edit.focused, "the sentinel belongs to the sidebar, not the whole shell");
+    assert!(!rt.state().sidebar.is_open());
+    assert!(rt.state().toolbar_edit.focused, "the sentinel belongs to the sidebar, not the whole shell");
     press(&mut rt, Key::Text("search".into()));
-    assert_eq!(rt.state.toolbar_edit.text, "search");
+    assert_eq!(rt.state().toolbar_edit.text, "search");
     assert!(rt.take_titlebar_action().is_none());
 }
 
@@ -374,21 +374,21 @@ fn hiding_the_sidebar_keeps_focus_in_a_main_pane_text_field() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.main_edit.focused);
+    assert!(rt.state().main_edit.focused);
     assert_eq!(focused(&rt).as_deref(), Some("input"));
 
     rt.key(toggle_shortcut());
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_open(), "shortcut closes the sidebar");
-    assert!(rt.state.main_edit.focused, "focus never leaves the main text field");
+    assert!(!rt.state().sidebar.is_open(), "shortcut closes the sidebar");
+    assert!(rt.state().main_edit.focused, "focus never leaves the main text field");
     assert_eq!(focused(&rt).as_deref(), Some("input"));
 
     for ch in ["a", " ", "b"] {
         press(&mut rt, Key::Text(ch.into()));
     }
-    assert_eq!(rt.state.main_edit.text, "a b");
-    assert!(!rt.state.sidebar.is_open(), "Space typed into the field does not reopen the sidebar");
-    assert!(rt.state.main_edit.focused);
+    assert_eq!(rt.state().main_edit.text, "a b");
+    assert!(!rt.state().sidebar.is_open(), "Space typed into the field does not reopen the sidebar");
+    assert!(rt.state().main_edit.focused);
 
     // Closing the inspector while focus is inside it returns focus to the main pane, while
     // closing it with focus already in main keeps focus in main.
@@ -415,9 +415,9 @@ fn inline_rename_commits_on_return_and_cancels_on_escape() {
     });
     rt.frame(1.0 / 60.0);
     press(&mut rt, Key::Text("Beta".into()));
-    assert_eq!(rt.state.edit.text, "Beta");
+    assert_eq!(rt.state().edit.text, "Beta");
     press(&mut rt, Key::Escape);
-    assert_eq!((rt.state.renaming, rt.state.committed.as_deref()), (None, None), "Escape cancels");
+    assert_eq!((rt.state().renaming, rt.state().committed.as_deref()), (None, None), "Escape cancels");
 
     rt.update(|s, _| {
         s.renaming = Some(1);
@@ -428,7 +428,7 @@ fn inline_rename_commits_on_return_and_cancels_on_escape() {
     rt.frame(1.0 / 60.0);
     press(&mut rt, Key::Text("Beta".into()));
     press(&mut rt, Key::Enter);
-    assert_eq!((rt.state.renaming, rt.state.committed.as_deref()), (None, Some("Beta")), "Return commits");
+    assert_eq!((rt.state().renaming, rt.state().committed.as_deref()), (None, Some("Beta")), "Return commits");
 }
 
 #[test]
@@ -439,12 +439,12 @@ fn a_stuck_resize_clears_on_window_blur_or_uncaptured_pointer_move() {
     rt.pointer_down(x, y);
     rt.pointer_move(x - 200.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_open() && rt.state.sidebar.is_resizing());
+    assert!(!rt.state().sidebar.is_open() && rt.state().sidebar.is_resizing());
 
     // Losing window focus without a pointer-up clears `is_resizing`.
     rt.window_focus(false);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_resizing(), "window blur clears a stuck resize");
+    assert!(!rt.state().sidebar.is_resizing(), "window blur clears a stuck resize");
 
     // Reopen, start another resize, release capture, then simulate a stuck flag: the next
     // uncaptured pointer move clears it.
@@ -455,28 +455,28 @@ fn a_stuck_resize_clears_on_window_blur_or_uncaptured_pointer_move() {
     rt.pointer_move(x, y);
     rt.pointer_down(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_resizing());
+    assert!(rt.state().sidebar.is_resizing());
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_resizing());
+    assert!(!rt.state().sidebar.is_resizing());
 
     // Now start a drag, collapse, end the pointer capture, and force `resizing` back on as if
     // the release never reached the handler: moving the pointer without a button held clears it.
     rt.pointer_down(x, y);
     rt.pointer_move(x + 20.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_resizing(), "live drag keeps resizing");
+    assert!(rt.state().sidebar.is_resizing(), "live drag keeps resizing");
     rt.pointer_up(x + 20.0, y);
     rt.frame(1.0 / 60.0);
     rt.pointer_down(x + 20.0, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.sidebar.is_resizing());
+    assert!(rt.state().sidebar.is_resizing());
     // Simulate OS dropping the button release before the next move by cancelling via window blur,
     // or verify that an uncaptured move after `pointer_up` leaves `resizing` false.
     rt.pointer_up(x + 20.0, y);
     rt.pointer_move(500.0, 300.0);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_resizing());
+    assert!(!rt.state().sidebar.is_resizing());
 }
 
 #[test]
@@ -524,8 +524,8 @@ fn a_rename_field_keeps_letters_and_arrows_that_would_type_select_a_row() {
     for key in [Key::Down, Key::Up, Key::Home, Key::End] {
         press(&mut rt, key);
     }
-    assert_eq!(rt.state.edit.text, "Del", "Delta's first letter goes to the field");
-    assert_eq!((rt.state.picked, focused(&rt).as_deref()), (1, Some("rename")), "no row was type-selected");
+    assert_eq!(rt.state().edit.text, "Del", "Delta's first letter goes to the field");
+    assert_eq!((rt.state().picked, focused(&rt).as_deref()), (1, Some("rename")), "no row was type-selected");
 }
 
 #[test]
@@ -553,14 +553,14 @@ fn two_line_rows_keep_focus_keyboard_navigation_and_accessible_labels() {
     press(&mut rt, Key::Tab);
     assert_eq!(focused(&rt).as_deref(), Some("row1"), "Tab lands on the selected two-line row");
     press(&mut rt, Key::Down);
-    assert_eq!((focused(&rt).as_deref(), rt.state.picked), (Some("row2"), 2));
+    assert_eq!((focused(&rt).as_deref(), rt.state().picked), (Some("row2"), 2));
     press(&mut rt, Key::Home);
-    assert_eq!((focused(&rt).as_deref(), rt.state.picked), (Some("row0"), 0));
+    assert_eq!((focused(&rt).as_deref(), rt.state().picked), (Some("row0"), 0));
     press(&mut rt, Key::Text("d".into()));
-    assert_eq!((focused(&rt).as_deref(), rt.state.picked), (Some("row3"), 3), "type-select matches the title label");
-    rt.state.picked = 0;
+    assert_eq!((focused(&rt).as_deref(), rt.state().picked), (Some("row3"), 3), "type-select matches the title label");
+    rt.state_mut().picked = 0;
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.picked, 3, "Return selects the focused two-line row");
+    assert_eq!(rt.state().picked, 3, "Return selects the focused two-line row");
 
     // Ending an inline rename on a two-line row returns focus to the selected row.
     rt.update(|s, _| {
@@ -641,7 +641,7 @@ fn page_matches_split_views_toolbar_and_frame_pixel_for_pixel() {
     assert!(rt.take_titlebar_action().is_none());
     rt.pointer_up(lx, ly);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.backs, 1);
+    assert_eq!(rt.state().backs, 1);
 }
 
 #[test]
@@ -691,7 +691,8 @@ fn icon_button_and_sidebar_toggle_show_help_and_shortcut_tooltips() {
     let (x, y) = rt.find("lock").unwrap();
     rt.pointer_move(x, y);
     rt.frame(1.0 / 60.0);
-    rt.frame(rt.help_delay + 0.05);
+    let core = &mut *rt;
+    core.frame(core.help_delay + 0.05);
     assert_eq!(rt.help_tooltip().map(|(t, _)| t), Some("Lock  ⌘L"));
 }
 
@@ -849,7 +850,7 @@ fn select_only_rows_skip_tab_and_keep_an_outside_field_focused() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.picked, rt.state.presses), (2, 1), "the press selects");
+    assert_eq!((rt.state().picked, rt.state().presses), (2, 1), "the press selects");
     assert_eq!(focused(&rt), ["input"], "the field keeps focus through the press");
     assert!(row(&rt, 2).item_selected && !row(&rt, 1).item_selected);
 

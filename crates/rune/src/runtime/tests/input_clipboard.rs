@@ -23,9 +23,9 @@ fn page_keys_reach_an_input_and_scroll_its_scroll_view_by_most_of_a_viewport() {
         rt.frame(t);
     };
     page(&mut rt, crate::Key::PageDown, 0.1);
-    assert_eq!(rt.state.keys, [crate::Key::PageDown], "the input's key handler sees it");
+    assert_eq!(rt.state().keys, [crate::Key::PageDown], "the input's key handler sees it");
     assert_eq!(top(&rt), 40.0 - 180.0, "a page is 90% of the viewport");
-    assert_eq!(rt.state.edit.text, "hello");
+    assert_eq!(rt.state().edit.text, "hello");
     page(&mut rt, crate::Key::PageDown, 0.2);
     page(&mut rt, crate::Key::PageDown, 0.3);
     page(&mut rt, crate::Key::PageDown, 0.4);
@@ -63,7 +63,7 @@ fn page_keys_keep_paging_the_list_of_a_focused_field_that_scrolled_out() {
     assert!(y(&rt, "field").is_none(), "the field's row scrolled out of the window");
     assert_eq!(y(&rt, "r40"), Some(40.0 * 40.0 - 8.0 * 180.0), "every page moved the focused field's list");
     assert_eq!(y(&rt, "o0"), Some(0.0), "the list under the pointer stayed");
-    assert!(rt.state.edit.focused);
+    assert!(rt.state().edit.focused);
 }
 
 #[test]
@@ -88,11 +88,11 @@ fn single_line_input_scrolls_to_the_caret_instead_of_wrapping() {
     // A click lands on the scrolled text, not on the hidden start.
     rt.queue.push(Action::Focus(path.clone(), 1.0, 12.0));
     rt.frame(0.0);
-    assert!(rt.state.focus > 10, "clicked index {}", rt.state.focus);
+    assert!(rt.state().focus > 10, "clicked index {}", rt.state().focus);
 
     rt.queue.push(Action::Blur);
     rt.frame(0.0);
-    assert!(!rt.state.focused);
+    assert!(!rt.state().focused);
     assert!(!rt.input_scroll.contains_key(&path), "unfocused fields rest at their start");
 }
 
@@ -116,12 +116,12 @@ fn grapheme_arrow_caret_hit_tests_roundtrip_after_single_line_scroll() {
         offset += grapheme.len();
         rt.key(KeyEvent { key: crate::Key::Right, mods: Default::default() });
         rt.frame(0.0);
-        assert_eq!(rt.state.focus, offset, "arrow must cross the whole {grapheme:?}");
+        assert_eq!(rt.state().focus, offset, "arrow must cross the whole {grapheme:?}");
         let [x, y, _, height] = rt.ime_area.unwrap();
         assert!((0.0..=100.0).contains(&x), "caret must remain in the scrolled field");
         rt.queue.push(Action::Focus(path.clone(), x + 0.1, y + height * 0.5));
         rt.frame(0.0);
-        assert_eq!(rt.state.focus, offset, "clicking the reported caret after {grapheme:?} must hit that boundary");
+        assert_eq!(rt.state().focus, offset, "clicking the reported caret after {grapheme:?} must hit that boundary");
     }
     assert!(rt.input_scroll[&path] > 0.0, "the fixture must exercise scrolled caret geometry");
 }
@@ -140,16 +140,16 @@ fn clipboard_paste_routes_to_window_or_field_and_discards_late_reads() {
     rt.frame(0.0);
     assert!(rt.accepts_paste());
     rt.paste("window fixture"); rt.frame(0.0);
-    assert_eq!(rt.state.pasted, "window fixture");
+    assert_eq!(rt.state().pasted, "window fixture");
     assert!(rt.events.iter().any(|e| e == "paste window"));
     assert!(!format!("{:?}", rt.copy_request).contains("window fixture"));
     rt.update(|s, _| s.field.focused = true); rt.frame(0.0);
     rt.paste_result(None, crate::ClipboardContent::new("late window reply")); rt.frame(0.0);
-    assert!(rt.state.field.text.is_empty());
-    assert_eq!(rt.state.pasted, "window fixture");
+    assert!(rt.state().field.text.is_empty());
+    assert_eq!(rt.state().pasted, "window fixture");
     let target = rt.paste_target();
     rt.paste_result(target, crate::ClipboardContent::new("field fixture")); rt.frame(0.0);
-    assert_eq!(rt.state.field.text, "field fixture");
+    assert_eq!(rt.state().field.text, "field fixture");
     assert!(rt.events.iter().any(|e| e == "paste field"));
 }
 
@@ -180,29 +180,29 @@ fn rich_pastes_reach_paste_hooks_and_plain_fields_keep_pasting_text() {
     m.set_content(ClipboardContent::new("Hello").with_html("<b>Hello</b><script>steal()</script>"));
 
     paste(&mut rt);
-    let window = rt.state.window.pop().unwrap();
+    let window = rt.state_mut().window.pop().unwrap();
     assert_eq!((window.text(), window.html()), ("Hello", Some("<b>Hello</b>")), "the window hears every form, sanitised");
 
     rt.update(|s, _| s.plain.focused = true); rt.frame(0.0);
     assert_eq!(rt.paste_forms(rt.paste_target().as_deref()), Forms::Text);
     paste(&mut rt);
-    assert_eq!(rt.state.plain.text, "Hello", "a field without a hook pastes the text, as before");
+    assert_eq!(rt.state().plain.text, "Hello", "a field without a hook pastes the text, as before");
 
     rt.update(|s, _| { s.plain.focused = false; s.rich.focused = true; }); rt.frame(0.0);
     assert_eq!(rt.paste_forms(rt.paste_target().as_deref()), Forms::All);
     paste(&mut rt);
-    assert_eq!((rt.state.rich.text.as_str(), rt.state.changes), ("Hello", 1), "a declining hook leaves the paste to the editor");
+    assert_eq!((rt.state().rich.text.as_str(), rt.state().changes), ("Hello", 1), "a declining hook leaves the paste to the editor");
     rt.update(|s, _| { s.take = true; s.rich.text.clear(); s.rich.anchor = 0; s.rich.focus = 0; }); rt.frame(0.0);
     paste(&mut rt);
-    assert_eq!((rt.state.rich.text.as_str(), rt.state.changes), ("[rich]", 2), "a hook that takes it edits the field; on_input_change runs");
-    assert_eq!(rt.state.hook, vec![Some("<b>Hello</b>".to_owned()); 2]);
+    assert_eq!((rt.state().rich.text.as_str(), rt.state().changes), ("[rich]", 2), "a hook that takes it edits the field; on_input_change runs");
+    assert_eq!(rt.state().hook, vec![Some("<b>Hello</b>".to_owned()); 2]);
 
     // HTML with no plain text: only rich hooks hear it, never a plain field or text handler.
     m.set_content(ClipboardContent::new("").with_html("<i>only</i>"));
     rt.update(|s, _| s.take = false); rt.frame(0.0);
     paste(&mut rt);
-    assert_eq!((rt.state.rich.text.as_str(), rt.state.hook.last().cloned().flatten().as_deref()), ("[rich]", Some("<i>only</i>")));
-    assert!(rt.state.window.is_empty(), "a focused field's paste never falls through to the window");
+    assert_eq!((rt.state().rich.text.as_str(), rt.state().hook.last().cloned().flatten().as_deref()), ("[rich]", Some("<i>only</i>")));
+    assert!(rt.state().window.is_empty(), "a focused field's paste never falls through to the window");
     assert_eq!(rt.paste_forms(None), Forms::All);
 
     let mut plain_root = Runtime::new(Vec::<String>::new(), |_: &Vec<String>, _: &mut Cx<Vec<String>>| {
@@ -213,7 +213,7 @@ fn rich_pastes_reach_paste_hooks_and_plain_fields_keep_pasting_text() {
     assert_eq!(plain_root.paste_forms(None), Forms::Text, "a plain root on_paste never requests HTML or RTF");
     plain_root.update(|_, tx| tx.request_paste());
     plain_root.frame(0.0);
-    assert!(plain_root.state.is_empty(), "an HTML-only clipboard never triggers a plain root on_paste");
+    assert!(plain_root.state().is_empty(), "an HTML-only clipboard never triggers a plain root on_paste");
 }
 
 #[test]
@@ -254,31 +254,31 @@ fn pasted_images_reach_hooks_only() {
     // A screenshot: an image and no text.
     m.set_content(ClipboardContent::new("").with_image(image.clone()));
     paste(&mut rt);
-    assert_eq!(rt.state.window.pop().and_then(|c| c.image().cloned()).as_ref(), Some(&image), "the root's on_paste_content gets the image");
+    assert_eq!(rt.state_mut().window.pop().and_then(|c| c.image().cloned()).as_ref(), Some(&image), "the root's on_paste_content gets the image");
     focus(&mut rt, |s| &mut s.plain);
     paste(&mut rt);
     focus(&mut rt, |s| &mut s.rich);
     assert_eq!(rt.paste_forms(rt.paste_target().as_deref()), Forms::Rich, "a rich field with no hook never fetches the image");
     paste(&mut rt);
-    assert_eq!((rt.state.plain.text.as_str(), rt.state.rich.text.as_str()), ("", ""), "an image alone pastes nothing into a field without a hook");
+    assert_eq!((rt.state().plain.text.as_str(), rt.state().rich.text.as_str()), ("", ""), "an image alone pastes nothing into a field without a hook");
     focus(&mut rt, |s| &mut s.hooked);
     assert_eq!(rt.paste_forms(rt.paste_target().as_deref()), Forms::All);
     paste(&mut rt);
-    assert_eq!(rt.state.hooked.text, "4×3");
-    assert_eq!(rt.state.hooked.pills().map(|(_, id)| id.to_owned()).collect::<Vec<_>>(), [format!("image:{}", image.png().len())]);
-    assert!(rt.state.window.is_empty(), "a focused field's paste never reaches the root");
+    assert_eq!(rt.state().hooked.text, "4×3");
+    assert_eq!(rt.state().hooked.pills().map(|(_, id)| id.to_owned()).collect::<Vec<_>>(), [format!("image:{}", image.png().len())]);
+    assert!(rt.state().window.is_empty(), "a focused field's paste never reaches the root");
 
     // Text beside an image: a declining hook leaves the text to the editor.
     m.set_content(ClipboardContent::new(" caption"));
     paste(&mut rt);
-    assert_eq!(rt.state.hooked.text, "4×3 caption");
-    assert!(rt.state.hook.last().is_some_and(|c| c.image().is_none()));
+    assert_eq!(rt.state().hooked.text, "4×3 caption");
+    assert!(rt.state().hook.last().is_some_and(|c| c.image().is_none()));
 
     m.set_content(ClipboardContent::new("alt").with_image(image.clone()));
     rt.update(|_, tx| tx.read_clipboard(|s: &mut State, content, _| s.reads.push(content.clone())));
     rt.frame(0.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.reads.iter().map(|c| (c.text(), c.image().map(ClipboardImage::size))).collect::<Vec<_>>(), [("alt", Some((4, 3)))]);
+    assert_eq!(rt.state().reads.iter().map(|c| (c.text(), c.image().map(ClipboardImage::size))).collect::<Vec<_>>(), [("alt", Some((4, 3)))]);
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn copied_images_and_files_round_trip_and_reach_only_hooks() {
     assert_eq!(m.content().as_ref(), Some(&copied), "the memory clipboard keeps every form");
     rt.update(|_, tx| tx.read_clipboard(|s: &mut State, content, _| s.reads.push(content.clone())));
     rt.frame(0.0);
-    assert_eq!(rt.state.reads.pop().as_ref(), Some(&copied), "a read gets the image and files back");
+    assert_eq!(rt.state_mut().reads.pop().as_ref(), Some(&copied), "a read gets the image and files back");
 
     rt.update(|_, tx| tx.copy_rich(only_files.clone()));
     for which in [(|s: &mut State| &mut s.field) as fn(&mut State) -> &mut crate::TextEdit, |s| &mut s.rich] {
@@ -320,7 +320,7 @@ fn copied_images_and_files_round_trip_and_reach_only_hooks() {
         rt.update(|_, tx| tx.request_paste());
         rt.frame(0.0);
     }
-    assert_eq!((rt.state.field.text.as_str(), rt.state.rich.text.as_str()), ("", ""), "files alone paste nothing into a field without a hook");
+    assert_eq!((rt.state().field.text.as_str(), rt.state().rich.text.as_str()), ("", ""), "files alone paste nothing into a field without a hook");
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn a_paste_of_files_alone_keeps_the_selection_of_a_field_without_a_hook() {
         rt.update(|_, tx| tx.request_paste());
         rt.frame(0.0);
         rt.frame(0.0);
-        assert_eq!((rt.state.field.text.as_str(), rt.state.field.selected()), ("keep me", "keep me"), "rich {rich}");
+        assert_eq!((rt.state().field.text.as_str(), rt.state().field.selected()), ("keep me", "keep me"), "rich {rich}");
     }
 }
 
@@ -368,12 +368,12 @@ fn read_clipboard_answers_once_even_when_empty_and_pastes_nowhere() {
         rt.frame(0.0);
     };
     read(&mut rt);
-    assert_eq!(rt.state.reads, [ClipboardContent::default()], "an empty clipboard still answers");
+    assert_eq!(rt.state().reads, [ClipboardContent::default()], "an empty clipboard still answers");
     m.set_content(ClipboardContent::new("a").with_html("<a href='javascript:x'>a</a>").with_rtf("{\\rtf1 a}"));
     read(&mut rt);
-    let got = rt.state.reads.pop().unwrap();
+    let got = rt.state_mut().reads.pop().unwrap();
     assert_eq!((got.text(), got.html(), got.rtf()), ("a", Some("<a>a</a>"), Some("{\\rtf1 a}")));
-    assert!(rt.state.field.text.is_empty() && rt.state.reads.len() == 1);
+    assert!(rt.state().field.text.is_empty() && rt.state().reads.len() == 1);
     assert!(rt.clipboard_reads.is_empty() && rt.read_requests.is_empty());
 }
 

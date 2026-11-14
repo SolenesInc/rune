@@ -2,7 +2,7 @@
 //! which element's menu it opens.
 use super::*;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The nearest element with `on_secondary_press` (or a link with `on_link_secondary`) at
     /// (x, y), else the selectable text there (its Copy menu): an app's context menu on a row
     /// wins over its text's.
@@ -127,7 +127,7 @@ impl<S: 'static> Runtime<S> {
                 let path = n.path.clone();
                 let point = self.pointer_event(index, x, y);
                 log_event!(self, "secondary press {path}");
-                f(states!(self), point, tx);
+                f(self.app.states(), point, tx);
                 return true;
             }
             let Some(p) = n.parent else { return false };

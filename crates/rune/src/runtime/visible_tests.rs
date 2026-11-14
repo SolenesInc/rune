@@ -18,27 +18,27 @@ fn an_element_hears_when_the_page_scrolls_it_on_screen_and_off() {
     rt.page_mode();
     rt.frame(0.0);
     rt.frame(0.0);
-    assert!(rt.state.log.is_empty(), "off screen at first, and nothing to say");
+    assert!(rt.state().log.is_empty(), "off screen at first, and nothing to say");
 
     rt.set_page_scroll(330.0);
     rt.frame(0.0);
     rt.frame(0.0);
-    assert!(rt.state.log.is_empty(), "30 of its 100 points show: not yet");
+    assert!(rt.state().log.is_empty(), "30 of its 100 points show: not yet");
 
     rt.set_page_scroll(360.0);
     rt.frame(0.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.log, [true], "60 points show");
+    assert_eq!(rt.state().log, [true], "60 points show");
 
     rt.set_page_scroll(450.0);
     rt.frame(0.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.log, [true], "still on screen: no second report");
+    assert_eq!(rt.state().log, [true], "still on screen: no second report");
 
     rt.set_page_scroll(800.0);
     rt.frame(0.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.log, [true, false]);
+    assert_eq!(rt.state().log, [true, false]);
 }
 
 #[test]

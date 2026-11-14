@@ -39,7 +39,7 @@ pub(crate) fn boxes_moved(a: &[[f32; 4]], b: &[[f32; 4]]) -> bool {
     a.len() != b.len() || a.iter().zip(b).any(|(x, y)| layout_read::moved(Some(*x), Some(*y)))
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The selection's line boxes laid out in the last commit's nodes.
     pub(super) fn selection_boxes(&self) -> Vec<[f32; 4]> {
         let mut out = Vec::new();

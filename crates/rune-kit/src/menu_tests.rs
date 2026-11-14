@@ -97,7 +97,7 @@ fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
     let focused = |rt: &Runtime<Field>| rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone());
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 
-    rt.state.open = true;
+    rt.state_mut().open = true;
     rt.frame(1.0 / 60.0);
     rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
     rt.frame(1.5 / 60.0);
@@ -105,6 +105,6 @@ fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
 
     rt.key(rune::KeyEvent { key: rune::Key::Escape, mods: rune::Mods::default() });
     rt.frame(2.0 / 60.0);
-    assert!(!rt.state.open);
+    assert!(!rt.state().open);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 }

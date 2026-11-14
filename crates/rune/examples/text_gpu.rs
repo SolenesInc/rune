@@ -44,7 +44,8 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
 }
 
 fn frame(gpu: &Gpu, renderer: &mut Renderer, rt: &mut Runtime<State>, out: &Offscreen, timestamps: Option<&wgpu::QuerySet>) {
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+    let core = &mut **rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
     let mut enc = gpu.device.create_command_encoder(&Default::default());
     let writes = timestamps.map(|q| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(0), end_of_pass_write_index: Some(1) });
     renderer.draw_timed(&mut enc, &out.view, rt.clear_color(), writes);
@@ -82,7 +83,7 @@ fn main() {
                 let mut renderer = if args.get(4).is_some_and(|a| a == "classic") { Renderer::new_classic(&gpu.device, OFFSCREEN_FORMAT) } else { Renderer::new(&gpu.device, OFFSCREEN_FORMAT) };
                 let mut rt = runtime(scale, size, 4, dark);
                 if let Some(mode) = args.get(3) { rt.set_font_smoothing(smoothing(mode)); }
-                let zoom = rt.state.zoom.clone();
+                let zoom = rt.state().zoom.clone();
                 let tag = if dark { "dark" } else { "light" };
                 // `gpu`: the renderer says first that it fills masks, so the first frame's are GPU-filled.
                 if args.get(5).is_some_and(|a| a == "gpu") {
@@ -123,7 +124,7 @@ fn perf(scale: f32, mode: Option<&str>) {
     // `empty`: the same frame without its text, so the text's own cost is the difference.
     let mut rt = runtime(scale, size, if mode == Some("empty") { 0 } else { 48 }, false);
     if let Some(mode) = mode { rt.set_font_smoothing(smoothing(mode)); }
-    let zoom = rt.state.zoom.clone();
+    let zoom = rt.state().zoom.clone();
     rt.frame(0.0);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
     let glyphs = rt.instances.iter().filter(|i| i.params[1] == KIND_GLYPH).count();
@@ -147,8 +148,8 @@ fn perf(scale: f32, mode: Option<&str>) {
         (ms[ms.len() / 2], ms[ms.len() * 9 / 10], outlined(rt))
     };
     let still = measure(&mut rt, &mut renderer, &mut |_, _| {});
-    let scroll = measure(&mut rt, &mut renderer, &mut |rt, f| { rt.state.scroll = (f % 60) as f32 * 3.0; rt.invalidate(); });
-    rt.state.scroll = 0.0;
+    let scroll = measure(&mut rt, &mut renderer, &mut |rt, f| { rt.state_mut().scroll = (f % 60) as f32 * 3.0; rt.invalidate(); });
+    rt.state_mut().scroll = 0.0;
     rt.invalidate();
     let zooming = measure(&mut rt, &mut renderer, &mut |_, f| { zoom.set(1.0 + 0.25 * ((f as f32) * 0.05).sin().abs()); });
     println!("adapter={} backend={:?} scale={scale} mode={mode:?} glyphs={glyphs} shader={}", info.name, info.backend, renderer.uber_shader());

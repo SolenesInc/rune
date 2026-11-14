@@ -59,11 +59,11 @@ fn updates_that_change_nothing_do_not_delay_due_timers() {
 fn a_timer_asking_for_the_next_frame_waits_a_frame_without_a_display_link() {
     fn poll(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(Duration::ZERO); false }
     let mut rt = Runtime::new(0u32, |_, _| crate::el(), (10.0, 10.0), crate::Env::default());
-    rt.poll = Some(poll);
+    rt.app_mut().poll = Some(poll);
     let start = Instant::now() - Duration::from_secs(1);
     rt.wall_start = Some(start);
     rt.frame(0.0);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
     let due = wall_wake_deadline(&rt).expect("armed");
     let polled = start + Duration::from_secs_f64(rt.polled_at());
     assert!(due <= polled + Duration::from_micros(1), "due at once on the runtime's clock");
@@ -128,7 +128,7 @@ fn a_timer_frame_that_draws_the_same_still_draws_while_a_poll_steps() {
         false
     }
     let mut rt = Runtime::new(false, |_, _| crate::el().size(20.0, 20.0), (20.0, 20.0), crate::Env::default());
-    rt.poll = Some(poll);
+    rt.app_mut().poll = Some(poll);
     rt.wall_start = Some(Instant::now());
     rt.frame(0.0);
     let config = wgpu::SurfaceConfiguration {
@@ -147,7 +147,7 @@ fn a_timer_frame_that_draws_the_same_still_draws_while_a_poll_steps() {
     let p = presented.as_ref().unwrap();
     let next_tick = Some(Instant::now() + Duration::from_millis(8));
     assert!(p.unchanged(&rt, &config, false, next_tick, None), "a slow timer leaves the drawable");
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.frame(0.0);
     assert!(p.same(&rt, &config));
     assert!(!p.unchanged(&rt, &config, false, next_tick, None), "a step due by the next tick draws");
@@ -246,7 +246,7 @@ impl CompHost {
         let comp = comp.map(|_| Box::new(FlagComp { animates: comp_animates.clone(), redraws: comp_redraws.clone() }) as Box<dyn crate::Compositor<u32>>);
         let mut host = Self { rt, presented: None, config, idle: false, comp, comp_animates, comp_redraws, frames: 0, reports: Default::default() };
         host.frame(false);
-        host.rt.poll = Some(poll);
+        host.rt.app_mut().poll = Some(poll);
         host.frame(false);
         host
     }
@@ -304,32 +304,32 @@ impl CompHost {
 fn a_still_compositor_s_window_rests_and_polls_its_timers_first() {
     let mut host = CompHost::new(Some(false), still);
     assert!(host.idle && host.presented.is_some(), "a still compositor lets the window rest");
-    let (frames, commits, polls) = (host.frames, host.rt.stats.commits, host.rt.state);
+    let (frames, commits, polls) = (host.frames, host.rt.stats.commits, *host.rt.state());
     for _ in 0..8 { assert!(!host.timer_wake(), "a poll that returns false builds and presents nothing"); }
     assert_eq!(host.frames, frames);
     assert_eq!(host.rt.stats.commits, commits, "and runs no view");
-    assert_eq!(host.rt.state, polls + 8, "each timer still polls");
+    assert_eq!(*host.rt.state(), polls + 8, "each timer still polls");
 }
 
 #[test]
 fn a_still_compositor_s_poll_that_changes_something_gets_one_frame() {
     let mut host = CompHost::new(Some(false), every_third);
-    let (frames, polls) = (host.frames, host.rt.state);
+    let (frames, polls) = (host.frames, *host.rt.state());
     let drew = (0..6).filter(|_| host.timer_wake()).count();
     let changes = (polls + 1..=polls + 6).filter(|p| p % 3 == 0).count();
     assert_eq!(drew, changes, "one frame for each poll that returns true");
     assert_eq!(host.frames - frames, changes as u32);
-    assert_eq!(host.rt.state, polls + 6, "one poll a wake: the frame doesn't poll again");
+    assert_eq!(*host.rt.state(), polls + 6, "one poll a wake: the frame doesn't poll again");
 }
 
 #[test]
 fn an_animating_compositor_draws_every_frame() {
     let mut host = CompHost::new(Some(true), still);
     assert!(!host.idle && host.presented.is_none(), "an animating compositor never rests");
-    let (frames, polls) = (host.frames, host.rt.state);
+    let (frames, polls) = (host.frames, *host.rt.state());
     for _ in 0..5 { assert!(host.timer_wake()); }
     assert_eq!(host.frames - frames, 5);
-    assert_eq!(host.rt.state, polls + 5, "the frames poll");
+    assert_eq!(*host.rt.state(), polls + 5, "the frames poll");
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn a_compositor_that_redraws_never_counts_as_unchanged() {
 
     // Without a compositor, the same frame presents nothing.
     let mut host = CompHost::new(None, still);
-    host.rt.poll = Some(changed);
+    host.rt.app_mut().poll = Some(changed);
     let frames = host.frames;
     assert!(!host.timer_wake());
     assert_eq!(host.frames, frames);
@@ -359,7 +359,7 @@ fn sends_the_key_away(_: &mut u32, _: &crate::KeyEvent, tx: &mut Tx) -> bool { t
 #[test]
 fn a_key_that_changes_nothing_on_screen_presents_no_frame() {
     let mut host = CompHost::new(Some(false), still);
-    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.app_mut().on_key = Some(sends_the_key_away);
     host.rt.check_live_only(false);
     host.comp_redraws.set(false);
     let frames = host.frames;
@@ -373,13 +373,13 @@ fn a_key_that_changes_nothing_on_screen_presents_no_frame() {
 
     // A compositor that doesn't say presents the key's frame, as before.
     let mut host = CompHost::new(Some(false), still);
-    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.app_mut().on_key = Some(sends_the_key_away);
     host.rt.check_live_only(false);
     assert!(host.key());
 
     // Without a compositor, a key whose frame builds the same instances presents nothing.
     let mut host = CompHost::new(None, still);
-    host.rt.on_key = Some(sends_the_key_away);
+    host.rt.app_mut().on_key = Some(sends_the_key_away);
     host.rt.check_live_only(false);
     assert!(!host.key());
 }
@@ -427,7 +427,7 @@ fn reporting_frames_changes_no_frame_skip_or_redraw() {
             steps.push((presented, host.idle, host.rt.stale(), host.rt.wake_deadline().is_some(), host.frames));
         }
         let outcomes = log.borrow().clone();
-        (steps, host.rt.stats.commits, host.rt.state, outcomes)
+        (steps, host.rt.stats.commits, *host.rt.state(), outcomes)
     }
     let (plain, plain_commits, plain_polls, none) = run(false);
     let (hooked, hooked_commits, hooked_polls, outcomes) = run(true);
@@ -513,7 +513,7 @@ fn a_timer_frame_that_never_comes_runs_its_timer_covered_instead_of_spinning() {
         true
     }
     let mut rt = Runtime::new(Due::default(), |_, _| crate::el().size(20.0, 20.0), (20.0, 20.0), crate::Env::default());
-    rt.poll = Some(poll);
+    rt.app_mut().poll = Some(poll);
     rt.wall_start = Some(Instant::now());
     rt.frame(0.0);
     // A change since that frame, as a `wake` whose poll it hasn't drawn leaves it.
@@ -532,9 +532,9 @@ fn a_timer_frame_that_never_comes_runs_its_timer_covered_instead_of_spinning() {
     assert!(!frame.stalled(now + TIMER_FRAME_STALL - Duration::from_millis(1)));
     assert!(frame.stalled(now + TIMER_FRAME_STALL), "after the bound the timer runs covered");
 
-    let polls = rt.state.polls;
+    let polls = rt.state().polls;
     covered_step(&mut rt);
-    assert_eq!(rt.state.polls, polls + 1, "the due timer polled");
+    assert_eq!(rt.state().polls, polls + 1, "the due timer polled");
     let next = timer_deadline(&rt).expect("its next timer is armed");
     assert!(next > Instant::now(), "the next timer is ahead: {next:?}");
     // The covered step takes the frame's place, and a timer still ahead keeps its own time.
@@ -775,7 +775,7 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
     });
-    handle.inspect(move |rt| read.send(rt.state).unwrap());
+    handle.inspect(move |rt| read.send(*rt.state()).unwrap());
     let mut inspections = shared.take().inspections.into_iter();
     assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the press asks for a frame");
     assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the read asks for none");
@@ -826,12 +826,12 @@ fn the_right_button_reaches_an_element_that_takes_it_and_opens_the_menu_of_one_t
     rt.frame(0.0);
     mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags, [crate::Phase::Down, crate::Phase::Up]);
-    assert!(rt.state.menus.is_empty());
+    assert_eq!(rt.state().drags, [crate::Phase::Down, crate::Phase::Up]);
+    assert!(rt.state().menus.is_empty());
 
     let (x, y) = rt.find("menu").unwrap();
     mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Pressed);
     mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
     rt.frame(0.0);
-    assert_eq!(rt.state.menus, ["menu"]);
+    assert_eq!(rt.state().menus, ["menu"]);
 }

@@ -57,7 +57,7 @@ fn text_inside_a_scale_draws_at_that_size() {
         rt.pointer_down(x, 40.0);
         rt.pointer_up(x, 40.0);
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state.pressed, hit, "a press at x {x}");
+        assert_eq!(rt.state().pressed, hit, "a press at x {x}");
     }
 
     // A press scale's text shrinks too; while it springs back, it samples rest-size glyphs.
@@ -125,7 +125,7 @@ fn nested_scales_compose_about_each_mapped_centre() {
         assert!(near(edges(&rt), rest), "{how:?} at rest: {:?} vs {rest:?}", edges(&rt));
         press(&mut rt, rest[0] - 1.0, rest[1] - 1.0);
         press(&mut rt, rest[0] + 1.0, rest[1] + 1.0);
-        assert_eq!(rt.state.pressed, 1, "{how:?}: hits follow the drawn rect");
+        assert_eq!(rt.state().pressed, 1, "{how:?}: hits follow the drawn rect");
         let Some(held) = held else { continue };
         let (cx, cy) = ((rest[0] + rest[2]) * 0.5, (rest[1] + rest[3]) * 0.5);
         rt.pointer_move(cx, cy);
@@ -135,7 +135,7 @@ fn nested_scales_compose_about_each_mapped_centre() {
         // Still hit at its resting size: a release just inside its resting corner presses.
         rt.pointer_up(rest[2] - 0.2, rest[3] - 0.2);
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state.pressed, 2, "{how:?}: a held press hits at the resting rect");
+        assert_eq!(rt.state().pressed, 2, "{how:?}: a held press hits at the resting rect");
     }
 }
 
@@ -153,7 +153,7 @@ fn a_changing_static_scale_keeps_the_glyph_atlas_bounded() {
     let rest = rt.text.atlas.glyph_entries();
     // A slider or pinch: a new scale every frame, holding still now and then.
     for i in 0..1000 {
-        rt.state.k = 0.5 + i as f32 * 0.0007;
+        rt.state_mut().k = 0.5 + i as f32 * 0.0007;
         rt.invalidate();
         rt.frame(1.0 / 120.0);
         assert!(i == 0 || !crisp(&rt), "a scale changing every frame samples rest-size glyphs");
@@ -161,7 +161,7 @@ fn a_changing_static_scale_keeps_the_glyph_atlas_bounded() {
     }
     let grown = rt.text.atlas.glyph_entries() - rest;
     assert!(grown < 1000, "1,000 scales added {grown} glyph entries (one size each would add 15,000)");
-    rt.state.k = 0.75;
+    rt.state_mut().k = 0.75;
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     assert!(!crisp(&rt));
@@ -192,7 +192,7 @@ fn a_held_press_scale_keeps_its_hover_and_a_scroll_cancels_it() {
     assert_eq!(rt.scene.get(id, P_HOVER), Some(1.0), "the held row keeps its highlight");
     rt.pointer_up(199.0, 20.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, [0]);
+    assert_eq!(rt.state().pressed, [0]);
 
     // Scrolling under a held press cancels it: the row lets go, and the release presses nothing.
     for _ in 0..60 { rt.frame(1.0 / 120.0); }
@@ -205,14 +205,14 @@ fn a_held_press_scale_keeps_its_hover_and_a_scroll_cancels_it() {
     assert!((rt.scene.get(id, P_PRESS_SCALE).unwrap() - 1.0).abs() < 1e-3, "the scrolled-away row springs back");
     rt.pointer_up(100.0, 20.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, [0], "a scroll cancels the press");
+    assert_eq!(rt.state().pressed, [0], "a scroll cancels the press");
     // A fling does too.
     rt.pointer_move(100.0, 20.0);
     rt.pointer_down(100.0, 20.0);
     rt.fling(100.0, 100.0, 600.0);
     rt.pointer_up(100.0, 20.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, [0]);
+    assert_eq!(rt.state().pressed, [0]);
 }
 
 #[test]
@@ -252,7 +252,7 @@ fn press_scale_shrinks_while_held_and_springs_back() {
     settle(&mut rt);
     rt.pointer_up(99.0, 50.0);
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.pressed, 1);
+    assert_eq!(rt.state().pressed, 1);
     let mut last = info(&rt, "tile").scale;
     assert!(last > 0.96 && last < 1.0, "the release springs, not jumps: {last}");
     let mut peak: f32 = last;

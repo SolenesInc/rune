@@ -204,9 +204,9 @@ fn peeked() -> Runtime<S> {
     rt.frame(1.0 / 60.0);
     rt.pointer_move(12.0, 300.0);
     rt.frame(0.03);
-    assert!(!rt.state.sidebar.is_peeking(), "not before 40 ms");
+    assert!(!rt.state().sidebar.is_peeking(), "not before 40 ms");
     rt.frame(0.02);
-    assert!(rt.state.sidebar.is_peeking(), "after resting 40 ms");
+    assert!(rt.state().sidebar.is_peeking(), "after resting 40 ms");
     rt
 }
 
@@ -228,18 +228,18 @@ fn resting_at_the_edge_slides_the_sidebar_over_the_content_and_leaving_closes_it
     rt.pointer_down(rx, ry);
     rt.pointer_up(rx, ry);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.picked, 2, "rows in the peek take presses");
-    assert!(rt.state.sidebar.is_peeking());
+    assert_eq!(rt.state().picked, 2, "rows in the peek take presses");
+    assert!(rt.state().sidebar.is_peeking());
 
     // Straying within the margin keeps it; past it, it closes after the grace.
     rt.pointer_move(276.0 + 10.0, 300.0);
     rt.frame(0.2);
-    assert!(rt.state.sidebar.is_peeking(), "within 15 points");
+    assert!(rt.state().sidebar.is_peeking(), "within 15 points");
     rt.pointer_move(600.0, 300.0);
     rt.frame(0.09);
-    assert!(rt.state.sidebar.is_peeking(), "within the grace");
+    assert!(rt.state().sidebar.is_peeking(), "within the grace");
     rt.frame(0.02);
-    assert!(!rt.state.sidebar.is_peeking() && !rt.state.sidebar.is_open());
+    assert!(!rt.state().sidebar.is_peeking() && !rt.state().sidebar.is_open());
     settle(&mut rt);
     assert!(find(&rt, "pane-content").rect[0] + 276.0 <= 0.5, "slid out");
     assert_eq!(find(&rt, "pane-surface").opacity, 0.0);
@@ -251,12 +251,12 @@ fn the_title_bar_band_and_a_quick_pass_dont_peek() {
     settle(&mut rt);
     rt.pointer_move(12.0, 40.0);
     rt.frame(0.2);
-    assert!(!rt.state.sidebar.is_peeking(), "the band holds the lights and the toggle");
+    assert!(!rt.state().sidebar.is_peeking(), "the band holds the lights and the toggle");
     rt.pointer_move(12.0, 300.0);
     rt.frame(0.02);
     rt.pointer_move(400.0, 300.0);
     rt.frame(0.2);
-    assert!(!rt.state.sidebar.is_peeking(), "a pass shorter than the delay");
+    assert!(!rt.state().sidebar.is_peeking(), "a pass shorter than the delay");
 }
 
 #[test]
@@ -266,16 +266,16 @@ fn resting_on_the_toggle_peeks_and_pressing_it_docks_in_place() {
     let (x, y) = rt.find("sidebar-toggle").unwrap();
     rt.pointer_move(x, y);
     rt.frame(0.07);
-    assert!(!rt.state.sidebar.is_peeking(), "not before 80 ms");
+    assert!(!rt.state().sidebar.is_peeking(), "not before 80 ms");
     rt.frame(0.02);
-    assert!(rt.state.sidebar.is_peeking());
+    assert!(rt.state().sidebar.is_peeking());
     settle(&mut rt);
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     for i in 0..40 {
         rt.frame(1.0 / 120.0);
         if i == 0 {
-            assert!(rt.state.sidebar.is_open() && !rt.state.sidebar.is_peeking(), "docked");
+            assert!(rt.state().sidebar.is_open() && !rt.state().sidebar.is_peeking(), "docked");
         }
         let x = find(&rt, "pane-content").rect[0];
         assert!(x.abs() < 0.5, "the contents hold still while the sidebar docks: {x}");
@@ -288,11 +288,11 @@ fn resting_on_the_toggle_peeks_and_pressing_it_docks_in_place() {
 fn escape_and_blur_end_a_peek() {
     let mut rt = peeked();
     rt.update(|s, _| s.sidebar.end_peek());
-    assert!(!rt.state.sidebar.is_peeking());
+    assert!(!rt.state().sidebar.is_peeking());
     let mut rt = peeked();
     rt.window_focus(false);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.sidebar.is_peeking(), "the window losing focus ends it");
+    assert!(!rt.state().sidebar.is_peeking(), "the window losing focus ends it");
 }
 
 #[test]
@@ -302,7 +302,7 @@ fn under_reduce_motion_a_peek_fades_in_place() {
     settle(&mut rt);
     rt.pointer_move(12.0, 300.0);
     rt.frame(0.05);
-    assert!(rt.state.sidebar.is_peeking());
+    assert!(rt.state().sidebar.is_peeking());
     rt.frame(1.0 / 60.0);
     let c = find(&rt, "pane-content");
     assert_eq!(c.rect[0], 0.0, "no slide");
@@ -333,7 +333,7 @@ fn tall_rows_lay_out_two_lines_and_swap_status_for_close_on_hover() {
     rt.pointer_down(cx, cy);
     rt.pointer_up(cx, cy);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state.closed.as_slice(), rt.state.picked), (&[1][..], 0), "closes without selecting");
+    assert_eq!((rt.state().closed.as_slice(), rt.state().picked), (&[1][..], 0), "closes without selecting");
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn dragging_a_row_lifts_it_reflows_the_others_and_escape_puts_it_back() {
     rt.pointer_down(x, y);
     rt.pointer_move(x, y + 2.0 * pitch + 4.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.reorder.target(), Some(2));
+    assert_eq!(rt.state().reorder.target(), Some(2));
     assert_eq!(y0(&rt, "row0"), r0 + 2.0 * pitch + 4.0, "follows the pointer");
     rt.frame(1.0 / 60.0);
     let mid = y0(&rt, "row1");
@@ -358,8 +358,8 @@ fn dragging_a_row_lifts_it_reflows_the_others_and_escape_puts_it_back() {
     assert_eq!((y0(&rt, "row1"), y0(&rt, "row2"), y0(&rt, "row3")), (r0, r1, r3));
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.reorder.dragging(), None);
-    assert_eq!(rt.state.order, [0, 1, 2, 3, 4], "Escape cancels");
+    assert_eq!(rt.state().reorder.dragging(), None);
+    assert_eq!(rt.state().order, [0, 1, 2, 3, 4], "Escape cancels");
     settle(&mut rt);
     assert_eq!((y0(&rt, "row0"), y0(&rt, "row1"), y0(&rt, "row2")), (r0, r1, r2), "back in place");
     rt.pointer_up(x, y);
@@ -371,7 +371,7 @@ fn dragging_a_row_lifts_it_reflows_the_others_and_escape_puts_it_back() {
     let drawn = y0(&rt, "row0");
     rt.pointer_up(x, y + 2.0 * pitch);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.order, [1, 2, 0, 3, 4], "a drop moves it");
+    assert_eq!(rt.state().order, [1, 2, 0, 3, 4], "a drop moves it");
     let mut last = drawn;
     for _ in 0..60 {
         rt.frame(1.0 / 60.0);
@@ -380,7 +380,7 @@ fn dragging_a_row_lifts_it_reflows_the_others_and_escape_puts_it_back() {
         last = now;
     }
     assert_eq!(last, r2);
-    assert_eq!(rt.state.picked, 0, "a drag isn't a select");
+    assert_eq!(rt.state().picked, 0, "a drag isn't a select");
 }
 
 #[test]
@@ -422,12 +422,12 @@ fn cancelling_a_resize_restores_the_width_and_open_state_without_peeking() {
         rt.pointer_down(x, y);
         rt.pointer_move(12.0, y);
         rt.frame(0.1);
-        assert!(!rt.state.sidebar.is_peeking(), "a held resize never peeks");
+        assert!(!rt.state().sidebar.is_peeking(), "a held resize never peeks");
         if blur { rt.window_focus(false); } else { rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() }); }
         rt.frame(0.0);
-        assert_eq!(rt.state.sidebar.width(), 276.0);
-        assert!(rt.state.sidebar.is_open(), "blur={blur}");
-        assert!(!rt.state.sidebar.is_resizing());
+        assert_eq!(rt.state().sidebar.width(), 276.0);
+        assert!(rt.state().sidebar.is_open(), "blur={blur}");
+        assert!(!rt.state().sidebar.is_resizing());
     }
 }
 
@@ -439,5 +439,5 @@ fn a_pending_peek_does_not_open_after_blur() {
     rt.frame(0.02);
     rt.window_focus(false);
     rt.frame(0.2);
-    assert!(!rt.state.sidebar.is_peeking());
+    assert!(!rt.state().sidebar.is_peeking());
 }

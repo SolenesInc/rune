@@ -51,7 +51,7 @@ fn nothing_records_or_allocates_until_a_recorder_is_attached() {
     let mut rt = app(Rewind::new());
     frames(&mut rt, 5);
     assert!(rt.rewind().is_none());
-    assert_eq!(rt.state.rewind.frames(), 0);
+    assert_eq!(rt.state().rewind.frames(), 0);
     let before = crate::tooling::test_alloc::allocs();
     for _ in 0..100 { rt.record_rewind(); }
     assert_eq!(crate::tooling::test_alloc::allocs(), before, "an unattached recorder costs a branch");
@@ -60,10 +60,10 @@ fn nothing_records_or_allocates_until_a_recorder_is_attached() {
 #[test]
 fn a_poll_can_attach_the_recorder() {
     let mut rt = app(Rewind::new());
-    rt.poll = Some(|s, _, tx| { if s.y == 0.0 { s.y = 1.0; tx.record_rewind(Some(&s.rewind)); true } else { false } });
+    rt.app_mut().poll = Some(|s, _, tx| { if s.y == 0.0 { s.y = 1.0; tx.record_rewind(Some(&s.rewind)); true } else { false } });
     frames(&mut rt, 3);
     assert!(rt.rewind().is_some());
-    assert!(rt.state.rewind.frames() > 0);
+    assert!(rt.state().rewind.frames() > 0);
 }
 
 #[test]
@@ -71,11 +71,11 @@ fn records_each_frame_and_stops_when_detached() {
     let mut rt = app(Rewind::new());
     record(&mut rt);
     frames(&mut rt, 9);
-    let n = rt.state.rewind.frames();
+    let n = rt.state().rewind.frames();
     assert!(n >= 10, "{n} frames");
     rt.update(|_, tx| tx.record_rewind(None));
     frames(&mut rt, 5);
-    assert_eq!(rt.state.rewind.frames(), n, "nothing records once detached");
+    assert_eq!(rt.state().rewind.frames(), n, "nothing records once detached");
 }
 
 #[test]
@@ -85,10 +85,10 @@ fn the_ring_keeps_only_its_window_and_rebuilds_old_frames() {
     frames(&mut rt, 30);
     jump(&mut rt, 40.0);
     frames(&mut rt, 300);
-    let held = rt.state.rewind.frames();
+    let held = rt.state().rewind.frames();
     assert!((59..=62).contains(&held), "a second at 60 Hz, held {held}");
     // The frames that put both elements on screen are long gone; the base still has them.
-    let clip = rt.state.rewind.freeze();
+    let clip = rt.state().rewind.freeze();
     let first = clip.frame(0);
     assert_eq!(first.len(), 2, "{first:?}");
     let title = first.iter().find(|(id, _)| clip.name(*id) == "title").unwrap().1;
@@ -101,8 +101,8 @@ fn the_ring_stays_within_its_byte_budget() {
     let mut rt = app(Rewind::new().max_bytes(budget));
     record(&mut rt);
     for k in 0..400 { jump(&mut rt, (k % 50) as f32); rt.frame(1.0 / 60.0); }
-    assert!(rt.state.rewind.bytes() <= budget, "{} bytes", rt.state.rewind.bytes());
-    assert!(rt.state.rewind.frames() > 10);
+    assert!(rt.state().rewind.bytes() <= budget, "{} bytes", rt.state().rewind.bytes());
+    assert!(rt.state().rewind.frames() > 10);
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn a_one_frame_jump_is_found_and_labelled() {
     frames(&mut rt, 10);
     jump(&mut rt, 7.5);
     frames(&mut rt, 10);
-    let clip = rt.state.rewind.freeze();
+    let clip = rt.state().rewind.freeze();
     let k = (0..clip.len()).find(|&k| clip.has_jump(k)).expect("a jump");
     let changes = clip.changes(k);
     assert_eq!(changes.len(), 1, "{changes:?}");
@@ -134,7 +134,7 @@ fn a_one_frame_blip_out_and_back_is_a_jump() {
     rt.frame(1.0 / 60.0);
     jump(&mut rt, 0.0);
     frames(&mut rt, 10);
-    let clip = rt.state.rewind.freeze();
+    let clip = rt.state().rewind.freeze();
     let jumps: Vec<usize> = (0..clip.len()).filter(|&k| clip.has_jump(k)).collect();
     assert_eq!(jumps.len(), 1, "only the frame it went out in: {jumps:?}");
     assert_eq!(clip.changes(jumps[0])[0].label(), "title ↓9.0 pt");
@@ -145,7 +145,7 @@ fn smooth_motion_is_not_a_jump() {
     let mut rt = app(Rewind::new());
     record(&mut rt);
     for k in 1..=30 { jump(&mut rt, k as f32 * 3.0); rt.frame(1.0 / 60.0); }
-    let clip = rt.state.rewind.freeze();
+    let clip = rt.state().rewind.freeze();
     assert!((0..clip.len()).all(|k| !clip.has_jump(k)));
     assert!((0..clip.len()).filter(|&k| clip.activity(k) > 0.0).count() >= 29);
 }
@@ -157,9 +157,9 @@ fn freezing_pauses_recording_and_the_keys_step_select_and_resume() {
     frames(&mut rt, 10);
     jump(&mut rt, 20.0);
     frames(&mut rt, 10);
-    let rewind = rt.state.rewind.clone();
-    rt.state.scrub.open(&rewind);
-    let scrub = &mut rt.state.scrub;
+    let rewind = rt.state().rewind.clone();
+    rt.state_mut().scrub.open(&rewind);
+    let scrub = &mut rt.state_mut().scrub;
     assert!(scrub.is_open() && rewind.is_paused());
     let held = rewind.frames();
     let clip = scrub.clip().unwrap().clone();
@@ -175,8 +175,8 @@ fn freezing_pauses_recording_and_the_keys_step_select_and_resume() {
     assert_eq!(sent.frames(), k - 1..k + 2);
     frames(&mut rt, 5);
     assert_eq!(rewind.frames(), held, "nothing records while frozen");
-    assert!(matches!(rt.state.scrub.key(&press(Key::Escape, false)), Keyed::Closed));
-    assert!(!rt.state.scrub.is_open() && !rewind.is_paused());
+    assert!(matches!(rt.state_mut().scrub.key(&press(Key::Escape, false)), Keyed::Closed));
+    assert!(!rt.state().scrub.is_open() && !rewind.is_paused());
     frames(&mut rt, 5);
     assert_eq!(rewind.frames(), held + 5);
 }
@@ -192,7 +192,7 @@ fn the_scrubber_draws_the_moved_element_and_sends_from_its_button() {
     rt.frame(1.0 / 60.0);
     let els = rt.elements();
     let find = |key: &str| els.iter().find(|e| e.key.as_deref() == Some(key)).unwrap_or_else(|| panic!("no {key}")).rect;
-    let id = rt.state.scrub.clip().unwrap().changes(rt.state.scrub.frame())[0].id;
+    let id = rt.state().scrub.clip().unwrap().changes(rt.state().scrub.frame())[0].id;
     assert_eq!(find(&format!("rewind-box-{id}")), [10.0, 30.0, 100.0, 20.0]);
     assert_eq!(find(&format!("rewind-was-{id}")), [10.0, 0.0, 100.0, 20.0]);
     assert!(els.iter().any(|e| e.key.as_deref().is_some_and(|k| k.starts_with("rewind-bin-"))), "the track lights up");
@@ -200,8 +200,8 @@ fn the_scrubber_draws_the_moved_element_and_sends_from_its_button() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.sent.len(), 1, "send at {x},{y}: {:?}", rt.elements().iter().filter(|e| e.key.as_deref().is_some_and(|k| k.starts_with("rewind-"))).map(|e| (e.key.clone(), e.rect)).collect::<Vec<_>>());
-    assert_eq!(rt.state.sent[0].note(), "title jumps");
+    assert_eq!(rt.state().sent.len(), 1, "send at {x},{y}: {:?}", rt.elements().iter().filter(|e| e.key.as_deref().is_some_and(|k| k.starts_with("rewind-"))).map(|e| (e.key.clone(), e.rect)).collect::<Vec<_>>());
+    assert_eq!(rt.state().sent[0].note(), "title jumps");
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn a_scrubber_on_an_inset_stage_still_outlines_where_the_window_drew() {
     frames(&mut rt, 5);
     rt.update(|s, _| { let r = s.rewind.clone(); s.scrub.open(&r); });
     frames(&mut rt, 2);
-    let id = rt.state.scrub.clip().unwrap().changes(rt.state.scrub.frame())[0].id;
+    let id = rt.state().scrub.clip().unwrap().changes(rt.state().scrub.frame())[0].id;
     let rect = rt.elements().iter().find(|e| e.key.as_deref() == Some(&format!("rewind-box-{id}"))).unwrap().rect;
     assert_eq!(rect, [10.0, 30.0, 100.0, 20.0]);
     let bar = rt.elements().iter().find(|e| e.key.as_deref() == Some("rewind-bar")).map(|e| e.rect);
@@ -228,7 +228,7 @@ fn a_bundle_holds_a_trace_a_contact_sheet_and_a_summary() {
     frames(&mut rt, 10);
     jump(&mut rt, 7.5);
     frames(&mut rt, 10);
-    let clip = rt.state.rewind.freeze();
+    let clip = rt.state().rewind.freeze();
     let dir = std::env::temp_dir().join(format!("rune-rewind-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let bundle = clip.write_bundle(&dir, 0..clip.len(), "the title hops").unwrap();
