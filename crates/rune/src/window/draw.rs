@@ -17,6 +17,7 @@ impl<S: 'static> Host<S> {
     /// (`Backoff`), with its display link stopped so no tick redraws sooner. `stepped` when this
     /// frame already ran the runtime.
     pub(super) fn missed_frame(&mut self, missed: Missed, stepped: bool) {
+        crate::diag_wake::wake_log!("missed {missed:?} stepped={stepped}");
         let Some(l) = self.win.as_mut() else { return };
         l.timer_frame.drawn();
         l.presented = None;
@@ -84,6 +85,7 @@ impl<S: 'static> Host<S> {
         let owed = covered && !l.minimized() && l.covered_draw.drawing();
         #[cfg(not(target_os = "windows"))]
         let owed = false;
+        crate::diag_wake::wake_log!("draw resizing={resizing} hidden={hidden} covered={covered} backing_off={}", l.backing_off(Instant::now()));
         if covered && !owed {
             // A covered window's clips stop presenting on their layers, as they stop being pulled.
             #[cfg(target_os = "windows")]
@@ -142,7 +144,7 @@ impl<S: 'static> Host<S> {
             if l.native.prime.presumes() && !pacing.running() {
                 None
             } else {
-                let Some(target) = pacing.next_frame().target() else { return };
+                let Some(target) = pacing.next_frame().target() else { crate::diag_wake::wake_log!("draw waits for a display tick"); return };
                 target
             }
         } else { None };

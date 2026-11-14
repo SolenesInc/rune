@@ -90,8 +90,10 @@ impl<S: 'static> Host<S> {
     fn turn_ends_in_turn(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
         let Some(w) = &self.win else { return };
         let paints = cfg!(target_os = "windows") && self.life.uncovered() && !w.minimized();
-        let (next, effect) = w.redraw.get().step(RedrawEvent::TurnEnds { now, paints });
+        let prev = w.redraw.get();
+        let (next, effect) = prev.step(RedrawEvent::TurnEnds { now, paints });
         w.redraw.set(next);
+        if prev != next || effect != RedrawEffect::None { crate::diag_wake::wake_log!("turn-ends {prev:?} -> {next:?} {effect:?}"); }
         match effect {
             RedrawEffect::None => {}
             RedrawEffect::Request => w.window.request_redraw(),

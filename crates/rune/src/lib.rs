@@ -7,6 +7,7 @@
 compile_error!("web does not support Rune's hot or native-file-dialog features; disable them for wasm32");
 
 mod a11y;
+pub(crate) mod diag_wake;
 mod app;
 mod cold;
 mod flight;

@@ -55,6 +55,7 @@ impl<S: 'static> Host<S> {
         #[cfg(target_os = "macos")]
         { l.native.prime.stop(); }
         let was = self.life.cover(cover, on);
+        crate::diag_wake::wake_log!("cover {cover:?} on={on} covered_now={}", self.life.covered());
         l.backoff_step(BackoffEvent::Uncovered);
         l.presented = None;
         self.rt.set_live_visible(self.life.uncovered() && !l.minimized());

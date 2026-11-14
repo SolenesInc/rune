@@ -234,6 +234,7 @@ impl<S: 'static> Host<S> {
             WindowEvent::DroppedFile(path) => { self.files.file(path, true); return; }
             WindowEvent::HoveredFileCancelled => { self.files.steps.push(FileStep::Leave); return; }
             WindowEvent::RedrawRequested => {
+                crate::diag_wake::wake_log!("RedrawRequested");
                 self.paint(event_loop);
                 return;
             }

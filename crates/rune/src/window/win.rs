@@ -102,8 +102,10 @@ impl Win {
 
     #[cfg_attr(feature = "frame-profile", track_caller)]
     pub(super) fn redraw_step(&self, event: RedrawEvent) {
-        let (next, effect) = self.redraw.get().step(event);
+        let prev = self.redraw.get();
+        let (next, effect) = prev.step(event);
         self.redraw.set(next);
+        crate::diag_wake::wake_log!("redraw {event:?} {prev:?} -> {next:?} {effect:?}");
         #[cfg(feature = "frame-profile")]
         if matches!(event, RedrawEvent::Ask(_)) || effect != RedrawEffect::None { crate::frame::live_log::asked(std::panic::Location::caller()); }
         if effect == RedrawEffect::Request { self.window.request_redraw(); }

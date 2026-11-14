@@ -236,6 +236,7 @@ impl<S: 'static> Host<S> {
             },
             || self.win.as_ref().is_some_and(Win::minimized),
         );
+        crate::diag_wake::wake_log!("drain wake={wake} updates={had_updates} changed={changed} quiet={quiet} covered={} shown={} work={work:?}", self.life.covered(), self.life.shown());
         let framed = match work {
             WakeWork::Nothing => false,
             WakeWork::HiddenFrame => self.refresh_hidden(),
@@ -489,5 +490,6 @@ pub(super) fn inspect<S>(rt: &mut Runtime<S>, f: crate::app::Inspection<S>) -> b
     f(rt);
     let changed = rt.has_pending_input() || rt.stale();
     if changed { rt.hidden_timer_frame(); }
+    crate::diag_wake::wake_log!("inspect behind={behind} changed={changed} stale_after={}", rt.stale());
     behind || changed
 }
