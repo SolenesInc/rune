@@ -162,7 +162,8 @@ fn run_sample(
 
     // Frame 0: initial build and rasterize.
     rt.frame(0.0);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
     {
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &out.view, rt.clear_color());
@@ -175,7 +176,8 @@ fn run_sample(
             break;
         }
     }
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
     {
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &out.view, rt.clear_color());
@@ -210,7 +212,8 @@ fn run_sample(
         let paint = phases[rune::PHASES + 4];
 
         let enc0 = Instant::now();
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (out.width, out.height));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (out.width, out.height));
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &out.view, rt.clear_color());
         renderer.submit(&gpu.queue, enc);

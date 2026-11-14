@@ -180,11 +180,11 @@ fn main() {
             let mut rt = runtime(src.clone(), 900.0);
             let ranges: Vec<_> = src.char_indices().filter(|&(i, c)| c.is_ascii_alphabetic() && (i == 0 || src.as_bytes()[i - 1].is_ascii_whitespace()))
                 .take(2000).map(|(i, _)| (i..i + src[i..].bytes().take_while(u8::is_ascii_alphabetic).count(), Highlight::new())).collect();
-            let row = timed(&mut rt, |rt| { rt.state.marks = ranges; rt.invalidate(); });
+            let row = timed(&mut rt, |rt| { rt.state_mut().marks = ranges; rt.invalidate(); });
             report(kb, "marks", &[row]);
             let t = std::time::Instant::now();
             let elements = rt.elements();
-            println!("MARKS requested={} reported={} nodes={} elements={} elements_ms={:.3}", rt.state.marks.len(), elements.iter().filter(|e| e.role == "mark").count(), rt.stats.layout_nodes, elements.len(), t.elapsed().as_secs_f64() * 1000.0);
+            println!("MARKS requested={} reported={} nodes={} elements={} elements_ms={:.3}", rt.state().marks.len(), elements.iter().filter(|e| e.role == "mark").count(), rt.stats.layout_nodes, elements.len(), t.elapsed().as_secs_f64() * 1000.0);
         }
 
         if run("open") {

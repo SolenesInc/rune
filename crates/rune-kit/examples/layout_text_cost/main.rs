@@ -470,7 +470,7 @@ fn run(case: &str, tag: u32, kb: usize, meta: &mut Vec<String>) -> Vec<Vec<f64>>
             meta.push(census(&rt, case, heap0));
             let same = case == "stack-same";
             (0..240).map(|i| timed(&mut rt, tag, |rt| {
-                if !same { let n = rt.state.on.len(); rt.state.on[(i * 37) % n] ^= true; }
+                if !same { let n = rt.state().on.len(); rt.state_mut().on[(i * 37) % n] ^= true; }
                 rt.invalidate();
             })).collect()
         }

@@ -86,7 +86,7 @@ fn overlay_late_up_after_a_lost_release_is_no_drop() {
     overlay.left_edge(None, true, Some((10.0, 10.0)));
     overlay.left_edge(Some((30.0, 10.0)), false, None);
     overlay.rt.frame(0.0);
-    let ups: Vec<_> = overlay.rt.state.iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect();
+    let ups: Vec<_> = overlay.rt.state().iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect();
     assert_eq!(ups, [true], "the recovery lands before the late Up");
 }
 
@@ -98,9 +98,9 @@ fn overlay_press_that_beats_a_lost_release_ends_the_old_drag_first() {
     overlay.left_edge(Some((30.0, 10.0)), true, Some((50.0, 10.0)));
     overlay.left_edge(None, false, Some((50.0, 10.0)));
     overlay.rt.frame(0.0);
-    let ups: Vec<_> = overlay.rt.state.iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect();
+    let ups: Vec<_> = overlay.rt.state().iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect();
     assert_eq!(ups, [true, false], "the old drag is cancelled, the new one ends normally");
-    assert!(!overlay.rt.state.iter().any(|d| d.0 == crate::Phase::Move), "the old drag never hears the new press's point");
+    assert!(!overlay.rt.state().iter().any(|d| d.0 == crate::Phase::Move), "the old drag never hears the new press's point");
 }
 
 #[cfg(target_os = "macos")]
@@ -115,8 +115,8 @@ fn overlay_cursor_move_for_the_next_press_cancels_the_old_drag_first() {
     overlay.native_moved(&pointer, 50.0, 10.0); // winit reports the click's position just before the click
     overlay.native_left(&pointer, true);
     overlay.rt.frame(0.0);
-    assert_eq!(overlay.rt.state.iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect::<Vec<_>>(), [true]);
-    assert!(!overlay.rt.state.iter().any(|d| d.0 == crate::Phase::Move), "the old drag never hears the new press's point");
+    assert_eq!(overlay.rt.state().iter().filter(|d| d.0 == crate::Phase::Up).map(|d| d.1).collect::<Vec<_>>(), [true]);
+    assert!(!overlay.rt.state().iter().any(|d| d.0 == crate::Phase::Move), "the old drag never hears the new press's point");
 }
 
 #[cfg(target_os = "macos")]
@@ -154,7 +154,7 @@ fn overlay_release_past_the_drag_threshold_starts_no_os_drag() {
     overlay.native_left(&pointer, false);
     pointer.released();
     overlay.rt.frame(0.0);
-    assert_eq!(overlay.rt.state.starts, 0, "the button was up: no OS drag");
+    assert_eq!(overlay.rt.state().starts, 0, "the button was up: no OS drag");
     assert!(!overlay.rt.pointer_captured());
 }
 
@@ -174,7 +174,7 @@ fn overlay_a_stale_up_ahead_of_an_unmatched_press_leaves_its_drag_out_armed() {
     assert!(overlay.rt.pointer_captured(), "B is held, unmatched");
     overlay.native_moved(&pointer, 60.0, 10.0);
     overlay.rt.frame(0.0);
-    assert_eq!(overlay.rt.state.starts, 1, "A's stale Up says nothing about B's button: B's drag starts, as on dev");
+    assert_eq!(overlay.rt.state().starts, 1, "A's stale Up says nothing about B's button: B's drag starts, as on dev");
 }
 
 #[cfg(target_os = "macos")]
@@ -196,7 +196,7 @@ fn overlay_a_stale_click_taken_for_the_next_press_leaves_its_drag_out_armed() {
     assert!(overlay.rt.pointer_captured(), "C is held");
     overlay.native_moved(&pointer, 60.0, 10.0);
     overlay.rt.frame(0.0);
-    assert_eq!(overlay.rt.state.starts, 1, "B's stale Up says nothing about C's button: C's drag starts, as on dev");
+    assert_eq!(overlay.rt.state().starts, 1, "B's stale Up says nothing about C's button: C's drag starts, as on dev");
 }
 
 #[cfg(target_os = "macos")]
@@ -209,7 +209,7 @@ fn overlay_drag_past_the_threshold_with_the_button_down_starts_an_os_drag() {
     overlay.native_left(&pointer, true);
     overlay.native_moved(&pointer, 60.0, 10.0);
     overlay.rt.frame(0.0);
-    assert_eq!(overlay.rt.state.starts, 1);
+    assert_eq!(overlay.rt.state().starts, 1);
 }
 
 #[test]
@@ -387,7 +387,7 @@ fn a_hidden_prewarmed_overlay_commits_at_most_every_refresh() {
     let hidden = BUILDS.get() - builds;
     let bound = 1 + (Duration::from_secs(1).as_millis() / HIDDEN_REFRESH.as_millis()) as u32;
     assert!((2..=bound).contains(&hidden), "{hidden} builds in a hidden second, want at most {bound}; paced wakes at {pace_wakes:?}");
-    assert_eq!(overlay.rt.state, 10);
+    assert_eq!(*overlay.rt.state(), 10);
     assert_ne!(counter_text(&overlay).as_deref(), Some("10"), "the last change waits for the pace or the reveal");
     let before = BUILDS.get();
     overlay.refresh_for_reveal_at(start + Duration::from_millis(1005));
@@ -462,13 +462,13 @@ fn overlay_occluded_runs_due_timers_without_frames() {
     }
     let app = AppSpec { poll: Some(poll), ..AppSpec::new("occluded", (30.0, 20.0), State::default, view) };
     let (mut overlay, handle) = Overlay::new(OverlaySpec::new("occluded", app.size, view), State::default(), &app);
-    overlay.rt.state.handle = Some(handle.clone());
+    overlay.rt.state_mut().handle = Some(handle.clone());
     overlay.presence = Presence::Shown { occluded: false };
     overlay.rt.wall_start = None;
     // Shown onto sleeping displays: the first frame misses, and still polls.
     overlay.occluded(true);
     overlay.missed(Missed::Occluded, false, false);
-    assert_eq!(overlay.rt.state.polls, 1);
+    assert_eq!(overlay.rt.state().polls, 1);
     assert_eq!(overlay.rt.wake_deadline(), Some(0.25));
     overlay.backoff = Default::default();
     let start = Instant::now() - Duration::from_millis(251);
@@ -476,7 +476,7 @@ fn overlay_occluded_runs_due_timers_without_frames() {
     assert!(overlay.wake_deadline().is_some_and(|at| at <= Instant::now()), "the timer stays armed while occluded");
     overlay.dirty = false;
     overlay.wake_due(Instant::now());
-    assert_eq!(overlay.rt.state.polls, 2, "the due timer runs without waiting for a drawable");
+    assert_eq!(overlay.rt.state().polls, 2, "the due timer runs without waiting for a drawable");
     assert_eq!(handle.shared.requests.lock().unwrap().visible(), Some(false), "and its hide() goes through");
     assert_eq!(overlay.wake_deadline(), None);
 

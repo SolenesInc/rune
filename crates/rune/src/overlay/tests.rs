@@ -80,16 +80,16 @@ fn a_retained_overlay_moved_while_hidden_reports_its_screen_rect_on_show() {
     let (mut overlay, _) = Overlay::new(OverlaySpec::new("moved hidden", app.size, view).options(options), None, &app);
     overlay.rt.wall_start = None;
     overlay.warm();
-    assert_eq!(overlay.rt.state, Some([10.0, 5.0, 20.0, 8.0]));
+    assert_eq!(*overlay.rt.state(), Some([10.0, 5.0, 20.0, 8.0]));
     overlay.dirty = false;
     overlay.idle = true;
 
     overlay.origin_moved((300.0, 200.0));
     assert!(overlay.dirty, "the moved rect waits for the next step");
     assert!(overlay.idle, "a hidden overlay doesn't turn the loop for it");
-    assert_eq!(overlay.rt.state, Some([10.0, 5.0, 20.0, 8.0]));
+    assert_eq!(*overlay.rt.state(), Some([10.0, 5.0, 20.0, 8.0]));
     overlay.refresh_for_reveal_at(Instant::now());
-    assert_eq!(overlay.rt.state, Some([310.0, 205.0, 20.0, 8.0]), "the reveal delivers it");
+    assert_eq!(*overlay.rt.state(), Some([310.0, 205.0, 20.0, 8.0]), "the reveal delivers it");
 }
 
 /// `Tx::wake_after(Duration::ZERO)` asks for the next frame. With no display link to take
@@ -385,13 +385,13 @@ fn overlay_hidden_commit_keeps_elapsed_motion_on_later_reveal() {
         overlay.warm();
         overlay.dirty = false; // Successful submission of A, without a native window.
         let commit = overlay.clock.last() + Duration::from_secs(10);
-        overlay.rt.state.enter = true;
+        overlay.rt.state_mut().enter = true;
         overlay.advance_at(commit); // Hidden turn 1 commits B; no show request yet.
         assert_eq!(handle.shared.requests.lock().unwrap().visible(), None);
         assert_eq!(overlay.rt.presented("box").unwrap().0[2], 12.0, "idle before B must not age B");
         assert!(!overlay.draw(), "hidden motion must not drive frames");
         assert_eq!(overlay.wake_deadline(), None);
-        overlay.rt.state.live.set("01");
+        overlay.rt.state().live.set("01");
         handle.show(); // Turn 2, after B has been committed.
         overlay.resume_live();
         overlay.settle_before_reveal();
@@ -481,7 +481,7 @@ fn overlay_hidden_poll_can_show_and_animate_from_the_cached_pose() {
             .options(OverlayOptions { prewarm, ..Default::default() });
         let (mut overlay, handle) = Overlay::new(spec, State { width: 12.0, instant, ..Default::default() }, &app);
         overlay.rt.set_system_reduced_motion(false);
-        overlay.rt.state.handle = Some(handle.clone());
+        overlay.rt.state_mut().handle = Some(handle.clone());
         overlay.warm();
         // No native window in this test: model successful submission of the warmed pose.
         overlay.dirty = false;
@@ -489,7 +489,7 @@ fn overlay_hidden_poll_can_show_and_animate_from_the_cached_pose() {
         overlay.advance();
         assert!(!overlay.dirty, "an unchanged hidden poll preserves the prepared frame");
         if stale { overlay.apply_wake(false, vec![Box::new(|s, _| { s.width = 16.0; true })]); }
-        overlay.rt.state.enter = true; // External event observed by the next hidden poll.
+        overlay.rt.state_mut().enter = true; // External event observed by the next hidden poll.
         if queued {
             // An app's original kick: a no-op update invalidates the prepared frame
             // before the hidden poll commits B and requests show.

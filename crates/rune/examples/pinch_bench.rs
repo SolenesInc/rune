@@ -86,7 +86,8 @@ struct Draw { gpu: Gpu, renderer: Renderer, out: Offscreen }
 impl Draw {
     fn draw(&mut self, rt: &mut Runtime<Canvas>) {
         self.renderer.upload_images(&self.gpu.device, &self.gpu.queue, &mut rt.images);
-        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut rt.text.atlas, &rt.instances, (self.out.width, self.out.height));
+        let core = &mut **rt;
+        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut core.text.atlas, &core.instances, (self.out.width, self.out.height));
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
         self.renderer.draw(&mut encoder, &self.out.view, rt.clear_color());
         self.renderer.submit(&self.gpu.queue, encoder);

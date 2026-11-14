@@ -184,7 +184,8 @@ struct Draw { gpu: Gpu, renderer: Renderer, out: Offscreen }
 impl Draw {
     fn draw(&mut self, rt: &mut Runtime<State>) {
         self.renderer.upload_images(&self.gpu.device, &self.gpu.queue, &mut rt.images);
-        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut rt.text.atlas, &rt.instances, (self.out.width, self.out.height));
+        let core = &mut **rt;
+        self.renderer.prepare(&self.gpu.device, &self.gpu.queue, &mut core.text.atlas, &core.instances, (self.out.width, self.out.height));
         let mut encoder = self.gpu.device.create_command_encoder(&Default::default());
         self.renderer.draw(&mut encoder, &self.out.view, rt.clear_color());
         self.renderer.submit(&self.gpu.queue, encoder);
@@ -207,9 +208,9 @@ const METRICS: &[&str] = &["cpu_ms", "frame_ms", "encode_ms", "view_ms", "commit
 
 /// How many of the shown list's rows are laid out.
 fn mounted(rt: &Runtime<State>) -> f64 {
-    let (list, keys) = match rt.state.mode {
-        Mode::List => ("list", &rt.state.keys),
-        Mode::Grid => ("grid", &rt.state.row_keys),
+    let (list, keys) = match rt.state().mode {
+        Mode::List => ("list", &rt.state().keys),
+        Mode::Grid => ("grid", &rt.state().row_keys),
     };
     keys.iter().filter(|k| rt.find(&format!("#0/{list}/rows/{k}")).is_some()).count() as f64
 }
@@ -225,7 +226,7 @@ fn sample(d: &mut Draw, from: Mode, case: &str, lazy_grid: bool, eager: bool, ce
     for _ in 0..3 { text.end_commit(); }
     let start = if case == "first" { from } else { to };
     let mut rt = Runtime::with_text(State::new(start, lazy_grid, eager, cells), view, SIZE, Env::new(true, 2.0), text);
-    rt.on_key = Some(on_key);
+    rt.app_mut().on_key = Some(on_key);
     rt.frame(0.0);
     settle(&mut rt, d);
     if case == "quick" {
