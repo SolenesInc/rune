@@ -37,3 +37,24 @@ fn each_field_s_editor_takes_the_key_the_app_gives_it() {
     assert_eq!(rt.state().focused, ["name", "notes", "title"]);
     assert_eq!((rt.state().name.text.as_str(), rt.state().notes.text.as_str(), rt.state().title.text.as_str()), ("a", "a", "a"));
 }
+
+fn reply(s: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    col()
+        .child(TextInput::new(&s.name).key("sending").read_only(true).on_edit(|s: &mut S| &mut s.name).build(&k))
+        .child(TextInput::new(&s.notes).key("typing").on_edit(|s: &mut S| &mut s.notes).build(&k))
+}
+
+#[test]
+fn a_read_only_field_s_editor_reads_as_read_only_and_an_editable_one_does_not() {
+    let mut rt = Runtime::new(S::default(), reply, (600.0, 400.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let tree = rt.accessibility_json();
+    fn read_only(n: &serde_json::Value, key: &str) -> Option<bool> {
+        if n["key"] == key {
+            return Some(n["states"].as_array().is_some_and(|s| s.iter().any(|s| s == "read-only")));
+        }
+        n["children"].as_array()?.iter().find_map(|c| read_only(c, key))
+    }
+    assert_eq!((read_only(&tree, "sending"), read_only(&tree, "typing")), (Some(true), Some(false)), "{tree}");
+}

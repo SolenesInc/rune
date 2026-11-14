@@ -140,6 +140,7 @@ pub struct TextInput {
     clear: bool,
     invalid: bool,
     active: Option<String>,
+    read_only: bool,
     state: State,
     edits: EditActs,
     copy_acts: Acts,
@@ -203,6 +204,7 @@ impl TextInput {
             clear: false,
             invalid: false,
             active: None,
+            read_only: false,
             state: State::Rest,
             edits: EditActs::default(),
             copy_acts: Acts::default(),
@@ -287,6 +289,12 @@ impl TextInput {
         self.active = key.map(Into::into);
         self
     }
+    /// Whether the editor reads as read-only (`aria-readonly`) while it keeps focus and its
+    /// handlers, such as a reply field while its reply sends.
+    pub fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
     pub fn state(mut self, s: State) -> Self {
         self.state = s;
         self
@@ -331,7 +339,9 @@ impl TextInput {
             .rich_style(kit_rich_style(k))
             .placeholder(self.placeholder.clone(), hint)
             .caret(ink, k.selection());
-        let mut field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled).invalid(self.invalid);
+        let mut field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled)
+            .invalid(self.invalid)
+            .read_only(self.read_only);
         if let Some(key) = self.active.clone() {
             field = field.active_descendant(key);
         }
