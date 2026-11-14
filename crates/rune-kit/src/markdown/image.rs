@@ -22,6 +22,20 @@ pub struct ImageFrame<'a> {
     pub image: &'a Image,
 }
 
+/// Draws an image without its picture (see [`Markdown::missing_image_frame`]).
+pub(super) type MissingFrame = Rc<dyn Fn(El, &MissingImage<'_>) -> El>;
+
+/// An image [`Markdown::missing_image_frame`] draws in place of the broken-image glyph.
+#[non_exhaustive]
+pub struct MissingImage<'a> {
+    /// Its source as written.
+    pub src: &'a str,
+    /// Its alt text.
+    pub alt: &'a str,
+    /// Whether the app's picture for it is still decoding, rather than missing or unreadable.
+    pub decoding: bool,
+}
+
 /// The width the broken-image glyph takes before an image's alt text.
 pub(super) const BROKEN_GLYPH: f32 = 16.0;
 
@@ -53,6 +67,15 @@ impl Markdown {
         self.on_image = Some(Rc::new(f));
         self
     }
+
+    /// Draws `f(glyph, image)` in place of each image that has no picture to show, which by
+    /// default shows Chromium's broken-image glyph and its alt text (`glyph`, nothing for an
+    /// image without alt text), so an app can say in its own words that the image is missing or
+    /// still loading.
+    pub fn missing_image_frame(mut self, f: impl Fn(El, &MissingImage<'_>) -> El + 'static) -> Self {
+        self.missing_image = Some(Rc::new(f));
+        self
+    }
 }
 
 impl Renderer {
@@ -62,7 +85,16 @@ impl Renderer {
     }
 
     pub(super) fn image(&self, src: &str, alt: &str, title: &str) -> El {
-        let Some(([w, _], picture)) = self.picture(src) else { return self.broken(alt) };
+        let Some(([w, _], picture)) = self.picture(src) else {
+            let glyph = self.broken(alt);
+            return match &self.missing_image {
+                Some(frame) => {
+                    let decoding = self.images.as_ref().and_then(|f| f(src)).is_some_and(|i| !i.is_ready() && i.error().is_none());
+                    frame(glyph, &MissingImage { src, alt, decoding })
+                }
+                None => glyph,
+            };
+        };
         // Its own size in points, as a browser draws an image's pixels at 1x, up to the text's width.
         let mut e = el().role("image").label(if alt.is_empty() { "Image preview" } else { alt }).w_full().max_w(w as f32).pixels(picture.pixels()).radius(4.0).cursor(Cursor::ZoomIn);
         if !title.is_empty() {
