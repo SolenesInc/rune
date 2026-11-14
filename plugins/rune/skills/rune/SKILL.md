@@ -28,9 +28,13 @@ rune_kit::root(body, layer)                        // the view's root
 ```
 
 - An app that depends on `rune` alone has no kit yet. Add `rune-kit` to its `Cargo.toml` from the same git revision as `rune`, and make the kit once per view: `Kit::neutral(cx.system_dark())`, or `Kit::from_palette(PaletteSeed { bg, fg, accent })` for the app's own colours. Then replace hand-drawn controls (an `el()` with `.role("button")`) with the kit's as you touch them.
+- The kit has no slider, number stepper or colour picker, and `IconButton` has no selected state. Build those from `el()` with the kit's tokens, and say in your report what you built by hand.
+- A `SegmentedControl` gives equal segments that truncate: use it for three or fewer short options, and a `Select` for more.
+- Kit controls set their text in the kit's type (`k.ty.ui`). Move a control's label with it, through `Field` or `k.ty`, or the screen shows two type scales.
+- Kit overlays are drawn inside the window, so a small window clips them. In a window sized to its content, lay the list out in the window itself.
 - Take every colour, text style, radius and shadow from the `Kit` (`k.c.text_muted`, `k.ty.body`, `k.radius.md`, `k.elevation.raised`). A literal colour or font size in a view is a defect.
 - Overlays build with `.build(k, &mut layer)` and need `rune_kit::root(body, layer)`, or they never show.
-- Give each element you will script, test or crop a `.key("name")`.
+- Give each element you will script, test or crop a `.key("name")`, on the root of a kit component too. The kit keys its own parts (`segment0`, `label`, `indicator`), so a script reaches one by path: `"key": "cleanup/segment1"`.
 - The API changes between revisions, so read the source of the Rune the app pins before you write against it. `cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "rune-kit") | .manifest_path'` prints its path; three directories up are `crates/rune-kit/README.md` (every component, with samples), `crates/rune/README.md` and `examples/kit-gallery` (each component in each state).
 
 ## 2. Look at what you built
@@ -45,10 +49,11 @@ $APP --snap out.png --theme light --scene NAME --size 900x600
 $APP --snap out.png --playground "Group/Story" --variant "Long names"
 $APP --script input.json --snap out.png --at mark:end # a state behind a click or a key
 $APP --tree tree.json                                 # every element's key, text, rect and colours
+$APP --window KEY --snap out.png                      # one window of an app that has several
 ```
 
 A script is timed input: `[{"t": 0.1, "type": "tap", "key": "open-menu"}, {"t": 0.6, "type": "type", "text": "hi"}, {"t": 1.0, "type": "mark", "name": "end"}]`.
 
-Render each screen you changed in dark and light, at its normal size and a small one, and in its hard states (empty, many items, long names, an error). In each picture check that edges and baselines align, the same relationship has the same gap, nothing clips or overflows, and one thing is primary. Fix what you see, render again, and attach the final PNGs to your report.
+Render each screen you changed in dark and light, at its normal size and a small one, and in its hard states (empty, many items, long names, an error). The light theme is where invisible text hides: read `--tree` for a fill and a text colour that match. In each picture check that edges and baselines align, the same relationship has the same gap, nothing clips or overflows, and one thing is primary. Fix what you see, render again, and attach the final PNGs to your report.
 
 A state you can't reach from the command line doesn't get looked at. When you add a screen or a component, add a scene (`AppSpec { scenes: &[("empty", |s| s.items.clear())], .. }`) or a playground story (`Story::new("Sidebar/Row", init, view).variant("Long names", |s| ..)`) for each state. "Agent tooling" and "Playground" in `crates/rune/README.md` have the rest.
