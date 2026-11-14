@@ -92,6 +92,10 @@ impl TextEdit {
         self.line_mode = if single_line { LineMode::Single } else { LineMode::Multi };
     }
 
+    pub(crate) fn set_return_breaks_line(&mut self, breaks: bool) {
+        self.return_breaks_line = breaks;
+    }
+
     /// Whether this is a multi-line secure field in hidden mode (`secure && !revealed && !single_line`).
     pub(crate) fn is_hidden_multiline(&self) -> bool {
         self.masking() == Masking::Hidden { multiline: true }

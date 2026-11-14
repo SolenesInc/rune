@@ -176,8 +176,8 @@ impl<S: 'static> Runtime<S> {
     /// [`Self::with_focused`] for an edit that needs the app state (an app's paste hook).
     pub(super) fn with_focused_state(&mut self, f: impl FnOnce(crate::states::States<'_>, &crate::el::EditFn, &mut Tx) -> EditOutcome, tx: &mut Tx) -> bool {
         let Some(path) = self.focus.owned() else { return false };
-        let Some((access, submit, change, animate_layout, single_line, secure, revealed_override)) =
-            self.focused_input().map(|i| (i.access.clone(), i.submit.clone(), i.change.clone(), i.animate_layout, i.single_line, i.edit.is_secure(), i.revealed_override))
+        let Some((access, submit, change, animate_layout, single_line, return_breaks_line, secure, revealed_override)) =
+            self.focused_input().map(|i| (i.access.clone(), i.submit.clone(), i.change.clone(), i.animate_layout, i.single_line, i.return_breaks_line, i.edit.is_secure(), i.revealed_override))
         else {
             return false;
         };
@@ -186,6 +186,7 @@ impl<S: 'static> Runtime<S> {
         {
             let edit = access(states!(self));
             edit.set_single_line(single_line);
+            edit.set_return_breaks_line(return_breaks_line);
             if secure && !edit.is_secure() { edit.set_secure(true); }
             if let Some(rev) = revealed_override { edit.set_revealed(rev); }
         }

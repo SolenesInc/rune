@@ -118,14 +118,10 @@ impl TextEdit {
             // A composition's Return and Escape are the input method's.
             Key::Enter | Key::Escape if self.preedit().is_some() => {}
             Key::Enter => {
-                if self.is_single_line() {
+                if self.is_single_line() || ((self.secure || self.return_breaks_line) && (m.cmd || m.ctrl)) {
                     out.submit = true;
                 } else if self.secure {
-                    if m.cmd || m.ctrl {
-                        out.submit = true;
-                    } else {
-                        self.replace(self.range(), "\n", EditKind::LineBreak);
-                    }
+                    self.replace(self.range(), "\n", EditKind::LineBreak);
                 } else {
                     let (a, b) = self.range();
                     let line_idx = self.line_of_byte(a);
@@ -161,6 +157,9 @@ impl TextEdit {
                                 } else {
                                     self.insert_newline(Block::Quote, false);
                                 }
+                            }
+                            Block::Paragraph if self.return_breaks_line => {
+                                self.insert_newline(Block::Paragraph, false);
                             }
                             Block::Paragraph => {
                                 out.submit = true;

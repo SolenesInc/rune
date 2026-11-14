@@ -58,6 +58,8 @@ pub struct TextEdit {
     revealed: bool,
     /// Mirrors the field's `El::single_line()`; the runtime sets it before each edit.
     line_mode: LineMode,
+    /// Mirrors the field's `El::return_breaks_line()`; the runtime sets it before each edit.
+    return_breaks_line: bool,
     /// Formatting keys and rich paste are on (see [`TextEdit::rich`]).
     rich: bool,
     /// The mark kinds this field keeps, one bit per [`Mark::kind_order`]; `None` keeps all.
@@ -182,6 +184,7 @@ impl TextEdit {
             secure: false,
             revealed: false,
             line_mode: LineMode::Default,
+            return_breaks_line: false,
             rich: false,
             allowed_marks: None,
             allowed_blocks: None,

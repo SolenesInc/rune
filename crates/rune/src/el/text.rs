@@ -375,6 +375,14 @@ impl El {
         }
         self
     }
+    /// Plain Return in this multi-line field breaks the line, as in a `<textarea>`, and
+    /// Cmd/Ctrl+Return submits. A single-line field still submits on Return.
+    pub fn return_breaks_line(mut self) -> Self {
+        if let Some(i) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+            i.return_breaks_line = true;
+        }
+        self
+    }
     /// Keep a text field to one line: long text scrolls sideways under the caret instead of
     /// wrapping. Fields are multi-line by default.
     pub fn single_line(mut self) -> Self {
@@ -591,7 +599,8 @@ impl El {
     /// Called when Return submits this text field. In a multi-line field (the default),
     /// Shift+Return and Option+Return insert a newline (as does plain Return inside a list, quote
     /// or code block), while plain Return in a paragraph calls `on_submit` — or presses the
-    /// [`El::default_button`] when the field has none.
+    /// [`El::default_button`] when the field has none. With [`El::return_breaks_line`], plain
+    /// Return breaks the line and Cmd/Ctrl+Return submits.
     pub fn on_submit<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         if let Some(i) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
             i.submit = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
