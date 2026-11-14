@@ -782,6 +782,45 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
 }
 
+/// A selection drag that an inspection feeds over the text the pointer already rests on changes
+/// only the selection: no state, no queued action. It still asks the window for a frame, and the
+/// release reaches `on_selection_change`. Repeating the same drag selects what is already
+/// selected, and its release is heard once more, though no frame came between press and release.
+#[test]
+fn an_inspection_s_selection_drag_asks_for_a_frame_and_its_release_is_heard() {
+    use crate::{App, AppSpec, TextStyle, col, text};
+    fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        col().w_full().selection_group(true)
+            .on_selection_change(|n: &mut u32, c, _| if !c.dragging() && c.selection().is_some() { *n += 1 })
+            .child(text("select these words, then these ones").key("t").font(TextStyle::new(14.0, 400.0)).w(380.0).selectable(true))
+    }
+    let app = App::new(AppSpec::new("t", (400.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (400.0, 100.0), crate::Env::new(true, 1.0));
+    let mut t = 0.0;
+    let mut settle = |rt: &mut Runtime<u32>| for _ in 0..3 { t += 1.0 / 60.0; rt.frame(t); };
+    settle(&mut rt);
+    let (x, y) = rt.find("t").expect("laid out");
+    rt.pointer_move(x - 100.0, y);
+    settle(&mut rt);
+    let drag = move |rt: &mut Runtime<u32>| {
+        rt.pointer_move(x - 100.0, y);
+        rt.pointer_down(x - 100.0, y);
+        rt.pointer_move(x, y);
+        rt.pointer_move(x + 40.0, y);
+        rt.pointer_up(x + 40.0, y);
+    };
+    handle.inspect(drag);
+    handle.inspect(drag);
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the drag asks for a frame");
+    settle(&mut rt);
+    assert_eq!(*rt.state(), 1, "the release reached on_selection_change");
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the same drag again asks for a frame");
+    settle(&mut rt);
+    assert_eq!(*rt.state(), 2, "its release was heard once more");
+}
+
 /// A covered window builds no view for an update until it shows again; an inspection builds it
 /// first, so it reads the update, and asks for a frame to show it.
 #[test]

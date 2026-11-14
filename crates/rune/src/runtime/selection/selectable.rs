@@ -44,10 +44,13 @@ pub(super) struct Snapshot {
 }
 
 /// What each `El::on_selection_change` element last heard, by path, and what that was checked
-/// against.
+/// against. `pressed`: a press made the selection since then, which its release must be heard
+/// for even when no check saw the press (a press, drag and release handled with no frame
+/// between, as `AppHandle::inspect` feeds them).
 #[derive(Default)]
 pub(super) struct Heard {
     from: Option<Basis>,
+    pressed: bool,
     by_path: HashMap<String, Rc<TextSelection>>,
 }
 
@@ -380,13 +383,20 @@ impl RuntimeCore {
             sel.and_then(|s| s.far.as_ref()).map(|f| f.path.clone()), phase.dragging())
     }
 
+    /// No `El::on_selection_change` call is owed: the selection is as the last check heard it.
+    pub(in crate::runtime) fn selection_heard(&self) -> bool {
+        !self.sel_heard.pressed && self.sel_heard.from.as_ref().is_some_and(|f| self.same_from(f))
+    }
+
     /// The `El::on_selection_change` calls owed since the last check: each element whose part
     /// of the selection changed, started or cleared.
     pub(super) fn selection_changes(&mut self) -> Vec<Action> {
-        if self.sel_heard.from.as_ref().is_some_and(|f| self.same_from(f)) { return Vec::new(); }
+        if self.selection_heard() { return Vec::new(); }
         // A release is heard by whoever holds the selection, though it didn't change.
-        let released = self.sel_heard.from.as_ref().is_some_and(|f| f.5 && !self.selectable.phase.dragging());
+        let pressed = self.sel_heard.pressed || self.sel_heard.from.as_ref().is_some_and(|f| f.5);
+        let released = pressed && !self.selectable.phase.dragging();
         self.sel_heard.from = Some(self.selection_from());
+        self.sel_heard.pressed = false;
         if self.sel_heard.by_path.is_empty() && !self.nodes.iter().any(|n| n.handlers.get().is_some_and(|h| h.on_selection_change.is_some())) {
             return Vec::new();
         }
@@ -533,6 +543,7 @@ impl RuntimeCore {
     }
 
     fn carry_select(&mut self, effects: crate::machine::Effects<phase::Effect>) {
+        if self.selectable.phase.dragging() { self.sel_heard.pressed = true; }
         for effect in effects {
             match effect {
                 phase::Effect::SyncPins => self.sync_selection_pins(),

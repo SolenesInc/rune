@@ -116,9 +116,10 @@ impl RuntimeCore {
         self.dirty || self.pending.frame_work() || self.patch_pending()
     }
 
-    /// The last frame no longer shows the window: state, its size or queued input changed since.
+    /// The last frame no longer shows the window: state, its size, queued input or the
+    /// selection changed since.
     pub(crate) fn stale(&self) -> bool {
-        self.needs_commit() || self.relayout || !self.queue.is_empty()
+        self.needs_commit() || self.relayout || !self.queue.is_empty() || !self.selection_heard()
     }
 
     /// A live-edit patch arrived that the next frame hasn't rebuilt the view with yet.
