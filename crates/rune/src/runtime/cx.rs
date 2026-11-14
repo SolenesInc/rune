@@ -53,8 +53,6 @@ pub struct Cx<S> {
     pub(super) env: Env,
     pub(super) titlebar_inset: f32,
     pub(super) chrome: crate::ChromeInsets,
-    /// `Cx::caption_color`, read once the view returns.
-    pub(super) caption_color: Option<Color>,
     /// `Cx::foreground` and `Cx::focus_ring`, read once the view returns.
     pub(super) defaults: ViewDefaults,
     /// `Cx::set_titlebar` and `Cx::titlebar_height`, read once the view returns.
@@ -78,11 +76,11 @@ impl<S> Cx<S> {
     /// core builds a `Cx<()>`, and the typed side hands the app's view a `Cx<S>` and takes it back.
     pub(crate) fn into_state<T>(self) -> Cx<T> {
         let Cx {
-            env, titlebar_inset, chrome, caption_color, defaults, titlebar, system_accent, system_scroll_bars,
+            env, titlebar_inset, chrome, defaults, titlebar, system_accent, system_scroll_bars,
             system_reduced_motion, reduced_motion, time_scale, zoom, caret, caret_read, layout, layout_reads, _s,
         } = self;
         Cx {
-            env, titlebar_inset, chrome, caption_color, defaults, titlebar, system_accent, system_scroll_bars,
+            env, titlebar_inset, chrome, defaults, titlebar, system_accent, system_scroll_bars,
             system_reduced_motion, reduced_motion, time_scale, zoom, caret, caret_read, layout, layout_reads, _s: PhantomData,
         }
     }
@@ -93,7 +91,7 @@ impl<S> Cx<S> {
     /// does for a sub-view (a plugin's panel) that panicked partway.
     pub fn retype<T>(&self) -> Cx<T> {
         Cx {
-            env: self.env, titlebar_inset: self.titlebar_inset, chrome: self.chrome, caption_color: self.caption_color,
+            env: self.env, titlebar_inset: self.titlebar_inset, chrome: self.chrome,
             defaults: self.defaults.clone(),
             titlebar: self.titlebar,
             system_accent: self.system_accent,
@@ -106,7 +104,7 @@ impl<S> Cx<S> {
 
     /// Takes back a [`Self::retype`]d context a nested view ran with: its overrides, and the
     /// caret and layout reads it added. The window's chrome stays the outer view's: a staged
-    /// story's `caption_color` or titlebar isn't the window's.
+    /// story's titlebar isn't the window's.
     pub fn absorb<T>(&mut self, other: Cx<T>) {
         self.reduced_motion = other.reduced_motion;
         self.time_scale = other.time_scale;
@@ -134,7 +132,6 @@ impl<S> Cx<S> {
         self.reduced_motion = other.reduced_motion;
         self.time_scale = other.time_scale;
         self.zoom = other.zoom;
-        self.caption_color = other.caption_color;
         self.titlebar = other.titlebar;
         self.caret_read = other.caret_read;
         self.layout_reads = other.layout_reads;
@@ -156,19 +153,11 @@ impl<S> Cx<S> {
         self.titlebar_inset
     }
     /// What the window's own controls take of a titlebar the app draws (`App::titlebar`):
-    /// the macOS traffic lights at the leading edge, the Windows caption buttons at the
-    /// trailing edge, and the band's height. Zero where the native frame stays. Keep the
+    /// the macOS traffic lights at the leading edge, and the band's height. Zero where the native frame stays. Keep the
     /// titlebar's own controls clear of both ends. Headless runs report what this platform's
     /// window would.
     pub fn chrome_insets(&self) -> crate::ChromeInsets {
         self.chrome
-    }
-    /// The colour of the Windows caption buttons' symbols (Electron's `titleBarOverlay`
-    /// `symbolColor`), for a titlebar whose colours follow the app's theme rather than the
-    /// system's light or dark setting: by default black in light mode, white in dark. Their
-    /// hover and press washes are this colour at 10% and 20%; close turns red either way.
-    pub fn caption_color(&mut self, color: Color) {
-        self.caption_color = Some(color);
     }
     /// The theme's text colour, as CSS `color` on the page: text, icons and text fields that
     /// aren't given a colour (`El::color`, `El::placeholder`, `El::caret`) draw in it, the
@@ -223,10 +212,9 @@ impl<S> Cx<S> {
     }
     /// The height of the titlebar the app draws (`App::titlebar`), in window points, in place of
     /// `Titlebar::new`'s while the view keeps setting it: a band that scales with the app's UI
-    /// zoom, as Electron's `setTitleBarOverlay({ height })` does. The Windows caption buttons
-    /// take it (their width stays), macOS centres the traffic lights in it unless
-    /// `Titlebar::traffic_lights` or `Chrome::traffic_lights` places them, and
-    /// [`Self::chrome_insets`] reports it from the next frame on, so the buttons line up with
+    /// zoom, as Electron's `setTitleBarOverlay({ height })` does. macOS centres the traffic
+    /// lights in it unless `Titlebar::traffic_lights` or `Chrome::traffic_lights` places them,
+    /// and [`Self::chrome_insets`] reports it from the next frame on, so the lights line up with
     /// the app's row at every zoom: for a 44 point row, `cx.titlebar_height(44.0 * zoom.max(1.0))`
     /// keeps the row 44 points tall zoomed out, as Electron apps size their `titleBarOverlay`.
     /// The height is in window points; [`Self::chrome_insets`] reports it in the view's, over
@@ -237,7 +225,7 @@ impl<S> Cx<S> {
     /// The titlebar the app draws (`App::titlebar`), in place of the app's while the view keeps
     /// setting it: its height and, on macOS, where the traffic lights sit
     /// (`Titlebar::traffic_lights`), for a switch between layouts whose titlebars differ. The
-    /// window moves the traffic lights and resizes the Windows caption buttons to it, and
+    /// window moves the traffic lights to it, and
     /// [`Self::chrome_insets`] and [`Self::titlebar_inset`] report the new controls from the
     /// next frame on. A window without `App::titlebar` keeps its native frame.
     pub fn set_titlebar(&mut self, titlebar: crate::Titlebar) {

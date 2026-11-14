@@ -35,7 +35,6 @@ impl RuntimeCore {
             Some(path) => capture::Secondary::Held { path, link: i.and_then(|i| self.secondary_link_at(i, x, y)), left: false },
             None => capture::Secondary::Up,
         };
-        self.secondary_region_down(x, y, self.secondary.is_held());
         // Under `Cx::web_focus` a right-click focuses the control it's on, as Chromium's
         // mousedown does, so focus is back on it when its menu closes.
         if self.defaults.web_focus
@@ -66,7 +65,6 @@ impl RuntimeCore {
 
     pub fn secondary_up(&mut self, x: f32, y: f32) {
         self.pointer = Some((x, y));
-        self.secondary_region_up(x, y);
         let (path, down_link, left) = match std::mem::take(&mut self.secondary) {
             capture::Secondary::Held { path, link, left } => (Some(path), link, left),
             capture::Secondary::Up => (None, None, false),

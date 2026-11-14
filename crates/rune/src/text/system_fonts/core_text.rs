@@ -1,5 +1,5 @@
-//! macOS: system font files found through CoreText, as DirectWrite finds them on Windows
-//! (`direct_write`), so no font folder is walked and no font is parsed until a text needs it.
+//! macOS: system font files found through CoreText, so no font folder is walked and no font is
+//! parsed until a text needs it.
 //! A text the app's fonts lack goes to CoreText's own fallback (`CTFontCreateForStringWithLanguage`,
 //! what Safari and AppKit fall back with), which names the font that covers it; a family's
 //! files come from CoreText's descriptors for the family name.

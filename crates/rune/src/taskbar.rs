@@ -1,13 +1,5 @@
 //! What a window's taskbar button says about the work behind it: a progress state and a count
-//! badge, set with [`crate::WindowHandle::set_taskbar`], and a bounded flash for something that
-//! needs the person ([`crate::WindowHandle::flash`]).
-//!
-//! Windows draws both on the window's taskbar button (`ITaskbarList3`): the progress bar under it,
-//! and the badge as an overlay icon over its corner. Explorer animates an indeterminate bar
-//! itself, so a window showing work wakes no more than one showing nothing. Nothing is made
-//! until the first call that shows something: a window that never sets a state never starts
-//! the taskbar's COM object. Explorer restarting gives every window a new button; each gets
-//! its state again.
+//! badge, set with [`crate::WindowHandle::set_taskbar`].
 //!
 //! macOS shows the badge on the Dock icon, for the app as a whole: the sum of its windows'
 //! counts (`NSDockTile.badgeLabel`); the Dock has no progress bar, so progress shows nothing there.

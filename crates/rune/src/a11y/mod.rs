@@ -3,7 +3,7 @@
 //! handlers run wherever the OS calls them; they only queue what they heard and wake the host,
 //! whose thread then activates the runtime's tree (`runtime/a11y/tree.rs`), runs the actions
 //! and sends tree updates. Until a client asks, the runtime builds nothing.
-#![cfg_attr(not(all(feature = "accessibility", any(target_os = "windows", target_os = "macos", target_os = "linux"))), allow(dead_code))]
+#![cfg_attr(not(all(feature = "accessibility", any(target_os = "macos", target_os = "linux"))), allow(dead_code))]
 
 use std::sync::{Arc, Mutex};
 
@@ -18,8 +18,6 @@ pub(crate) mod roles;
 mod macos;
 #[cfg(all(feature = "accessibility", target_os = "linux"))]
 mod unix;
-#[cfg(all(feature = "accessibility", target_os = "windows"))]
-mod windows;
 
 /// `Tx::announce`'s last words: the window's own live region, which draws nothing. `said`
 /// counts the calls, so the same words said again still change what a reader is told.
@@ -179,8 +177,6 @@ impl AccessibilityLink {
 /// One surface's platform adapter.
 pub(crate) struct Adapter {
     link: AccessibilityLink,
-    #[cfg(all(feature = "accessibility", target_os = "windows"))]
-    inner: windows::Adapter,
     #[cfg(all(feature = "accessibility", target_os = "macos"))]
     inner: macos::Adapter,
     #[cfg(all(feature = "accessibility", target_os = "linux"))]
@@ -193,8 +189,6 @@ impl Adapter {
     #[allow(unused_variables)]
     pub(crate) fn new(window: &winit::window::Window, wake: crate::Waker) -> Option<Self> {
         let link = AccessibilityLink::with_wake(wake);
-        #[cfg(all(feature = "accessibility", target_os = "windows"))]
-        return windows::Adapter::new(window, Activation(link.shared.clone()), Actions(link.shared.clone())).map(|inner| Adapter { link, inner });
         #[cfg(all(feature = "accessibility", target_os = "macos"))]
         return macos::Adapter::new(window, Activation(link.shared.clone()), Actions(link.shared.clone())).map(|inner| Adapter { link, inner });
         #[cfg(all(feature = "accessibility", target_os = "linux"))]
@@ -223,11 +217,11 @@ impl Adapter {
     #[allow(unused_variables)]
     fn send(&mut self, update: TreeUpdate) {
         #[cfg(feature = "accessibility")]
-        #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         self.inner.update(update);
     }
 
-    /// The window gained or lost key focus. Windows tracks it from the window's own messages.
+    /// The window gained or lost key focus.
     #[allow(unused_variables)]
     pub(crate) fn focus(&mut self, focused: bool) {
         #[cfg(all(feature = "accessibility", any(target_os = "macos", target_os = "linux")))]
@@ -258,19 +252,10 @@ impl Adapter {
         self.link.receive(rt, name)
     }
 
-    /// Tells assistive clients the window's content changed, so one that looked before this
-    /// adapter existed asks again.
-    pub(crate) fn notify_structure(&self) {
-        #[cfg(all(feature = "accessibility", target_os = "windows"))]
-        self.inner.notify(crate::runtime::a11y_tree::Changes { structure: true, moved: false });
-    }
-
     /// Sends the tree's changes since the last update, when a client listens.
     pub(crate) fn sync<S: 'static>(&mut self, rt: &mut Runtime<S>) {
         if let Some(update) = self.link.update(rt) {
             self.send(update);
-            #[cfg(all(feature = "accessibility", target_os = "windows"))]
-            self.inner.notify(rt.a11y_changes());
         }
     }
 }

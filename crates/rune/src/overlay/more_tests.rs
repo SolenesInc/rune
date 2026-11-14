@@ -917,9 +917,8 @@ fn only_an_opted_in_overlay_takes_the_pointer_on_xwayland() {
     assert!(!xwayland_allowed(OverlayInput::All, KeyPolicy::OnDemand, true), "never keys");
 }
 
-/// A fade-out gives the GPU surface back only once the fade ends, so the exit plays out on the
-/// window and its last frames reach the screen before the surface (and on Windows and macOS,
-/// the window) goes; where windows don't fade, the hide releases at once.
+/// A fading overlay keeps its GPU surface, so its exit plays out on the window; where windows
+/// don't fade, the hide releases at once.
 #[test]
 fn a_fade_out_releases_the_gpu_after_the_fade() {
     use std::time::Duration;
@@ -932,32 +931,6 @@ fn a_fade_out_releases_the_gpu_after_the_fade() {
     overlay.presence_due(Instant::now());
     assert_eq!(overlay.presence.release_at(), None, "a fading overlay keeps its surface");
     overlay.presence = Presence::Shown { occluded: false };
-    let before = Instant::now();
     overlay.hide_fading(Duration::from_millis(200));
-    if !cfg!(target_os = "windows") {
-        assert!(!overlay.presence.fading() && overlay.presence.release_at().is_some(), "no fade here: released at the hide");
-        return;
-    }
-    let end = overlay.presence.fade_end().expect("fading");
-    assert!(overlay.presence.drawing(), "frames keep drawing through the fade");
-    assert_eq!(overlay.presence.release_at(), None, "nothing is released mid-fade");
-    overlay.presence_due(end - Duration::from_millis(1));
-    assert_eq!(overlay.presence.release_at(), None, "not before the fade ends");
-    overlay.presence_due(end);
-    assert!(!overlay.presence.drawing());
-    let at = overlay.presence.release_at().expect("released once the fade ends");
-    assert!(at >= before + Duration::from_secs(5), "counted from the hide that ended the fade");
-}
-
-#[test]
-fn a_windows_fade_steps_alpha_down_to_zero() {
-    use std::time::Duration;
-    let now = Instant::now();
-    let length = Duration::from_millis(200);
-    let end = now + length;
-    assert_eq!(fade_alpha(end, length, now), 255);
-    assert_eq!(fade_alpha(end, length, now + Duration::from_millis(100)), 128);
-    assert_eq!(fade_alpha(end, length, end), 0);
-    assert_eq!(fade_alpha(end, length, end + Duration::from_millis(50)), 0, "past the end stays clear");
-    assert_eq!(fade_alpha(end, Duration::ZERO, now), 0);
+    assert!(!overlay.presence.fading() && overlay.presence.release_at().is_some(), "no fade here: released at the hide");
 }

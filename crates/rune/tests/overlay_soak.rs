@@ -45,22 +45,6 @@ fn hide<T>(name: &str, overlay: &OverlayHandle<T>) {
     assert!(wait(Duration::from_secs(5), || overlay.surface_description().is_none()), "{name} kept its surface");
 }
 
-#[cfg(target_os = "windows")]
-fn memory_mb() -> f64 {
-    #[repr(C)]
-    #[derive(Default)]
-    struct Counters { cb: u32, faults: u32, peak_ws: usize, ws: usize, qpp: usize, qp: usize, qnpp: usize, qnp: usize, pagefile: usize, peak_pagefile: usize, private: usize }
-    #[link(name = "kernel32")]
-    unsafe extern "system" {
-        fn GetCurrentProcess() -> isize;
-        fn K32GetProcessMemoryInfo(process: isize, counters: *mut Counters, cb: u32) -> i32;
-    }
-    let mut c = Counters { cb: std::mem::size_of::<Counters>() as u32, ..Default::default() };
-    // SAFETY: fills `c`, whose `cb` names PROCESS_MEMORY_COUNTERS_EX.
-    unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };
-    c.private as f64 / 1e6
-}
-
 /// Resident memory, from `/proc/self/statm` (pages).
 #[cfg(target_os = "linux")]
 fn memory_mb() -> f64 {
@@ -69,7 +53,7 @@ fn memory_mb() -> f64 {
     pages * 4096.0 / 1e6
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(target_os = "linux"))]
 fn memory_mb() -> f64 { 0.0 }
 
 fn main() {

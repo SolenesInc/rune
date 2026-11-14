@@ -1,5 +1,5 @@
 //! research/30's HUD frame through wgpu: acquire, `WRITES` 256-byte `Queue::write_buffer`s, one
-//! pass that clears the drawable, submit, present. `BACKEND=vulkan|dx12` (default: the
+//! pass that clears the drawable, submit, present. `BACKEND=vulkan` (default: the
 //! platform's).
 
 #[path = "../count.rs"]
@@ -26,7 +26,6 @@ impl Gpu {
     fn new(window: Arc<Window>) -> Gpu {
         let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
         desc.backends = match std::env::var("BACKEND").as_deref() {
-            Ok("dx12") => wgpu::Backends::DX12,
             Ok("vulkan") => wgpu::Backends::VULKAN,
             _ => wgpu::Backends::PRIMARY,
         };

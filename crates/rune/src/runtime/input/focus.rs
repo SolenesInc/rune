@@ -16,11 +16,11 @@ const CLAMPED_ROLES: [&str; 3] = ["list", "tree", "grid"];
 /// Roles whose pressable elements are Tab stops under `Cx::web_focus`, as HTML's buttons,
 /// links and form controls are, and the items of trees and grids, which a reader moves through
 /// by arrows once their group has focus (`El::focus_group` keeps the group one Tab stop).
-/// Roles F6 cycles between, as a browser's and Windows' pane navigation does.
+/// Roles F6 cycles between, as a browser's pane navigation does.
 const LANDMARK_ROLES: [&str; 6] = ["banner", "navigation", "main", "complementary", "form", "search"];
 const PRESSABLE_ROLES: [&str; 9] = ["button", "link", "tab", "checkbox", "switch", "radio", "combobox", "treeitem", "gridcell"];
 /// The innermost open modal and the nodes input may reach while it shows: its subtree, the
-/// popovers anchored inside it, and the window's caption buttons.
+/// and the popovers anchored inside it.
 pub(super) struct ModalScope {
     index: usize,
     members: Vec<bool>,
@@ -105,11 +105,7 @@ impl RuntimeCore {
             self.modal_scope = None;
             return;
         };
-        // The Windows caption buttons are the window's, not the view's: a modal in the view
-        // leaves them to the pointer and assistive technology, as the native ones are.
-        let caption = |n: &Node| n.key.as_deref() == Some(crate::titlebar::BUTTONS_KEY)
-            && n.parent.is_some_and(|p| self.nodes[p].key.as_deref() == Some(crate::titlebar::FRAME_KEY));
-        let mut members: Vec<bool> = self.nodes.iter().enumerate().map(|(i, n)| i >= index || caption(n)).collect();
+        let mut members: Vec<bool> = (0..self.nodes.len()).map(|i| i >= index).collect();
         // Portals are root siblings. Follow their anchor ownership, including chained
         // popovers, rather than requiring their layout parent to be the modal.
         loop {

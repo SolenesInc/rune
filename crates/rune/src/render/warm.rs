@@ -17,7 +17,7 @@ pub(super) const LINGER: Duration = Duration::from_secs(30);
 /// How long a parked device waits for the next surface.
 pub(crate) const PARKED: Duration = Duration::from_secs(5 * 60);
 
-/// The format overlays and windows draw in on Windows and Linux (`surface_config`, after
+/// The format overlays and windows draw in on Linux (`surface_config`, after
 /// `srgb_blend` drops the sRGB suffix); a surface in another one rebuilds the pipeline.
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 

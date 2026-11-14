@@ -23,32 +23,18 @@ pub(super) enum Route {
 pub(super) const MATH_FONT_FILES: &[&str] = &["stixtwomath"];
 #[cfg(target_os = "macos")]
 pub(super) const MATH_FAMILIES: &[&str] = &["STIX Two Math"];
-#[cfg(windows)]
-pub(super) const MATH_FONT_FILES: &[&str] = &["cambriattc"];
-#[cfg(windows)]
-pub(super) const MATH_FAMILIES: &[&str] = &["Cambria Math"];
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(target_os = "macos"))]
 pub(super) const MATH_FONT_FILES: &[&str] = &["notosansmath", "stixtwomath", "notomusic", "symbola"];
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(target_os = "macos"))]
 pub(super) const MATH_FAMILIES: &[&str] = &["Noto Sans Math", "STIX Two Math", "Noto Music", "Symbola"];
 
-/// Monospace families with Arabic and Hebrew at the Latin advance (0.6 em, as IBM Plex Mono's),
-/// tried in code after the mono slot and before the script's proportional fallback, so a diff
-/// or a shell line in those scripts keeps its columns. Windows: Courier New's Arabic and Hebrew
-/// are 0.6 em, where Cascadia Code, Consolas and Segoe UI Variable have neither script and Segoe
-/// UI is proportional. Linux: DejaVu Sans Mono. macOS ships no monospace Arabic: Courier New
-/// where it has them, else SF Arabic.
-#[cfg(windows)]
-pub(super) const MONO_SCRIPT_FILES: &[&str] = &[];
-#[cfg(windows)]
-pub(super) const MONO_SCRIPT_FAMILIES: &[&str] = &["Courier New"];
 #[cfg(target_os = "macos")]
 pub(super) const MONO_SCRIPT_FILES: &[&str] = &["couriernew"];
 #[cfg(target_os = "macos")]
 pub(super) const MONO_SCRIPT_FAMILIES: &[&str] = &["Courier New"];
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(target_os = "macos"))]
 pub(super) const MONO_SCRIPT_FILES: &[&str] = &["dejavusansmono"];
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(target_os = "macos"))]
 pub(super) const MONO_SCRIPT_FAMILIES: &[&str] = &["DejaVu Sans Mono"];
 /// A script the app's fonts usually lack, the blocks that use it and the system font files
 /// (lowercase, without spaces or dots, most preferred first) that cover it. Loaded the first
@@ -82,15 +68,7 @@ pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[
     ScriptFonts { script: b"Beng", blocks: BENGALI, files: &["kohinoorbangla", "banglamn"] },
     ScriptFonts { script: b"Thai", blocks: THAI, files: &["thonburi"] },
 ];
-#[cfg(windows)]
-pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[
-    ScriptFonts { script: b"Hebr", blocks: HEBREW, files: &["segoeuittf", "arialttf"] },
-    ScriptFonts { script: b"Arab", blocks: ARABIC, files: &["segoeuittf", "arialttf"] },
-    ScriptFonts { script: b"Deva", blocks: DEVANAGARI, files: &["nirmala"] },
-    ScriptFonts { script: b"Beng", blocks: BENGALI, files: &["nirmala"] },
-    ScriptFonts { script: b"Thai", blocks: THAI, files: &["leelawui", "tahomattf"] },
-];
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(target_os = "macos"))]
 pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[
     ScriptFonts { script: b"Hebr", blocks: HEBREW, files: &["notosanshebrew", "freesans"] },
     ScriptFonts { script: b"Arab", blocks: ARABIC, files: &["notosansarabic", "notonaskharabic", "freesans"] },

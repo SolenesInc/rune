@@ -59,7 +59,7 @@ impl<T: 'static> Overlay<T> {
         let surface = showing || !self.defers_gpu();
         let wayland = crate::window::is_wayland(event_loop);
         // Only an X11 window waits parked for its surface. A Wayland overlay's window is its
-        // surface, and a Windows or macOS one that gives its GPU back is made for each show
+        // surface, and a macOS one that gives its GPU back is made for each show
         // (`park`): both wait.
         let parks = cfg!(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))) && !wayland;
         if !surface && !parks { return; }
@@ -145,8 +145,8 @@ impl<T: 'static> Overlay<T> {
         // then releases what it held.
         #[cfg(target_os = "macos")]
         self.fn_key();
-        // Only macOS and Windows fade the window; elsewhere it goes at once, and so does drawing.
-        let fade = if cfg!(any(target_os = "macos", target_os = "windows")) { fade } else { Duration::ZERO };
+        // Only macOS fades the window; elsewhere it goes at once, and so does drawing.
+        let fade = if cfg!(target_os = "macos") { fade } else { Duration::ZERO };
         let effects = self.presence.step(presence::Event::Hide { fade, now: Instant::now() }, self.release);
         self.carry_out(effects);
     }
@@ -157,10 +157,6 @@ impl<T: 'static> Overlay<T> {
     pub(super) fn presence_due(&mut self, now: Instant) {
         let effects = self.presence.step(presence::Event::Due { now }, self.release);
         self.carry_out(effects);
-        #[cfg(target_os = "windows")]
-        if let Presence::FadingOut { until, length, .. } = self.presence && let Some(native) = &self.native {
-            native.fade(fade_alpha(until, length, now));
-        }
     }
 
     pub(super) fn carry_out(&mut self, effects: crate::machine::Effects<presence::Effect>) {
@@ -197,20 +193,12 @@ impl<T: 'static> Overlay<T> {
             Backing::Window(window) => {
                 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
                 if let Some(x11) = &self.x11 { x11.hide(); }
-                #[cfg(target_os = "windows")]
-                {
-                    let _ = (window, fade);
-                    if let Some(native) = &mut self.native {
-                        if self.presence.fading() { native.fade(255) } else { native.hide() }
-                    }
-                }
                 #[cfg(target_os = "macos")]
                 if let Some(panel) = &self.panel {
                     panel.hide(fade);
                 }
-                #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                #[cfg(not(target_os = "macos"))]
                 let _ = fade;
-                #[cfg(not(target_os = "windows"))]
                 window.set_visible(false);
             }
             #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
@@ -273,13 +261,6 @@ impl<T: 'static> Overlay<T> {
                 attrs = attrs.with_name(id, id);
             }
         }
-        #[cfg(target_os = "windows")]
-        {
-            use winit::platform::windows::WindowAttributesExtWindows;
-            // DirectComposition draws the overlay (`Gpu::instance`); without a redirection bitmap
-            // nothing under it paints the window black.
-            attrs = attrs.with_skip_taskbar(true).with_undecorated_shadow(false).with_no_redirection_bitmap(true);
-        }
         #[cfg(target_os = "macos")]
         {
             use winit::platform::macos::WindowAttributesExtMacOS;
@@ -323,20 +304,6 @@ impl<T: 'static> Overlay<T> {
                     capture_exclusion: OverlaySupport::Unsupported, nonactivating_keys: OverlaySupport::Unsupported, global_pointer: OverlaySupport::Supported,
                 };
             }
-            #[cfg(target_os = "windows")]
-            {
-                let wake = self.shared.wake.lock().unwrap().clone();
-                match crate::platform::win32::OverlayWindow::new(&window, self.interactive, &self.options, wake) {
-                    Ok(native) => self.native = Some(native),
-                    Err(error) => {
-                        self.fail(error);
-                        return None;
-                    }
-                }
-                self.shared.native.lock().unwrap().1 = crate::OverlayCapabilities {
-                    capture_exclusion: self.native.as_ref().unwrap().capture_exclusion(), nonactivating_keys: OverlaySupport::Unsupported, global_pointer: OverlaySupport::Supported,
-                };
-            }
         }
         self.place_window(event_loop, &window);
         #[cfg(target_os = "macos")]
@@ -361,16 +328,13 @@ impl<T: 'static> Overlay<T> {
     /// `release_gpu_when_hidden`: the hidden overlay gives back its surface, swapchain and
     /// renderer, and its hold on the GPU device, which waits a while for the next surface
     /// (`render::park_gpu`) once no other surface draws with it. The
-    /// window stays parked on X11 only. On Windows a hidden topmost window, often
-    /// display-sized, in a process that draws with DXGI is enough for game capture tools such
-    /// as NVIDIA's Instant Replay to take the app for the running game; on macOS 27 hidden
-    /// screen-sized panels that join every Space empty Mission Control's Space thumbnails.
+    /// window stays parked on X11 only. On macOS 27 hidden screen-sized panels that join every Space empty Mission Control's Space thumbnails.
     /// There the window goes too, and the next show makes a new one.
     pub(super) fn park(&mut self) {
         if !matches!(self.surface.live().map(|l| &l.backing), Some(Backing::Window(_))) { return; }
-        #[cfg(any(target_os = "windows", target_os = "macos"))]
+        #[cfg(target_os = "macos")]
         self.release();
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        #[cfg(not(target_os = "macos"))]
         {
             let Some(Live { alpha, surface, backing, .. }) = self.surface.take_live() else { return };
             // The surface goes before the device that made it and the window it draws into.

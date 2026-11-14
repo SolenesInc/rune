@@ -6,12 +6,11 @@
 //! spaces or control characters. The check runs when the handler calls `open_url`; the open
 //! itself happens once the handler's frame is done.
 //!
-//! macOS asks `NSWorkspace`, Windows `ShellExecuteW`, Linux runs `xdg-open`. Headless runs and
+//! macOS asks `NSWorkspace`, Linux runs `xdg-open`. Headless runs and
 //! tests never open anything: they keep the requests for [`Runtime::take_url_requests`].
 use crate::RuntimeCore;
 
 pub(crate) mod incoming;
-pub(crate) mod instance;
 
 const MAX_LEN: usize = 8192;
 
@@ -229,17 +228,6 @@ fn percent_encode_non_ascii(url: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Owned(out)
 }
 
-#[cfg(target_os = "windows")]
-fn open(url: &str) -> Result<(), OpenUrlError> {
-    use windows_sys::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
-    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
-    let (verb, target) = (wide("open"), wide(url));
-    // SAFETY: both strings are NUL-terminated and outlive the call; the other pointers are null.
-    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
-    // Values above 32 are success.
-    if result as usize > 32 { Ok(()) } else { Err(OpenUrlError::Failed(format!("ShellExecute returned {}", result as usize))) }
-}
-
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
 fn open(url: &str) -> Result<(), OpenUrlError> {
     debug_assert!(!url.starts_with('-'));
@@ -252,16 +240,11 @@ fn open(url: &str) -> Result<(), OpenUrlError> {
     Ok(())
 }
 
-#[cfg(not(any(target_arch = "wasm32", target_os = "macos", target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android"))))))]
+#[cfg(not(any(target_arch = "wasm32", target_os = "macos", all(unix, not(any(target_os = "ios", target_os = "android"))))))]
 fn open(_: &str) -> Result<(), OpenUrlError> { Err(OpenUrlError::Failed("this platform can't open links".into())) }
 
 #[cfg(target_os = "macos")]
 fn reveal(path: &str) -> Result<(), OpenUrlError> { spawn_reaped(std::process::Command::new("/usr/bin/open").arg("-R").arg(path)) }
-
-#[cfg(target_os = "windows")]
-fn reveal(path: &str) -> Result<(), OpenUrlError> {
-    spawn_reaped(std::process::Command::new("explorer.exe").arg(format!("/select,{path}")))
-}
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
 fn reveal(path: &str) -> Result<(), OpenUrlError> {
@@ -269,7 +252,7 @@ fn reveal(path: &str) -> Result<(), OpenUrlError> {
     spawn_reaped(std::process::Command::new("xdg-open").arg(folder))
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android")))))]
+#[cfg(any(target_os = "macos", all(unix, not(any(target_os = "ios", target_os = "android")))))]
 fn spawn_reaped(command: &mut std::process::Command) -> Result<(), OpenUrlError> {
     let mut child = command
         .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
@@ -278,7 +261,7 @@ fn spawn_reaped(command: &mut std::process::Command) -> Result<(), OpenUrlError>
     Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(any(target_arch = "wasm32", target_os = "ios", target_os = "android"))))))]
+#[cfg(not(any(target_os = "macos", all(unix, not(any(target_arch = "wasm32", target_os = "ios", target_os = "android"))))))]
 fn reveal(_: &str) -> Result<(), OpenUrlError> { Err(OpenUrlError::Failed("this platform can't reveal files".into())) }
 
 #[cfg(test)]

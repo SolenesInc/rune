@@ -29,55 +29,24 @@ impl<S: 'static> Host<S> {
             }
         }
         let open_as = if !self.shown && self.options.resizable { self.open_as } else { crate::windows::OpenAs::Normal };
-        // Windows maximizes it once cloaked: maximizing shows a window.
-        #[cfg(not(target_os = "windows"))]
-        {
-            attrs = attrs.with_maximized(open_as.maximizes());
-            if open_as.full_screens() { attrs = attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None))); }
-        }
+        attrs = attrs.with_maximized(open_as.maximizes());
+        if open_as.full_screens() { attrs = attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None))); }
         let chrome = frame_chrome(self.chrome, self.titlebar, self.rt.titlebar_set());
         #[cfg(target_os = "macos")]
         if !self.options.borderless && chrome.full_size_content {
             use winit::platform::macos::WindowAttributesExtMacOS;
             attrs = attrs.with_titlebar_transparent(true).with_title_hidden(true).with_fullsize_content_view(true);
         }
-        // Windows opens it hidden, then shows it cloaked until its first frame lands
-        // (`Cloak`), so it never comes on screen empty. The show doesn't activate it: the cloak
-        // does as it lifts, so the text services' start-up follows the frame.
-        #[cfg(target_os = "windows")]
-        let attrs = crate::platform::app_icon::with_icon(winit::platform::windows::WindowAttributesExtWindows::with_drag_and_drop(attrs.with_visible(false).with_active(false), false));
         let window = Arc::new(event_loop.create_window(attrs).map_err(|e| e.to_string())?);
         crate::marks::mark("window.native");
-        #[cfg(target_os = "windows")]
-        crate::platform::win32::follow_suggested_rect(&window);
-        #[cfg(target_os = "windows")]
-        crate::platform::win32::press_point::install(&window);
         // Before it shows, so the title bar never appears.
-        #[cfg(target_os = "windows")]
-        let frame = self.titlebar.and_then(|t| crate::platform::win32::CustomFrame::install(&window, t.height()));
         crate::marks::mark("window.frame_installed");
-        #[cfg(target_os = "windows")]
-        let cloak = crate::platform::win32::Cloak::default();
         // Its first frame on the CPU renderer, painted before it shows (`cpu_frame`).
-        #[cfg(target_os = "windows")]
-        let cpu_first = visible && !launcher && cpu_frame::opens_on_cpu(self);
-        #[cfg(target_os = "windows")]
-        if visible && !cpu_first {
-            // Unfocused (`App::open_inactive`), it never activates.
-            cloak.hold(&window, Instant::now() + win::READY_FALLBACK, focus);
-            window.set_visible(true);
-            chrome::open_as(&window, open_as);
-        }
         crate::marks::mark("window.framed");
         // First, before anything observes the view (macOS) or an assistive client asks. On Windows,
         // with no screen reader running, UI Automation's adapter (about 7,500 µs) waits for the
         // loop's first idle turn after the first frame: it subclasses the window, which works at
         // any time (`a11y_after_frame`).
-        #[cfg(target_os = "windows")]
-        let a11y_start = if crate::platform::win32::screen_reader() { native::A11yStart::Made } else { native::A11yStart::AfterFirstFrame };
-        #[cfg(target_os = "windows")]
-        let a11y = if a11y_start == native::A11yStart::Made { self.a11y_adapter(&window) } else { None };
-        #[cfg(not(target_os = "windows"))]
         let a11y = self.a11y_adapter(&window);
         #[cfg(target_os = "macos")]
         crate::native_menu::adopt_standard_view();
@@ -104,15 +73,6 @@ impl<S: 'static> Host<S> {
             self.rt.double_click_interval = mac::double_click_interval();
             self.rt.set_native_help(true);
         }
-        #[cfg(windows)]
-        {
-            let ms = unsafe { windows_sys::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime() };
-            self.rt.double_click_interval = f64::from(ms) / 1000.0;
-            // A tooltip control's initial delay is the double-click time.
-            self.rt.help_delay = self.rt.double_click_interval;
-        }
-        #[cfg(target_os = "windows")]
-        if cpu_first { return self.open_on_cpu(event_loop, window, a11y, a11y_start, frame, cloak, focus, open_as, built); }
         let mut prewarmed = None;
         crate::marks::mark("gpu.begin");
         // A device that died while this window was closed draws nothing: make another.
@@ -232,15 +192,7 @@ impl<S: 'static> Host<S> {
             _spot: crate::platform::macos::traffic_lights::Spot::new(&window),
         };
         // Making the GPU and surface took part of the cloak's wait; the frame gets all of it.
-        #[cfg(target_os = "windows")]
-        cloak.extend(Instant::now() + win::READY_FALLBACK);
-        #[cfg(target_os = "windows")]
-        let native = {
-            let handle = self.native_handle.clone();
-            let report = Arc::new(move |covered| handle.send(move |slot| WakeEvent::Covered(slot, covered)));
-            Native { cloak, frame, _occlusion: crate::platform::win32::occlusion::Tracked::new(&window, report), mode: Default::default(), a11y_start, video_layers: Default::default() }
-        };
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(target_os = "macos"))]
         let native = Native::default();
         self.win = Some(Win {
             a11y,
@@ -257,10 +209,6 @@ impl<S: 'static> Host<S> {
             alpha,
             timer_frame: TimerFrame::default(),
             presented: None,
-            #[cfg(target_os = "windows")]
-            steady: Steady::Rest,
-            #[cfg(target_os = "windows")]
-            covered_draw: CoveredDraw::Current,
             redraw: std::cell::Cell::new(Redraw::Idle),
         });
         if launcher { self.win.as_mut().unwrap().first_frame.prepare(Instant::now()); }
@@ -311,20 +259,6 @@ impl<S: 'static> Host<S> {
         crate::a11y::Adapter::new(window, Arc::new(move || handle.send(WakeEvent::A11y)))
     }
 
-    /// Windows: the accessibility adapter a window opened without, on the first idle turn after
-    /// its first frame; assistive clients hear the window's content change so they ask again.
-    #[cfg(target_os = "windows")]
-    pub(super) fn a11y_after_frame(&mut self) {
-        let Some(w) = self.win.as_ref() else { return };
-        if w.native.a11y_start != native::A11yStart::AfterFirstFrame || !w.first_frame.ready() { return; }
-        let adapter = self.a11y_adapter(&w.window);
-        crate::marks::mark("window.a11y");
-        let Some(w) = self.win.as_mut() else { return };
-        w.native.a11y_start = native::A11yStart::Made;
-        w.a11y = adapter;
-        if let Some(a) = &w.a11y { a.notify_structure(); }
-    }
-
     /// Replaces the window's surface and the device it draws with, keeping the window, its size
     /// and its place. A lost GPU configures nothing, and under it wgpu drops the error
     /// `Surface::configure` returns without recording the surface's error sink: the surface has
@@ -336,9 +270,7 @@ impl<S: 'static> Host<S> {
         let Some(w) = self.win.as_mut() else { return Err("there is no window to draw into".into()) };
         let window = w.window.clone();
         // The old surface goes before the device that made it and before the new surface is
-        // made: a DX12 surface takes the window's one DirectComposition target
-        // (`Dx12SwapchainKind::DxgiFromVisual`), so the replacement can only be configured once
-        // the old swapchain has let go of it.
+        // made.
         w.alpha = None;
         w.presented = None;
         drop(w.surface.take());
@@ -347,17 +279,7 @@ impl<S: 'static> Host<S> {
         self.rt.images.invalidate();
         let features = self.comp.as_ref().map_or(wgpu::Features::empty(), |c| c.features());
         let transparent = self.options.transparent;
-        // A window the CPU handed to the GPU keeps its DirectComposition target: the new swap
-        // chain goes on the same visual, committed once it has presented (`SurfaceMode::rebind`).
-        // wgpu has the composition-visual target only on Windows.
-        #[cfg(target_os = "windows")]
-        let visual = w.native.mode.visual();
         let (gpu, surface, prewarmed) = Gpu::for_surface(features, transparent, |instance| {
-            #[cfg(target_os = "windows")]
-            if let Some(visual) = visual {
-                // SAFETY: the window keeps the visual's `Handover` as long as it keeps this surface.
-                return unsafe { instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CompositionVisual(visual)) }.map_err(|e| e.to_string());
-            }
             instance.create_surface(window.clone()).map_err(|e| e.to_string())
         })?;
         let gpu = Arc::new(gpu);
@@ -388,8 +310,6 @@ impl<S: 'static> Host<S> {
         w.config = config;
         w.surface_ok = true;
         w.alpha = alpha;
-        #[cfg(target_os = "windows")]
-        w.native.mode.rebind();
         #[cfg(target_os = "macos")]
         {
             w.native.present = present;
@@ -399,42 +319,6 @@ impl<S: 'static> Host<S> {
         crate::render::surface_gpu(&gpu);
         self.gpu = Some((gpu, renderer));
         Ok(())
-    }
-
-    /// Makes a handed-over window's swap chain again with premultiplied alpha (a playing clip's
-    /// own layer shows under the UI, `video_layer`) or opaque (none does): a new surface on the
-    /// same visual, committed once its first frame has presented (`SurfaceMode::rebind`), as for
-    /// a lost device. Premultiplied costs DWM a blend of every region the UI presents, so it lasts
-    /// only while a layer shows. Ok(false) when there's nothing to do.
-    #[cfg(target_os = "windows")]
-    pub(super) fn rebind_alpha(&mut self, premultiplied: bool) -> Result<bool, String> {
-        let Some((gpu, _)) = self.gpu.as_ref() else { return Ok(false) };
-        let Some(w) = self.win.as_mut() else { return Ok(false) };
-        let Some(visual) = w.native.mode.visual() else { return Ok(false) };
-        if self.options.transparent || matches!(w.native.mode, super::cpu_frame::SurfaceMode::Rebinding { .. }) {
-            return Ok(false);
-        }
-        let alpha = if premultiplied { wgpu::CompositeAlphaMode::PreMultiplied } else { wgpu::CompositeAlphaMode::Opaque };
-        if w.config.alpha_mode == alpha {
-            return Ok(false);
-        }
-        if premultiplied && w.surface.as_ref().is_none_or(|s| crate::render::translucency::mode(s, &gpu.adapter) != Some(alpha)) {
-            return Err("this adapter can't composite a premultiplied swap chain".into());
-        }
-        // The old surface goes first: a DX12 surface takes the visual's content, and the
-        // committed tree keeps showing its last frame until the new one commits.
-        drop(w.surface.take());
-        // SAFETY: the window keeps the visual's `Handover` as long as it keeps this surface.
-        let surface = unsafe { gpu.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CompositionVisual(visual)) }.map_err(|e| e.to_string())?;
-        let mut config = w.config.clone();
-        config.alpha_mode = alpha;
-        configure(&surface, gpu, &config)?;
-        w.surface = Some(surface);
-        w.config = config;
-        w.surface_ok = true;
-        w.presented = None;
-        w.native.mode.rebind();
-        Ok(true)
     }
 
     /// Replaces the window's surface and device when either can't draw a frame: a device that is

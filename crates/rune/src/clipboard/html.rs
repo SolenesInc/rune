@@ -1,5 +1,4 @@
-//! Strips active content from HTML that came from another app, and packs/unpacks Windows
-//! `CF_HTML` (`HTML Format`).
+//! Strips active content from HTML that came from another app.
 //!
 //! A small tokenizer, not a parser: it keeps text and ordinary tags and drops anything that
 //! can run code or load something. Where it can't tell, it drops more, never less. What it
@@ -345,79 +344,9 @@ fn decode_entities(s: &str) -> String {
     out
 }
 
-/// Packs an HTML fragment into a Windows `CF_HTML` (`HTML Format`) payload whose header
-/// offsets (`StartHTML`, `EndHTML`, `StartFragment`, `EndFragment`) are UTF-8 byte offsets
-/// from the start of the payload, including the header. arboard writes Windows copies itself;
-/// this builds payloads for [`unpack_cf_html`]'s tests.
-#[cfg(test)]
-pub(crate) fn pack_cf_html(fragment: &str) -> String {
-    const PREFIX: &str = "<html>\r\n<body>\r\n<!--StartFragment-->";
-    const SUFFIX: &str = "<!--EndFragment-->\r\n</body>\r\n</html>";
-    const START_HTML: usize = 105;
-    let start_frag = START_HTML + PREFIX.len();
-    let end_frag = start_frag + fragment.len();
-    let end_html = end_frag + SUFFIX.len();
-    let out = format!(
-        "Version:0.9\r\nStartHTML:{START_HTML:010}\r\nEndHTML:{end_html:010}\r\nStartFragment:{start_frag:010}\r\nEndFragment:{end_frag:010}\r\n{PREFIX}{fragment}{SUFFIX}"
-    );
-    debug_assert_eq!(&out.as_bytes()[start_frag..end_frag], fragment.as_bytes());
-    debug_assert_eq!(out.len(), end_html);
-    out
-}
-
-/// Extracts the HTML fragment (or document) from a Windows `CF_HTML` (`HTML Format`) buffer.
-/// Tolerates `-1` offsets (`StartHTML:-1`, `StartFragment:-1`, etc.), `0000000000` offsets,
-/// trailing NUL padding, `<!--StartFragment-->` / `<!--EndFragment-->` comments, and
-/// out-of-bounds offsets from other apps.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-pub(crate) fn unpack_cf_html(raw: &[u8]) -> Option<String> {
-    let len = raw.iter().position(|&b| b == 0).unwrap_or(raw.len()).min(MAX_RICH_BYTES);
-    let raw = &raw[..len];
-    if raw.is_empty() { return None; }
-    let text = std::str::from_utf8(raw).ok()?;
-
-    let (mut start_html, mut end_html, mut start_frag, mut end_frag) = (None, None, None, None);
-    let mut header_end = 0;
-    let mut saw_header = false;
-    for line in text.split_inclusive('\n') {
-        let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed.starts_with('<') { break; }
-        let Some((key, val)) = trimmed.split_once(':') else { break };
-        saw_header = true;
-        header_end += line.len();
-        let offset = val.trim().parse::<i64>().ok().and_then(|n| usize::try_from(n).ok());
-        match key.trim() {
-            "StartHTML" => start_html = offset,
-            "EndHTML" => end_html = offset,
-            "StartFragment" => start_frag = offset,
-            "EndFragment" => end_frag = offset,
-            _ => {}
-        }
-    }
-
-    let slice = |s: usize, e: usize| {
-        (s >= header_end && s <= e && e <= text.len() && text.is_char_boundary(s) && text.is_char_boundary(e)).then(|| &text[s..e])
-    };
-    if let (Some(s), Some(e)) = (start_frag, end_frag) && let Some(frag) = slice(s, e) && !frag.is_empty() {
-        return Some(frag.to_owned());
-    }
-    const START_MARK: &str = "<!--StartFragment-->";
-    const END_MARK: &str = "<!--EndFragment-->";
-    if let Some(s) = text.find(START_MARK).map(|i| i + START_MARK.len())
-        && let Some(e) = text[s..].find(END_MARK).map(|i| s + i)
-    {
-        return Some(text[s..e].to_owned());
-    }
-    if let (Some(s), Some(e)) = (start_html, end_html) && let Some(doc) = slice(s, e) && !doc.is_empty() {
-        return Some(doc.to_owned());
-    }
-    let body = if saw_header { &text[header_end..] } else { text }.trim();
-    (!body.is_empty()).then(|| body.to_owned())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{pack_cf_html, sanitize_html as clean, unpack_cf_html};
+    use super::sanitize_html as clean;
 
     #[test]
     fn formatting_survives() {
@@ -521,28 +450,5 @@ mod tests {
         let multibyte = "café 🦀 <b title=\"🎉\">bold</b>".repeat(2_000);
         assert!(clean(&multibyte).contains("🦀"));
         assert!(start.elapsed() < std::time::Duration::from_secs(2), "sanitizer took {:?}", start.elapsed());
-    }
-
-    #[test]
-    fn cf_html_uses_utf8_byte_offsets_and_tolerates_minus_one_offsets() {
-        let fragment = "<b>Héllo 🦀</b> <i>world</i>";
-        let packed = pack_cf_html(fragment);
-        assert_eq!(unpack_cf_html(packed.as_bytes()).as_deref(), Some(fragment));
-        let mut nul_padded = packed.into_bytes();
-        nul_padded.extend_from_slice(b"\0\0\0");
-        assert_eq!(unpack_cf_html(&nul_padded).as_deref(), Some(fragment));
-
-        // Apps that omit context or fragment offsets write -1 (or -000000001) and rely on the markers or StartHTML.
-        let minus_one_context = "Version:0.9\r\nStartHTML:-1\r\nEndHTML:-1\r\nStartFragment:0000000109\r\nEndFragment:0000000124\r\n<!--StartFragment--><b>Hi café</b><!--EndFragment-->";
-        assert_eq!(unpack_cf_html(minus_one_context.as_bytes()).as_deref(), Some("<b>Hi café</b>"));
-
-        let minus_one_frag = "Version:0.9\r\nStartHTML:-000000001\r\nEndHTML:-000000001\r\nStartFragment:-000000001\r\nEndFragment:-000000001\r\n<html><body><!--StartFragment--><i>markers</i><!--EndFragment--></body></html>";
-        assert_eq!(unpack_cf_html(minus_one_frag.as_bytes()).as_deref(), Some("<i>markers</i>"));
-
-        let html_offsets_only = "Version:0.9\r\nStartHTML:0000000043\r\nEndHTML:0000000059\r\n<p>doc slice</p>";
-        assert_eq!(unpack_cf_html(html_offsets_only.as_bytes()).as_deref(), Some("<p>doc slice</p>"));
-
-        let out_of_bounds = "Version:0.9\r\nStartHTML:0000000100\r\nEndHTML:0000099999\r\nStartFragment:0000000500\r\nEndFragment:0000099999\r\n<b>fallback</b>";
-        assert_eq!(unpack_cf_html(out_of_bounds.as_bytes()).as_deref(), Some("<b>fallback</b>"));
     }
 }

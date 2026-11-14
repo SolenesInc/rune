@@ -3,7 +3,7 @@ use zeroize::Zeroize;
 
 /// The modifiers held with a key. `shift`, `alt`, `ctrl` and `logo` are keys; `cmd` is the
 /// platform's primary shortcut modifier, reported alongside its key: ⌘ on macOS (with `logo`)
-/// and Ctrl elsewhere (with `ctrl`), so Ctrl+W on Windows is `{ cmd, ctrl }`. A test of
+/// and Ctrl elsewhere (with `ctrl`), so Ctrl+W on Linux is `{ cmd, ctrl }`. A test of
 /// `cmd && !ctrl` therefore never passes off macOS. Match shortcuts with a
 /// [`Chord`](crate::Chord) ("mod+w", "ctrl+tab") rather than by comparing flags.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -44,8 +44,7 @@ pub enum Key {
     PageDown,
     /// Insert (Help on older Mac keyboards). Text fields ignore it; apps can bind it.
     Insert,
-    /// Print Screen (SysRq). Text fields ignore it; apps can bind it. Windows sends it only
-    /// on release, so its press and release arrive together.
+    /// Print Screen (SysRq). Text fields ignore it; apps can bind it.
     PrintScreen,
     /// Scroll Lock. Text fields ignore it; apps can bind it.
     ScrollLock,
@@ -133,7 +132,7 @@ impl KeyEvent {
 
     /// Text typed with Cmd (macOS) or Ctrl held, such as an unclaimed Shift-Cmd-Space. It never
     /// inserts, matching browsers and AppKit, but still reaches key handlers. Ctrl+Alt is AltGr
-    /// on Windows and Linux, so text typed with both still inserts there; Option alone types.
+    /// on Linux, so text typed with both still inserts there; Option alone types.
     pub(crate) fn is_command_chord(&self) -> bool {
         let m = self.mods;
         matches!(self.key, Key::Text(_)) && (m.cmd || m.ctrl) && (cfg!(target_os = "macos") || !m.alt)
@@ -147,8 +146,8 @@ impl KeyEvent {
         let Key::Command(c) = self.key else { return None };
         (crate::input::chord::primary_alone(self.mods) && (c == 'z' || !self.mods.shift)).then_some(c)
     }
-    /// Alt+Space off macOS: the window menu's key. It never types a space, and on Windows opens
-    /// the window menu when no handler takes it. (Option+Space types on macOS.)
+    /// Alt+Space off macOS: the window manager's window-menu key. It never types a space.
+    /// (Option+Space types on macOS.)
     pub(crate) fn is_window_menu_chord(&self) -> bool {
         let m = self.mods;
         !cfg!(target_os = "macos") && matches!(&self.key, Key::Text(t) if t == " ") && m.alt && !m.ctrl && !m.cmd && !m.logo

@@ -178,8 +178,6 @@ impl<T: 'static> Overlay<T> {
         let Some(live) = self.surface.live() else { return false };
         #[cfg(target_os = "macos")]
         if let Some(panel) = &self.panel { panel.set_regions(self.rt.hit_regions()); }
-        #[cfg(target_os = "windows")]
-        if let Some(native) = &self.native { native.set_regions(self.rt.hit_regions(), live.scale); }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         if self.options.input.resolved(self.interactive) == OverlayInput::Regions && let Some(x11) = &mut self.x11 { x11.regions(self.rt.hit_regions(), live.scale); }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
@@ -199,8 +197,6 @@ impl<T: 'static> Overlay<T> {
         let _ = resolved;
         #[cfg(target_os = "macos")]
         if let Some(panel) = &self.panel { panel.set_input(resolved); }
-        #[cfg(target_os = "windows")]
-        if let Some(native) = &mut self.native { native.set_input(resolved); }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         {
             if let Some(x11) = &mut self.x11 { x11.set_input(resolved); }
@@ -398,8 +394,6 @@ impl<T: 'static> Overlay<T> {
             self.options.follow_pointer = follow;
             #[cfg(target_os = "macos")]
             if let Some(panel) = &self.panel { panel.set_follow_pointer(follow); }
-            #[cfg(target_os = "windows")]
-            if let Some(native) = &mut self.native { native.set_follow_pointer(follow); }
             #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
             if let Some(x11) = &self.x11 { x11.set_follow_pointer(follow); }
         }
@@ -468,8 +462,6 @@ impl<T: 'static> Overlay<T> {
         if self.presence.shown() {
             #[cfg(target_os = "macos")]
             if let Some(panel) = &self.panel { self.shared.native.lock().unwrap().1.global_pointer = panel.global_pointer(); }
-            #[cfg(target_os = "windows")]
-            if let Some(native) = &self.native { self.shared.native.lock().unwrap().1.global_pointer = native.global_pointer(); }
             #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
             if let Some(x11) = &self.x11 { self.shared.native.lock().unwrap().1.global_pointer = x11.global_pointer(); }
         }

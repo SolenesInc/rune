@@ -718,7 +718,7 @@ fn a_surface_lost_after_every_replacement_gives_up_after_the_tries() {
     assert_eq!(retries.attempt(), SurfaceStep::Replace);
 }
 
-/// A device that went away (a driver reset, a GPU removed, Windows' Modern Standby) configures
+/// A device that went away (a driver reset, a GPU removed) configures
 /// nothing, and wgpu drops the `DeviceLost` that would say so: `configure` reports the lost
 /// device itself, and no drawable is ever asked of it.
 #[cfg(target_os = "linux")]

@@ -91,8 +91,6 @@ impl RuntimeCore {
         // would wake the host again every frame interval.
         let due = self.wake_deadlines.partition_point(|t| *t <= self.clock);
         self.wake_deadlines.drain(..due);
-        // A glyph mask cache write that came due while nothing draws (`mask_cache`).
-        let _ = self.text.mask_cache_frame(false);
         let patched = self.patch_pending();
         if !self.app.has(app_side::Hook::Poll) { return patched }
         let mut one = self.transaction();

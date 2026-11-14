@@ -7,9 +7,8 @@
 //! prefs.set("text_size", &(size + 1.0)).ok();
 //! ```
 //!
-//! The file is `prefs.json` in `~/Library/Application Support/<app id>` on macOS and iOS,
-//! `%APPDATA%\<app id>` on Windows and `$XDG_CONFIG_HOME/<app id>` (else `~/.config/<app id>`)
-//! elsewhere: [`crate::dirs::AppDirs::config`]. `RUNE_PREFS_DIR` replaces the config directory,
+//! The file is `prefs.json` in `~/Library/Application Support/<app id>` on macOS and iOS, and
+//! `$XDG_CONFIG_HOME/<app id>` (else `~/.config/<app id>`) elsewhere: [`crate::dirs::AppDirs::config`]. `RUNE_PREFS_DIR` replaces the config directory,
 //! and `RUNE_DIRS_ROOT` puts it at `<root>/config`, so a headless run or a test script keeps its
 //! settings apart from the real ones. [`Prefs::memory`] keeps nothing on disk.
 //!
@@ -255,8 +254,6 @@ mod tests {
         assert_eq!(config_dir(env(&[])), None);
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         assert_eq!(config_dir(env(&[("HOME", "/h")])), Some(PathBuf::from("/h/Library/Application Support")));
-        #[cfg(target_os = "windows")]
-        assert_eq!(config_dir(env(&[("APPDATA", "C:\\Roaming")])), Some(PathBuf::from("C:\\Roaming")));
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
         {
             assert_eq!(config_dir(env(&[("HOME", "/h")])), Some(PathBuf::from("/h/.config")));

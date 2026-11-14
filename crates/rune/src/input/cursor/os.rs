@@ -1,9 +1,7 @@
 //! The OS cursor a winit host last applied.
 //!
 //! `Cursor::Hidden` sets a transparent cursor image rather than winit's
-//! `set_cursor_visible(false)`: on Windows that call also confines the pointer to the centre of
-//! a focused window, and its `ShowCursor` count is process-wide. A cursor image is per-window
-//! like any other shape, so the OS drops it when the pointer leaves the window or the window
+//! `set_cursor_visible(false)`. A cursor image is per-window like any other shape, so the OS drops it when the pointer leaves the window or the window
 //! goes away.
 //!
 //! `Cursor::Image` goes through winit's custom cursors, made at the window's scale so the
@@ -41,8 +39,8 @@ impl OsCursor {
     }
 
     /// Applies `want` while the host is `active` (the pointer is over its window or its hit
-    /// area), and the arrow once when it stops being active. winit sets some cursors at once
-    /// (Win32 `SetCursor`), so an inactive host must leave the cursor to whichever window has
+    /// area), and the arrow once when it stops being active. winit sets some cursors at once, so
+    /// an inactive host must leave the cursor to whichever window has
     /// the pointer.
     pub(crate) fn apply(&mut self, window: &Arc<Window>, want: Cursor, active: bool) {
         let scale = image_scale(window);
@@ -60,8 +58,6 @@ impl OsCursor {
             Cursor::Hidden => clear::set(window),
             #[cfg(not(target_os = "macos"))]
             Cursor::Image(image) => images::set(window, image, scale),
-            #[cfg(windows)]
-            Cursor::Cell => images::set(window, crate::cursor::CELL, scale),
             other => window.set_cursor(icon(other)),
         }
     }
@@ -122,8 +118,6 @@ mod clear {
 fn os_image(c: Cursor) -> Option<crate::cursor::CursorImage> {
     match c {
         Cursor::Image(image) => Some(image),
-        #[cfg(windows)]
-        Cursor::Cell => Some(crate::cursor::CELL),
         _ => None,
     }
 }

@@ -26,8 +26,6 @@ pub(super) struct GlyphKey {
     pub(super) apple: u8,
     /// Synthetic oblique, in degrees (0 for none).
     pub(super) skew: u8,
-    /// Synthetic bold (`synthetic_bold`).
-    pub(super) bold: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -159,7 +157,7 @@ pub struct GlyphQuad {
     pub color: u32,
     /// A glyph drawn straight from its outline instead of the atlas (`uv` unused).
     pub outline: Option<super::Outline>,
-    /// A subpixel mask, three texels a pixel (`FontSmoothing::WindfoilRgb`, `ClearType`).
+    /// A subpixel mask, three texels a pixel (`FontSmoothing::WindfoilRgb`).
     pub lcd: bool,
 }
 

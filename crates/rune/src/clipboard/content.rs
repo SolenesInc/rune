@@ -43,11 +43,11 @@ impl ClipboardContent {
     pub fn with_html(mut self, html: impl Into<String>) -> Self { self.html = Some(Zeroizing::new(html.into())); self }
     /// Adds an RTF form, for apps that read RTF but not HTML.
     pub fn with_rtf(mut self, rtf: impl Into<String>) -> Self { self.rtf = Some(Zeroizing::new(rtf.into())); self }
-    /// Adds an image. macOS writes it as PNG and TIFF beside the other forms; Windows and Linux
-    /// write it alone (see [`Tx::copy_rich`](crate::Tx::copy_rich)); the web as PNG.
+    /// Adds an image. macOS writes it as PNG and TIFF beside the other forms; Linux writes it
+    /// alone (see [`Tx::copy_rich`](crate::Tx::copy_rich)); the web as PNG.
     pub fn with_image(mut self, image: ClipboardImage) -> Self { self.image = Some(image); self }
     /// Adds files, so a paste into a file manager copies them. macOS writes one file URL item
-    /// per file; Windows and Linux write the file list alone; the web skips them. Paths should
+    /// per file; Linux writes the file list alone; the web skips them. Paths should
     /// be absolute.
     pub fn with_files(mut self, files: impl IntoIterator<Item = PathBuf>) -> Self { self.files.extend(files); self }
     pub fn text(&self) -> &str { &self.text }
@@ -114,7 +114,7 @@ pub(crate) fn valid_image_size(width: u32, height: u32) -> bool {
 }
 
 /// An image as PNG bytes: one to copy, or one a paste found in whatever form the clipboard held
-/// it (TIFF on macOS, a DIB on Windows). Cheap to clone. Debug output shows only its size.
+/// it (TIFF on macOS). Cheap to clone. Debug output shows only its size.
 ///
 /// ```
 /// # use rune::clipboard::{ClipboardContent, ClipboardImage};
@@ -144,7 +144,7 @@ impl ClipboardImage {
         Self::from_png(crate::drag_out::encode_png(width, height, rgba)?)
     }
     /// Decodes the PNG to 8-bit RGBA, for clipboards that take pixels.
-    #[cfg(any(target_os = "windows", all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android")))))]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
     pub(crate) fn to_rgba(&self) -> Option<image::RgbaImage> {
         image::load_from_memory_with_format(&self.png, image::ImageFormat::Png).ok().map(|i| i.into_rgba8())
     }

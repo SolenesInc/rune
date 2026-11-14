@@ -1,8 +1,7 @@
 //! A text field's own menu (right-click, macOS control-click, the Menu key and Shift+F10), as a
 //! browser's menu over an editable field: a misspelled word's suggestions and Learn Spelling,
 //! then Cut, Copy, Paste and, off macOS, Select All, then the app's Spellcheck setting
-//! (`El::on_spellcheck`) and, where there are dictionaries to choose, its Spellcheck Languages
-//! (`El::on_spellcheck_languages`). A field with its own `on_secondary_press` shows that instead.
+//! (`El::on_spellcheck`). A field with its own `on_secondary_press` shows that instead.
 //! The items read the app's names for them (`rune::set_labels`) each time the menu opens.
 use super::input_click::hit;
 use super::*;
@@ -17,8 +16,6 @@ pub(crate) struct FieldMenu {
     word: Option<(usize, usize, String)>,
     suggestions: Vec<String>,
     toggle: Option<(bool, crate::el::WindowFocusFn)>,
-    /// The dictionaries checking text when the menu opened, and what keeps a new choice.
-    languages: Option<(Vec<String>, crate::el::LanguagesFn)>,
 }
 
 impl RuntimeCore {
@@ -34,7 +31,6 @@ impl RuntimeCore {
         let scroll = self.input_scroll.get(&path).copied().unwrap_or(0.0);
         let s = self.env.scale;
         let toggle = std::iter::successors(Some(i), |&j| self.nodes[j].parent).find_map(|j| self.nodes[j].handlers.on_spellcheck.clone());
-        let keep = std::iter::successors(Some(i), |&j| self.nodes[j].parent).find_map(|j| self.nodes[j].handlers.on_spellcheck_languages.clone());
         if self.focus.path() != Some(path.as_str()) {
             self.set_focus(Some(path.clone()), false);
         }
@@ -56,7 +52,7 @@ impl RuntimeCore {
         }
         let (a, b) = e.range();
         let word = spell
-            .then(|| crate::spell::misspelled(&e.text, None))
+            .then(|| crate::spell::misspelled(&e.text))
             .filter(|found| found.contains(&(a, b)))
             .map(|_| (a, b, e.text[a..b].to_owned()));
         let suggestions = word.as_ref().map(|w| crate::spell::suggest(&w.2)).unwrap_or_default();
@@ -76,31 +72,8 @@ impl RuntimeCore {
         if !cfg!(target_os = "macos") {
             menu = menu.item(PopupItem::new("select-all", label(Label::SelectAll)));
         }
-        let mut languages = None;
         if let Some((on, _)) = &toggle {
             menu = menu.separator().item(PopupItem::new("spellcheck", label(Label::Spellcheck)).checked(*on));
-            // Desktop's dictionary picker (spellcheck.ts), where the platform has dictionaries
-            // to choose: the last one stays, as the Spellcheck item is how to stop checking.
-            let available = crate::spell::available_languages();
-            if let Some(keep) = keep.filter(|_| !available.is_empty()) {
-                let current = crate::spell::languages();
-                let only = |tag: &String| current.len() == 1 && current[0] == *tag;
-                // Named in the app's language, in the order of those names, as Desktop's
-                // `nativeLanguageOptions` sorts its `Intl.DisplayNames`.
-                let locale = crate::labels::locale();
-                let name = |tag: &str| {
-                    crate::labels::named(Label::Language(tag))
-                        .or_else(|| locale.as_deref().and_then(|locale| crate::spell::language_name_in(tag, locale)))
-                        .unwrap_or_else(|| crate::spell::language_name(tag))
-                };
-                let mut named: Vec<(String, &String)> = available.iter().map(|tag| (name(tag), tag)).collect();
-                crate::spell::sort_names_in(&mut named, locale.as_deref().unwrap_or("en"));
-                let items = named.into_iter().map(|(name, tag)| {
-                    PopupItem::new(format!("language-{tag}"), name).checked(current.contains(tag)).enabled(!only(tag))
-                });
-                menu = menu.submenu_enabled(label(Label::SpellcheckLanguages), PopupMenu::new().items(items), *on);
-                languages = Some((current, keep));
-            }
         }
         one.commit = one.commit.instant();
         log_event!(self, "field menu {path}");
@@ -108,7 +81,7 @@ impl RuntimeCore {
             menu,
             anchor: PopupAnchor::Point(at.0, at.1),
             on_pick: Box::new(|_, _, _| {}),
-            field: Some(Box::new(FieldMenu { path, word, suggestions, toggle, languages })),
+            field: Some(Box::new(FieldMenu { path, word, suggestions, toggle })),
         });
         true
     }
@@ -139,17 +112,6 @@ impl RuntimeCore {
             "spellcheck" => {
                 if let Some((on, f)) = menu.toggle {
                     f(self.app.states(), !on, one);
-                }
-            }
-            id if id.starts_with("language-") => {
-                if let (Some((mut current, keep)), Some(tag)) = (menu.languages, id.strip_prefix("language-")) {
-                    match current.iter().position(|t| t == tag) {
-                        Some(n) => _ = current.remove(n),
-                        None => current.push(tag.to_owned()),
-                    }
-                    crate::spell::set_languages(&current);
-                    keep(self.app.states(), current, one);
-                    self.dirty = true;
                 }
             }
             id => {

@@ -1,6 +1,6 @@
 //! Where a file drag from another app is over a window. winit 0.30 reports file drags without
-//! a position on every platform (macOS has no `draggingUpdated:`, and Windows and X11 drop
-//! the point they're given), and no pointer moves arrive while the drag lasts. The host
+//! a position on every platform (macOS has no `draggingUpdated:`, and X11 drops the point
+//! it's given), and no pointer moves arrive while the drag lasts. The host
 //! samples the system pointer instead, when the drag enters, each frame while it's over the
 //! window, and when it drops.
 use winit::window::Window;
@@ -43,11 +43,6 @@ impl DropPointer {
             let y = if view.isFlipped() { p.y } else { view.bounds().size.height - p.y };
             return Some((p.x as f32, y as f32));
         }
-        #[cfg(target_os = "windows")]
-        {
-            let (x, y) = crate::platform::win32::pointer_position()?;
-            return screen_to_window(window, (x, y));
-        }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         {
             use x11rb::protocol::xproto::ConnectionExt as _;
@@ -62,7 +57,7 @@ impl DropPointer {
 
 /// A screen point in physical pixels, in `window`'s content in points. `None` when the window
 /// can't say where it is (Wayland, including an X11 connection under XWayland).
-#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
 fn screen_to_window(window: &Window, (x, y): (i32, i32)) -> Option<(f32, f32)> {
     let origin = window.inner_position().ok()?;
     let scale = window.scale_factor() as f32;

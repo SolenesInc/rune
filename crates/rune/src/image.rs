@@ -251,8 +251,7 @@ impl ImageCache {
     /// window's display scale). Handles are shared by (path, size, scale) rather than by
     /// content, so repeated calls never re-rasterize while a handle is alive. Lookup and
     /// rasterization run on the cache worker like any decode, so this is safe to call from a view.
-    /// Missing paths still get the system's generic document icon on macOS. Windows reads an
-    /// executable's or icon file's first icon; Linux reads a `.desktop` entry's `Icon=` from the
+    /// Missing paths still get the system's generic document icon on macOS. Linux reads a `.desktop` entry's `Icon=` from the
     /// hicolor theme or pixmaps (PNG or SVG), or an image file itself. Paths without an icon
     /// resolve to an error, so callers can draw their own fallback.
     pub fn app_icon_scaled(&self, path: impl AsRef<std::path::Path>, size_pt: f32, scale: f32) -> Image {
@@ -353,82 +352,16 @@ fn is_svg(bytes: &[u8]) -> bool {
 /// macOS: `NSWorkspace iconForFile:` drawn into a thread-local `NSBitmapImageRep` context.
 /// Neither needs the main thread: `NSWorkspace` is not main-actor isolated in the SDK, and
 /// AppKit allows drawing an `NSImage` into a bitmap context owned by a secondary thread.
-/// Windows: the file's first icon from `PrivateExtractIconsW` at `px` (at most 256).
 /// Linux: the closest theme size at or above `px`, or an SVG rasterized to fit `px`; a
 /// non-square pixmap keeps its aspect ratio.
 pub fn app_icon_rgba(path: &std::path::Path, px: u32) -> Result<(u32, u32, Vec<u8>), ImageError> {
     if px == 0 || px > 1024 { return Err(ImageError("app icon size must be 1..=1024 pixels".into())); }
     #[cfg(target_os = "macos")]
     { macos_icon(path, px) }
-    #[cfg(target_os = "windows")]
-    { windows_icon(path, px) }
     #[cfg(target_os = "linux")]
     { linux_icon(path, px) }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = path; Err(ImageError("app_icon is unsupported on this platform".into())) }
-}
-
-#[cfg(target_os = "windows")]
-fn windows_icon(path: &std::path::Path, px: u32) -> Result<(u32, u32, Vec<u8>), ImageError> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Graphics::Gdi::{
-        BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDIBits, GetObjectW,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO, PrivateExtractIconsW};
-    let err = |what: &str| ImageError(format!("{what}: {}", path.display()));
-    // PrivateExtractIconsW reads a fixed MAX_PATH buffer.
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
-    if wide.len() > 260 { return Err(err("icon path is longer than MAX_PATH")); }
-    let mut buffer = [0u16; 260];
-    buffer[..wide.len()].copy_from_slice(&wide);
-    let side = px.min(256) as i32;
-    let mut icon: HICON = std::ptr::null_mut();
-    let extracted = unsafe { PrivateExtractIconsW(buffer.as_ptr(), 0, side, side, &mut icon, std::ptr::null_mut(), 1, 0) };
-    if extracted == 0 || extracted == u32::MAX || icon.is_null() { return Err(err("no icon")); }
-    let mut info: ICONINFO = unsafe { std::mem::zeroed() };
-    if unsafe { GetIconInfo(icon, &mut info) } == 0 {
-        unsafe { DestroyIcon(icon) };
-        return Err(err("unreadable icon"));
-    }
-    let result = (|| {
-        if info.hbmColor.is_null() { return Err(err("monochrome icon")); }
-        let mut bitmap: BITMAP = unsafe { std::mem::zeroed() };
-        if unsafe { GetObjectW(info.hbmColor, std::mem::size_of::<BITMAP>() as i32, (&raw mut bitmap).cast()) } == 0 {
-            return Err(err("unreadable icon bitmap"));
-        }
-        let (w, h) = (bitmap.bmWidth, bitmap.bmHeight);
-        if w <= 0 || h <= 0 || w > 1024 || h > 1024 { return Err(err("icon bitmap has no pixels")); }
-        let mut header = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: -h, // negative: rows top-down
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB,
-                ..unsafe { std::mem::zeroed() }
-            },
-            ..unsafe { std::mem::zeroed() }
-        };
-        let mut pixels = vec![0u8; w as usize * h as usize * 4];
-        let dc = unsafe { CreateCompatibleDC(std::ptr::null_mut()) };
-        let rows = unsafe { GetDIBits(dc, info.hbmColor, 0, h as u32, pixels.as_mut_ptr().cast(), &mut header, DIB_RGB_COLORS) };
-        unsafe { DeleteDC(dc) };
-        if rows == 0 { return Err(err("unreadable icon pixels")); }
-        // BGRA with straight alpha; icons without an alpha channel leave it zero and draw opaque.
-        let opaque = pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0);
-        for p in pixels.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-            if opaque { p[3] = 255; }
-        }
-        Ok((w as u32, h as u32, pixels))
-    })();
-    unsafe {
-        if !info.hbmColor.is_null() { DeleteObject(info.hbmColor); }
-        if !info.hbmMask.is_null() { DeleteObject(info.hbmMask); }
-        DestroyIcon(icon);
-    }
-    result
 }
 
 #[cfg(target_os = "linux")]
@@ -919,16 +852,6 @@ mod tests {
         assert_eq!(freedesktop::icon_file(&entry("missing"), 48, &dirs), None);
         assert_eq!(freedesktop::icon_name("[Desktop Action x]\nIcon=no\n"), None, "only the main group counts");
         std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn app_icon_reads_an_executables_icon() {
-        let notepad = std::path::Path::new(r"C:\Windows\System32\notepad.exe");
-        if !notepad.is_file() { return; }
-        let (w, h, pixels) = app_icon_rgba(notepad, 48).unwrap();
-        assert_eq!((w, h), (48, 48));
-        assert!(pixels.as_chunks::<4>().0.iter().any(|p| p[3] > 0));
     }
 
     #[cfg(target_os = "macos")]

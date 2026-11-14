@@ -7,12 +7,6 @@ pub(super) fn composing<S: 'static>(comp: Option<&dyn Compositor<S>>) -> bool {
     comp.is_some_and(|c| c.animating())
 }
 
-/// Whether a compositor drew anything of its own last frame (`Compositor::draws_own`).
-#[cfg(target_os = "windows")]
-pub(super) fn composed<S: 'static>(comp: Option<&dyn Compositor<S>>) -> bool {
-    comp.is_some_and(|c| c.draws_own())
-}
-
 /// What an idle window's last frame drew. A timer or a key that wakes the window builds a frame
 /// before taking a drawable; when it would draw these same pixels, and a compositor would draw
 /// nothing new of its own (`Compositor::redraws`), nothing is acquired or presented.

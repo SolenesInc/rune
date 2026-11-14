@@ -8,19 +8,16 @@ use crate::Kit;
 const HEIGHT: f32 = 44.0;
 
 /// A titlebar the app draws: leading controls, a [`TabStrip`](super::TabStrip), and trailing
-/// controls, in a `.window_drag()` band that keeps clear of the traffic lights on macOS and
-/// the caption buttons on Windows.
+/// controls, in a `.window_drag()` band that keeps clear of the traffic lights on macOS.
 /// `WindowTitlebar::from_insets(cx.chrome_insets()).leading(menu).tabs(strip).build(&kit)`.
 ///
 /// Its buttons and tabs take their presses; the gaps between tabs, the bands above and below
-/// them and the empty stretch after the strip move the window, double-click to zoom it and, on
-/// Windows, right-click for the window menu.
+/// them and the empty stretch after the strip move the window and double-click to zoom it.
 pub struct WindowTitlebar {
     key: String,
     height: f32,
     top_pad: f32,
     leading_inset: f32,
-    trailing_inset: f32,
     leading_pad: f32,
     trailing_pad: f32,
     gap: f32,
@@ -40,7 +37,6 @@ impl WindowTitlebar {
             height: if insets.height > 0.0 { insets.height } else { HEIGHT },
             top_pad: 0.0,
             leading_inset: insets.leading,
-            trailing_inset: insets.trailing,
             leading_pad: 14.0,
             trailing_pad: 12.0,
             gap: 6.0,
@@ -65,7 +61,7 @@ impl WindowTitlebar {
         self.top_pad = points.max(0.0);
         self
     }
-    /// Points past the leading inset (default 14; 10 on macOS, 9 beside side tabs on Windows).
+    /// Points past the leading inset (default 14; 10 on macOS).
     pub fn leading_padding(mut self, points: f32) -> Self {
         self.leading_pad = points.max(0.0);
         self
@@ -113,8 +109,8 @@ impl WindowTitlebar {
         let slot = row().key(format!("{}-tabs", self.key)).grow(1.0).shrink().min_w(0.0).h_full().center_y().children(self.tabs);
         // Right to left the row's left padding is its start side: the insets keep their sides.
         let (left_inset, right_inset) = match self.direction {
-            Direction::Rtl => (self.trailing_inset, self.leading_inset),
-            Direction::Ltr | Direction::Auto => (self.leading_inset, self.trailing_inset),
+            Direction::Rtl => (0.0, self.leading_inset),
+            Direction::Ltr | Direction::Auto => (self.leading_inset, 0.0),
         };
         row()
             .key(self.key)

@@ -26,7 +26,7 @@ const TITLES: [&str; 12] = [
     "Keyboard navigation audit",
     "Sidebar resize behaviour",
     "Scroll jank in the list",
-    "Snap layouts on Windows",
+    "Snap window layouts",
 ];
 
 #[derive(Clone)]

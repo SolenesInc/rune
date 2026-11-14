@@ -84,7 +84,7 @@ return {
   and `require("./x")` would be beside the folder. `.luaurc` aliases apply, including the one
   above the folder (`Sources::parent_config`). Nothing outside the folder resolves; a cycle is an
   error naming the chain. A module that starts with `--!native` compiles to native code with
-  the `native-code` feature (Windows and Linux).
+  the `native-code` feature (Linux only).
 
 ## Errors
 
@@ -95,7 +95,7 @@ safepoint, and that script carries on with its next call.
 ## Platforms
 
 Scripts run in Luau's interpreter. The `native-code` feature adds Luau's native code generation
-for modules that open with `--!native`, on Windows and Linux (x86-64, arm64) only: enable it for
+for modules that open with `--!native`, on Linux (x86-64, arm64) only: enable it for
 those targets alone. It costs every VM a 4 MiB committed code block as the VM starts, whether a
 native module ever loads or not. On `wasm32-unknown-unknown`, Luau's C++ builds with
 [WASI SDK](https://github.com/WebAssembly/wasi-sdk) 33 or newer and WebAssembly exception

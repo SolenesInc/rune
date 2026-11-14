@@ -1,12 +1,11 @@
 //! Drives every short sequence of titlebar presses through the runtime and checks the press
-//! state, the request handed to the shell and the window menu against a literal transcription of
-//! the code before `TitlebarPress` replaced it: `action: Option<TitlebarAction>`, a `PressRun`
-//! for the pair, `secondary_on_region: bool` and `window_menu`.
+//! state and the request handed to the shell against a literal transcription of the code
+//! before `TitlebarPress` replaced it: `action: Option<TitlebarAction>` and a `PressRun` for
+//! the pair.
 //!
 //! The reference sees only the letters. It keeps its own run of presses (with `PressRun`'s count,
-//! as it was), its own band, its own secondary flag and its own request slot, and the runtime's
-//! answers are compared with it after every letter, on both a custom titlebar that draws caption
-//! buttons and one that draws none.
+//! as it was), its own band and its own request slot, and the runtime's answers are compared
+//! with it after every letter.
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -28,7 +27,7 @@ const REGION: (f32, f32) = (100.0, 50.0);
 const REGION_FAR: (f32, f32) = (140.0, 50.0);
 /// A press on the button inside the region.
 const BUTTON: (f32, f32) = (20.0, 50.0);
-/// A press on nothing, in the native band and clear of the caption buttons.
+/// A press on nothing, in the native band.
 const EMPTY_BAND: (f32, f32) = (20.0, 10.0);
 /// A press on nothing, below the band.
 const EMPTY_BELOW: (f32, f32) = (100.0, 160.0);
@@ -40,20 +39,16 @@ enum Letter {
     Button,
     EmptyBand,
     EmptyBelow,
-    SecDownRegion,
-    SecDownButton,
-    SecUpRegion,
-    SecUpButton,
+    SecDown,
+    SecUp,
     Clear,
     Tick,
     TakeAction,
-    TakeMenu,
 }
 
-const ALPHABET: [Letter; 13] = [
+const ALPHABET: [Letter; 10] = [
     Letter::Region, Letter::RegionFar, Letter::Button, Letter::EmptyBand, Letter::EmptyBelow,
-    Letter::SecDownRegion, Letter::SecDownButton, Letter::SecUpRegion, Letter::SecUpButton,
-    Letter::Clear, Letter::Tick, Letter::TakeAction, Letter::TakeMenu,
+    Letter::SecDown, Letter::SecUp, Letter::Clear, Letter::Tick, Letter::TakeAction,
 ];
 
 /// Whether a press at `point` is this press's second: `press_run::follows`, transcribed.
@@ -74,13 +69,11 @@ struct Dev {
     action: Option<TitlebarAction>,
     run: Option<Run>,
     native_band: f32,
-    secondary_on_region: bool,
-    window_menu: Option<WindowMenu>,
 }
 
 impl Dev {
     fn new(native_band: f32) -> Self {
-        Self { action: None, run: None, native_band, secondary_on_region: false, window_menu: None }
+        Self { action: None, run: None, native_band }
     }
 
     fn press_region(&mut self, now: f64, x: f32, y: f32, interval: f64) {
@@ -95,8 +88,6 @@ impl Dev {
 
     fn clear(&mut self) {
         self.run = None;
-        // differs from dev: a replaced stage no longer owns a secondary press either.
-        self.secondary_on_region = false;
     }
 
     /// `PressRun::press("", ..) >= 2`, after which the next press starts a new pair.
@@ -116,30 +107,19 @@ impl Dev {
         count >= 2
     }
 
-    fn secondary_down(&mut self, region: bool) {
-        self.secondary_on_region = region;
-    }
-
-    fn secondary_up(&mut self, region: bool) {
-        if std::mem::take(&mut self.secondary_on_region) && region { self.window_menu = Some(WindowMenu::Pointer); }
-    }
-
     fn take_action(&mut self) -> Option<TitlebarAction> { self.action.take() }
 
-    fn take_menu(&mut self) -> Option<WindowMenu> { self.window_menu.take() }
-
-    /// The press the next one would pair with, and a secondary press that still owes its release.
-    fn state(&self) -> (Option<(f64, (f32, f32))>, bool) {
-        (self.run.as_ref().map(|run| (run.at, run.point)), self.secondary_on_region)
+    /// The press the next one would pair with.
+    fn state(&self) -> Option<(f64, (f32, f32))> {
+        self.run.as_ref().map(|run| (run.at, run.point))
     }
 }
 
-/// The same two facts, read out of the branch's press.
-fn state_of(press: titlebar::TitlebarPress) -> (Option<(f64, (f32, f32))>, bool) {
+/// The same fact, read out of the branch's press.
+fn state_of(press: titlebar::TitlebarPress) -> Option<(f64, (f32, f32))> {
     match press {
-        titlebar::TitlebarPress::Rest => (None, false),
-        titlebar::TitlebarPress::Armed(pair) => (Some((pair.at, pair.point)), false),
-        titlebar::TitlebarPress::SecondaryOnRegion(pair) => (pair.map(|pair| (pair.at, pair.point)), true),
+        titlebar::TitlebarPress::Rest => None,
+        titlebar::TitlebarPress::Armed(pair) => Some((pair.at, pair.point)),
     }
 }
 
@@ -149,16 +129,13 @@ struct Walk {
     dev: Dev,
     /// The virtual clock both sides read, as the host's would tick on.
     now: f64,
-    /// Whether the custom titlebar draws caption buttons, which the secondary press needs.
-    caption: bool,
 }
 
 impl Walk {
-    fn new(caption: bool) -> Self {
+    fn new() -> Self {
         fn view(_: &(), _: &mut Cx<()>) -> El {
             col().size(200.0, 200.0)
-                // The band the system drags, and room for the caption buttons a custom titlebar
-                // draws over the top right.
+                // The band the system drags.
                 .child(el().key("top").size(200.0, 32.0))
                 .child(crate::el::row().key("titlebar").size(200.0, 40.0).window_drag()
                     .child(el().key("button").size(40.0, 40.0).on_press(|_: &mut ()| {})))
@@ -167,9 +144,8 @@ impl Walk {
         let mut rt = Runtime::new((), view, (200.0, 200.0), Env::new(true, 1.0));
         rt.double_click_interval = INTERVAL;
         rt.set_native_titlebar_band(BAND);
-        if caption { rt.set_caption(Some(crate::titlebar::Caption::new(BAND))); }
         rt.frame(0.0);
-        Self { rt, dev: Dev::new(BAND), now: 0.0, caption }
+        Self { rt, dev: Dev::new(BAND), now: 0.0 }
     }
 
     /// Whatever the last sequence left goes, without stepping: the next starts at `Rest`.
@@ -177,17 +153,10 @@ impl Walk {
         self.rt.cancel_pointer();
         self.rt.titlebar.press = titlebar::TitlebarPress::Rest;
         self.rt.titlebar.action = None;
-        self.rt.take_window_menu();
         self.rt.queue.retain(|_| false);
         self.rt.clock = 0.0;
         self.dev = Dev::new(BAND);
         self.now = 0.0;
-    }
-
-    /// Whether a secondary press at `point` lands on the bare region: a custom titlebar that
-    /// draws caption buttons, and a point inside its drag row clear of the button.
-    fn on_region(&self, point: (f32, f32)) -> bool {
-        self.caption && (point == REGION || point == REGION_FAR)
     }
 
     /// A primary press and release at `point`; `ask` is what the reference's press asked for,
@@ -208,18 +177,8 @@ impl Walk {
             Letter::Button => self.press(BUTTON, |_| {}),
             Letter::EmptyBand => self.press(EMPTY_BAND, |dev| dev.press_empty(now, EMPTY_BAND.0, EMPTY_BAND.1, INTERVAL)),
             Letter::EmptyBelow => self.press(EMPTY_BELOW, |dev| dev.press_empty(now, EMPTY_BELOW.0, EMPTY_BELOW.1, INTERVAL)),
-            Letter::SecDownRegion | Letter::SecDownButton => {
-                let point = if matches!(letter, Letter::SecDownRegion) { REGION } else { BUTTON };
-                self.rt.secondary_down(point.0, point.1);
-                let region = self.on_region(point);
-                self.dev.secondary_down(region);
-            }
-            Letter::SecUpRegion | Letter::SecUpButton => {
-                let point = if matches!(letter, Letter::SecUpRegion) { REGION } else { BUTTON };
-                self.rt.secondary_up(point.0, point.1);
-                let region = self.on_region(point);
-                self.dev.secondary_up(region);
-            }
+            Letter::SecDown => self.rt.secondary_down(REGION.0, REGION.1),
+            Letter::SecUp => self.rt.secondary_up(REGION.0, REGION.1),
             Letter::Clear => {
                 self.rt.titlebar.clear();
                 self.dev.clear();
@@ -231,10 +190,6 @@ impl Walk {
             Letter::TakeAction => {
                 let (ours, reference) = (self.rt.take_titlebar_action(), self.dev.take_action());
                 if ours != reference { return Err(format!("take action {ours:?}, dev {reference:?}")); }
-            }
-            Letter::TakeMenu => {
-                let (ours, reference) = (self.rt.take_window_menu(), self.dev.take_menu());
-                if ours != reference { return Err(format!("take menu {ours:?}, dev {reference:?}")); }
             }
         }
         self.compare(letter)
@@ -253,15 +208,12 @@ impl Walk {
 
 #[test]
 fn focus_loss_cancels_titlebar_press() {
-    let mut rt = Walk::new(true).rt;
+    let mut rt = Walk::new().rt;
     let (x, y) = REGION;
     rt.pointer_down(x, y);
-    rt.secondary_down(x, y);
     rt.window_focus(false);
     rt.window_focus(true);
     assert_eq!(rt.take_titlebar_action(), Some(TitlebarAction::Drag));
-    rt.secondary_up(x, y);
-    assert_eq!(rt.take_window_menu(), None);
     rt.pointer_down(x, y);
     assert_eq!(rt.take_titlebar_action(), Some(TitlebarAction::Drag));
     rt.pointer_down(x, y);
@@ -275,7 +227,7 @@ fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: 
     walk.reset();
     for &letter in sequence.iter() {
         if let Err(why) = walk.play(letter) {
-            *failure = Some(format!("cap={} {sequence:?}: {why}", walk.caption));
+            *failure = Some(format!("{sequence:?}: {why}"));
             return;
         }
     }
@@ -289,17 +241,17 @@ fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: 
 
 #[test]
 fn every_short_sequence_of_titlebar_presses_leaves_what_dev_left() {
-    let jobs: Vec<(bool, Letter)> = [false, true].into_iter().flat_map(|caption| ALPHABET.map(|letter| (caption, letter))).collect();
+    let jobs = ALPHABET;
     let next = AtomicUsize::new(0);
     let results = Mutex::new(Vec::new());
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
-                let mut walks = [Walk::new(false), Walk::new(true)];
+                let mut walk = Walk::new();
                 let (mut ran, mut failure) = (0, None);
-                while let Some(&(caption, letter)) = jobs.get(next.fetch_add(1, Ordering::Relaxed)) {
-                    visit(&mut walks[usize::from(caption)], &mut vec![letter], &mut ran, &mut failure);
+                while let Some(&letter) = jobs.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    visit(&mut walk, &mut vec![letter], &mut ran, &mut failure);
                 }
                 results.lock().unwrap().push((ran, failure));
             });

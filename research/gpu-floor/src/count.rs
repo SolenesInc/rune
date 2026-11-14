@@ -1,7 +1,5 @@
 //! Retired user and kernel instructions on the calling thread, from Linux `perf_event_open`, and
 //! the thread's CPU time.
-//! A Windows build makes the same syscalls directly, which works when it runs under Wine on
-//! x86-64 Linux and reads zero elsewhere.
 
 pub struct Counter {
     fds: [i64; 2],
@@ -17,22 +15,9 @@ unsafe fn sys(n: i64, a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
     unsafe { libc::syscall(n, a, b, c, d, e) }
 }
 
-#[cfg(all(windows, target_arch = "x86_64"))]
-unsafe fn sys(n: i64, a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
-    let ret: i64;
-    unsafe {
-        std::arch::asm!("syscall", inlateout("rax") n => ret, in("rdi") a, in("rsi") b, in("rdx") c,
-            in("r10") d, in("r8") e, lateout("rcx") _, lateout("r11") _, options(nostack));
-    }
-    ret
-}
-
 impl Counter {
     /// `None` when the kernel refuses (no PMU, `perf_event_paranoid` too high, not Linux).
     pub fn new() -> Option<Counter> {
-        if cfg!(windows) && std::env::var_os("WINE_PERF").is_none() {
-            return None;
-        }
         let open = |exclude_user: bool| {
             // perf_event_attr, version 8 (136 bytes): type HARDWARE, config INSTRUCTIONS.
             let mut attr = [0u64; 17];

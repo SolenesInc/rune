@@ -56,7 +56,6 @@ impl RuntimeCore {
             // The window's controls are in its points; the view's are over the zoom.
             titlebar_inset: self.titlebar_inset / self.zoom.k,
             chrome: self.titlebar.insets.zoomed(self.zoom.k),
-            caption: self.titlebar.caption,
             system_accent: self.system_accent,
             system_scroll_bars: self.scroll_bars.state,
             reduced_motion: self.reduced_motion,
@@ -167,23 +166,14 @@ impl Measurement<'_> {
     /// The app's view, or with the playground attached, the view it composes (the bar, or the
     /// playground around its stage).
     fn root_view(&self, cx: app_side::CxAny) -> (El, app_side::CxAny) {
-        let (root, cx) = self.app.root_view(cx, self.viewport);
-        // The Windows caption buttons go over everything the view drew, in a frame around it.
-        let Some(caption) = &self.caption else { return (root, cx) };
-        let symbol = cx.caption_color.unwrap_or(if self.env.system_dark { Color::WHITE } else { Color::BLACK });
-        // At the height this run sets (`Cx::titlebar_height`, a zoom's), in this commit: the
-        // window's frame takes it after, and drawing the old one first would spring the buttons
-        // to the new one, at launch and on every zoom step.
-        let height = cx.titlebar.height.or(cx.titlebar.titlebar.map(|t| t.height())).unwrap_or(caption.height);
-        let caption = crate::titlebar::Caption { height, ..*caption };
-        (crate::titlebar::frame(root, &caption, symbol, (self.env.scale, self.zoom), self.fit_height), cx)
+        self.app.root_view(cx, self.viewport)
     }
 
     /// What a memo scope hashes of the window's controls (`Cx::titlebar_inset`,
     /// `Cx::chrome_insets`), so memos that read them rebuild when they change.
-    pub(super) fn chrome_bits(&self) -> [u32; 4] {
-        let [leading, trailing, height] = self.chrome.bits();
-        [self.titlebar_inset.to_bits(), leading, trailing, height]
+    pub(super) fn chrome_bits(&self) -> [u32; 3] {
+        let [leading, height] = self.chrome.bits();
+        [self.titlebar_inset.to_bits(), leading, height]
     }
 
     pub(super) fn finish(self, tx: &Tx) -> Measured {
@@ -375,7 +365,6 @@ impl Measurement<'_> {
             env: this.env,
             titlebar_inset: this.titlebar_inset,
             chrome: this.chrome,
-            caption_color: None,
             titlebar: Default::default(),
             system_accent: this.system_accent,
             system_scroll_bars: this.system_scroll_bars,

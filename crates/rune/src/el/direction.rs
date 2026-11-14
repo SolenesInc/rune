@@ -60,8 +60,7 @@ impl El {
 
     /// Keeps this element where left-to-right layout puts it inside a right-to-left parent,
     /// unmirrored, as a CSS physical `left` or `right` inset stays put under `dir="rtl"`: room
-    /// kept clear of the window's own controls (Windows' caption buttons stay on the right,
-    /// macOS's traffic lights on the left), or a pin that must not swap sides. Its own subtree
+    /// kept clear of the window's own controls (macOS's traffic lights stay on the left), or a pin that must not swap sides. Its own subtree
     /// still lays out in its direction.
     pub fn unmirrored(mut self) -> Self {
         self.flags.set(ElFlags::UNMIRRORED, true);

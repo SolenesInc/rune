@@ -7,7 +7,7 @@
 use std::cell::{Cell, RefCell};
 use std::io::Write;
 
-use super::host_clock::{cpu_ns, now_ns, thread_cpu};
+use super::host_clock::{now_ns, thread_cpu};
 use super::profile::PHASES;
 
 thread_local! {
@@ -66,7 +66,7 @@ pub(crate) fn now() -> u64 { now_ns() }
 pub(crate) struct Stamp { pub(crate) wall: u64, pub(crate) cpu: u64 }
 
 impl Stamp {
-    pub(crate) fn now() -> Self { Stamp { wall: now_ns(), cpu: cpu_ns(thread_cpu()) as u64 } }
+    pub(crate) fn now() -> Self { Stamp { wall: now_ns(), cpu: thread_cpu() } }
 }
 
 /// One drawn frame's stage boundaries and counts.

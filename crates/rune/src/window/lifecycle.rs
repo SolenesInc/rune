@@ -197,7 +197,7 @@ impl<S: 'static> Host<S> {
         if let Some(after) = requests.quit {
             // Quitting from now on: a close later in this turn closes for the quit.
             // `Windows::exiting` carries out its effects.
-            let _ = crate::quit::send(crate::quit::Event::Start { ending: false, after });
+            let _ = crate::quit::send(crate::quit::Event::Start { after });
             // A tracking menu holds the event loop until it ends.
             self.popup.cancel(&mut self.rt);
             self.file_dialog.cancel(&mut self.rt);
@@ -301,11 +301,7 @@ impl<S: 'static> Host<S> {
         if self.rt.take_toggle_full_screen() && let Some(w) = self.shown_win() {
             chrome::toggle_full_screen(&w.window);
         }
-        if let Some(menu) = self.rt.take_window_menu() && let Some(w) = self.shown_win() {
-            chrome::window_menu(&w.window, menu, None);
-        }
-        // A new `Cx::set_titlebar` or `Cx::titlebar_height` resizes the caption buttons and the band
-        // the frame hit-tests, and moves the traffic lights.
+        // A new `Cx::set_titlebar` or `Cx::titlebar_height` moves the traffic lights.
         if self.rt.take_titlebar_changed() && let Some(w) = &self.win {
             sync_chrome(&mut self.rt, w, self.chrome, self.titlebar);
             if self.rt.stale() { w.request_redraw(); }
@@ -315,7 +311,7 @@ impl<S: 'static> Host<S> {
             match self.rt.shell_request.take() {
                 Some(shell @ (Shell::Quit | Shell::Relaunch)) => {
                     let after = shell.after().unwrap_or(crate::quit::After::Exit);
-                    let _ = crate::quit::send(crate::quit::Event::Start { ending: false, after });
+                    let _ = crate::quit::send(crate::quit::Event::Start { after });
                     self.popup.cancel(&mut self.rt);
                     self.file_dialog.cancel(&mut self.rt);
                     event_loop.exit();
@@ -364,7 +360,7 @@ impl<S: 'static> Host<S> {
         if let Some(trace) = &mut self.trace { trace.settle_presents(crate::frame::present_time::SETTLE); }
         if let Some(after) = self.rt.shell_request.take().and_then(Shell::after) {
             if after == crate::quit::After::Relaunch {
-                let _ = crate::quit::send(crate::quit::Event::Start { ending: false, after });
+                let _ = crate::quit::send(crate::quit::Event::Start { after });
             }
             self.popup.cancel(&mut self.rt);
             self.file_dialog.cancel(&mut self.rt);

@@ -11,8 +11,6 @@ pub(crate) use keys::{capital, us_char};
 mod service;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
 #[cfg(target_os = "linux")]
 mod x11;
 #[cfg(any(target_os = "linux", test))]
@@ -72,8 +70,6 @@ fn backend(wayland: bool, sink: Sink) -> Result<NativeBackend, ShortcutError> {
     let _ = wayland;
     #[cfg(target_os = "macos")]
     return Ok(Box::new(macos::Native::new(sink)?));
-    #[cfg(target_os = "windows")]
-    return Ok(Box::new(windows::Native::new(sink)?));
     #[cfg(target_os = "linux")]
     return if wayland {
         #[cfg(feature = "dbus")]
@@ -81,7 +77,7 @@ fn backend(wayland: bool, sink: Sink) -> Result<NativeBackend, ShortcutError> {
         #[cfg(not(feature = "dbus"))]
         { Err(ShortcutError::Unsupported) }
     } else { Ok(Box::new(x11::Native::new(sink)?)) };
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = sink; Err(ShortcutError::Unsupported) }
 }
 
@@ -94,7 +90,7 @@ fn system_owner(shortcut: &Shortcut) -> Option<String> {
 }
 
 // Keep native status mapping pure so tests can inject failures without grabbing the desktop.
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 fn native_status(code: i64, conflict: i64) -> Result<(), ShortcutError> {
     match code {
         0 => Ok(()),
@@ -123,7 +119,7 @@ impl<S: 'static> crate::App<S> {
 
 impl<S: 'static> crate::AppHandle<S> {
     /// Register a shortcut and return the actual backend result. On the app thread this is
-    /// immediate; on macOS/Windows other threads wait for the loop to process the request.
+    /// immediate; on macOS other threads wait for the loop to process the request.
     /// Do not join such callers from the app thread. Linux registrations can run off-thread;
     /// use a worker for Wayland consent dialogs to keep the UI responsive. Portal consent is
     /// bounded to two minutes and the user may choose a different trigger.
@@ -138,7 +134,7 @@ impl<S: 'static> crate::AppHandle<S> {
 
     /// Who holds `shortcut`, when Rune or the desktop can say: this App or another Rune App in
     /// the process (its title), or on macOS a system shortcut ("Spotlight", "Mission Control",
-    /// "macOS" for others). None when unknown, including other apps' Carbon, Win32, X11 and
+    /// "macOS" for others). None when unknown, including other apps' Carbon, X11 and
     /// portal grabs, before the app runs and for chords headless runs didn't register.
     /// Ask after `ShortcutError::Conflict` to name the owner in a message.
     pub fn shortcut_owner(&self, shortcut: &Shortcut) -> Option<String> {

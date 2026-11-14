@@ -9,11 +9,11 @@ pub(super) struct Fallback { key: KeyEvent, base: Option<char>, unhandled: Optio
 /// opens the window menu.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone)]
-pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>), WindowMenu }
+pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>) }
 
 impl std::fmt::Debug for Unhandled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu", Self::WindowMenu => "WindowMenu" })
+        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu" })
     }
 }
 
@@ -56,7 +56,7 @@ impl RuntimeCore {
         self.physical_then(event, Some(key), base, None);
     }
     /// Return whether the native host needs to request a frame for this event.
-    #[cfg_attr(any(target_os = "windows", target_os = "ios", target_os = "android"), allow(dead_code))]
+    #[cfg_attr(any(target_os = "ios", target_os = "android"), allow(dead_code))]
     pub(crate) fn physical_with_fallback(&mut self, event: PhysicalInput, key: Option<KeyEvent>) -> bool {
         self.physical_then(event, key, None, None)
     }
@@ -168,7 +168,6 @@ impl RuntimeCore {
                         Some(Unhandled::Close) => one.close_window(),
                         Some(Unhandled::Minimize) => one.minimize(),
                         Some(Unhandled::Menu(run)) => run(),
-                        Some(Unhandled::WindowMenu) => self.request_window_menu(),
                         None => {}
                     }
                     fold_live(&mut live, ran || fell, &one);

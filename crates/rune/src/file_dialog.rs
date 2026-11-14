@@ -108,11 +108,11 @@ impl FileDialogs {
     }
 }
 
-#[cfg(all(feature = "native-file-dialog", any(target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "native-file-dialog", target_os = "macos"))]
 async fn native(kind: FileDialogKind, options: FileDialogOptions) -> Result<Option<PathBuf>, FileDialogError> {
     rfd_show(rfd_dialog(options), kind).await
 }
-#[cfg(all(feature = "native-file-dialog", any(target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "native-file-dialog", target_os = "macos"))]
 fn rfd_dialog(options: FileDialogOptions) -> rfd::AsyncFileDialog {
     let mut dialog = rfd::AsyncFileDialog::new().set_title(options.title);
     if let Some(directory) = options.directory { dialog = dialog.set_directory(directory); }
@@ -121,7 +121,7 @@ fn rfd_dialog(options: FileDialogOptions) -> rfd::AsyncFileDialog {
     dialog
 }
 /// Calling this starts the dialog (on macOS, a sheet over the parent); awaiting reads it.
-#[cfg(all(feature = "native-file-dialog", any(target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "native-file-dialog", target_os = "macos"))]
 fn rfd_show(dialog: rfd::AsyncFileDialog, kind: FileDialogKind) -> impl Future<Output = Result<Option<PathBuf>, FileDialogError>> {
     let file: Pin<Box<dyn Future<Output = Option<rfd::FileHandle>> + Send>> = match kind {
         FileDialogKind::Open => Box::pin(dialog.pick_file()),
@@ -130,7 +130,7 @@ fn rfd_show(dialog: rfd::AsyncFileDialog, kind: FileDialogKind) -> impl Future<O
     };
     async move { Ok(file.await.map(|file| file.path().to_path_buf())) }
 }
-#[cfg(all(feature = "native-file-dialog", not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+#[cfg(all(feature = "native-file-dialog", not(any(target_os = "linux", target_os = "macos"))))]
 async fn native(_: FileDialogKind, _: FileDialogOptions) -> Result<Option<PathBuf>, FileDialogError> {
     Err(FileDialogError("native file dialogs aren't supported on this platform".into()))
 }
@@ -351,12 +351,12 @@ impl Drop for Presenter {
 }
 
 fn show_over(kind: FileDialogKind, options: FileDialogOptions, window: &winit::window::Window) -> Pin<Box<dyn Future<Output = FileDialogResult>>> {
-    #[cfg(all(feature = "native-file-dialog", any(target_os = "macos", target_os = "windows")))]
+    #[cfg(all(feature = "native-file-dialog", target_os = "macos"))]
     return Box::pin(rfd_show(rfd_dialog(options).set_parent(window), kind));
     // The portal's parent is the focused window (`window_focus`).
     #[cfg(all(feature = "native-file-dialog", target_os = "linux"))]
     return { let _ = window; Box::pin(native(kind, options)) };
-    #[cfg(all(feature = "native-file-dialog", not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+    #[cfg(all(feature = "native-file-dialog", not(any(target_os = "linux", target_os = "macos"))))]
     return { let _ = window; Box::pin(native(kind, options)) };
     #[cfg(not(feature = "native-file-dialog"))]
     {

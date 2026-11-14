@@ -1,5 +1,4 @@
-//! Latest-wins video frames. macOS imports IOSurface-backed CoreVideo buffers without a copy;
-//! Windows reads D3D shared textures from another process or API (`windows`).
+//! Latest-wins video frames. macOS imports IOSurface-backed CoreVideo buffers without a copy.
 //! CPU byte frames provide a portable source and a reference for headless verification.
 
 #[cfg(test)]
@@ -11,8 +10,6 @@ mod place_tests;
 pub mod macos;
 mod pipeline;
 pub(crate) mod place;
-#[cfg(target_os = "windows")]
-pub mod windows;
 pub use pipeline::SurfaceRenderer;
 pub(crate) use pipeline::Building;
 use std::sync::{Arc, Mutex};
@@ -64,11 +61,6 @@ pub(crate) enum Source {
     Bytes(ByteFrame),
     #[cfg(target_os = "macos")]
     PixelBuffer(macos::PixelBuffer),
-    #[cfg(target_os = "windows")]
-    Shared(windows::SharedTexture),
-    /// A video decoder's NV12 picture and the fence value that marks it written.
-    #[cfg(target_os = "windows")]
-    Decoded(Arc<windows::DecodedPlanes>, u64),
 }
 pub(crate) struct Frame {
     pub id: u64,
@@ -279,31 +271,6 @@ impl NativeSurface {
         self.replace(Frame { id: frame_id, source: Source::PixelBuffer(buffer), size, format, color, orient });
         Ok(())
     }
-    /// Shows the frame in a D3D shared texture (`windows::SharedTexture`), read on Rune's D3D12
-    /// device the first time it draws.
-    #[cfg(target_os = "windows")]
-    pub fn push_shared(&self, texture: windows::SharedTexture, frame_id: u64) -> Result<(), String> {
-        let size = texture.size();
-        if size.contains(&0) || size.iter().any(|v| *v > 16384) {
-            return Err("video size must be 1..16384".into());
-        }
-        self.replace(Frame {
-            id: frame_id,
-            size,
-            format: Format::Bgra,
-            color: ColorInfo::default(),
-            orient: Orient::UP,
-            source: Source::Shared(texture),
-        });
-        Ok(())
-    }
-    /// Shows a decoded NV12 picture (`video::windows`), sampled in place once its fence reaches
-    /// `value`.
-    #[cfg(target_os = "windows")]
-    pub(crate) fn push_decoded(&self, planes: Arc<windows::DecodedPlanes>, value: u64, frame_id: u64, format: Format, color: ColorInfo, orient: Orient) {
-        let size = planes.size;
-        self.replace(Frame { id: frame_id, size, format, color, orient, source: Source::Decoded(planes, value) });
-    }
     fn replace(&self, frame: Frame) {
         let (old, wake) = {
             let mut s = self.0.lock().unwrap();
@@ -314,7 +281,7 @@ impl NativeSurface {
             wake();
         }
     }
-    #[cfg(any(test, target_os = "windows"))]
+    #[cfg(test)]
     pub(crate) fn latest(&self) -> Option<Arc<Frame>> {
         self.0.lock().unwrap().latest.clone()
     }
@@ -342,17 +309,6 @@ impl NativeSurface {
             f(timing);
         }
     }
-}
-
-/// A device Rune made, `presented` when it draws a window: on Windows its adapter is the one
-/// shared-texture producers render on (`windows::adapter_luid`).
-pub(crate) fn note_device(device: &wgpu::Device, presented: bool) {
-    #[cfg(target_os = "windows")]
-    if presented {
-        windows::note_adapter(device);
-    }
-    #[cfg(not(target_os = "windows"))]
-    let _ = (device, presented);
 }
 
 /// A node's video draw in painter order. Geometry is already in device pixels.

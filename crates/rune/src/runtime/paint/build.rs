@@ -15,9 +15,7 @@ impl RuntimeCore {
                 }
             }
         }
-        if let Some(after) = self.text.begin_frame_pinned(pinned_pages) {
-            self.schedule_wakes([after]);
-        }
+        self.text.begin_frame_pinned(pinned_pages);
         self.marks.clear();
         self.icon_aprons.clear();
         self.surfaces.clear();

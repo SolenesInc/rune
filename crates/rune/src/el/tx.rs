@@ -419,8 +419,7 @@ impl Tx {
     }
 
     /// Take this window full screen after this handler, or bring it back, as macOS's green
-    /// button and Electron's `setFullScreen` do: on Windows and Linux a borderless window over
-    /// its display, which hides a custom titlebar's caption buttons (`Cx::chrome_insets`).
+    /// button and Electron's `setFullScreen` do: on Linux a borderless window over its display.
     /// Does nothing for overlays and headless runs.
     pub fn toggle_full_screen(&mut self) {
         self.toggle_full_screen = true;
@@ -469,7 +468,7 @@ impl Tx {
     }
 
     /// Show the file or folder at `path` selected in the system's file manager once this
-    /// handler's frame is done: Finder on macOS, Explorer on Windows; Linux opens the folder
+    /// handler's frame is done: Finder on macOS; Linux opens the folder
     /// that holds it. A path that isn't absolute, or holds control characters, is refused here
     /// and nothing opens. Headless runs and tests reveal nothing; read the requests with
     /// `Runtime::take_reveal_requests`.
@@ -492,7 +491,7 @@ impl Tx {
     /// per step. The top edge stays put and the window stays on its screen. The frame moves
     /// on this change's spring (`Tx::motion`, else `tok::motion::DEFAULT`), so content laid
     /// out against the window's edges follows it frame by frame; `Tx::instant` or reduced
-    /// motion jumps. On macOS it animates; Windows and Linux resize at once, and Wayland
+    /// motion jumps. On macOS it animates; Linux resizes at once, and Wayland
     /// can't keep the window on screen. Headless runs resize the viewport on the virtual
     /// clock, so `--tree` and scripts see it; their frames keep the launch canvas size.
     /// Overlays ignore it: use `OverlayHandle::resize`.

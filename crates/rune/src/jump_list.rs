@@ -1,17 +1,8 @@
-//! The app's jump list: what a right-click on its taskbar button (Windows) offers besides its
-//! windows, as tasks (New window) and named categories of recent things (Recent projects). Each
-//! entry starts the app's own executable with one argument, which a running app receives
-//! through `single_instance` like any second launch's arguments, so a link the app opens
-//! (`App::on_open_url`) is the natural argument.
-//!
-//! [`set_jump_list`] returns at once: the list is built and committed on a thread of its own
-//! (made on the first call, asleep in between), never on the UI thread, and a list equal to the
-//! last one does nothing. Entries the person removed from the list stay out of it, as Windows
-//! asks. On Windows the list belongs to the process's AppUserModelID, so call it after the app
-//! took its identity.
-//!
-//! macOS shows the same list as the Dock icon's menu (when the app's own menus put nothing in the
-//! Dock): a pick arrives as the link the app opens (`App::on_open_url`), in the running app.
+//! The app's jump list: what the Dock icon's menu (macOS) offers besides the app's windows, as
+//! tasks (New window) and named categories of recent things (Recent projects), when the app's
+//! own menus put nothing in the Dock. Each entry carries one argument, which arrives as the link
+//! the app opens (`App::on_open_url`) in the running app, so such a link is the natural
+//! argument.
 //! Linux's counterpart, the launcher's actions, are static in a `.desktop` file, not built here.
 
 /// One entry: a title, and the single argument the app starts with when it's picked.
@@ -64,14 +55,12 @@ impl JumpList {
     }
 }
 
-/// Replaces the app's jump list with `list`: on Windows off the UI thread, on macOS as the Dock
-/// menu (call it on the main thread). Does nothing elsewhere, and for headless runs.
+/// Replaces the app's jump list with `list`: on macOS the Dock menu (call it on the main
+/// thread). Does nothing elsewhere, and for headless runs.
 pub fn set_jump_list(list: JumpList) {
     if crate::is_headless() { return; }
-    #[cfg(target_os = "windows")]
-    crate::platform::win32::jump_list::set(list);
     #[cfg(target_os = "macos")]
     crate::native_menu::set_jump_menu(&list);
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(target_os = "macos"))]
     let _ = list;
 }

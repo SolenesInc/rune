@@ -16,7 +16,7 @@ import collections
 import re
 import sys
 
-DRIVER_OBJECTS = ("libvulkan_lvp", "libgallium", "libLLVM", "libvulkan.so", "libvkd3d", "d3d12", "dxgi")
+DRIVER_OBJECTS = ("libvulkan_lvp", "libgallium", "libLLVM", "libvulkan.so")
 CRATES = {
     "wgpu_core": "wgpu-core",
     "wgpu_hal": "wgpu-hal",
@@ -29,7 +29,6 @@ CRATES = {
     "floor": "probe",
     "wgpu_frame": "probe",
     "vk_floor": "probe",
-    "dx12_floor": "probe",
 }
 COMPONENTS = ("rune", "probe", "wgpu", "wgpu-core", "wgpu-hal", "driver", "platform", "other")
 

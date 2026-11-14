@@ -33,13 +33,7 @@ impl<S: 'static> AnyHost for Host<S> {
         // come.
         let shown = self.shown_win();
         let runtime = shown.map_or(runtime, |w| w.timer_frame.wait(runtime, now));
-        #[cfg(target_os = "windows")]
-        let handover = win.and_then(|w| w.handover_deadline(now));
-        #[cfg(not(target_os = "windows"))]
         let handover = None;
-        #[cfg(target_os = "windows")]
-        let covered_draw = win.and_then(|w| w.covered_draw.deadline());
-        #[cfg(not(target_os = "windows"))]
         let covered_draw = None;
         runtime.into_iter()
             .chain(handover)
@@ -54,7 +48,7 @@ impl<S: 'static> AnyHost for Host<S> {
             .min()
     }
 
-    fn turn_ends(&mut self, event_loop: &ActiveEventLoop, now: Instant) { self.in_turn(|h| h.turn_ends_in_turn(event_loop, now)) }
+    fn turn_ends(&mut self) { self.in_turn(Self::turn_ends_in_turn) }
 
     // What reaches the app's state runs in its turn scope (`App::turn_scope`).
     fn terminate(&mut self) { self.in_turn(Self::terminate_in_turn) }
@@ -85,22 +79,12 @@ pub(super) enum Turn {
 }
 
 impl<S: 'static> Host<S> {
-    /// The loop's turn ends: the frame the window wants next is asked for, and on Windows a
-    /// window whose paint the system keeps putting off behind another's paints now (`Redraw`).
-    fn turn_ends_in_turn(&mut self, event_loop: &ActiveEventLoop, now: Instant) {
+    /// The loop's turn ends: the frame the window wants next is asked for (`Redraw`).
+    fn turn_ends_in_turn(&mut self) {
         let Some(w) = &self.win else { return };
-        let paints = cfg!(target_os = "windows") && self.life.uncovered() && !w.minimized();
-        let (next, effect) = w.redraw.get().step(RedrawEvent::TurnEnds { now, paints });
+        let (next, effect) = w.redraw.get().step(RedrawEvent::TurnEnds);
         w.redraw.set(next);
-        match effect {
-            RedrawEffect::None => {}
-            RedrawEffect::Request => w.window.request_redraw(),
-            RedrawEffect::PaintNow => {
-                #[cfg(target_os = "windows")]
-                crate::platform::win32::drop_paint(&w.window);
-                self.paint(event_loop);
-            }
-        }
+        if effect == RedrawEffect::Request { w.window.request_redraw(); }
     }
 
     /// Runs `f` inside the app's turn scope, entered once however deep the turn's calls go.
@@ -168,15 +152,6 @@ impl<S: 'static> Host<S> {
         if let Some(shadow) = self.win.as_ref().and_then(|w| w.native.shadow.as_ref()) { shadow.turn(); }
         self.meter.turn(matches!(cause, StartCause::ResumeTimeReached { .. } | StartCause::Poll), crate::frame::surface_stats::slept(cause));
         if matches!(cause, StartCause::ResumeTimeReached { .. }) && let Some(w) = &self.win { w.cursor.reassert(); }
-        #[cfg(target_os = "windows")]
-        if let Some(w) = &self.win { w.native.cloak.lift_if_due(&w.window, Instant::now()); }
-        #[cfg(target_os = "windows")]
-        self.watch_handover(Instant::now());
-        #[cfg(target_os = "windows")]
-        if let Some(w) = &mut self.win && w.covered_draw.due(Instant::now()) {
-            w.covered_draw = w.covered_draw.step(CoveredDrawEvent::Due);
-            w.request_redraw();
-        }
         if let Some(w) = &mut self.win && let Some((retry, until)) = w.first_frame.deadline() && retry <= Instant::now() {
             if until <= Instant::now() {
                 let notified = w.first_frame.notified();
@@ -272,11 +247,6 @@ impl<S: 'static> Host<S> {
         self.hidden_input(event_loop);
         self.a11y_turn();
         // The first idle turn after a CPU-drawn window's first frame starts its GPU.
-        #[cfg(target_os = "windows")]
-        {
-            self.cpu_idle();
-            self.a11y_after_frame();
-        }
         false
     }
 

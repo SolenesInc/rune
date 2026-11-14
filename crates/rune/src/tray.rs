@@ -1,5 +1,5 @@
 //! A system tray icon with a flat menu: StatusNotifierItem and `com.canonical.dbusmenu` over
-//! zbus on Linux, `Shell_NotifyIcon` on its own message-only window on Windows. Each tray runs
+//! zbus on Linux. Each tray runs
 //! on its own thread, so it needs no event loop of the app's and answers while the app's window
 //! is closed. A primary click sends [`TrayEvent::Activate`]; a secondary click opens the menu,
 //! whose picks send [`TrayEvent::Menu`]. Dropping the [`Tray`] removes the icon.
@@ -7,14 +7,11 @@
 //! Linux shows the icon only where a tray host runs (KDE, waybar, most bars; GNOME needs an
 //! extension). Without one, [`Tray::new`] still succeeds and the icon appears once a host
 //! starts. The Linux backend needs the default `dbus` feature. macOS isn't supported yet.
-#[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+#[cfg(all(target_os = "linux", feature = "dbus"))]
 use std::sync::Arc;
 
 #[cfg(all(target_os = "linux", feature = "dbus"))]
 #[path = "tray/sni.rs"]
-mod native;
-#[cfg(target_os = "windows")]
-#[path = "tray/win32.rs"]
 mod native;
 
 /// The icon as straight (not premultiplied) RGBA rows, `width × height × 4` bytes.
@@ -82,11 +79,11 @@ impl std::fmt::Display for TrayError {
 impl std::error::Error for TrayError {}
 
 /// Runs on the tray's thread; keep it short and hand work to the app.
-#[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+#[cfg(all(target_os = "linux", feature = "dbus"))]
 pub(crate) type Handler = Arc<dyn Fn(TrayEvent) + Send + Sync>;
 
 pub struct Tray {
-    #[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+    #[cfg(all(target_os = "linux", feature = "dbus"))]
     native: native::Native,
 }
 
@@ -95,8 +92,6 @@ pub struct Tray {
 /// status item (macOS) ends when the connection does.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn remove_all() {
-    #[cfg(target_os = "windows")]
-    native::remove_all();
 }
 
 impl Tray {
@@ -104,21 +99,21 @@ impl Tray {
         if spec.icon.rgba.len() != spec.icon.width as usize * spec.icon.height as usize * 4 {
             return Err(TrayError::Backend("tray icon size doesn't match its pixels".into()));
         }
-        #[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+        #[cfg(all(target_os = "linux", feature = "dbus"))]
         { native::Native::new(spec, Arc::new(on_event)).map(|native| Self { native }) }
-        #[cfg(not(any(all(target_os = "linux", feature = "dbus"), target_os = "windows")))]
+        #[cfg(not(all(target_os = "linux", feature = "dbus")))]
         { let _ = (spec, on_event); Err(TrayError::Unsupported) }
     }
     pub fn set_menu(&self, menu: Vec<TrayItem>) {
-        #[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+        #[cfg(all(target_os = "linux", feature = "dbus"))]
         self.native.set_menu(menu);
-        #[cfg(not(any(all(target_os = "linux", feature = "dbus"), target_os = "windows")))]
+        #[cfg(not(all(target_os = "linux", feature = "dbus")))]
         let _ = menu;
     }
     pub fn set_tooltip(&self, tooltip: impl Into<String>) {
-        #[cfg(any(all(target_os = "linux", feature = "dbus"), target_os = "windows"))]
+        #[cfg(all(target_os = "linux", feature = "dbus"))]
         self.native.set_tooltip(tooltip.into());
-        #[cfg(not(any(all(target_os = "linux", feature = "dbus"), target_os = "windows")))]
+        #[cfg(not(all(target_os = "linux", feature = "dbus")))]
         let _ = tooltip;
     }
 }
