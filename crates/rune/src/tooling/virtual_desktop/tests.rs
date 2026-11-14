@@ -169,6 +169,6 @@ fn a_finished_window_runs_its_close_hook_once() {
     let desktop = VirtualDesktop::from_script(None, 2.0).unwrap();
     w.rt.update(|_, tx| tx.close_window());
     w.drain(&desktop, 0.0);
-    assert_eq!(w.rt.state, 1);
+    assert_eq!(*w.rt.state(), 1);
     assert!(!w.visible() && !w.reopen_candidate().reopenable);
 }

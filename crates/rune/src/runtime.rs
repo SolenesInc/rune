@@ -36,14 +36,6 @@ use crate::text::{Deco, PaintedDeco, GlyphQuad, Ink, TextFlow, TextLayout, TextS
 use crate::tok::motion;
 use event_log::log_event;
 
-/// The states a handler call can reach: the app's (`$self.state`), or while the playground is
-/// attached, its stage's beside its own controls.
-macro_rules! states {
-    ($self:ident) => {
-        crate::runtime::playground_host::handler_states(&mut $self.state, &mut $self.playground)
-    };
-}
-
 #[inline(always)]
 pub(crate) fn handler_state<S: 'static>(state: &mut S) -> &mut dyn Any {
     #[cfg(feature = "hot")]
@@ -221,6 +213,10 @@ mod secondary;
 pub(crate) mod field_menu;
 #[path = "runtime/input/app_ime.rs"]
 mod app_ime;
+#[path = "runtime/app_side.rs"]
+mod app_side;
+pub use app_side::{Runtime, Typed};
+pub(crate) use app_side::AppSide;
 #[path = "runtime/input/press_run.rs"]
 mod press_run;
 #[path = "runtime/input/press_repeat.rs"]
@@ -409,19 +405,14 @@ use tracks::{SCROLL_DECAY, mark_ancestors, scroll_offsets, word_starts};
 mod commit;
 use commit::{Measured, Measurement, Pass, unwrapped_width};
 
-pub struct Runtime<S: 'static> {
-    pub state: S,
-    pub(crate) on_focus: Option<fn(&mut S, bool, &mut Tx)>,
-    /// `App::on_modifiers`, and the modifiers it last heard.
-    pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
+/// Everything a window's runtime does that doesn't depend on the app's state type. The typed
+/// [`Runtime`] wraps it; the app's state, view and hooks sit behind `app`.
+pub struct RuntimeCore {
+    pub(crate) app: Box<dyn app_side::AppSide>,
+    /// The modifiers `App::on_modifiers` last heard.
     mods_heard: crate::Mods,
-    /// `App::on_visibility`.
-    pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
-    /// `App::on_ime` and the composition it has open.
-    pub(crate) app_ime: app_ime::AppIme<S>,
-    view: fn(&S, &mut Cx<S>) -> El,
-    /// `App::playground`, when this run shows it.
-    pub(crate) playground: Option<Box<crate::playground::Live<S>>>,
+    /// The composition `App::on_ime` has open.
+    pub(crate) app_ime: app_ime::AppIme,
     #[cfg(feature = "hot")]
     pub(crate) hot: Option<crate::hot::Session>,
     pub text: TextSystem,
@@ -453,8 +444,6 @@ pub struct Runtime<S: 'static> {
     /// The last view's `Cx::foreground` and `Cx::focus_ring`, for rows built after it and the
     /// rings painted until the next.
     defaults: cx::ViewDefaults,
-    /// Called at the start of every frame with the clock; return true when state changed (new data).
-    pub poll: Option<fn(&mut S, f64, &mut Tx) -> bool>,
     /// Seconds since the first frame, unscaled (virtual when headless).
     pub clock: f64,
     wake_deadlines: Vec<f64>,
@@ -465,10 +454,6 @@ pub struct Runtime<S: 'static> {
     pub wall_start: Option<crate::time::Instant>,
     #[cfg(test)]
     pub(crate) test_clock: Option<crate::Clock>,
-    /// Called for keys unhandled by the focused control; return true to consume it.
-    pub on_key: Option<fn(&mut S, &KeyEvent, &mut Tx) -> bool>,
-    /// `App::on_field_key`: keys a focused text field would get, offered first.
-    pub on_field_key: Option<fn(&mut S, &KeyEvent, &mut Tx) -> bool>,
     pub(crate) nodes: Vec<Node>,
     /// The last commit's node buffer, emptied, for the next flatten to fill: an app of a few
     /// thousand elements otherwise maps and faults in megabytes every commit.
@@ -848,20 +833,14 @@ pub struct Runtime<S: 'static> {
     a11y: Option<Box<a11y_tree::A11yTree>>,
 }
 
-impl<S: 'static> Runtime<S> {
-    pub fn new(state: S, view: fn(&S, &mut Cx<S>) -> El, viewport: (f32, f32), env: Env) -> Self {
-        Self::with_text(state, view, viewport, env, TextSystem::default())
-    }
-
-    pub fn with_text(state: S, view: fn(&S, &mut Cx<S>) -> El, viewport: (f32, f32), env: Env, text: TextSystem) -> Self {
+impl RuntimeCore {
+    pub(crate) fn with_app(app: Box<dyn app_side::AppSide>, viewport: (f32, f32), env: Env, text: TextSystem) -> Self {
         let mut scene = Scene::new();
         scene.set_pixel_scale(env.scale);
         crate::recorder::headless_reset();
         crate::video::headless_reset();
-        Runtime {
-            state,
-            view,
-            playground: None,
+        RuntimeCore {
+            app,
             #[cfg(feature = "hot")]
             hot: None,
             text,
@@ -883,7 +862,6 @@ impl<S: 'static> Runtime<S> {
             scroll_bars: Default::default(),
             time_scale: 1.0,
             defaults: Default::default(),
-            poll: None,
             clock: 0.0,
             wake_deadlines: Vec::new(),
             timer_wake: Default::default(),
@@ -892,8 +870,6 @@ impl<S: 'static> Runtime<S> {
             wall_start: None,
             #[cfg(test)]
             test_clock: None,
-            on_key: None,
-            on_field_key: None,
             nodes: Vec::new(),
             spare_nodes: Vec::new(),
             apply_scratch: Default::default(),
@@ -1081,10 +1057,7 @@ impl<S: 'static> Runtime<S> {
             window_focused: None,
             spell_watch: None,
             keys_lost: false,
-            on_focus: None,
-            on_mods: None,
             mods_heard: Default::default(),
-            on_visibility: None,
             app_ime: Default::default(),
             live_subscriptions: Vec::new(),
             live_only_skips: 0,

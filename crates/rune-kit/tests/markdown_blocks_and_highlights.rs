@@ -28,7 +28,7 @@ fn caller_block_keys_insert_remove_edit_and_retarget_mid_flight() {
     assert!(y_b0 > 20.0);
 
     // 1. Insert a block at the top: old blocks keep their keys and spring down; new block fades in.
-    rt.state = ("Intro\n\nAlpha\n\nBeta".to_owned(), vec!["p-intro", "p-a", "p-b"]);
+    *rt.state_mut() = ("Intro\n\nAlpha\n\nBeta".to_owned(), vec!["p-intro", "p-a", "p-b"]);
     rt.invalidate();
     rt.frame(0.0);
     rt.frame(1.0 / 60.0);
@@ -47,7 +47,7 @@ fn caller_block_keys_insert_remove_edit_and_retarget_mid_flight() {
     assert!((y_a_landed - y_b0).abs() < 0.5 && y_b_landed > y_a_landed);
 
     // 2. Remove the middle block: it stays mounted while exiting and the trailing sibling springs up.
-    rt.state = ("Intro\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
+    *rt.state_mut() = ("Intro\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
     rt.invalidate();
     rt.frame(0.0);
     rt.frame(1.0 / 60.0);
@@ -64,7 +64,7 @@ fn caller_block_keys_insert_remove_edit_and_retarget_mid_flight() {
     // 3. Edit a block in place and retarget mid-flight: height and sibling y continue smoothly without jumping.
     let h0 = by_key(&rt, "p-intro").rect[3];
     let y0 = by_key(&rt, "p-b").rect[1];
-    rt.state = ("Intro line one  \nline two  \nline three\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
+    *rt.state_mut() = ("Intro line one  \nline two  \nline three\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
     rt.invalidate();
     rt.frame(0.0);
     for _ in 0..3 {
@@ -76,7 +76,7 @@ fn caller_block_keys_insert_remove_edit_and_retarget_mid_flight() {
     assert!(h_mid < by_key(&rt, "p-intro").target[3] && y_mid < by_key(&rt, "p-b").target[1],
         "editing animates toward the larger height and sibling position, not straight to them");
 
-    rt.state = ("Intro line one  \nline two  \nline three  \nline four  \nline five\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
+    *rt.state_mut() = ("Intro line one  \nline two  \nline three  \nline four  \nline five\n\nBeta".to_owned(), vec!["p-intro", "p-b"]);
     rt.invalidate();
     rt.frame(0.0);
     let h_retarget = by_key(&rt, "p-intro").rect[3];
@@ -103,7 +103,7 @@ fn block_keys_fallback_nested_and_selectable() {
     assert!(paths.iter().any(|p| p.ends_with("/b2")), "missing 3rd key falls back to b2: {paths:?}");
 
     // Extra keys, empty keys and duplicates never collide or panic.
-    rt.state = vec!["", "dup", "dup", "extra-1", "extra-2"];
+    *rt.state_mut() = vec!["", "dup", "dup", "extra-1", "extra-2"];
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let top_keys: Vec<_> = rt.elements().into_iter().filter(|e| !e.exiting && e.path.matches('/').count() == 2).filter_map(|e| e.key).collect();
@@ -138,7 +138,7 @@ fn source_keys_do_not_shift_when_parsers_disagree() {
     assert_eq!(by_key(&rt, "after").text.as_deref(), Some("After"));
     assert!(rt.elements().iter().all(|e| !matches!(e.key.as_deref(), Some("second-item" | "html"))));
     // Appending a partial block takes the incremental parse path; absolute offsets stay valid.
-    rt.state.push_str(" grows\n\npartial");
+    rt.state_mut().push_str(" grows\n\npartial");
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     assert_eq!(by_key(&rt, "after").text.as_deref(), Some("After grows"));
@@ -155,17 +155,17 @@ fn nested_tasks_report_exact_source_marker_offsets_and_tab_skips_read_only() {
     // Space without focus does nothing. Tab walks document order, including nested tasks.
     rt.key(rune::KeyEvent { key: rune::Key::Text(" ".into()), mods: Default::default() });
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.toggled.is_empty());
+    assert!(rt.state().toggled.is_empty());
     for (n, (marker, key, checked)) in [("[ ] nested", "b1", true), ("[x] outer", "b1", false), ("[ ] last", "b3", true)].into_iter().enumerate() {
         rt.key(rune::KeyEvent { key: rune::Key::Tab, mods: Default::default() });
         rt.frame(1.0 / 60.0);
         rt.key(rune::KeyEvent { key: rune::Key::Text(" ".into()), mods: Default::default() });
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.toggled.len(), n + 1);
-        assert_eq!(rt.state.toggled[n], (key.to_owned(), src.find(marker).unwrap(), checked));
+        assert_eq!(rt.state().toggled.len(), n + 1);
+        assert_eq!(rt.state().toggled[n], (key.to_owned(), src.find(marker).unwrap(), checked));
     }
-    rt.state.read_only = true;
-    rt.state.toggled.clear();
+    rt.state_mut().read_only = true;
+    rt.state_mut().toggled.clear();
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     for _ in 0..4 {
@@ -173,7 +173,7 @@ fn nested_tasks_report_exact_source_marker_offsets_and_tab_skips_read_only() {
         rt.key(rune::KeyEvent { key: rune::Key::Text(" ".into()), mods: Default::default() });
         rt.frame(1.0 / 60.0);
     }
-    assert!(rt.state.toggled.is_empty());
+    assert!(rt.state().toggled.is_empty());
     assert!(rt.elements().iter().filter(|e| e.role == "checkbox").all(|e| !e.focusable));
 }
 
@@ -263,35 +263,35 @@ fn task_lists_render_checkboxes_press_space_and_respect_read_only() {
 
     // Each callback identifies the source marker, not an index among tasks or list items.
     click(&mut rt, boxes[0].rect);
-    assert_eq!(rt.state.toggled, [("checklist".to_owned(), 9, true)]);
+    assert_eq!(rt.state().toggled, [("checklist".to_owned(), 9, true)]);
     assert_eq!(rt.copy_request.as_deref(), Some("checklist:9:true"));
 
     click(&mut rt, boxes[1].rect);
-    assert_eq!(rt.state.toggled, [("checklist".to_owned(), 9, true), ("checklist".to_owned(), 17, false)]);
+    assert_eq!(rt.state().toggled, [("checklist".to_owned(), 9, true), ("checklist".to_owned(), 17, false)]);
     assert_eq!(rt.copy_request.as_deref(), Some("checklist:17:false"));
 
     // Space on the focused task checkbox toggles it through the same handler.
     rt.key(rune::KeyEvent { key: rune::Key::Text(" ".into()), mods: Default::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.toggled.last(), Some(&("checklist".to_owned(), 17, false)));
-    assert_eq!(rt.state.toggled.len(), 3, "Space fires once on the focused checkbox");
+    assert_eq!(rt.state().toggled.last(), Some(&("checklist".to_owned(), 17, false)));
+    assert_eq!(rt.state().toggled.len(), 3, "Space fires once on the focused checkbox");
     rt.key(rune::KeyEvent { key: rune::Key::Enter, mods: Default::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.toggled.len(), 3, "checkboxes toggle with Space, not Enter");
+    assert_eq!(rt.state().toggled.len(), 3, "checkboxes toggle with Space, not Enter");
 
     // Without caller block_keys, on_task receives the default b{index} key.
-    rt.state.keys.clear();
-    rt.state.toggled.clear();
+    rt.state_mut().keys.clear();
+    rt.state_mut().toggled.clear();
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     click(&mut rt, boxes[0].rect);
-    assert_eq!(rt.state.toggled, [("b1".to_owned(), 9, true)]);
+    assert_eq!(rt.state().toggled, [("b1".to_owned(), 9, true)]);
 
     // `.tasks_read_only()` and missing `on_task` keep role/label/checked state but ignore presses and Space.
     for (handled, read_only) in [(true, true), (false, false)] {
-        rt.state.handled = handled;
-        rt.state.read_only = read_only;
-        rt.state.toggled.clear();
+        rt.state_mut().handled = handled;
+        rt.state_mut().read_only = read_only;
+        rt.state_mut().toggled.clear();
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         let ro_boxes: Vec<_> = rt.elements().into_iter().filter(|e| !e.exiting && e.role == "checkbox").collect();
@@ -301,7 +301,7 @@ fn task_lists_render_checkboxes_press_space_and_respect_read_only() {
         click(&mut rt, ro_boxes[0].rect);
         rt.key(rune::KeyEvent { key: rune::Key::Text(" ".into()), mods: Default::default() });
         rt.frame(1.0 / 60.0);
-        assert!(rt.state.toggled.is_empty(), "read-only tasks must not fire: handled={handled} read_only={read_only}");
+        assert!(rt.state().toggled.is_empty(), "read-only tasks must not fire: handled={handled} read_only={read_only}");
     }
 }
 
@@ -396,9 +396,9 @@ fn bare_urls_autolink_with_gfm_punctuation_rules_and_respect_opt_out() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["http://www.example.org/hello"]);
+    assert_eq!(rt.state().opened, ["http://www.example.org/hello"]);
 
-    rt.state.autolink = false;
+    rt.state_mut().autolink = false;
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     assert!(rt.find("http://www.example.org/hello").is_none(), "autolink(false) disables bare URL links");
@@ -628,14 +628,14 @@ fn review_highlight_mapping_edges_and_streaming() {
     let mut rt = Runtime::new((String::new(), marks), view, (480.0, 200.0), Env::new(true, 1.0));
     for end in 0..=src.len() {
         if !src.is_char_boundary(end) { continue; }
-        rt.state.0 = src[..end].into();
+        rt.state_mut().0 = src[..end].into();
         rt.invalidate();
         rt.frame(0.0);
         for e in rt.elements().into_iter().filter(|e| e.role == "mark") {
             assert_ne!(e.key.as_deref(), Some("md-mark-2"));
         }
     }
-    rt.state.1 = vec![(start..start + 6, Highlight::current().fg(rune::Color::WHITE))];
+    rt.state_mut().1 = vec![(start..start + 6, Highlight::current().fg(rune::Color::WHITE))];
     rt.invalidate();
     rt.frame(0.0);
     assert_eq!(rt.stats.shaped, 0, "changing highlights including foreground must reuse the shape cache");
@@ -661,7 +661,7 @@ fn review_marks_do_not_wrap_large_offsets_or_intercept_links() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.opened, ["https://example.org/path"]);
+    assert_eq!(rt.state().opened, ["https://example.org/path"]);
 }
 
 #[test]
@@ -685,7 +685,7 @@ fn review_two_thousand_matches_add_no_layout_nodes_or_shapes() {
     let mut rt = Runtime::new((src, false), view, (480.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0);
     let nodes = rt.stats.layout_nodes;
-    rt.state.1 = true;
+    rt.state_mut().1 = true;
     rt.invalidate();
     rt.frame(0.0);
     assert_eq!(rt.stats.shaped, 0);

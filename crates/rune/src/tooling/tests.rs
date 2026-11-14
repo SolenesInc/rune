@@ -9,14 +9,14 @@ fn trace_annotations_from_hidden_poll_survive_idle_catch_up_once() {
     });
     rt.scene.set_trace(Some(trace));
     rt.trace_channels = Some(Default::default());
-    rt.poll = Some(|pending, _, tx| {
+    rt.app_mut().poll = Some(|pending, _, tx| {
         if !std::mem::take(pending) { return false; }
         tx.trace_event("hidden:ready");
         tx.trace_channel("shell.width", "position", 40.0);
         true
     });
     rt.frame(0.0);
-    rt.state = true;
+    *rt.state_mut() = true;
     let commits = rt.stats.commits;
     rt.poll_hidden();
     assert_eq!(rt.stats.commits, commits, "hidden polling must not lay out or render");
@@ -873,7 +873,7 @@ fn tree_and_trace_serialize_effects_and_remove_channels() {
     {
         let mut trace = Trace::open(&path, rt.viewport, 60.0, 1.0);
         trace.frame(&mut rt, 0.0, 0.0);
-        rt.state = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+        *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
         let tree = tree_json(&rt, 0.05);
         let pill = tree["elements"].as_array().unwrap().iter().find(|e| e["key"] == "pill").unwrap();
         assert_eq!(pill["exiting"], true);
@@ -908,7 +908,7 @@ fn trace_all_names_unkeyed_elements_and_reports_what_animated() {
             let mut trace = Trace::open(&path, rt.viewport, 60.0, 1.0);
             trace.all = all;
             trace.frame(&mut rt, 0.0, 0.0);
-            rt.state = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
+            *rt.state_mut() = true; rt.invalidate(); rt.frame(0.0); rt.frame(0.05);
             trace.frame(&mut rt, 50.0, 0.0);
         }
         let text = std::fs::read_to_string(&path).unwrap();

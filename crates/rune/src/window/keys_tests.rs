@@ -12,7 +12,7 @@ fn field(s: &Field, _: &mut Cx<Field>) -> El {
 #[test]
 fn dvorak_shift_command_o_reaches_the_app_with_a_field_focused() {
     let mut rt = Runtime::new(Field::default(), field, (200.0, 40.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, ev, _| {
+    rt.app_mut().on_key = Some(|s, ev, _| {
         if ev.key == Key::Command('o') && ev.mods.shift {
             s.opened = true;
             return true;
@@ -31,8 +31,8 @@ fn dvorak_shift_command_o_reaches_the_app_with_a_field_focused() {
         key: PhysicalKeyCode::KeyS, mods: logical.mods, pressed: true, repeat: false,
     }, Some(logical));
     rt.frame(0.0);
-    assert!(rt.state.opened);
-    assert!(rt.state.edit.text.is_empty(), "the chord did not type into the field");
+    assert!(rt.state().opened);
+    assert!(rt.state().edit.text.is_empty(), "the chord did not type into the field");
 }
 
 #[test]
@@ -55,5 +55,5 @@ fn dvorak_paste_uses_the_logical_character_not_the_physical_period() {
     let target = rt.paste_request.take().expect("Dvorak Command-V requests the clipboard");
     rt.paste_result(target, crate::ClipboardContent::new("Dictated reply"));
     rt.frame(0.0);
-    assert_eq!(rt.state.edit.text, "Dictated reply");
+    assert_eq!(rt.state().edit.text, "Dictated reply");
 }

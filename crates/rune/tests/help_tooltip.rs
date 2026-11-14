@@ -45,8 +45,9 @@ fn shows_after_the_delay_and_hides_on_exit() {
     let mut rt = runtime();
     assert_eq!(find(&rt, "copy").help.as_deref(), Some("Copy the command"), "tools read the help text");
     hover(&mut rt, "copy");
-    assert!(rt.state.hovered, "the element keeps its own hover");
-    rt.frame(rt.help_delay - 0.1);
+    assert!(rt.state().hovered, "the element keeps its own hover");
+    let core = &mut *rt;
+    core.frame(core.help_delay - 0.1);
     assert_eq!(tip(&rt), None, "not before the delay");
     rt.frame(0.15);
     assert_eq!(tip(&rt).as_deref(), Some("Copy the command"));
@@ -102,7 +103,7 @@ fn press_scroll_and_key_hide_it_until_the_pointer_leaves() {
         assert_eq!(tip(&rt), None, "stays hidden while the pointer rests ({hide})");
         hover(&mut rt, "plain");
     }
-    assert_eq!(rt.state.presses, 1, "the press went to the element, not the tooltip");
+    assert_eq!(rt.state().presses, 1, "the press went to the element, not the tooltip");
     hover(&mut rt, "copy");
     rt.frame(1.0);
     assert!(tip(&rt).is_some(), "back after leaving");
@@ -115,7 +116,7 @@ fn follows_its_element_and_flips_above_at_the_bottom() {
     rt.frame(1.0);
     let x0 = rt.help_tooltip().unwrap().1[0];
     // The element moves a little under the resting pointer: the tooltip goes with it.
-    rt.state.inset = 6.0;
+    rt.state_mut().inset = 6.0;
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let (_, r) = rt.help_tooltip().expect("still shown");

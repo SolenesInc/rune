@@ -1,7 +1,7 @@
 //! Frame loop, clocks, wake deadlines, request latching and motion/paint-order stepping.
 use super::*;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// rame-profile: the paths of drawn nodes whose loop is running, which wake the window.
     #[cfg(feature = "frame-profile")]
     pub(crate) fn fp_loops(&self) -> Vec<String> {
@@ -76,7 +76,7 @@ impl<S: 'static> Runtime<S> {
                 self.dirty = true;
             }
             self.window_focused = Some(focused);
-            if let Some(f) = self.on_focus { self.update(|s, tx| f(s, focused, tx)); }
+            if self.app.has(app_side::Hook::Focus) { self.update_app(&mut |app, tx| { app.focus(focused, tx); true }); }
             // Deliver the cancelled Up before FocusLost can commit a view that removes its
             // grip (or the focus callback clears the app's drag state).
             if !focused {
@@ -137,27 +137,10 @@ impl<S: 'static> Runtime<S> {
         self.dirty = true;
     }
 
-    /// Changes the state from outside any handler, for data another thread delivered
-    /// (`AppHandle::update`). Runs now, so it works while no window shows; the next frame commits
-    /// it with the motion `f` asked for.
-    pub fn update(&mut self, f: impl FnOnce(&mut S, &mut Tx)) {
-        self.update_if(|s, tx| { f(s, tx); true });
-    }
-
-    /// `update` for a change that may be no change: `f` returns whether it changed state the
-    /// view reads, as `poll` does. On false the view doesn't re-run and no frame is asked for,
-    /// while what `f` asked of its `Tx` still happens: clipboard, close and quit, menus and
-    /// window frames reach the shell, a scroll or text flight still takes a frame, and a
-    /// `wake_after` waits, like `update`'s, for the next frame or hidden poll to schedule it
-    /// (a host that runs neither calls `schedule_pending_wakes`). Returns whether the last frame
-    /// went out of date: `f` reported a change or asked for work only a frame does.
-    ///
-    /// Returning false after changing state the view reads leaves the screen stale until the
-    /// next change.
-    pub fn update_if(&mut self, f: impl FnOnce(&mut S, &mut Tx) -> bool) -> bool {
+    pub(crate) fn update_app(&mut self, f: &mut dyn FnMut(&mut dyn AppSide, &mut Tx) -> bool) -> bool {
         // Its wakes count from now (`schedule_pending_wakes`), so its clock reads now too.
         let mut one = Tx { clock: self.now_clock(), ..self.transaction() };
-        let changed = crate::tooling::perf_warn::timed("an `update` closure", || f(&mut self.state, &mut one));
+        let changed = crate::tooling::perf_warn::timed("an `update` closure", || f(&mut *self.app, &mut one));
         let stale = changed || one.frame_work() || one.window_frame.is_some() || one.srgb_blend.is_some_and(|b| b != self.srgb_blend) || one.font_smoothing.is_some_and(|m| m != self.text.font_smoothing())
             || self.changes_families(&one)
             || (one.blur && self.focus.path().is_some());
@@ -468,17 +451,17 @@ impl<S: 'static> Runtime<S> {
         // the checker brought back show without the view running again.
         let (wake, _marked) = crate::spell::pause::tick(&mut self.spell_watch, self.clock);
         if let Some(at) = wake { self.schedule_wakes([std::time::Duration::from_secs_f64((at - self.clock).max(0.0))]); }
-        if let Some(poll) = self.poll.filter(|_| !polled) {
+        if self.app.has(app_side::Hook::Poll) && !polled {
             let mut one = self.transaction();
             // Scheduling does not imply a model change.
-            if self.idle_meter.polled(crate::tooling::perf_warn::timed("poll", || app_call!(poll, &mut self.state, self.clock, &mut one))) {
+            if self.idle_meter.polled(crate::tooling::perf_warn::timed("poll", || self.app.poll(self.clock, &mut one))) {
                 ran = true;
                 why |= CommitWhy::POLL;
                 self.watch.meter.poll();
             }
             merge(&mut tx, one);
         }
-        if self.playground.as_ref().is_some_and(|p| p.polls()) {
+        if self.app.playground().is_some_and(|p| p.polls()) {
             let mut one = self.transaction();
             let clock = self.clock;
             if self.poll_playground(clock, &mut one) {

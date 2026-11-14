@@ -41,15 +41,15 @@ fn drag_off(tabs: usize, lone: bool) -> rune::Runtime<App> {
 #[test]
 fn a_lone_tab_tears_out_only_when_the_spec_lets_it() {
     let rt = drag_off(1, false);
-    assert!(!rt.state.drag.torn_out() && rt.state.torn.is_empty(), "the only tab stays by default");
+    assert!(!rt.state().drag.torn_out() && rt.state().torn.is_empty(), "the only tab stays by default");
     let rt = drag_off(1, true);
-    assert!(rt.state.drag.torn_out(), "TearOutSpec::lone tears it out");
-    assert_eq!(rt.state.torn.last(), Some(&true));
+    assert!(rt.state().drag.torn_out(), "TearOutSpec::lone tears it out");
+    assert_eq!(rt.state().torn.last(), Some(&true));
 }
 
 #[test]
 fn a_tab_among_others_tears_out_either_way() {
     for lone in [false, true] {
-        assert!(drag_off(2, lone).state.drag.torn_out(), "lone: {lone}");
+        assert!(drag_off(2, lone).state().drag.torn_out(), "lone: {lone}");
     }
 }

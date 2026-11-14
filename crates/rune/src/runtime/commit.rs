@@ -47,10 +47,8 @@ impl Pass {
 
 /// Measurement capabilities: text/layout caches and virtual geometry only. In particular this
 /// type has no Scene, growth tracks, reveal tracks, draw instances, or mutable app state.
-pub(super) struct Measurement<'a, S: 'static> {
-    pub(super) state: &'a S,
-    pub(super) view: fn(&S, &mut Cx<S>) -> El,
-    pub(super) playground: Option<&'a crate::playground::Live<S>>,
+pub(super) struct Measurement<'a> {
+    pub(super) app: &'a dyn AppSide,
     pub(super) env: Env,
     pub(super) viewport: (f32, f32),
     pub(super) fit_height: bool,
@@ -121,7 +119,7 @@ pub(super) struct Measured {
     pub(super) selection: Vec<layout_read::SelectedRange>,
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     pub(super) fn commit(&mut self, tx: &Tx) {
         let _commit_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Commit);
         let _first_view = crate::tooling::perf_warn::launch::FirstView::start(self.commits == 0);

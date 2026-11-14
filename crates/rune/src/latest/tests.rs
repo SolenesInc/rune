@@ -282,17 +282,17 @@ fn poll_changes_state_once_per_answer() {
     let (waker, wakes) = counter();
     let state = Search { hits: String::new(), results: Latest::on(pool(), Some(waker)) };
     let mut rt = Runtime::new(state, view, (200.0, 100.0), Env::default());
-    rt.poll = Some(|s, _, _| {
+    rt.app_mut().poll = Some(|s, _, _| {
         let Some(hits) = s.results.take() else { return false };
         s.hits = hits;
         true
     });
     rt.frame(0.0);
     let commits = rt.stats.commits;
-    rt.state.results.request("rune".to_owned(), |q| format!("{q}.md"));
+    rt.state().results.request("rune".to_owned(), |q| format!("{q}.md"));
     eventually("the answer lands", || wakes.load(Ordering::SeqCst) == 1);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.hits, "rune.md");
+    assert_eq!(rt.state().hits, "rune.md");
     assert_eq!(rt.stats.commits, commits + 1, "the landed answer commits");
     rt.frame(2.0 / 60.0);
     rt.frame(3.0 / 60.0);

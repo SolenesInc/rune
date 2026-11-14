@@ -33,7 +33,7 @@ fn follow(rt: &mut Runtime<S>, n: usize, each: impl Fn(&mut Runtime<S>)) -> usiz
         each(rt);
         rt.frame(1.0 / 120.0);
         let row = rect(rt, "row3");
-        let ring = rt.state.ring.get();
+        let ring = rt.state().ring.get();
         assert!(near(ring, row), "frame {f}: the value {ring:?} is where row 3 drew, {row:?}");
         assert!(near(rect(rt, "ring"), last), "frame {f}: the ring {:?} follows row 3 a frame behind, {last:?}", rect(rt, "ring"));
         if (row[1] - last[1]).abs() > 0.01 { moved += 1; }
@@ -47,7 +47,7 @@ fn a_drawn_rect_follows_a_scroll_and_a_glide_with_no_commit() {
     let mut rt = Runtime::new(S { ring: Live::new([0.0; 4]) }, view, (400.0, 600.0), Env::new(true, 2.0));
     rt.frame(0.0);
     rt.frame(1.0 / 120.0);
-    assert!(near(rt.state.ring.get(), [0.0, 170.0, 300.0, 40.0]), "{:?}", rt.state.ring.get());
+    assert!(near(rt.state().ring.get(), [0.0, 170.0, 300.0, 40.0]), "{:?}", rt.state().ring.get());
     let commits = rt.stats.commits;
     let wheeled = follow(&mut rt, 30, |rt| rt.wheel(150.0, 200.0, -8.0));
     assert!(wheeled > 20, "the wheel scrolled it ({wheeled} frames)");
@@ -55,7 +55,7 @@ fn a_drawn_rect_follows_a_scroll_and_a_glide_with_no_commit() {
     rt.update_if(|_, tx| { tx.scroll_to("scroll", 0.0, 0.0); false });
     let glided = follow(&mut rt, 120, |_| {});
     assert!(glided > 5, "the glide carried it ({glided} frames)");
-    assert!(near(rt.state.ring.get(), [0.0, 170.0, 300.0, 40.0]), "it lands back at the top");
+    assert!(near(rt.state().ring.get(), [0.0, 170.0, 300.0, 40.0]), "it lands back at the top");
     assert!(near(rect(&rt, "ring"), [0.0, 170.0, 300.0, 40.0]), "and the ring with it");
     assert_eq!(rt.stats.commits, commits, "a scroll and a glide run no view");
 }

@@ -1,7 +1,7 @@
 //! Keyboard, IME, focused-field editing and clipboard paste routing.
 use super::*;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Offer a logical key that already passed `held_gate` to the app, the focused
     /// input's handler, focus traversal and the focused editor, in that order.
     pub(super) fn route_key(&mut self, ev: &KeyEvent, repeat: bool, one: &mut Tx) -> bool {
@@ -19,19 +19,19 @@ impl<S: 'static> Runtime<S> {
         // Return and Escape that reach a field mid-composition belong to the input method: they
         // confirm or cancel it, and submit, blur and press nothing.
         if matches!(ev.key, crate::Key::Enter | crate::Key::Escape) && self.composing() { return true; }
-        if self.focused_input().is_some() && !self.playground_typing() && let Some(f) = self.on_field_key
-            && Tx::took(self.app_key(f, ev, one), one) { return true; }
+        if self.focused_input().is_some() && !self.playground_typing() && self.app.has(app_side::Hook::FieldKey)
+            && Tx::took(self.app.key(true, ev, one), one) { return true; }
         if self.element_key(ev, one) { return true; }
         one.physical_key = None;
         if self.default_button_key(ev, one) { return true; }
         one.physical_key = physical_key;
         if self.playground_nav(ev, one) { return true; }
-        if app_first && !self.playground_typing() && let Some(f) = self.on_key && Tx::took(self.app_key(f, ev, one), one) { return true; }
+        if app_first && !self.playground_typing() && self.app.has(app_side::Hook::Key) && Tx::took(self.app.key(false, ev, one), one) { return true; }
         if self.focused_input().is_some() {
             self.input_click.clear_last();
         }
         if let Some(f) = self.focused_input().and_then(|input| input.key.clone())
-            && Tx::took(f(states!(self), ev, one), one)
+            && Tx::took(f(self.app.states(), ev, one), one)
         {
             return true;
         }
@@ -85,7 +85,7 @@ impl<S: 'static> Runtime<S> {
             if handled { return true; }
         }
         one.physical_key = physical_key;
-        if !app_first && !self.playground_typing() && let Some(f) = self.on_key && Tx::took(self.app_key(f, ev, one), one) {
+        if !app_first && !self.playground_typing() && self.app.has(app_side::Hook::Key) && Tx::took(self.app.key(false, ev, one), one) {
             log_event!(self, "key {:?}", ev.key);
             return true;
         }
@@ -95,16 +95,6 @@ impl<S: 'static> Runtime<S> {
         if !repeat && self.selection_key(ev, one) { return true; }
         if !repeat && self.context_menu_key(ev, one) { return true; }
         self.page_scroll(ev) || self.playground_key(ev, one)
-    }
-
-    /// `AppSpec::on_key`, given the stage's state while the playground shows one of the app's.
-    /// The playground's list and side column have already taken the keys they use.
-    pub(super) fn app_key(&mut self, f: fn(&mut S, &KeyEvent, &mut Tx) -> bool, ev: &KeyEvent, one: &mut Tx) -> bool {
-        let state = match &mut self.playground {
-            Some(playground) => playground.key_state(&mut self.state),
-            None => Some(&mut self.state),
-        };
-        state.is_some_and(|state| app_call!(f, state, ev, one))
     }
 
     /// Page Up and Page Down scroll by most of a viewport, and Home and End to the top and
@@ -123,7 +113,7 @@ impl<S: 'static> Runtime<S> {
                 .find_map(|p| self.nodes.iter().position(|n| n.path == p))
         });
         // A step's key (`Play::press`) pages only the stage, never the playground around it.
-        let staged = self.playground.as_ref().is_some_and(|p| p.pressing);
+        let staged = self.app.playground().is_some_and(|p| p.pressing());
         let pageable = |i: usize| self.pageable(i) && (!staged || self.under(i, crate::playground::is_stage));
         let around = |from: usize| std::iter::successors(Some(from), |&i| self.nodes[i].parent).find(|&i| pageable(i));
         let i = focused.and_then(around)
@@ -184,24 +174,24 @@ impl<S: 'static> Runtime<S> {
         let Some(access) = access else { return false };
         self.input_click.clear_last();
         {
-            let edit = access(states!(self));
+            let edit = access(self.app.states());
             edit.set_single_line(single_line);
             edit.set_return_breaks_line(return_breaks_line);
             if secure && !edit.is_secure() { edit.set_secure(true); }
             if let Some(rev) = revealed_override { edit.set_revealed(rev); }
         }
-        let before = change.as_ref().map(|_| zeroize::Zeroizing::new(access(states!(self)).text.clone()));
-        let mut out = f(states!(self), &access, tx);
+        let before = change.as_ref().map(|_| zeroize::Zeroizing::new(access(self.app.states()).text.clone()));
+        let mut out = f(self.app.states(), &access, tx);
         // Submit and Escape's blur act once per press; held keys still type, move and delete.
         if tx.key_repeat { out.submit = false; out.blur = false; }
         // Typing is the user's own hand: no animation.
         tx.commit = tx.commit.snap(!animate_layout);
         self.caret_follow = true;
         if let Some(change) = change
-            && before.as_ref().map(|s| s.as_str()) != Some(access(states!(self)).text.as_str())
+            && before.as_ref().map(|s| s.as_str()) != Some(access(self.app.states()).text.as_str())
         {
-            change(states!(self), tx);
-            access(states!(self)).mark_edited();
+            change(self.app.states(), tx);
+            access(self.app.states()).mark_edited();
         }
         if let Some(c) = out.copy {
             tx.copy(c);
@@ -214,7 +204,7 @@ impl<S: 'static> Runtime<S> {
         {
             log_event!(self, "submit {path}");
             tx.commit = tx.commit.animated();
-            sub(states!(self), tx);
+            sub(self.app.states(), tx);
         } else if out.submit {
             // A field with nothing to submit passes Return to the default button, as in a sheet.
             self.press_default_button(tx);
@@ -226,7 +216,7 @@ impl<S: 'static> Runtime<S> {
     pub(super) fn composing(&mut self) -> bool {
         let Some(access) = self.focused_input().map(|i| i.access.clone()) else { return self.app_ime.composing() };
         match access {
-            Some(access) => access(states!(self)).preedit().is_some(),
+            Some(access) => access(self.app.states()).preedit().is_some(),
             None => self.focused_input().is_some_and(|i| i.edit.preedit().is_some()),
         }
     }
@@ -244,7 +234,7 @@ impl<S: 'static> Runtime<S> {
             .take_while(|&j| self.allowed(j) && !self.subtree_exiting(j))
             .filter_map(|j| self.nodes[j].focus.key.clone())
             .collect();
-        handlers.into_iter().any(|f| Tx::took(f(states!(self), ev, tx), tx))
+        handlers.into_iter().any(|f| Tx::took(f(self.app.states(), ev, tx), tx))
     }
 
     pub(super) fn focused_input(&self) -> Option<&InputSpec> {

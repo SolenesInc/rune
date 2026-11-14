@@ -14,14 +14,14 @@ fn press_then_slide(move_after: Option<(f32, f32)>) -> u32 {
     rt.frame(0.0);
     rt.pointer_move(20.0, 10.0);
     rt.pointer_down(20.0, 10.0);
-    rt.state.x = 200.0;
+    rt.state_mut().x = 200.0;
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let (x, y) = move_after.unwrap_or((20.0, 10.0));
     rt.pointer_move(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    rt.state.pressed
+    rt.state().pressed
 }
 
 #[test]

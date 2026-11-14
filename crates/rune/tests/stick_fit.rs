@@ -29,9 +29,9 @@ fn run(state: S, change: fn(&mut S)) -> Vec<(f32, f32)> {
     let mut rt = Runtime::new(state, view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     for _ in 0..60 { rt.frame(1.0 / 120.0); }
-    let sample = |rt: &Runtime<S>| (bottom(rt, "r0"), bottom(rt, &format!("r{}", rt.state.rows - 1)));
+    let sample = |rt: &Runtime<S>| (bottom(rt, "r0"), bottom(rt, &format!("r{}", rt.state().rows - 1)));
     let mut out = vec![sample(&rt)];
-    change(&mut rt.state);
+    change(&mut rt.state_mut());
     rt.invalidate();
     for _ in 0..120 {
         rt.frame(1.0 / 120.0);

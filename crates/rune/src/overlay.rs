@@ -392,14 +392,14 @@ impl<T: 'static> Overlay<T> {
         rt.wall_start = Some(Instant::now());
         rt.native_overlay = true;
         rt.set_os_drag(crate::drag_out::SUPPORTED);
-        rt.on_key = on_key;
+        rt.app_mut().on_key = on_key;
         rt.set_modifier_keys(modifier_keys);
-        rt.on_focus = on_focus;
+        rt.app_mut().on_focus = on_focus;
         rt.set_live_visible(false);
         rt.surface_stats = Some(meter.shared());
         // App and overlay may use different state types. Downcast the function pointer
         // once, without a per-frame adapter or changing App::overlay's generic API.
-        rt.poll = poll.or_else(|| app.poll.and_then(|f| {
+        rt.app_mut().poll = poll.or_else(|| app.poll.and_then(|f| {
             (&f as &dyn std::any::Any).downcast_ref::<fn(&mut T, f64, &mut Tx) -> bool>().copied()
         }));
         let overlay = Overlay {

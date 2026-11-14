@@ -60,10 +60,10 @@ fn climb(at: &[f64], width: f32) -> (Vec<f32>, Vec<f32>) {
     while t < end {
         t += 1.0 / 120.0;
         while next < at.len() && at[next] <= t {
-            if !rt.state.text.is_empty() { rt.state.text.push(' '); }
-            rt.state.text.push_str(WORDS[next % WORDS.len()]);
+            if !rt.state().text.is_empty() { rt.state_mut().text.push(' '); }
+            rt.state_mut().text.push_str(WORDS[next % WORDS.len()]);
             next += 1;
-            rt.state.streaming = next < at.len();
+            rt.state_mut().streaming = next < at.len();
             rt.invalidate();
         }
         rt.frame(1.0 / 120.0);

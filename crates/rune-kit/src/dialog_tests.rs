@@ -47,8 +47,8 @@ fn a_close_handler_with_a_tx_can_keep_the_dialog_open_and_move_focus() {
     let mut rt = settled((1200.0, 900.0));
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.closes, 1);
-    assert!(rt.state.open);
+    assert_eq!(rt.state().closes, 1);
+    assert!(rt.state().open);
     let focused = rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key);
     assert_eq!(focused.as_deref(), Some("field"));
 
@@ -56,8 +56,8 @@ fn a_close_handler_with_a_tx_can_keep_the_dialog_open_and_move_focus() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.closes, 2);
-    assert!(!rt.state.open);
+    assert_eq!(rt.state().closes, 2);
+    assert!(!rt.state().open);
 }
 
 #[test]

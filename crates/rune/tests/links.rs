@@ -93,8 +93,8 @@ fn links_hit_by_their_glyphs_press_and_take_keyboard_focus() {
     assert!(painted(&rt, pressed_bg()) && find(&rt, "user:kit").press == 1.0, "pressed look");
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["user:kit"]);
-    assert!(rt.state.draft.focused, "clicking a link keeps the composer's focus");
+    assert_eq!(rt.state().opened, ["user:kit"]);
+    assert!(rt.state().draft.focused, "clicking a link keeps the composer's focus");
 
     // Plain text takes no press; a press dragged to another link opens nothing.
     click(&mut rt, (between, y));
@@ -104,24 +104,24 @@ fn links_hit_by_their_glyphs_press_and_take_keyboard_focus() {
     rt.pointer_move(dx, dy);
     rt.pointer_up(dx, dy);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["user:kit"]);
+    assert_eq!(rt.state().opened, ["user:kit"]);
 
     // A wrapped link takes its second line but not the plain words beside its first.
     let long = find(&rt, "long");
     assert!(long.rect[3] > 30.0, "two lines: {long:?}");
     click(&mut rt, (long.rect[0] + 3.0, long.rect[1] + 3.0));
-    assert_eq!(rt.state.opened, ["user:kit"], "\"go to\" sits inside the link's bounding box but is not the link");
+    assert_eq!(rt.state().opened, ["user:kit"], "\"go to\" sits inside the link's bounding box but is not the link");
     click(&mut rt, (long.rect[0] + 3.0, long.rect[1] + long.rect[3] - 3.0));
-    assert_eq!(rt.state.opened, ["user:kit", "long"]);
+    assert_eq!(rt.state().opened, ["user:kit", "long"]);
 
     // Keyboard: each link is a Tab stop after the composer; Enter and Space press it;
     // Shift+Tab walks back. (The click on plain text blurred the composer.)
     key(&mut rt, Key::Tab, false);
-    assert!(rt.state.draft.focused);
+    assert!(rt.state().draft.focused);
     key(&mut rt, Key::Tab, false);
     assert_eq!(focused_link(&rt).as_deref(), Some("user:kit"));
     assert!(find(&rt, "user:kit").focus_visible);
-    assert!(!rt.state.draft.focused);
+    assert!(!rt.state().draft.focused);
     key(&mut rt, Key::Tab, false);
     key(&mut rt, Key::Tab, false);
     assert_eq!(focused_link(&rt).as_deref(), Some("file:notes.md"));
@@ -129,14 +129,14 @@ fn links_hit_by_their_glyphs_press_and_take_keyboard_focus() {
     key(&mut rt, Key::Tab, true);
     assert_eq!(focused_link(&rt).as_deref(), Some("https://docs"));
     key(&mut rt, Key::Text(" ".into()), false);
-    assert_eq!(rt.state.opened, ["user:kit", "long", "file:notes.md", "https://docs"]);
+    assert_eq!(rt.state().opened, ["user:kit", "long", "file:notes.md", "https://docs"]);
     assert!(painted(&rt, hover_bg()), "the focused link shows its hover look");
     key(&mut rt, Key::Tab, false);
     key(&mut rt, Key::Tab, false);
     assert_eq!(focused_link(&rt).as_deref(), Some("long"), "on to the next text's link");
     key(&mut rt, Key::Tab, false);
     assert_eq!(focused_link(&rt), None);
-    assert!(rt.state.draft.focused, "and round to the composer");
+    assert!(rt.state().draft.focused, "and round to the composer");
 }
 
 const EMOJI: &str = "😀😀 @kit 🎉 docs";
@@ -218,5 +218,5 @@ fn link_boxes_match_drawn_glyphs_beside_emoji_and_in_centred_lines() {
     rt.pointer_down(mid(images[2], s).0, mid(images[2], s).1);
     rt.pointer_up(mid(images[2], s).0, mid(images[2], s).1);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["party"]);
+    assert_eq!(rt.state().opened, ["party"]);
 }

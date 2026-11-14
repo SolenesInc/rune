@@ -565,10 +565,10 @@ impl<S: 'static> Host<S> {
             spec.size = size;
             args.size = None;
         }
-        rt.on_focus = on_focus;
-        rt.on_visibility = on_visibility;
-        rt.on_field_key = on_field_key;
-        rt.app_ime.hook = on_ime;
+        rt.app_mut().on_focus = on_focus;
+        rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_field_key = on_field_key;
+        rt.app_mut().on_ime = on_ime;
         rt.set_modifier_keys(modifier_keys);
         rt.set_srgb_blend(srgb_blend); rt.set_font_smoothing(font_smoothing);
         rt.set_system_reduced_motion(crate::platform::preferences::reduced_motion());

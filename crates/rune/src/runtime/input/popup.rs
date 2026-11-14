@@ -65,7 +65,7 @@ impl Popups {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The pop-up menu showing, or the next to show, from [`Tx::popup_menu`].
     pub fn popup_menu(&self) -> Option<&PopupMenu> { self.popups.front().map(|r| &r.menu) }
 
@@ -87,7 +87,7 @@ impl<S: 'static> Runtime<S> {
         if let (Some(field), Some(id)) = (request.field, picked) {
             self.field_menu_pick(*field, id, &mut one);
         }
-        (request.on_pick)(states!(self), picked, &mut one);
+        (request.on_pick)(self.app.states(), picked, &mut one);
         self.latch_requests(&mut one);
         merge(&mut self.pending, one);
         self.dirty = true;

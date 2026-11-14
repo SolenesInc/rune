@@ -375,7 +375,8 @@ fn headless<S: 'static>(spec: &AppSpec<S>, state: S, args: Args, (srgb_blend, fo
             }
             renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
             renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (w, h));
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (w, h));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (w, h));
             let mut enc = gpu.device.create_command_encoder(&Default::default());
             renderer.draw(&mut enc, &target.view, rt.clear_color());
             target.copy(&mut enc);
@@ -391,7 +392,7 @@ fn headless<S: 'static>(spec: &AppSpec<S>, state: S, args: Args, (srgb_blend, fo
             encoder.write_header().unwrap().write_image_data(&pixels).expect("hot snapshot");
             std::fs::rename(temp, png).expect("publish hot snapshot");
             let mut tree = tree_json(&rt, rt.clock);
-            tree["hot"] = json!({"generation": generation, "pid": std::process::id(), "state": format!("{:p}", crate::runtime::handler_state_ref(&rt.state) as *const dyn Any as *const ()), "request": command["id"], "pixels_ns": pixels_ns, "scrolls": rt.hot_scrolls(), "motion": rt.hot_motion()});
+            tree["hot"] = json!({"generation": generation, "pid": std::process::id(), "state": format!("{:p}", crate::runtime::handler_state_ref(rt.state()) as *const dyn Any as *const ()), "request": command["id"], "pixels_ns": pixels_ns, "scrolls": rt.hot_scrolls(), "motion": rt.hot_motion()});
             atomic_write(&png.with_extension("json"), &serde_json::to_vec_pretty(&tree).unwrap());
             println!("rune-hot-pixels {}", tree["hot"]);
             use std::io::Write;
@@ -467,7 +468,7 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
-        assert_eq!(rt.state, 6);
+        assert_eq!(*rt.state(), 6);
         assert_eq!(CALLS.get(), 3, "the memo cache works again: a new version builds once");
         rt.update(|_, _| {});
         rt.frame(0.0);
@@ -507,26 +508,26 @@ mod tests {
     fn panicking_poll_and_on_key_patches_fall_back_to_the_startup_callbacks() {
         CALLS.set(0);
         let mut rt = crate::Runtime::new(0u32, |_: &u32, _: &mut Cx<u32>| el().size(10.0, 10.0), (100.0, 100.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, _, _| { panics_once(); *s += 1; true });
+        rt.app_mut().on_key = Some(|s, _, _| { panics_once(); *s += 1; true });
         rt.frame(0.0);
         rt.key(KeyEvent { key: Key::Function(5), mods: Default::default() });
         rt.frame(0.0);
-        assert_eq!((rt.state, CALLS.get()), (1, 2));
+        assert_eq!((*rt.state(), CALLS.get()), (1, 2));
         CALLS.set(0);
-        rt.poll = Some(|s, _, _| { panics_once(); *s += 10; true });
+        rt.app_mut().poll = Some(|s, _, _| { panics_once(); *s += 10; true });
         rt.frame(0.0);
-        assert_eq!((rt.state, CALLS.get()), (11, 2));
+        assert_eq!((*rt.state(), CALLS.get()), (11, 2));
         // Through the type-erased host as well: its adapters dispatch through the table too.
         CALLS.set(0);
         fn view(_: &usize, _: &mut Cx<usize>) -> El { el().size(10.0, 10.0) }
         let mut host = runtime::<usize>(view);
-        let spec = host.state.spec.downcast_mut::<AppSpec<usize>>().unwrap();
+        let spec = host.state_mut().spec.downcast_mut::<AppSpec<usize>>().unwrap();
         spec.on_key = Some(|s, _, _| { panics_once(); *s += 1; true });
-        host.on_key = Some(|s: &mut HostState, key, tx| (s.key)(s, key, tx));
+        host.app_mut().on_key = Some(|s: &mut HostState, key, tx| (s.key)(s, key, tx));
         host.frame(0.0);
         host.key(KeyEvent { key: Key::Function(5), mods: Default::default() });
         host.frame(0.0);
-        assert_eq!((*host.state.value.downcast_ref::<usize>().unwrap(), CALLS.get()), (1, 2));
+        assert_eq!((*host.state().value.downcast_ref::<usize>().unwrap(), CALLS.get()), (1, 2));
     }
 
     #[test]
@@ -562,7 +563,7 @@ mod tests {
         // refreshes that frame when its hidden poll (the patch's wake) reports it, poll or not.
         assert!(rt.needs_commit() && rt.stale());
         assert!(rt.poll_hidden());
-        rt.poll = Some(|_, _, _| false);
+        rt.app_mut().poll = Some(|_, _, _| false);
         assert!(rt.poll_hidden());
         rt.frame(0.0);
         assert!(!rt.needs_commit() && !rt.stale() && !rt.poll_hidden());
@@ -580,9 +581,9 @@ mod tests {
             el().key(format!("count-{s}")).on_press(|s: &mut usize| *s += 1)
         }
         let mut rt = runtime(original);
-        *rt.state.value.downcast_mut::<usize>().unwrap() = 7;
-        let address = rt.state.value.as_ref() as *const dyn Any as *const ();
-        rt.state.view = |host, cx| {
+        *rt.state_mut().value.downcast_mut::<usize>().unwrap() = 7;
+        let address = rt.state().value.as_ref() as *const dyn Any as *const ();
+        rt.state_mut().view = |host, cx| {
             let state = host.value.downcast_ref::<usize>().unwrap();
             let original = host.spec.downcast_ref::<AppSpec<usize>>().unwrap().view;
             view_or_original(original, state, cx, |_, typed| {
@@ -596,9 +597,9 @@ mod tests {
         control_input(&mut rt, &json!({"tap": "count-7"}));
         rt.frame(0.0);
         assert!(rt.find("count-8").is_some(), "original handlers still operate on retained state");
-        assert_eq!(rt.state.value.as_ref() as *const dyn Any as *const (), address);
+        assert_eq!(rt.state().value.as_ref() as *const dyn Any as *const (), address);
         // A later healthy patch is still attempted rather than latching the failure.
-        rt.state.view = |host, cx| {
+        rt.state_mut().view = |host, cx| {
             let state = host.value.downcast_ref::<usize>().unwrap();
             view_or_original(original, state, cx, |s, _| el().key(format!("recovered-{s}")))
         };
@@ -620,10 +621,10 @@ mod tests {
             control_input(&mut rt, &command);
             rt.frame(0.0);
         }
-        assert_eq!(*rt.state.value.downcast_ref::<usize>().unwrap(), 0);
+        assert_eq!(*rt.state().value.downcast_ref::<usize>().unwrap(), 0);
         control_input(&mut rt, &json!({"tap": "button", "scroll": [10, 10, 20]}));
         rt.frame(0.0);
-        assert_eq!(*rt.state.value.downcast_ref::<usize>().unwrap(), 1);
+        assert_eq!(*rt.state().value.downcast_ref::<usize>().unwrap(), 1);
     }
 
     #[test]
@@ -661,7 +662,7 @@ mod tests {
         rt.key(KeyEvent { key: Key::Enter, mods: Default::default() });
         rt.key(KeyEvent { key: Key::Escape, mods: Default::default() });
         rt.frame(0.0);
-        let s = rt.state.value.downcast_ref::<Events>().unwrap();
+        let s = rt.state().value.downcast_ref::<Events>().unwrap();
         assert_eq!((s.presses, s.physical, s.dismisses), (1, 1, 1));
         assert_eq!(s.links, ["docs"]);
         assert_eq!(s.paste, "window paste");
@@ -687,7 +688,7 @@ mod tests {
         rt.paste("caret");
         rt.frame(0.0);
         rt.frame(0.0);
-        let s = rt.state.value.downcast_ref::<Reads>().unwrap();
+        let s = rt.state().value.downcast_ref::<Reads>().unwrap();
         let (reduced, layout, caret) = *s.seen.borrow();
         assert!(reduced);
         assert_eq!(layout.unwrap()[2..], [180.0, 30.0]);
@@ -727,7 +728,7 @@ mod tests {
         rt.frame(0.0);
         rt.key(KeyEvent { key: Key::Enter, mods: Default::default() });
         rt.frame(0.0);
-        let s = rt.state.value.downcast_ref::<State>().unwrap();
+        let s = rt.state().value.downcast_ref::<State>().unwrap();
         assert!(s.pressed);
         assert!(s.hovered);
         assert!(s.secondary && s.changed && s.keyed);

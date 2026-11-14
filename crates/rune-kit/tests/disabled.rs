@@ -81,7 +81,8 @@ fn a_disabled_contrast_button_fades_as_the_browser_does() {
         let mut renderer = Renderer::new(&gpu.device, format);
         renderer.set_srgb_blend(true);
         let target = Offscreen::with_format(&gpu.device, w, h, format);
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (w, h));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (w, h));
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut encoder, &target.view, rt.clear_color());
         target.copy(&mut encoder);

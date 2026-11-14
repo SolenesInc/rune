@@ -18,7 +18,7 @@ fn view(_: &S, _: &mut Cx<S>) -> El {
 
 fn held() -> Runtime<S> {
     let mut rt = Runtime::new(S::default(), view, (300.0, 300.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
+    rt.app_mut().on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
     rt.frame(0.0);
     rt.pointer_down(10.0, 10.0);
     rt.pointer_move(40.0, 10.0);
@@ -35,13 +35,13 @@ fn escape_cancels_a_held_drag_and_the_release_does_nothing() {
     let mut rt = held();
     rt.key(esc());
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, true, 30.0)));
-    assert!(rt.state.keys.is_empty(), "the cancel took the Escape");
+    assert_eq!(rt.state().drags.last(), Some(&(Phase::Up, true, 30.0)));
+    assert!(rt.state().keys.is_empty(), "the cancel took the Escape");
     rt.pointer_move(60.0, 10.0);
     rt.pointer_up(60.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.iter().filter(|d| d.0 == Phase::Up).count(), 1, "exactly one end");
-    assert_eq!(rt.state.presses, 0);
+    assert_eq!(rt.state().drags.iter().filter(|d| d.0 == Phase::Up).count(), 1, "exactly one end");
+    assert_eq!(rt.state().presses, 0);
 }
 
 #[test]
@@ -50,10 +50,10 @@ fn losing_window_focus_cancels_a_held_drag() {
     rt.window_focus(true);
     rt.window_focus(false);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, true, 30.0)));
+    assert_eq!(rt.state().drags.last(), Some(&(Phase::Up, true, 30.0)));
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.iter().filter(|d| d.0 == Phase::Up).count(), 1);
+    assert_eq!(rt.state().drags.iter().filter(|d| d.0 == Phase::Up).count(), 1);
 }
 
 #[test]
@@ -63,11 +63,11 @@ fn physical_escape_cancels_a_held_drag_too() {
         key: rune::PhysicalKeyCode::Escape, mods: Mods::default(), pressed: true, repeat: false,
     });
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, true, 30.0)));
-    assert!(rt.state.keys.is_empty());
+    assert_eq!(rt.state().drags.last(), Some(&(Phase::Up, true, 30.0)));
+    assert!(rt.state().keys.is_empty());
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.iter().filter(|d| d.0 == Phase::Up).count(), 1);
+    assert_eq!(rt.state().drags.iter().filter(|d| d.0 == Phase::Up).count(), 1);
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn a_release_ends_uncancelled_and_escape_without_a_drag_passes_through() {
     let mut rt = held();
     rt.pointer_up(40.0, 10.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drags.last(), Some(&(Phase::Up, false, 30.0)));
+    assert_eq!(rt.state().drags.last(), Some(&(Phase::Up, false, 30.0)));
     rt.key(esc());
     rt.frame(0.0);
-    assert_eq!(rt.state.keys, [Key::Escape]);
+    assert_eq!(rt.state().keys, [Key::Escape]);
 }

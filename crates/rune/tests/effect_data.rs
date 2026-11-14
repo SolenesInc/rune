@@ -21,7 +21,8 @@ struct Seen {
 /// Draws the frame through `Renderer::draw_with` and records every slot the hook sees.
 fn draw<S: 'static>(gpu: &Gpu, renderer: &mut Renderer, rt: &mut Runtime<S>, size: (u32, u32)) -> Vec<Seen> {
     let target = Offscreen::new(&gpu.device, size.0, size.1);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+    let core = &mut **rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
     let instances: &[Instance] = &rt.instances;
     let mut seen = Vec::new();
     let mut encoder = gpu.device.create_command_encoder(&Default::default());

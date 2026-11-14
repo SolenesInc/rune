@@ -412,18 +412,18 @@ mod tests {
         assert_eq!((kind, options.title.as_str(), options.filters.as_slice()), (FileDialogKind::Open, "Import", &[("Export".to_owned(), vec!["json".to_owned()])][..]));
         assert_eq!(rt.file_dialog_json().unwrap(), serde_json::json!({ "kind": "open", "title": "Import", "filters": [{ "name": "Export", "extensions": ["json"] }] }));
         rt.frame(2.0 / 60.0);
-        assert!(rt.state.answers.is_empty() && rt.file_dialog().is_some(), "it stays open across frames");
+        assert!(rt.state().answers.is_empty() && rt.file_dialog().is_some(), "it stays open across frames");
 
         rt.resolve_file_dialog(Some("/exports/录音.json".into())).unwrap();
-        assert!(rt.file_dialog().is_none() && rt.state.answers.is_empty(), "closed; the answer waits for a frame");
+        assert!(rt.file_dialog().is_none() && rt.state().answers.is_empty(), "closed; the answer waits for a frame");
         assert!(rt.has_pending_input(), "so the host draws one");
         rt.frame(3.0 / 60.0);
-        assert_eq!(rt.state.answers, [Ok(Some("/exports/录音.json".into()))]);
+        assert_eq!(rt.state().answers, [Ok(Some("/exports/录音.json".into()))]);
 
         press(&mut rt);
         rt.resolve_file_dialog(None).unwrap();
         rt.frame(5.0 / 60.0);
-        assert_eq!(rt.state.answers[1], Ok(None), "cancelling answers None");
+        assert_eq!(rt.state().answers[1], Ok(None), "cancelling answers None");
         assert!(rt.resolve_file_dialog(None).is_err(), "nothing is open");
     }
 
@@ -442,7 +442,7 @@ mod tests {
         assert_eq!(rt.file_dialog_json().unwrap(), serde_json::json!({ "kind": "folder", "title": "Open Project", "filters": [], "directory": "/work" }));
         rt.resolve_file_dialog(Some("/work/notes".into())).unwrap();
         rt.frame(2.0 / 60.0);
-        assert_eq!(rt.state.answers, [Ok(Some("/work/notes".into()))]);
+        assert_eq!(rt.state().answers, [Ok(Some("/work/notes".into()))]);
     }
 
     #[test]
@@ -452,14 +452,14 @@ mod tests {
         press(&mut rt);
         press(&mut rt);
         rt.frame(3.0 / 60.0);
-        assert_eq!(rt.state.answers, [Err("a file dialog is already open".to_owned())]);
+        assert_eq!(rt.state().answers, [Err("a file dialog is already open".to_owned())]);
         rt.update(|_, tx| tx.save_file(FileDialogOptions::default(), |s: &mut Import, result, _| s.answers.push(result.map_err(|e| e.0))));
         rt.frame(4.0 / 60.0);
-        assert_eq!(rt.state.answers.len(), 2, "an update's dialog too");
+        assert_eq!(rt.state().answers.len(), 2, "an update's dialog too");
         assert_eq!(rt.file_dialog().map(|(kind, _)| kind), Some(FileDialogKind::Open));
         rt.resolve_file_dialog(Some("a.json".into())).unwrap();
         rt.frame(5.0 / 60.0);
-        assert_eq!(rt.state.answers[2], Ok(Some("a.json".into())));
+        assert_eq!(rt.state().answers[2], Ok(Some("a.json".into())));
 
         rt.update(|_, tx| tx.save_file(FileDialogOptions { file_name: Some("out.json".into()), ..Default::default() }, |s: &mut Import, result, _| s.answers.push(result.map_err(|e| e.0))));
         assert_eq!(rt.file_dialog().map(|(kind, o)| (kind, o.file_name.clone())), Some((FileDialogKind::Save, Some("out.json".into()))), "once it closed the next opens");
@@ -475,12 +475,12 @@ mod tests {
         assert!(rt.take_file_dialog().is_none(), "showing, so not taken again");
         rt.answer_file_dialog(id, Err(FileDialogError("no portal".into())));
         rt.frame(2.0 / 60.0);
-        assert_eq!(rt.state.answers, [Err("no portal".to_owned())]);
+        assert_eq!(rt.state().answers, [Err("no portal".to_owned())]);
 
         press(&mut rt);
         rt.refuse_file_dialog("unsupported");
         rt.frame(4.0 / 60.0);
-        assert_eq!(rt.state.answers[1], Err("unsupported".to_owned()), "a host without dialogs refuses it");
+        assert_eq!(rt.state().answers[1], Err("unsupported".to_owned()), "a host without dialogs refuses it");
     }
 
     #[test]
@@ -492,7 +492,7 @@ mod tests {
         assert!(rt.file_dialog().is_none(), "overlays never leave a dialog pending");
         assert!(rt.keys_queued(), "hidden_input delivers the refusal without waiting for a show");
         rt.frame(2.0 / 60.0);
-        assert_eq!(rt.state.answers, [Err("overlays cannot open file dialogs".to_owned())]);
+        assert_eq!(rt.state().answers, [Err("overlays cannot open file dialogs".to_owned())]);
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod tests {
         rt.cancel_file_dialogs();
         assert!(rt.file_dialog().is_none());
         assert_eq!(
-            rt.state.answers,
+            rt.state().answers,
             [
                 Err("a file dialog is already open".to_owned()),
                 Ok(None),

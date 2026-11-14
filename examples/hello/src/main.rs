@@ -48,7 +48,7 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         for _ in 0..6 { rt.frame(1.0 / 60.0); }
-        assert!(rt.state.on);
+        assert!(rt.state().on);
         let mid = knob_x(&rt);
         for _ in 0..60 { rt.frame(1.0 / 60.0); }
         let on = knob_x(&rt);

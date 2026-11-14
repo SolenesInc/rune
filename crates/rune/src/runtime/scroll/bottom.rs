@@ -108,7 +108,7 @@ pub(super) fn glide(st: &mut ScrollState, dt: f32) -> bool {
     moving
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The scroll viewport `key` names (`Node::named`), or the nearest one containing it.
     fn scroll_viewport(&self, key: &str) -> Option<usize> {
         let mut i = self.nodes.iter().enumerate()
@@ -424,21 +424,21 @@ mod tests {
     }
 
     fn bottom_gap(rt: &Runtime<Chat>) -> f32 {
-        let last = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(&*format!("r{}", rt.state.rows - 1))).unwrap();
+        let last = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(&*format!("r{}", rt.state().rows - 1))).unwrap();
         300.0 - (last.rect[1] + last.rect[3])
     }
 
     #[test]
     fn at_bottom_reports_once_per_change_and_glides_back() {
         let mut rt = chat(Chat { rows: 40, ..Default::default() });
-        assert_eq!(rt.state.reports, [true], "the first layout reports its state");
+        assert_eq!(rt.state().reports, [true], "the first layout reports its state");
         assert_eq!(rt.scroll_at_bottom("scroll"), Some(true));
         for _ in 0..5 {
             rt.wheel(100.0, 100.0, 300.0);
             rt.frame(1.0 / 120.0);
         }
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state.reports, [true, false], "scrolling further up does not report again");
+        assert_eq!(rt.state().reports, [true, false], "scrolling further up does not report again");
         let commits = rt.stats.commits;
         for _ in 0..30 { rt.frame(1.0 / 120.0); }
         assert_eq!(rt.stats.commits, commits, "no per-frame callbacks or commits at rest");
@@ -450,7 +450,7 @@ mod tests {
         assert!((-600.0..0.0).contains(&start), "a long trip cuts to two viewports from the end: {start}");
         let mut previous = start;
         let mut frames = 0;
-        while rt.state.reports.len() < 3 && frames < 240 {
+        while rt.state().reports.len() < 3 && frames < 240 {
             rt.frame(1.0 / 120.0);
             let gap = bottom_gap(&rt);
             assert!(gap >= previous - 0.01, "the glide only moves toward the bottom: {previous} -> {gap}");
@@ -458,15 +458,15 @@ mod tests {
             frames += 1;
         }
         assert!(frames > 10, "the glide is animated ({frames} frames)");
-        assert_eq!(rt.state.reports, [true, false, true]);
+        assert_eq!(rt.state().reports, [true, false, true]);
         for _ in 0..60 { rt.frame(1.0 / 120.0); }
         assert!(bottom_gap(&rt).abs() < 0.05, "{}", bottom_gap(&rt));
         assert!(!rt.animating);
-        rt.state.rows += 1;
+        rt.state_mut().rows += 1;
         rt.invalidate();
         for _ in 0..120 { rt.frame(1.0 / 120.0); }
         assert!(bottom_gap(&rt).abs() < 0.05, "a sticky viewport follows the end again after landing");
-        assert_eq!(rt.state.reports, [true, false, true]);
+        assert_eq!(rt.state().reports, [true, false, true]);
         assert!(!rt.animating);
     }
 
@@ -475,15 +475,15 @@ mod tests {
     #[test]
     fn far_from_bottom_reports_past_its_threshold_only() {
         let mut rt = chat(Chat { rows: 40, ..Default::default() });
-        assert_eq!(rt.state.far, [false], "the first layout reports its state");
+        assert_eq!(rt.state().far, [false], "the first layout reports its state");
         rt.update(|_, tx| tx.scroll_to_y("scroll", 1e6));
         let max = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("stack")).unwrap().rect[3] - 300.0;
         rt.update(|_, tx| tx.scroll_to_y("scroll", max - 350.0));
         for _ in 0..3 { rt.frame(1.0 / 120.0); }
-        assert_eq!(rt.state.far, [false], "350 above the bottom is within 400");
+        assert_eq!(rt.state().far, [false], "350 above the bottom is within 400");
         rt.update(|_, tx| tx.scroll_to_y("scroll", max - 450.0));
         for _ in 0..3 { rt.frame(1.0 / 120.0); }
-        assert_eq!(rt.state.far, [false, true]);
+        assert_eq!(rt.state().far, [false, true]);
         let commits = rt.stats.commits;
         for _ in 0..30 { rt.frame(1.0 / 120.0); }
         assert_eq!(rt.stats.commits, commits, "no per-frame callbacks at rest");
@@ -491,11 +491,11 @@ mod tests {
         let mut near_at = None;
         for f in 0..240 {
             rt.frame(1.0 / 120.0);
-            if near_at.is_none() && rt.state.far.len() == 3 { near_at = Some((f, bottom_gap(&rt))); }
+            if near_at.is_none() && rt.state().far.len() == 3 { near_at = Some((f, bottom_gap(&rt))); }
         }
         let (_, gap) = near_at.expect("the glide reports near");
         assert!((-400.0..0.0).contains(&gap), "near once within 400 of the end, before landing: {gap}");
-        assert_eq!(rt.state.far, [false, true, false]);
+        assert_eq!(rt.state().far, [false, true, false]);
     }
 
     /// Under its pane, a viewport counts the pane's height (640) rather than its own (600, the
@@ -510,7 +510,7 @@ mod tests {
             let max = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("stack")).unwrap().rect[3] - 600.0;
             rt.update(|_, tx| tx.scroll_to_y("scroll", max - up));
             for _ in 0..3 { rt.frame(1.0 / 120.0); }
-            rt.state.far.last().copied()
+            rt.state().far.last().copied()
         };
         assert_eq!(far_at(false, 620.0), Some(true), "past its own 600");
         assert_eq!(far_at(true, 620.0), Some(false), "within the pane's 640");
@@ -580,7 +580,7 @@ mod tests {
             rt.frame(1.0 / 120.0);
             assert!(bottom_gap(&rt).abs() < 0.05, "{}", bottom_gap(&rt));
             rt.frame(1.0 / 120.0);
-            assert_eq!(rt.state.reports, [true, false, true]);
+            assert_eq!(rt.state().reports, [true, false, true]);
         }
     }
 
@@ -594,14 +594,14 @@ mod tests {
         for _ in 0..30 { rt.frame(1.0 / 120.0); }
         let up = bottom_gap(&rt);
         assert!(up < -100.0, "{up}");
-        rt.poll = Some(|s: &mut Chat, _, tx: &mut Tx| {
+        rt.app_mut().poll = Some(|s: &mut Chat, _, tx: &mut Tx| {
             tx.wake_after(std::time::Duration::from_secs(1));
             if std::mem::take(&mut s.instant) { tx.scroll_to_bottom_instant("stack"); }
             false
         });
         assert!(!rt.poll_hidden(), "a wake alone draws nothing new");
         assert!(!rt.needs_commit());
-        rt.state.instant = true;
+        rt.state_mut().instant = true;
         assert!(rt.poll_hidden(), "a scroll asked for while hidden schedules a hidden refresh");
         assert!(rt.needs_commit(), "and the cached frame isn't fresh");
         assert_eq!(bottom_gap(&rt), up, "nothing scrolled while hidden");
@@ -621,7 +621,7 @@ mod tests {
         press(&mut rt, "jump");
         for _ in 0..240 { rt.frame(1.0 / 120.0); }
         assert!(bottom_gap(&rt).abs() < 0.05, "{}", bottom_gap(&rt));
-        assert_eq!(rt.state.reports.last(), Some(&true));
+        assert_eq!(rt.state().reports.last(), Some(&true));
         assert!(!rt.animating);
     }
 
@@ -712,7 +712,7 @@ mod tests {
         key(&mut rt, crate::Key::PageDown);
         assert_eq!(scroll_state(&rt, "scroll").offset, bottom);
         assert!(scroll_state(&rt, "scroll").pinned(), "back on the end, the list follows it again");
-        let composer = rt.state.composer.as_ref().unwrap();
+        let composer = rt.state().composer.as_ref().unwrap();
         assert!(composer.focused);
         assert_eq!(composer.text, "hello");
     }
@@ -744,7 +744,7 @@ mod tests {
         rt.frame(1.0 / 120.0);
         assert_eq!(scroll_state(&rt, "scroll").offset, bottom, "clamped at the end");
         assert!(scroll_state(&rt, "scroll").pinned());
-        rt.state.rows += 5;
+        rt.state_mut().rows += 5;
         rt.invalidate();
         for _ in 0..120 { rt.frame(1.0 / 120.0); }
         assert!(bottom_gap(&rt).abs() < 0.05, "a stick_bottom list follows new rows again: {}", bottom_gap(&rt));
@@ -787,7 +787,7 @@ mod tests {
     /// The gap between the last row's bottom and the list viewport's.
     fn slack_gap(rt: &Runtime<Chat>) -> f32 {
         let r = rects(rt);
-        let (view, last) = (r["scroll"], r[&format!("r{}", rt.state.rows - 1)]);
+        let (view, last) = (r["scroll"], r[&format!("r{}", rt.state().rows - 1)]);
         view[1] + view[3] - (last[1] + last[3])
     }
 
@@ -826,7 +826,7 @@ mod tests {
             for (k, y) in shown.iter().zip(&mut ys) { y.push(r[k][1]); }
             assert_eq!(rt.scroll_at_bottom("scroll"), Some(true), "the list reports its bottom through the slack");
         }
-        assert_eq!(rt.state.rows, 41, "the draft was sent");
+        assert_eq!(rt.state().rows, 41, "the draft was sent");
         let shrank = before["composer"][3] - rects(&rt)["composer"][3];
         Sent { rt, ys, shrank, grew_until, frames }
     }
@@ -843,7 +843,7 @@ mod tests {
             assert!(y[0] - y[y.len() - 1] > 5.0, "the row rose by the new row less the freed room: {y:?}");
         }
         assert!(slack_gap(&rt).abs() < 0.05, "the last row ends on the bottom: {}", slack_gap(&rt));
-        assert_eq!(rt.state.reports, [true]);
+        assert_eq!(rt.state().reports, [true]);
     }
 
     /// Room freed beyond what the new row fills stays under it until the growth has stopped
@@ -904,7 +904,7 @@ mod tests {
     fn scrolling_up_through_slack_does_not_jump() {
         let mut rt = sending(7);
         enter(&mut rt);
-        while growing(&rt) || rt.state.rows < 41 { rt.frame(1.0 / 120.0); }
+        while growing(&rt) || rt.state().rows < 41 { rt.frame(1.0 / 120.0); }
         rt.frame(1.0 / 120.0);
         let gap = slack_gap(&rt);
         assert!(gap > 10.0, "slack is held under the last row: {gap}");
@@ -924,7 +924,7 @@ mod tests {
     fn a_taller_window_keeps_the_rows_on_the_bottom() {
         let mut rt = sending(7);
         enter(&mut rt);
-        while growing(&rt) || rt.state.rows < 41 { rt.frame(1.0 / 120.0); }
+        while growing(&rt) || rt.state().rows < 41 { rt.frame(1.0 / 120.0); }
         assert!(slack_gap(&rt) > 10.0);
         rt.set_viewport((200.0, 400.0), 2.0);
         rt.frame(1.0 / 120.0);
@@ -970,7 +970,7 @@ mod tests {
     #[test]
     fn a_row_removed_at_the_bottom_lets_the_rows_down_once() {
         let mut rt = chat(Chat { rows: 40, ..Default::default() });
-        rt.state.rows = 39;
+        rt.state_mut().rows = 39;
         rt.invalidate();
         let mut ys = Vec::new();
         for _ in 0..240 {
@@ -1026,7 +1026,7 @@ mod tests {
         let mut edit = crate::TextEdit::new(&vec!["line"; 7].join("\n"));
         edit.focused = true;
         let mut rt = chat(Chat { rows: 6, composer: Some(edit), sends: true, track_drawn: true, ..Default::default() });
-        rt.state.drawn.clear();
+        rt.state_mut().drawn.clear();
         let y0 = rects(&rt)["r0"][1];
         enter(&mut rt);
         let mut ys = vec![y0];
@@ -1042,7 +1042,7 @@ mod tests {
         }
         assert!(reversals(&ys) <= 1, "{ys:?}");
         assert!(slack_gap(&rt).abs() < 0.05, "{}", slack_gap(&rt));
-        assert!((*rt.state.drawn.last().unwrap() - *ys.last().unwrap()).abs() < 0.05, "drawn_layout settled on final y");
+        assert!((*rt.state().drawn.last().unwrap() - *ys.last().unwrap()).abs() < 0.05, "drawn_layout settled on final y");
     }
 
     /// Top-aligned rows that already fit, or cross from overflowing into fitting as the composer

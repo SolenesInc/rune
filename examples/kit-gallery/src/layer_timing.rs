@@ -91,6 +91,7 @@ fn disabled_controls_gpu_cost() {
     let mut rt = rune::Runtime::with_text(init(), disabled_controls, (1024.0, 640.0),
         rune::Env { scale: 2.0, system_dark: true }, text);
     rt.frame(0.0); rt.settle_all(); rt.frame(0.0);
+    let rt = &mut *rt;
     assert!(rt.instances.iter().all(|i| i.params[1] != KIND_LAYER && i.params[1] != KIND_LAYER_END));
     let old = legacy(&rt.instances);
     let mut renderers = [Renderer::new(&gpu.device, OFFSCREEN_FORMAT), Renderer::new(&gpu.device, OFFSCREEN_FORMAT)];

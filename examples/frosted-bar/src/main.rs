@@ -90,6 +90,6 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.tab, 2);
+        assert_eq!(rt.state().tab, 2);
     }
 }

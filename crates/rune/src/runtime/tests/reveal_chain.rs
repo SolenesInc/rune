@@ -32,7 +32,7 @@ fn runtime() -> Runtime<Doc> {
 #[test]
 fn one_chunk_over_three_paragraphs_fades_them_in_order() {
     let mut rt = runtime();
-    rt.state.paras = vec![words(12), words(12), words(12)];
+    rt.state_mut().paras = vec![words(12), words(12), words(12)];
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let [a, b, c] = ["p0", "p1", "p2"].map(|k| times(&rt, k).unwrap_or_else(|| panic!("{k} reveals")));
@@ -42,11 +42,11 @@ fn one_chunk_over_three_paragraphs_fades_them_in_order() {
 #[test]
 fn a_new_paragraph_waits_for_the_last_ones_tail() {
     let mut rt = runtime();
-    rt.state.paras = vec![words(30)];
+    rt.state_mut().paras = vec![words(30)];
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let a = times(&rt, "p0").unwrap();
-    rt.state.paras.push(words(4));
+    rt.state_mut().paras.push(words(4));
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let b = times(&rt, "p1").unwrap();
@@ -56,13 +56,13 @@ fn a_new_paragraph_waits_for_the_last_ones_tail() {
 #[test]
 fn once_everything_has_shown_a_new_paragraph_starts_at_once() {
     let mut rt = runtime();
-    rt.state.paras = vec![words(8)];
+    rt.state_mut().paras = vec![words(8)];
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     for _ in 0..120 {
         rt.frame(1.0 / 60.0);
     }
-    rt.state.paras.push(words(4));
+    rt.state_mut().paras.push(words(4));
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let (first, _) = times(&rt, "p1").unwrap();
@@ -74,7 +74,7 @@ fn once_everything_has_shown_a_new_paragraph_starts_at_once() {
 #[test]
 fn texts_behind_a_long_run_fade_together() {
     let mut rt = runtime();
-    rt.state.paras = vec![words(120), words(120), words(120)];
+    rt.state_mut().paras = vec![words(120), words(120), words(120)];
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let [a, b, c] = ["p0", "p1", "p2"].map(|k| times(&rt, k).unwrap_or_else(|| panic!("{k} reveals")));

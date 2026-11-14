@@ -149,7 +149,7 @@ impl Compositor<Lab> for LabGfx {
             .filter_map(|sc| rt.presented(&format!("canvas-{}", sc.id())).map(|(r, a)| (*sc, [r[0], r[1]], a)))
             .filter(|c| c.2 > 0.001)
             .collect();
-        let s = &rt.state;
+        let s = &rt.state();
         let mut anim = false;
 
         // ---- lights and effect layers per visible canvas
@@ -466,11 +466,11 @@ impl Compositor<Lab> for LabGfx {
         let due = self.last_push.is_none_or(|p| now - p >= 0.25);
         let live_flip = self.shown.is_some_and(|(_, _, l)| l != anim);
         if due && (anim || moved) || live_flip {
-            let c = if self.cpu.1 > 0 { (self.cpu.0 / self.cpu.1 as f64) as f32 } else { rt.state.perf.cpu_ms };
-            let g = (self.gpu.1 > 0).then(|| (self.gpu.0 / self.gpu.1 as f64) as f32).or(rt.state.perf.gpu_ms);
+            let c = if self.cpu.1 > 0 { (self.cpu.0 / self.cpu.1 as f64) as f32 } else { rt.state().perf.cpu_ms };
+            let g = (self.gpu.1 > 0).then(|| (self.gpu.0 / self.gpu.1 as f64) as f32).or(rt.state().perf.gpu_ms);
             let key = ((c * 100.0).round() as i32, g.map(|g| (g * 100.0).round() as i32), anim);
             if self.shown != Some(key) {
-                rt.state.perf = crate::Perf { cpu_ms: c, gpu_ms: g, draws: stats.drawn, live: anim };
+                rt.state_mut().perf = crate::Perf { cpu_ms: c, gpu_ms: g, draws: stats.drawn, live: anim };
                 rt.invalidate();
                 self.view_pending = true;
                 self.shown = Some(key);
@@ -479,6 +479,6 @@ impl Compositor<Lab> for LabGfx {
             self.gpu = (0.0, 0);
             self.last_push = Some(now);
         }
-        rt.state.now = now;
+        rt.state_mut().now = now;
     }
 }

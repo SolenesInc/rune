@@ -107,9 +107,9 @@ impl<S: 'static> Host<S> {
     fn in_turn<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let Some(scope) = self.turn_scope.filter(|_| self.turn == Turn::Between) else { return f(self) };
         self.turn = Turn::Within;
-        (scope.enter)(&mut self.rt.state);
+        (scope.enter)(&mut self.rt.state_mut());
         let result = f(self);
-        (scope.leave)(&mut self.rt.state);
+        (scope.leave)(&mut self.rt.state_mut());
         self.turn = Turn::Between;
         result
     }

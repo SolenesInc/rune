@@ -27,7 +27,8 @@ fn layered(instances: &[Instance]) -> bool {
 fn pixels(gpu: &Gpu, rt: &mut Runtime<State>) -> Vec<u8> {
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let target = Offscreen::new(&gpu.device, SIZE.0, SIZE.1);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, SIZE);
+    let core = &mut **rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, SIZE);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, [0.0; 4]);
     target.copy(&mut encoder);

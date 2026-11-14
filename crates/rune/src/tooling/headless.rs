@@ -110,10 +110,10 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
     let mut rt = runtime_for(&spec, state, size, Env::new(dark, scale), std::sync::Arc::new(|| {}));
     crate::playground::attach(&mut rt, playground, &spec, args.playground.clone(), args.variant.clone(), false);
     let chrome = rt.headless_chrome(chrome, titlebar, app_options.borderless);
-    rt.on_focus = on_focus;
-    rt.on_mods = on_mods;
-    rt.on_field_key = on_field_key;
-    rt.app_ime.hook = on_ime;
+    rt.app_mut().on_focus = on_focus;
+    rt.app_mut().on_mods = on_mods;
+    rt.app_mut().on_field_key = on_field_key;
+    rt.app_mut().on_ime = on_ime;
     rt.transparent = transparent;
     rt.fit_height = fit_height;
     rt.set_srgb_blend(srgb_blend);
@@ -367,13 +367,13 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
             c.render(&mut f);
             animating |= c.animating();
         } else {
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (wp, hp));
+            { let core: &mut crate::runtime::RuntimeCore = &mut rt; renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
             renderer.draw(&mut enc, view, rt.clear_color());
         }
         if let Some((ov, ui)) = overlay.as_mut() {
             let ort = ov.frame(real_t, step, rt.backdrop_dark().unwrap_or(dark));
             if !ort.instances.is_empty() {
-                ui.prepare(&gpu.device, &gpu.queue, &mut ort.text.atlas, &ort.instances, (wp, hp));
+                { let core: &mut crate::runtime::RuntimeCore = &mut **ort; ui.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
                 ui.draw_over(&mut enc, view);
             }
         }

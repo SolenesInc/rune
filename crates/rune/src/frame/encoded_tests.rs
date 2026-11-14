@@ -109,13 +109,13 @@ fn the_inspector_reads_the_runtime_each_drawn_or_unchanged_frame_shows() {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let sink = seen.clone();
     let window = WindowSpec::from_app("main", App::new(spec()).on_frame_drawn(move |rt| {
-        sink.borrow_mut().push((rt.state, rt.elements().iter().any(|e| e.key.as_deref() == Some("box"))));
+        sink.borrow_mut().push((*rt.state(), rt.elements().iter().any(|e| e.key.as_deref() == Some("box"))));
     }));
     let mut reports = FrameReports::new(None, Some("main")).inspecting(window.app.on_frame_drawn);
     let mut rt = crate::Runtime::new(7u32, |_, _| crate::el().key("box").size(20.0, 20.0), (100.0, 100.0), crate::Env::new(true, 1.0));
     rt.frame(0.0);
     reports.inspect(&rt);
-    rt.state = 8;
+    *rt.state_mut() = 8;
     reports.unchanged(None, &rt);
     assert_eq!(*seen.borrow(), vec![(7, true), (8, true)], "an unchanged frame leaves on screen what the runtime built");
     assert!(FrameReports::<u32>::new(None, None).1.is_none(), "without one, inspecting is an Option check");

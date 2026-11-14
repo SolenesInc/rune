@@ -1,7 +1,7 @@
 use super::*;
 use crate::file_dialog::{DialogState, FileDialogError, FileDialogKind, FileDialogOptions, FileDialogResult, Pending, Request};
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// The file dialog showing, or about to show, from [`Tx::open_file`], [`Tx::save_file`] or
     /// [`Tx::open_folder`].
     pub fn file_dialog(&self) -> Option<(FileDialogKind, &FileDialogOptions)> {
@@ -63,7 +63,7 @@ impl<S: 'static> Runtime<S> {
             "file-dialog:answer:{}",
             if result.as_ref().is_ok_and(Option::is_some) { "path" } else if result.is_ok() { "cancel" } else { "error" }
         ));
-        f(states!(self), result, one);
+        f(self.app.states(), result, one);
         true
     }
 

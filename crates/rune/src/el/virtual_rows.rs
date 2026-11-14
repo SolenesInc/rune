@@ -297,7 +297,7 @@ mod tests {
         assert!(rt.nodes.len() < 400, "{} nodes", rt.nodes.len());
         let (count, commits) = (first.len(), rt.stats.commits);
         for _ in 0..5 {
-            rt.state.tick += 1;
+            rt.state_mut().tick += 1;
             commit(&mut rt);
         }
         let ticks = built();
@@ -309,9 +309,9 @@ mod tests {
             rt.frame(1.0 / 120.0);
         }
         assert!(built().iter().any(|&i| i < 4900), "scrolling builds rows it brings in");
-        rt.state.tick += 1;
+        rt.state_mut().tick += 1;
         commit(&mut rt);
-        let top = rt.state.keys.iter().position(|k| visible(&rt)[0].0 == *k).unwrap();
+        let top = rt.state().keys.iter().position(|k| visible(&rt)[0].0 == *k).unwrap();
         assert!(top < 4600, "{top}");
         // The window is the viewport and two viewports either side; rows here are 72 points.
         let now = built();
@@ -341,8 +341,8 @@ mod tests {
         }
         let before = visible(&b);
         for rt in [&mut a, &mut b] {
-            let first = rt.state.ids[0];
-            rt.state.splice(0, first - 60..first);
+            let first = rt.state().ids[0];
+            rt.state_mut().splice(0, first - 60..first);
             commit(rt);
         }
         same(&a, &b, "prepended");
@@ -369,8 +369,8 @@ mod tests {
         let before = visible(&rt);
         assert_eq!(before[0].0, "m100000", "at the top");
         built();
-        let first = rt.state.ids[0];
-        rt.state.splice(0, first - 60..first);
+        let first = rt.state().ids[0];
+        rt.state_mut().splice(0, first - 60..first);
         commit(&mut rt);
         let after = visible(&rt);
         assert_eq!(before.len(), after.len());
@@ -394,7 +394,7 @@ mod tests {
         // below the offset. Once the page lands, that gap is the end of the row above it, still
         // at its estimate: measuring it must not push the reader's row down.
         let mut rt = chat(300, true, Mode::Index);
-        rt.state.pad = 8.0;
+        rt.state_mut().pad = 8.0;
         commit(&mut rt);
         for _ in 0..20 {
             rt.wheel(300.0, 400.0, 100_000.0);
@@ -402,8 +402,8 @@ mod tests {
         }
         let before = visible(&rt);
         assert_eq!(before[0].0, "m100000", "at the top");
-        let first = rt.state.ids[0];
-        rt.state.splice(0, first - 60..first);
+        let first = rt.state().ids[0];
+        rt.state_mut().splice(0, first - 60..first);
         commit(&mut rt);
         for _ in 0..10 {
             let after = visible(&rt);
@@ -424,7 +424,7 @@ mod tests {
             rt.frame(1.0 / 120.0);
         }
         let shown = visible(&rt);
-        assert!(shown.iter().any(|(k, _)| *k == rt.state.keys[10]), "{:?}", shown.iter().map(|(k, _)| k).collect::<Vec<_>>());
+        assert!(shown.iter().any(|(k, _)| *k == rt.state().keys[10]), "{:?}", shown.iter().map(|(k, _)| k).collect::<Vec<_>>());
         // The update's own commit, before the reveal, builds the tail it was at.
         let now = built();
         assert!(now.iter().all(|&i| i < 60 || i >= 4900), "only rows near it build: {now:?}");
@@ -436,7 +436,7 @@ mod tests {
         rt.wheel(150.0, 250.0, -40_000.0);
         until_idle(&mut rt);
         assert_eq!(visible(&rt)[0].0, "r800");
-        rt.state.truncate(10);
+        rt.state_mut().truncate(10);
         commit(&mut rt);
         let shown: Vec<_> = visible(&rt).into_iter().map(|(k, _)| k).collect();
         assert_eq!(shown, (0..10).map(|i| format!("r{i}")).collect::<Vec<_>>());
@@ -450,7 +450,7 @@ mod tests {
             rt.frame(1.0 / 120.0);
         }
         assert_eq!(visible(&rt)[0].0, "m100000", "at the top");
-        let key = rt.state.keys[500].clone();
+        let key = rt.state().keys[500].clone();
         rt.update(|_, tx| tx.scroll_into_view(key.clone()));
         rt.frame(1.0 / 120.0);
         let viewport = rt.elements().into_iter().find(|e| e.path == "#0/scroll").unwrap().rect;
@@ -475,7 +475,7 @@ mod tests {
         // The first pass, at 10,100, leaves out rows 180 and 181. The rows it mounts collapse,
         // which moves the reader's row up and leaves the viewport short, so a retry mounts from
         // row 162 down, 180 and 181 among them.
-        for h in &mut rt.state[182..232] { *h = 1; }
+        for h in &mut rt.state_mut()[182..232] { *h = 1; }
         commit(&mut rt);
         let v = &rt.virtuals["#0/scroll/rows"];
         assert_eq!(v.range.start, 162, "a retry isn't held to the per-frame budget");
@@ -715,7 +715,7 @@ mod tests {
     #[test]
     fn heights_persist_for_rows_scrolled_away() {
         let mut rt = chat(800, true, Mode::Index);
-        let key = rt.state.keys[795].clone();
+        let key = rt.state().keys[795].clone();
         let measured = visible(&rt).into_iter().find(|(k, _)| *k == key).expect("near the tail").1[3];
         assert!((measured - 72.0).abs() > 1.0, "a markdown row isn't the estimate: {measured}");
         for _ in 0..10 {
@@ -725,7 +725,7 @@ mod tests {
         assert!(rt.find(&key).is_none(), "scrolled away, unbuilt");
         let v = &rt.virtuals["#0/scroll/rows"];
         assert_eq!(v.height(&key), measured, "its height stays measured");
-        assert_eq!(v.height(&rt.state.keys[400]), 72.0, "a row never seen is estimated");
+        assert_eq!(v.height(&rt.state().keys[400]), 72.0, "a row never seen is estimated");
     }
 
     #[test]
@@ -748,8 +748,8 @@ mod tests {
         assert!(rt.find("row/0/field").is_none(), "the focused row scrolled out");
         rt.key(KeyEvent { key: Key::Text("offscreen".into()), mods: Default::default() });
         rt.frame(0.0);
-        assert_eq!(rt.state[0].text, "offscreen");
-        assert!(rt.state[0].focused);
+        assert_eq!(rt.state()[0].text, "offscreen");
+        assert!(rt.state()[0].focused);
         rt.wheel(100.0, 100.0, 20_000.0);
         rt.frame(0.0);
         assert!(rt.find("row/0/field").is_some(), "back in view");
@@ -774,19 +774,19 @@ mod tests {
         let mut rt = Runtime::new((0, 0, "a", 10_000), view, (300.0, 400.0), Env::default());
         rt.frame(0.0);
         KEYS.set(0);
-        rt.state.0 += 1;
+        rt.state_mut().0 += 1;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         assert!(KEYS.get() < 1000, "the same version checks no keys: {}", KEYS.get());
         assert!(rt.find("a0").is_some());
-        rt.state.2 = "b";
-        rt.state.1 += 1;
+        rt.state_mut().2 = "b";
+        rt.state_mut().1 += 1;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         assert!(rt.find("b0").is_some() && rt.find("a0").is_none(), "a new version takes the new keys");
         // Changing the row count refreshes keys even if the caller forgot to bump `version`.
-        rt.state.2 = "c";
-        rt.state.3 = 10_001;
+        rt.state_mut().2 = "c";
+        rt.state_mut().3 = 10_001;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         assert!(rt.find("c0").is_some() && rt.find("b0").is_none(), "a count change refreshes keys without a version bump");
@@ -812,18 +812,18 @@ mod tests {
         for _ in 0..6 {
             rt.frame(1.0 / 60.0);
         }
-        assert_eq!(rt.state.0, 0..10);
+        assert_eq!(rt.state().0, 0..10);
         let commits = rt.stats.commits;
         // Scrolling within the mounted overscan updates the visible range without re-running the view.
         rt.wheel(150.0, 100.0, -40.0);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.0, 2..12);
+        assert_eq!(rt.state().0, 2..12);
         assert_eq!(rt.stats.commits, commits, "returning false from on_visible_rows skips a commit");
         // Returning true triggers a commit when the visible range changes.
-        rt.state.1 = true;
+        rt.state_mut().1 = true;
         rt.wheel(150.0, 100.0, -40.0);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.0, 4..14);
+        assert_eq!(rt.state().0, 4..14);
         assert_eq!(rt.stats.commits, commits + 1, "returning true commits");
     }
 
@@ -870,12 +870,12 @@ mod tests {
         let first = BUILDS.get();
         assert!(first > 0 && first < 60, "{first}");
         for _ in 0..10 {
-            rt.state.0 += 1;
+            rt.state_mut().0 += 1;
             rt.invalidate();
             rt.frame(1.0 / 60.0);
         }
         assert_eq!(BUILDS.get(), first, "ticks reuse every mounted row");
-        rt.state.1 += 1;
+        rt.state_mut().1 += 1;
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         assert!(rt.find("r2000").is_some(), "an appended row mounts at the pinned tail");
@@ -891,14 +891,14 @@ mod tests {
             for n in [500, 2000, 5000] {
                 let mut rt = chat(n, false, mode);
                 for _ in 0..30 {
-                    rt.state.tick += 1;
+                    rt.state_mut().tick += 1;
                     commit(&mut rt);
                 }
                 let frames = 300;
                 VIEW_NS.set(0);
                 let start = Instant::now();
                 for _ in 0..frames {
-                    rt.state.tick += 1;
+                    rt.state_mut().tick += 1;
                     commit(&mut rt);
                 }
                 let per = start.elapsed().as_secs_f64() * 1e6 / f64::from(frames);
@@ -915,8 +915,8 @@ mod tests {
                 }
                 let (views, shaped) = (VIEWS.get(), rt.text.shaped);
                 VIEW_NS.set(0);
-                let first = rt.state.ids[0];
-                rt.state.splice(0, first - 60..first);
+                let first = rt.state().ids[0];
+                rt.state_mut().splice(0, first - 60..first);
                 let start = Instant::now();
                 commit(&mut rt);
                 let ms = start.elapsed().as_secs_f64() * 1e3;

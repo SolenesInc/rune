@@ -123,7 +123,7 @@ impl LinkFx {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Node `i`'s border box as drawn this frame (points, x0 y0 x1 y1).
     pub(super) fn drawn_box(&self, i: usize) -> [f32; 4] {
         self.drawn.get(i).filter(|d| d[2] > 0.0 || d[3] > 0.0)
@@ -223,7 +223,7 @@ impl<S: 'static> Runtime<S> {
             Some((t.cold.on_link.clone()?, t.cold.links.get(k)?.id.clone()))
         }) else { return false };
         log_event!(self, "link {path} {id}");
-        (f.0)(states!(self), &id, tx);
+        (f.0)(self.app.states(), &id, tx);
         true
     }
 
@@ -240,7 +240,7 @@ impl<S: 'static> Runtime<S> {
             Some((t.cold.on_link_secondary.clone()?, t.cold.links.get(k)?.id.clone()))
         }) else { return false };
         log_event!(self, "link secondary {path} {id}");
-        (f.0)(states!(self), &id, point.window(), tx);
+        (f.0)(self.app.states(), &id, point.window(), tx);
         true
     }
 

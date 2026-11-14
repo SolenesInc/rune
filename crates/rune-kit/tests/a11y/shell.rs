@@ -60,20 +60,20 @@ fn the_shell_reads_its_landmarks_sections_rows_and_grip() {
     golden("shell", &tree);
 
     assert!(act(&mut rt, "sidebar-grip", Action::Increment));
-    assert_eq!(rt.state.sidebar.width(), 248.0);
+    assert_eq!(rt.state().sidebar.width(), 248.0);
     assert!(rt.accessibility_action("sidebar-grip", Action::SetValue, Some(ActionData::NumericValue(304.0))));
     settle(&mut rt);
-    assert_eq!(rt.state.sidebar.width(), 304.0, "a reader sets the width in grip steps");
+    assert_eq!(rt.state().sidebar.width(), 304.0, "a reader sets the width in grip steps");
     assert!(act(&mut rt, "row0", Action::Click));
-    assert_eq!(rt.state.picked, Some(0));
+    assert_eq!(rt.state().picked, Some(0));
     act(&mut rt, "row0", Action::Focus);
     press_key(&mut rt, Key::Down);
-    assert_eq!(rt.state.picked, Some(1), "selection follows the arrows");
+    assert_eq!(rt.state().picked, Some(1), "selection follows the arrows");
     assert!(act(&mut rt, "section-header", Action::Collapse));
     let tree = rt.accessibility_json();
     assert!(has(node(&tree, "section-header"), "collapsed") && find(&tree, "row0").is_none());
     assert!(act(&mut rt, "sidebar-toggle", Action::Collapse));
-    assert!(!rt.state.sidebar.is_open());
+    assert!(!rt.state().sidebar.is_open());
     let tree = rt.accessibility_json();
     assert!(find(&tree, "sidebar-list").is_none(), "a closed sidebar leaves the tree");
     assert!(has(node(&tree, "sidebar-toggle"), "collapsed"));

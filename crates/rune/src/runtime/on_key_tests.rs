@@ -70,10 +70,10 @@ fn a_keyed_control_takes_its_keys_before_focus_navigation_innermost_first() {
     rt.frame(0.0);
     press(&mut rt, Key::Tab);
     assert_eq!(focused(&rt).as_deref(), Some("list"), "Tab reaches a control that owns its keys, without Full Keyboard Access");
-    rt.state.outer_down = true;
+    rt.state_mut().outer_down = true;
     press(&mut rt, Key::Down);
     press(&mut rt, Key::Left);
-    assert_eq!(rt.state.log, ["list Down", "outer Left"], "the list answers Down before the outer handler; Left falls through to it");
+    assert_eq!(rt.state().log, ["list Down", "outer Left"], "the list answers Down before the outer handler; Left falls through to it");
     assert_eq!(focused(&rt).as_deref(), Some("list"), "focus navigation never saw the arrow");
 }
 
@@ -85,8 +85,8 @@ fn a_focused_text_field_keeps_its_keys() {
     rt.frame(0.0);
     press(&mut rt, Key::Left);
     press(&mut rt, Key::Text("a".into()));
-    assert!(rt.state.log.is_empty(), "{:?}", rt.state.log);
-    assert_eq!(rt.state.field.text, "a");
+    assert!(rt.state().log.is_empty(), "{:?}", rt.state().log);
+    assert_eq!(rt.state().field.text, "a");
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn a_click_inside_a_keyed_control_focuses_it() {
     rt.frame(0.0);
     let at = center(&rt, "row");
     click(&mut rt, at);
-    assert_eq!(rt.state.pressed, 1);
+    assert_eq!(rt.state().pressed, 1);
     assert_eq!(focused(&rt).as_deref(), Some("table"), "the row's click focuses the table, not nothing");
 }
 
@@ -132,7 +132,7 @@ fn a_press_sees_the_modifiers_held() {
     rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
     rt.frame(0.0);
     click(&mut rt, (50.0, 50.0));
-    assert_eq!(rt.state.seen, [Mods::default(), shift, Mods::default()]);
+    assert_eq!(rt.state().seen, [Mods::default(), shift, Mods::default()]);
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn a_modal_stops_keys_from_bubbling_to_an_ancestors_on_key() {
     assert_eq!(focused(&rt).as_deref(), Some("inside"));
     rt.key(KeyEvent { key: Key::Down, mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.outer_keys, 0, "an on_key ancestor outside the modal must not see keys inside it");
+    assert_eq!(rt.state().outer_keys, 0, "an on_key ancestor outside the modal must not see keys inside it");
 }
 
 #[test]

@@ -78,14 +78,14 @@ mod tests {
         let at = rt.find("pictures");
         rt.drag_files(vec!["a.png".into(), "notes.txt".into()], at);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.over, Some("pictures"), "the zone lights up under the drag");
+        assert_eq!(rt.state().over, Some("pictures"), "the zone lights up under the drag");
         rt.drop_files(vec!["a.png".into(), "notes.txt".into()], at);
         rt.frame(2.0 / 60.0);
-        assert_eq!(rt.state.over, None);
-        assert_eq!(rt.state.last, Some(("pictures", vec!["a.png".into()])));
+        assert_eq!(rt.state().over, None);
+        assert_eq!(rt.state().last, Some(("pictures", vec!["a.png".into()])));
 
         rt.drop_files(vec!["notes.txt".into()], at);
         rt.frame(3.0 / 60.0);
-        assert_eq!(rt.state.last, Some(("window", vec!["notes.txt".into()])), "the window takes what the zone refuses");
+        assert_eq!(rt.state().last, Some(("window", vec!["notes.txt".into()])), "the window takes what the zone refuses");
     }
 }

@@ -25,7 +25,7 @@ fn close(s: &mut Viewer, _: &KeyEvent, _: &mut Tx) -> bool {
 #[test]
 fn a_flight_home_after_an_earlier_commit_in_its_frame_starts_where_it_was_seen() {
     let mut rt = Runtime::new(Viewer::default(), view, (300.0, 200.0), Env::new(true, 1.0));
-    rt.on_key = Some(close);
+    rt.app_mut().on_key = Some(close);
     rt.frame(0.0);
     rt.wheel(150.0, 100.0, -150.0);
     for _ in 0..30 { rt.frame(1.0 / 60.0); }

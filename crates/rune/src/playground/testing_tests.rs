@@ -13,5 +13,5 @@ fn a_headless_runtime_tells_the_app_when_the_held_modifiers_change() {
     rt.frame(0.0);
     rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
     rt.frame(0.0);
-    assert_eq!(rt.state, [alt, Mods::default()]);
+    assert_eq!(*rt.state(), [alt, Mods::default()]);
 }

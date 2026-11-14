@@ -16,7 +16,7 @@ fn zoomed_in() -> Runtime<App> {
     rt.frame(0.0);
     rt.update(|s, tx| { tx.focus(image_zoom::KEY, false); s.zoom.zoom_in(tx) });
     rt.frame(0.0);
-    assert!(rt.state.zoom.owns_escape());
+    assert!(rt.state().zoom.owns_escape());
     rt
 }
 
@@ -29,9 +29,9 @@ fn escape(rt: &mut Runtime<App>) {
 fn escape_on_a_zoomed_image_fits_it_before_closing() {
     let mut rt = zoomed_in();
     escape(&mut rt);
-    assert!(rt.state.open && !rt.state.zoom.owns_escape(), "the first Escape fits");
+    assert!(rt.state().open && !rt.state().zoom.owns_escape(), "the first Escape fits");
     escape(&mut rt);
-    assert!(!rt.state.open, "the second closes");
+    assert!(!rt.state().open, "the second closes");
 }
 
 /// A glide's frames land the image at once, but a close in the same frame still leaves on the
@@ -40,12 +40,12 @@ fn escape_on_a_zoomed_image_fits_it_before_closing() {
 #[test]
 fn closing_mid_glide_still_animates_the_close() {
     let mut rt = zoomed_in();
-    rt.poll = Some(|s: &mut App, now, tx| s.zoom.poll(now, tx));
+    rt.app_mut().poll = Some(|s: &mut App, now, tx| s.zoom.poll(now, tx));
     escape(&mut rt);
     for _ in 0..3 { rt.frame(1.0 / 60.0); }
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.open, "the second Escape closes it mid-glide");
+    assert!(!rt.state().open, "the second Escape closes it mid-glide");
     let leaving = rt.elements().into_iter().find(|e| e.key.as_deref() == Some(image_zoom::KEY));
     assert!(leaving.as_ref().is_some_and(|e| e.exiting), "the preview leaves on its exit: {leaving:?}");
 }

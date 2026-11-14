@@ -41,7 +41,7 @@ fn hover_outlines_the_smallest_region_and_a_click_opens_its_knobs() {
     for (x, y, want) in [(150.0, 150.0, "Inner"), (50.0, 600.0, "Left"), (600.0, 500.0, "Right")] {
         rt.pointer_move(x, y);
         settle(&mut rt);
-        assert_eq!(rt.state.knobs.hover.as_deref(), Some(want), "at {x},{y}");
+        assert_eq!(rt.state().knobs.hover.as_deref(), Some(want), "at {x},{y}");
         assert!(rt.find("knobs-outline").is_some());
     }
     rt.pointer_move(150.0, 150.0);
@@ -49,7 +49,7 @@ fn hover_outlines_the_smallest_region_and_a_click_opens_its_knobs() {
     rt.pointer_down(150.0, 150.0);
     rt.pointer_up(150.0, 150.0);
     settle(&mut rt);
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Inner"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Inner"));
     assert!(rt.find("knobs-knob-0").is_some());
 
     let (x, y) = rt.find("knobs-random").unwrap();
@@ -58,8 +58,8 @@ fn hover_outlines_the_smallest_region_and_a_click_opens_its_knobs() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     settle(&mut rt);
-    assert!(rt.state.knobs.values.contains_key("Inner gap"));
-    assert!(rt.state.knobs.can_undo());
+    assert!(rt.state().knobs.values.contains_key("Inner gap"));
+    assert!(rt.state().knobs.can_undo());
 
     let (x, y) = rt.find("knobs-tab-2").unwrap();
     rt.pointer_move(x, y);
@@ -67,7 +67,7 @@ fn hover_outlines_the_smallest_region_and_a_click_opens_its_knobs() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     settle(&mut rt);
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Right"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Right"));
 }
 
 fn click(rt: &mut Runtime<T>, key: &str) {
@@ -110,17 +110,17 @@ fn keyboard_steps_knobs_and_switches_groups() {
     let mut rt = Runtime::new(s, view, (1000.0, 700.0), Env::new(true, 1.0));
     settle(&mut rt);
     click(&mut rt, "knobs-card");
-    let k = |rt: &Runtime<T>| rt.state.knobs.get(&L);
+    let k = |rt: &Runtime<T>| rt.state().knobs.get(&L);
     press(&mut rt, rune::Key::Right, false);
     assert!((k(&rt) - 5.1).abs() < 1e-3, "{}", k(&rt));
     press(&mut rt, rune::Key::Left, true);
     assert!((k(&rt) - 4.1).abs() < 1e-3, "{}", k(&rt));
     press(&mut rt, rune::Key::Tab, false);
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Inner"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Inner"));
     press(&mut rt, rune::Key::Text("[".into()), false);
-    assert_eq!(rt.state.knobs.group.as_deref(), Some("Left"));
+    assert_eq!(rt.state().knobs.group.as_deref(), Some("Left"));
     press(&mut rt, rune::Key::Escape, false);
-    assert!(!rt.state.knobs.open);
+    assert!(!rt.state().knobs.open);
 }
 
 #[test]
@@ -132,11 +132,11 @@ fn undo_and_reset_are_disabled_until_there_is_something_to_undo() {
     settle(&mut rt);
     click(&mut rt, "knobs-undo");
     click(&mut rt, "knobs-reset");
-    assert!(rt.state.knobs.values.is_empty());
+    assert!(rt.state().knobs.values.is_empty());
     click(&mut rt, "knobs-random");
-    assert!(rt.state.knobs.can_undo() && rt.state.knobs.can_reset(&GROUPS[0]));
+    assert!(rt.state().knobs.can_undo() && rt.state().knobs.can_reset(&GROUPS[0]));
     click(&mut rt, "knobs-reset");
-    assert!(!rt.state.knobs.can_reset(&GROUPS[0]));
+    assert!(!rt.state().knobs.can_reset(&GROUPS[0]));
 }
 
 mod inline_width {

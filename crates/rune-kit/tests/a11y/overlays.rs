@@ -44,10 +44,10 @@ fn a_dialog_is_modal_named_and_described() {
     golden("dialog", &tree);
 
     assert!(act(&mut rt, "close", Action::Click));
-    assert!(!rt.state.open);
+    assert!(!rt.state().open);
     act(&mut rt, "delete", Action::Click);
     press_key(&mut rt, Key::Escape);
-    assert!(!rt.state.open, "Escape dismisses it");
+    assert!(!rt.state().open, "Escape dismisses it");
 }
 
 fn menu(s: &App, _: &mut Cx<App>) -> El {
@@ -93,7 +93,7 @@ fn menus_read_items_checks_shortcuts_and_submenus() {
     assert!(has(node(&rt.accessibility_json(), "file-item1"), "checked"));
     act(&mut rt, "file-item0", Action::Focus);
     press_key(&mut rt, Key::Enter);
-    assert_eq!((rt.state.presses, rt.state.open), (1, false), "Return runs the item and the menu closes");
+    assert_eq!((rt.state().presses, rt.state().open), (1, false), "Return runs the item and the menu closes");
     assert!(has(node(&rt.accessibility_json(), "file-button"), "collapsed"));
 }
 
@@ -121,7 +121,7 @@ fn popovers_and_tooltips_name_describe_and_open() {
     assert_eq!(node(&tree, "save")["description"], "Saves to disk", "a showing tooltip describes its trigger");
     assert!(with_role(&tree, "button").iter().all(|b| b["children"].is_null()), "no button wraps another");
     tap(&mut rt, "share-button");
-    assert!(rt.state.open);
+    assert!(rt.state().open);
     let tree = rt.accessibility_json();
     assert!(has(node(&tree, "share-button"), "expanded"));
     let panel = node(&tree, "share-content");
@@ -129,7 +129,7 @@ fn popovers_and_tooltips_name_describe_and_open() {
     assert_eq!(said(node(panel, "link")), ("label", "example.com/f/1"));
     golden("popover", &tree);
     assert!(act(&mut rt, "close", Action::Click));
-    assert!(!rt.state.open);
+    assert!(!rt.state().open);
 }
 
 const FRUIT: [&str; 3] = ["Apple", "Pear", "Plum"];
@@ -175,7 +175,7 @@ fn a_select_reads_its_name_choice_and_options() {
     golden("select-open", &tree);
 
     assert!(act(&mut rt, "option2", Action::Click));
-    assert_eq!((rt.state.chosen.as_deref(), rt.state.open), (Some("Plum"), false));
+    assert_eq!((rt.state().chosen.as_deref(), rt.state().open), (Some("Plum"), false));
     assert_eq!(node(&rt.accessibility_json(), "fruit-trigger")["value"], "Plum");
 }
 
@@ -220,7 +220,7 @@ fn a_combobox_reads_its_choice_search_and_results() {
     assert!(has(node(&tree, "model-option-smart"), "selected"), "arrows move the active result");
     assert_eq!(node(node(&tree, "search"), "input")["activeDescendant"], "model-option-smart", "focus stays in the search field");
     press_key(&mut rt, Key::Enter);
-    assert_eq!((rt.state.chosen.as_deref(), rt.state.combo.is_open()), (Some("smart"), false));
+    assert_eq!((rt.state().chosen.as_deref(), rt.state().combo.is_open()), (Some("smart"), false));
 }
 
 fn toasts(_: &App, _: &mut Cx<App>) -> El {
@@ -256,5 +256,5 @@ fn toasts_announce_politely_and_their_buttons_reach_the_keyboard() {
     press_key(&mut rt, Key::Tab);
     press_key(&mut rt, Key::Tab);
     press_key(&mut rt, Key::Text(" ".into()));
-    assert_eq!(rt.state.presses, 11, "Tab reaches Undo, Space presses it");
+    assert_eq!(rt.state().presses, 11, "Tab reaches Undo, Space presses it");
 }

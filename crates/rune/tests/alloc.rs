@@ -52,12 +52,12 @@ fn static_faded_container_planning_allocates_nothing() {
     }
     let mut rt = Runtime::new(Live::new([0.0; 2]), view, (200.0, 200.0), Env { system_dark: true, scale: 2.0 });
     rt.frame(0.0);
-    rt.state.set([1.0; 2]);
+    rt.state().set([1.0; 2]);
     rt.frame(0.0);
     let before = allocs();
     for i in 0..60 {
         // Force presentation without rebuilding the static-opacity ancestor.
-        rt.state.set([i as f32; 2]);
+        rt.state().set([i as f32; 2]);
         rt.frame(1.0 / 60.0);
     }
     assert_eq!(allocs() - before, 0, "static faded ancestor scope planning");
@@ -75,10 +75,10 @@ fn view(body: &String, _: &mut Cx<String>) -> El {
 fn streaming_presentation_allocates_nothing() {
     let mut rt = Runtime::new("hello ".repeat(120), view, (400.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state.truncate(360);
+    rt.state_mut().truncate(360);
     rt.settle_all();
     rt.frame(0.0);
-    rt.state.push_str(&"hello ".repeat(60));
+    rt.state_mut().push_str(&"hello ".repeat(60));
     rt.invalidate();
     // Commit/shaping is separately budgeted; warm glyphs and scratch capacity before measuring.
     for _ in 0..4 { rt.frame(1.0 / 120.0); }
@@ -99,7 +99,7 @@ fn live_publication_and_presentation_allocate_nothing() {
     let state = (Live::new(1.0), Live::new([0.0, 0.0]), Live::new(Color::WHITE));
     let mut rt = Runtime::new(state, view, (200.0, 200.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    let producer = (rt.state.0.clone(), rt.state.1.clone(), rt.state.2.clone());
+    let producer = (rt.state().0.clone(), rt.state().1.clone(), rt.state().2.clone());
     // Includes the very first publication on a new producer thread, not only warmed sets.
     std::thread::spawn(move || {
         let before = allocs();
@@ -113,9 +113,9 @@ fn live_publication_and_presentation_allocate_nothing() {
     rt.frame(0.0);
     let before = allocs();
     for i in 0..120 {
-        rt.state.0.set(0.5 + i as f32 / 240.0);
-        rt.state.1.set([i as f32, i as f32]);
-        rt.state.2.set(Color { r: i as f32 / 120.0, ..Color::WHITE });
+        rt.state().0.set(0.5 + i as f32 / 240.0);
+        rt.state().1.set([i as f32, i as f32]);
+        rt.state().2.set(Color { r: i as f32 / 120.0, ..Color::WHITE });
         rt.frame(1.0 / 120.0);
     }
     assert_eq!(allocs() - before, 0, "live CPU presentation allocations");

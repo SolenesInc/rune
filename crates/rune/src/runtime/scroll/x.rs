@@ -226,7 +226,7 @@ impl ScrollState {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// A wheel or trackpad delta in points on both axes (positive moves content right and
     /// down). The gesture's first delta picks the axis and the rest of the gesture keeps it:
     /// mostly horizontal scrolls the innermost [`El::scroll_x`] or [`El::scroll_xy`] viewport

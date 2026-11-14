@@ -70,9 +70,9 @@ fn links_before_the_first_window_arrive_once_in_order_as_it_starts() {
     let _listening = inbox.listen(&app, &glue).unwrap();
     inbox.settle(&glue);
     let mut rt = runtime();
-    assert!(rt.state.is_empty(), "nothing runs before the host starts");
+    assert!(rt.state().is_empty(), "nothing runs before the host starts");
     assert_eq!(deliver(&app, &mut rt), 2);
-    assert_eq!(rt.state, ["app://one", "app://two?x=1"]);
+    assert_eq!(*rt.state(), ["app://one", "app://two?x=1"]);
     assert!(rt.needs_commit(), "the transaction commits and redraws");
     assert_eq!(deliver(&app, &mut rt), 0, "delivered once");
     assert_eq!((glue.installs.get(), glue.removes.get()), (1, 0));
@@ -102,7 +102,7 @@ fn links_while_running_wake_the_loop_and_arrive() {
     assert_eq!(wakes.load(Ordering::SeqCst), before + 1);
     let mut rt = runtime();
     assert_eq!(deliver(&app, &mut rt), 1);
-    assert_eq!(rt.state, ["app://later"]);
+    assert_eq!(*rt.state(), ["app://later"]);
 }
 
 #[test]

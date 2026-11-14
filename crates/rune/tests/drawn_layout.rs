@@ -52,59 +52,59 @@ fn rect(rt: &Runtime<S>, key: &str) -> [f32; 4] {
 #[test]
 fn a_camera_pan_and_zoom_report_the_drawn_rect_without_a_commit() {
     let mut rt = app();
-    assert_eq!(rt.state.drawn, [[100.0, 100.0, 20.0, 20.0]], "reported once after it is first drawn");
-    assert_eq!(rt.state.laid, [[100.0, 100.0, 20.0, 20.0]]);
+    assert_eq!(rt.state().drawn, [[100.0, 100.0, 20.0, 20.0]], "reported once after it is first drawn");
+    assert_eq!(rt.state().laid, [[100.0, 100.0, 20.0, 20.0]]);
 
     // Half size about the world's centre (100, 100), then 10 right.
-    rt.state.zoom.set(0.5);
-    rt.state.pan.set([10.0, 0.0]);
+    rt.state().zoom.set(0.5);
+    rt.state().pan.set([10.0, 0.0]);
     rt.frame(0.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.drawn.last(), Some(&[110.0, 100.0, 10.0, 10.0]));
+    assert_eq!(rt.state().drawn.last(), Some(&[110.0, 100.0, 10.0, 10.0]));
     assert_eq!(rect(&rt, "node"), [110.0, 100.0, 10.0, 10.0], "ElementInfo::rect agrees");
-    assert_eq!(rt.state.laid.len(), 1, "on_layout keeps the laid-out rect, which didn't move");
+    assert_eq!(rt.state().laid.len(), 1, "on_layout keeps the laid-out rect, which didn't move");
 
     // A long pan keeps reporting: live moves are outside layout feedback.
     for k in 1..=30 {
-        rt.state.pan.set([10.0 + k as f32, 0.0]);
+        rt.state().pan.set([10.0 + k as f32, 0.0]);
         rt.frame(1.0 / 60.0);
     }
     rt.frame(0.0);
-    assert_eq!(rt.state.drawn.last(), Some(&[140.0, 100.0, 10.0, 10.0]));
-    assert!(rt.state.drawn.len() >= 30, "every frame of the pan reported: {}", rt.state.drawn.len());
-    let n = rt.state.drawn.len();
+    assert_eq!(rt.state().drawn.last(), Some(&[140.0, 100.0, 10.0, 10.0]));
+    assert!(rt.state().drawn.len() >= 30, "every frame of the pan reported: {}", rt.state().drawn.len());
+    let n = rt.state().drawn.len();
     for _ in 0..5 { rt.frame(1.0 / 60.0); }
-    assert_eq!(rt.state.drawn.len(), n, "nothing moved, nothing reported");
+    assert_eq!(rt.state().drawn.len(), n, "nothing moved, nothing reported");
     assert!(!rt.has_pending_input());
 }
 
 #[test]
 fn hit_tests_and_drags_follow_the_live_zoom_and_pan() {
     let mut rt = app();
-    rt.state.zoom.set(0.5);
-    rt.state.pan.set([10.0, 0.0]);
+    rt.state().zoom.set(0.5);
+    rt.state().pan.set([10.0, 0.0]);
     rt.frame(0.0);
     // At rest the node covers (100..120, 100..120); drawn it covers (110..120, 100..110).
     rt.pointer_down(112.0, 105.0);
     rt.pointer_up(112.0, 105.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.pressed, ["node"]);
+    assert_eq!(rt.state().pressed, ["node"]);
     rt.pointer_down(105.0, 115.0);
     rt.pointer_up(105.0, 115.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.pressed, ["node"], "inside its layout box but outside where it is drawn");
+    assert_eq!(rt.state().pressed, ["node"], "inside its layout box but outside where it is drawn");
     // `other` at rest (20..40, 20..40) is drawn at (70..80, 60..70).
     rt.pointer_down(72.0, 62.0);
     rt.pointer_up(72.0, 62.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.pressed, ["node", "other"]);
+    assert_eq!(rt.state().pressed, ["node", "other"]);
 
-    rt.state.drags.clear();
+    rt.state_mut().drags.clear();
     rt.pointer_down(112.0, 104.0);
     rt.pointer_move(118.0, 108.0);
     rt.pointer_up(118.0, 108.0);
     rt.frame(0.0);
-    let drags = &rt.state.drags;
+    let drags = &rt.state().drags;
     assert_eq!((drags[0], drags[drags.len() - 1]), ((4.0, 8.0), (16.0, 16.0)), "drag points are in the node's own points at half size: {drags:?}");
 }
 
@@ -112,20 +112,20 @@ fn hit_tests_and_drags_follow_the_live_zoom_and_pan() {
 fn a_handler_that_moves_its_own_element_falls_quiet() {
     let mut rt = app();
     rt.update(|s, _| s.chase = true);
-    rt.state.pan.set([5.0, 0.0]);
+    rt.state().pan.set([5.0, 0.0]);
     let mut frames = 0;
     while (rt.frame(1.0 / 60.0) || rt.has_pending_input()) && frames < 2_000 { frames += 1; }
     assert!(frames < 2_000, "layout feedback stops");
-    assert!(rt.state.drawn.len() <= 8, "a few reports, then quiet: {:?}", rt.state.drawn);
+    assert!(rt.state().drawn.len() <= 8, "a few reports, then quiet: {:?}", rt.state().drawn);
 
     let mut rt = app();
     rt.set_system_reduced_motion(true);
     rt.update(|s, _| s.chase_scale = true);
-    rt.state.pan.set([5.0, 0.0]);
+    rt.state().pan.set([5.0, 0.0]);
     let mut frames = 0;
     while (rt.frame(1.0 / 60.0) || rt.has_pending_input()) && frames < 2_000 { frames += 1; }
     assert!(frames < 2_000, "static scale feedback stops too");
-    assert!(rt.state.drawn.len() <= 8, "a few reports, then quiet: {:?}", rt.state.drawn);
+    assert!(rt.state().drawn.len() <= 8, "a few reports, then quiet: {:?}", rt.state().drawn);
 }
 
 #[test]
@@ -143,5 +143,5 @@ fn drag_points_in_a_scrolled_list_are_from_where_the_row_is_drawn() {
     rt.pointer_down(10.0, 110.0);
     rt.pointer_up(10.0, 110.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.first(), Some(&(10.0, 10.0)), "{:?}", rt.state);
+    assert_eq!(rt.state().first(), Some(&(10.0, 10.0)), "{:?}", rt.state());
 }

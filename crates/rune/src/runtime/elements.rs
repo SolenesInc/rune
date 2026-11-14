@@ -133,7 +133,7 @@ impl Pose {
     pub fn moving(&self) -> bool { self.moving }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Authored geometry goals, before scroll and spring sampling, in parent space.
     pub(crate) fn trace_goals(&self) -> impl Iterator<Item = (&str, [f32; 7])> {
         self.nodes.iter().map(|n| (n.path.as_str(), [n.local.x, n.local.y, n.local.w, n.local.h, n.vis.offset[0], n.vis.offset[1], n.static_scale]))
@@ -443,7 +443,7 @@ impl<S: 'static> Runtime<S> {
                 }
             };
             if let Some(f) = read.take() {
-                f(states!(self), answer, tx);
+                f(self.app.states(), answer, tx);
                 self.dirty = true;
             }
         }

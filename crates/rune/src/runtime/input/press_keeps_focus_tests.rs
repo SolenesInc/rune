@@ -66,7 +66,7 @@ fn a_press_on_a_focusable_control_that_keeps_focus_leaves_the_field_focused() {
 
     click(&mut rt, "button");
 
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 }
 
@@ -76,7 +76,7 @@ fn a_press_on_a_focusable_control_that_keeps_focus_leaves_nothing_focused_when_n
 
     click(&mut rt, "button");
 
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     assert_eq!(focused(&rt), None);
 }
 
@@ -95,7 +95,7 @@ fn under_controls_keep_focus_a_press_on_a_button_leaves_the_field_focused_and_ta
     let mut rt = runtime_with(true, true);
 
     click(&mut rt, "button");
-    assert_eq!(rt.state.presses, 1);
+    assert_eq!(rt.state().presses, 1);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 
     rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
@@ -150,7 +150,7 @@ fn under_controls_keep_focus_a_press_on_a_control_that_takes_physical_keys_focus
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.recording);
+    assert!(rt.state().recording);
     assert_eq!(rt_focused(&rt).as_deref(), Some("recorder"));
 }
 

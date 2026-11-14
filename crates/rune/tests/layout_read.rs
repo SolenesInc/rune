@@ -41,16 +41,16 @@ fn a_view_places_from_another_elements_rect_in_the_same_commit() {
     let mut rt = Runtime::new(S::default(), banner_view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     assert_eq!(find(&rt, "badge").target, [260.0, 30.0, 30.0, 10.0], "placed on the first frame");
-    rt.state.banner = true;
+    rt.state_mut().banner = true;
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     assert_eq!(find(&rt, "badge").target, [260.0, 65.0, 30.0, 10.0], "moved in the commit that grew the banner");
 
     // Animation frames re-run nothing and report nothing; settled, nothing re-runs.
-    let views = rt.state.views.get();
+    let views = rt.state().views.get();
     frames(&mut rt, 120);
-    assert_eq!(rt.state.views.get(), views + 1, "one re-run, for on_layout's state change");
-    assert_eq!(rt.state.rects, [[10.0, 10.0, 280.0, 20.0], [10.0, 10.0, 280.0, 55.0]], "once on layout, once on change");
+    assert_eq!(rt.state().views.get(), views + 1, "one re-run, for on_layout's state change");
+    assert_eq!(rt.state().rects, [[10.0, 10.0, 280.0, 20.0], [10.0, 10.0, 280.0, 55.0]], "once on layout, once on change");
     let commits = rt.stats.commits;
     frames(&mut rt, 10);
     assert_eq!(rt.stats.commits, commits);
@@ -78,9 +78,9 @@ fn scrolling_moves_a_read_rect_and_re_runs_its_reader() {
     let row = find(&rt, "r10").rect[1];
     assert!(row < 250.0, "scrolled: {row}");
     assert_eq!(find(&rt, "marker").target[1], row, "the marker follows the row");
-    let views = rt.state.views.get();
+    let views = rt.state().views.get();
     frames(&mut rt, 10);
-    assert_eq!(rt.state.views.get(), views, "still once scrolling stops");
+    assert_eq!(rt.state().views.get(), views, "still once scrolling stops");
 }
 
 /// A card reads its own width to pick a layout: two columns when wide, one when narrow.
@@ -102,9 +102,9 @@ fn a_view_reading_its_own_size_settles() {
     frames(&mut rt, 2);
     assert!(find(&rt, "b").target[1] > find(&rt, "a").target[1], "narrow: stacked");
     frames(&mut rt, 60);
-    let (views, commits) = (rt.state.views.get(), rt.stats.commits);
+    let (views, commits) = (rt.state().views.get(), rt.stats.commits);
     frames(&mut rt, 30);
-    assert_eq!((rt.state.views.get(), rt.stats.commits), (views, commits), "settled");
+    assert_eq!((rt.state().views.get(), rt.stats.commits), (views, commits), "settled");
 }
 
 /// A chip that reads its own width and swaps to the label that flips it back: no fixed point.
@@ -119,12 +119,12 @@ fn flip_flop(s: &S, cx: &mut Cx<S>) -> El {
 fn a_view_without_a_fixed_point_stops_instead_of_oscillating() {
     let mut rt = Runtime::new(S::default(), flip_flop, (600.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    let first = rt.state.views.get();
+    let first = rt.state().views.get();
     assert!(first <= 4, "one commit re-runs the view at most twice more ({first} runs)");
     frames(&mut rt, 120);
-    let (views, commits) = (rt.state.views.get(), rt.stats.commits);
+    let (views, commits) = (rt.state().views.get(), rt.stats.commits);
     frames(&mut rt, 60);
-    assert_eq!((rt.state.views.get(), rt.stats.commits), (views, commits), "no commits of its own");
+    assert_eq!((rt.state().views.get(), rt.stats.commits), (views, commits), "no commits of its own");
 }
 
 /// A handler feeding an element's width back into it, growing forever if allowed.
@@ -142,28 +142,28 @@ fn on_layout_feedback_settles() {
     let mut rt = Runtime::new(S { grow_by: 0.0, width: 50.0, ..S::default() }, runaway, (600.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     frames(&mut rt, 30);
-    assert_eq!(rt.state.rects.len(), 1, "{:?}", rt.state.rects);
+    assert_eq!(rt.state().rects.len(), 1, "{:?}", rt.state().rects);
 
     // One that never would: it stops after a few commits, then nothing re-runs.
     let mut rt = Runtime::new(S { grow_by: 10.0, width: 50.0, ..S::default() }, runaway, (600.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     frames(&mut rt, 60);
-    let reports = rt.state.rects.len();
-    assert!((2..=6).contains(&reports), "{:?}", rt.state.rects);
+    let reports = rt.state().rects.len();
+    assert!((2..=6).contains(&reports), "{:?}", rt.state().rects);
     let commits = rt.stats.commits;
     frames(&mut rt, 60);
-    assert_eq!((rt.state.rects.len(), rt.stats.commits), (reports, commits));
+    assert_eq!((rt.state().rects.len(), rt.stats.commits), (reports, commits));
 
     // Changes it missed meanwhile are not replayed; the next change from anywhere else is
     // reported, and feedback may run again.
     rt.invalidate();
     frames(&mut rt, 10);
-    assert_eq!(rt.state.rects.len(), reports);
-    rt.state.width = 200.0;
+    assert_eq!(rt.state().rects.len(), reports);
+    rt.state_mut().width = 200.0;
     rt.invalidate();
     frames(&mut rt, 60);
-    assert_eq!(rt.state.rects[reports], [0.0, 0.0, 200.0, 10.0], "{:?}", rt.state.rects);
-    assert!(rt.state.rects.len() > reports + 1, "{:?}", rt.state.rects);
+    assert_eq!(rt.state().rects[reports], [0.0, 0.0, 200.0, 10.0], "{:?}", rt.state().rects);
+    assert!(rt.state().rects.len() > reports + 1, "{:?}", rt.state().rects);
 }
 
 #[derive(Default)]
@@ -194,7 +194,7 @@ fn a_field_that_appears_on_the_re_run_takes_the_focus_it_asks_for() {
     assert!(editor.focused, "focused in the commit that placed it");
     rt.key(rune::KeyEvent { key: rune::Key::Text("a".into()), mods: Default::default() });
     rt.frame(1.0 / 120.0);
-    assert_eq!(rt.state.field.text, "a", "typing reaches it");
+    assert_eq!(rt.state().field.text, "a", "typing reaches it");
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn a_focused_field_remounting_after_a_layout_read_does_not_steal_newer_focus() {
     rt.frame(1.0 / 60.0);
     let focused: Vec<_> = rt.elements().into_iter().filter(|e| e.focused).filter_map(|e| e.key).collect();
     assert_eq!(focused, ["second"], "remounted field must not steal focus from the newer field");
-    assert!(rt.state.second.focused && !rt.state.first.focused);
+    assert!(rt.state().second.focused && !rt.state().first.focused);
 }
 
 /// How `sized_view` reads row 10.
@@ -284,7 +284,7 @@ fn scroll_runs(read: Read) -> (u32, u64) {
     let mut rt = Runtime::new(SizeRead { read, ..SizeRead::default() }, sized_view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
-    let (views, commits) = (rt.state.views.get(), rt.stats.commits);
+    let (views, commits) = (rt.state().views.get(), rt.stats.commits);
     let before = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r10")).unwrap().rect[1];
     for _ in 0..60 {
         rt.wheel(100.0, 100.0, -3.0);
@@ -292,7 +292,7 @@ fn scroll_runs(read: Read) -> (u32, u64) {
     }
     let after = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r10")).unwrap().rect[1];
     assert!(after < before - 50.0, "scrolled: {before} -> {after}");
-    (rt.state.views.get() - views, rt.stats.commits - commits)
+    (rt.state().views.get() - views, rt.stats.commits - commits)
 }
 
 #[test]
@@ -322,9 +322,9 @@ fn a_size_read_re_runs_its_view_when_the_element_resizes() {
     rt.frame(1.0 / 120.0);
     assert_eq!(echo(&rt)[2..], [420.0, 50.0]);
 
-    let views = rt.state.views.get();
+    let views = rt.state().views.get();
     for _ in 0..30 { rt.frame(1.0 / 120.0); }
-    assert_eq!(rt.state.views.get(), views, "settled");
+    assert_eq!(rt.state().views.get(), views, "settled");
 }
 
 /// A card reads its own width with `layout_size` to pick two columns or one.
@@ -346,9 +346,9 @@ fn a_view_reading_its_own_size_with_layout_size_settles_on_the_first_frame() {
     rt.frame(1.0 / 120.0);
     assert!(find(&rt, "b").target[1] > find(&rt, "a").target[1], "narrow in the commit that resized it");
     frames(&mut rt, 60);
-    let (views, commits) = (rt.state.views.get(), rt.stats.commits);
+    let (views, commits) = (rt.state().views.get(), rt.stats.commits);
     frames(&mut rt, 30);
-    assert_eq!((rt.state.views.get(), rt.stats.commits), (views, commits), "settled");
+    assert_eq!((rt.state().views.get(), rt.stats.commits), (views, commits), "settled");
 }
 
 #[derive(Default)]
@@ -372,7 +372,7 @@ fn header_view(s: &Header, cx: &mut Cx<Header>) -> El {
 fn a_layout_with_read_settles_on_the_first_layout() {
     let mut rt = Runtime::new(Header::default(), header_view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    assert_eq!(rt.state.seen.borrow().last(), Some(&Some(false)), "{:?}", rt.state.seen.borrow());
+    assert_eq!(rt.state().seen.borrow().last(), Some(&Some(false)), "{:?}", rt.state().seen.borrow());
     assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("clear")));
 }
 
@@ -381,7 +381,7 @@ fn a_layout_with_read_re_runs_its_view_only_when_its_value_flips() {
     let mut rt = Runtime::new(Header::default(), header_view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
-    rt.state.seen.borrow_mut().clear();
+    rt.state().seen.borrow_mut().clear();
     let r1 = |rt: &Runtime<Header>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r1")).unwrap().rect[1];
 
     // Down past the top: one run, on the frame it flips.
@@ -391,10 +391,10 @@ fn a_layout_with_read_re_runs_its_view_only_when_its_value_flips() {
         rt.wheel(100.0, 100.0, -3.0);
         rt.frame(1.0 / 120.0);
         if flipped_at.is_none() && r1(&rt) < 0.0 { flipped_at = Some(frame); }
-        assert_eq!(rt.state.seen.borrow().len(), usize::from(flipped_at.is_some()), "frame {frame}: y {}", r1(&rt));
+        assert_eq!(rt.state().seen.borrow().len(), usize::from(flipped_at.is_some()), "frame {frame}: y {}", r1(&rt));
     }
     assert!(r1(&rt) < -20.0, "scrolled past: {}", r1(&rt));
-    assert_eq!(*rt.state.seen.borrow(), [Some(true)]);
+    assert_eq!(*rt.state().seen.borrow(), [Some(true)]);
     assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("solid")), "solid in the frame it flipped");
     assert_eq!(rt.stats.commits - commits, 1, "one commit over 20 scrolled frames");
 
@@ -403,14 +403,14 @@ fn a_layout_with_read_re_runs_its_view_only_when_its_value_flips() {
         rt.wheel(100.0, 100.0, 3.0);
         rt.frame(1.0 / 120.0);
         let back = r1(&rt) >= 0.0;
-        assert_eq!(rt.state.seen.borrow().len(), 1 + usize::from(back), "frame {frame}: y {}", r1(&rt));
+        assert_eq!(rt.state().seen.borrow().len(), 1 + usize::from(back), "frame {frame}: y {}", r1(&rt));
         if back { break; }
     }
     for _ in 0..20 {
         rt.wheel(100.0, 100.0, 3.0);
         rt.frame(1.0 / 120.0);
     }
-    assert_eq!(*rt.state.seen.borrow(), [Some(true), Some(false)]);
+    assert_eq!(*rt.state().seen.borrow(), [Some(true), Some(false)]);
     assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("clear")));
     assert_eq!(rt.stats.commits - commits, 2);
 }
@@ -475,12 +475,12 @@ fn a_key_unread_on_one_settling_pass_keeps_its_rect_for_the_next() {
     let mut rt = Runtime::new(Gate { width: 100.0, ..Gate::default() }, gate_view, (300.0, 200.0), Env::new(true, 2.0));
     rt.frame(0.0);
     for _ in 0..10 { rt.frame(1.0 / 120.0); }
-    let views = rt.state.views.get();
+    let views = rt.state().views.get();
     rt.update(|s, _| s.width = 200.0);
     rt.frame(1.0 / 120.0);
     let echo = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("echo")).unwrap().target[2];
     assert_eq!(echo, 50.0);
-    assert_eq!(rt.state.views.get() - views, 2, "one pass with a stale, one to settle");
+    assert_eq!(rt.state().views.get() - views, 2, "one pass with a stale, one to settle");
 }
 
 /// Echoes the size of an element a third of 100 tall, below a gap the state sets.
@@ -498,10 +498,10 @@ fn moving_an_element_does_not_change_the_size_a_read_sees() {
     let mut rt = Runtime::new(Bar::default(), third_view, (300.0, 400.0), Env::new(true, 2.0));
     rt.frame(0.0);
     for top in [33.4, 50.0, 31.0, 64.1] {
-        let views = rt.state.views.get();
+        let views = rt.state().views.get();
         rt.update(|s, _| s.top = top);
         rt.frame(1.0 / 120.0);
-        assert_eq!(rt.state.views.get() - views, 1, "a move to {top} re-ran the size read");
+        assert_eq!(rt.state().views.get() - views, 1, "a move to {top} re-ran the size read");
     }
 }
 
@@ -559,7 +559,7 @@ fn a_memo_layout_read_inside_a_scrolled_viewport_commits_nothing_while_it_scroll
     let label = |rt: &Runtime<Board>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("label")).and_then(|e| e.text);
     let r10 = |rt: &Runtime<Board>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r10")).unwrap().rect;
     assert_eq!(label(&rt).as_deref(), Some("Some([0.0, 300.0, 300.0, 30.0])"));
-    let (commits, builds) = (rt.stats.commits, rt.state.builds.get());
+    let (commits, builds) = (rt.stats.commits, rt.state().builds.get());
 
     // A programmatic, animated scroll, then a wheel scroll.
     rt.update_if(|_, tx| { tx.scroll_to_y("scroll", 200.0); false });
@@ -571,14 +571,14 @@ fn a_memo_layout_read_inside_a_scrolled_viewport_commits_nothing_while_it_scroll
     }
     frames_of(&mut rt, 60);
     assert!(r10(&rt)[1] < 0.0, "scrolled on: {:?}", r10(&rt));
-    assert_eq!((rt.stats.commits, rt.state.builds.get()), (commits, builds), "no commits, no builds");
+    assert_eq!((rt.stats.commits, rt.state().builds.get()), (commits, builds), "no commits, no builds");
     assert_eq!(label(&rt).as_deref(), Some("Some([0.0, 300.0, 300.0, 30.0])"), "unscrolled");
 
     // A real size change still rebuilds, in the commit that made it.
     rt.update(|s, _| s.tall = true);
     rt.frame(1.0 / 120.0);
     assert_eq!(label(&rt).as_deref(), Some("Some([0.0, 300.0, 300.0, 50.0])"));
-    assert!(rt.state.builds.get() > builds);
+    assert!(rt.state().builds.get() > builds);
 }
 
 fn frames_of<S: 'static>(rt: &mut Runtime<S>, n: usize) {

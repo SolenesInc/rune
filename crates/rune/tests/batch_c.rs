@@ -36,7 +36,7 @@ fn live_text_shapes_only_changed_run_without_layout_and_coalesces_visible_wakes(
     assert_eq!(info(&a, "clock").text.as_deref(), Some("00:02"));
     assert_eq!(info(&b, "clock").text.as_deref(), Some("00:00"));
     assert_eq!(a.stats.commits, commits);
-    assert_eq!(a.state.views.load(Ordering::Relaxed), 1);
+    assert_eq!(a.state().views.load(Ordering::Relaxed), 1);
     b.set_live_visible(true);
     assert_eq!(wakes.load(Ordering::Relaxed), 2);
     b.frame(0.0);
@@ -49,14 +49,14 @@ fn live_text_shapes_only_changed_run_without_layout_and_coalesces_visible_wakes(
     a.invalidate(); a.frame(0.0);
     assert_eq!(info(&a, "clock").rect, rect, "placeholder still reserves the same box on rebuild");
     assert_eq!(info(&a, "clock").text.as_deref(), Some("a much longer clock value"));
-    a.state.bound = false; a.invalidate(); a.frame(0.0);
+    a.state_mut().bound = false; a.invalidate(); a.frame(0.0);
     // The clock still draws while it fades out; once it's gone it stops waking.
     for _ in 0..240 { if !a.frame(1.0 / 120.0) { break; } }
     b.set_live_visible(false);
     let before = wakes.load(Ordering::Relaxed);
     value.set("00:03");
     assert_eq!(wakes.load(Ordering::Relaxed), before, "unmounted and hidden hosts don't wake");
-    a.state.bound = true; a.invalidate(); a.frame(0.0);
+    a.state_mut().bound = true; a.invalidate(); a.frame(0.0);
     assert_eq!(info(&a, "clock").text.as_deref(), Some("00:03"));
 }
 
@@ -123,13 +123,13 @@ fn window_focus_delivers_ordered_transitions_including_before_first_frame() {
     }
     let mut rt = Runtime::new(Vec::new(), view, (100.0, 100.0), Env::default());
     rt.window_focus(true); rt.window_focus(true); rt.window_focus(false); rt.frame(0.0);
-    assert_eq!(rt.state, vec![true, false]);
+    assert_eq!(*rt.state(), vec![true, false]);
     assert_eq!(rt.copy_request.as_deref(), Some("focus"));
     let commits = rt.stats.commits;
     rt.window_focus(false); rt.frame(0.0);
     assert_eq!(rt.stats.commits, commits);
     rt.window_focus(true); rt.frame(0.0);
-    assert_eq!(rt.state, vec![true, false, true]);
+    assert_eq!(*rt.state(), vec![true, false, true]);
 }
 
 #[test]

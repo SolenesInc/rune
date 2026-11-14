@@ -75,7 +75,7 @@ fn a_story_opened_from_the_list_hears_the_keys_the_list_leaves() {
     assert!(stage(&rt).1, "⌘K reaches the story's on_key");
     typed(&mut rt, "3");
     assert_eq!(stage(&rt).2, "3", "and so does a digit");
-    assert!(!rt.state.palette && rt.state.typed.is_empty(), "the stage's state, not the app's");
+    assert!(!rt.state().palette && rt.state().typed.is_empty(), "the stage's state, not the app's");
     press(&mut rt, Key::Escape);
     assert_eq!(stage(&rt).1, false, "Esc goes to the story first");
     typed(&mut rt, "k");

@@ -143,7 +143,7 @@ impl ModifierKeys {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Send `Key::Modifier` presses and releases to `on_key` and the focused input's key
     /// handler. Off by default: handlers written before it may act on any key.
     pub fn set_modifier_keys(&mut self, enabled: bool) {
@@ -178,13 +178,13 @@ impl<S: 'static> Runtime<S> {
         if !self.modifier_keys.enabled { return false; }
         one.key_repeat = false;
         let app_first = self.focus.path().is_none();
-        if app_first && let Some(f) = self.on_key && Tx::took(self.app_key(f, ev, one), one) { return true; }
+        if app_first && self.app.has(app_side::Hook::Key) && Tx::took(self.app.key(false, ev, one), one) { return true; }
         if let Some(f) = self.focused_input().and_then(|input| input.key.clone())
-            && Tx::took(f(states!(self), ev, one), one)
+            && Tx::took(f(self.app.states(), ev, one), one)
         {
             return true;
         }
-        if !app_first && let Some(f) = self.on_key && Tx::took(self.app_key(f, ev, one), one) {
+        if !app_first && self.app.has(app_side::Hook::Key) && Tx::took(self.app.key(false, ev, one), one) {
             log_event!(self, "key {:?}", ev.key);
             return true;
         }
@@ -221,7 +221,7 @@ mod tests {
     fn runtime(enabled: bool) -> Runtime<Keys> {
         let mut rt = Runtime::new(Keys::default(), view, (300.0, 200.0), Env::new(true, 1.0));
         rt.set_modifier_keys(enabled);
-        rt.on_key = Some(|s, ev, _| {
+        rt.app_mut().on_key = Some(|s, ev, _| {
             // A typical chord binding: Cmd with any key.
             if ev.mods.cmd && matches!(ev.key, Key::Text(_) | Key::Command(_)) { s.chords += 1; }
             s.app.push(ev.clone());
@@ -257,8 +257,8 @@ mod tests {
         assert!(!flags(&mut rt, SHIFT), "the flags of a press already sent add nothing");
         assert!(modifier(&mut rt, Code::ShiftLeft, false, SHIFT));
         assert!(!flags(&mut rt, Mods::default()));
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
-        assert_eq!((rt.state.app[0].mods, rt.state.app[1].mods), (SHIFT, Mods::default()));
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
+        assert_eq!((rt.state().app[0].mods, rt.state().app[1].mods), (SHIFT, Mods::default()));
         assert_eq!(Modifier::ShiftLeft.side(), Some(KeySide::Left));
         assert!(!rt.focus.keyboard(), "a modifier tap shows no focus ring");
     }
@@ -270,9 +270,9 @@ mod tests {
         modifier(&mut rt, Code::AltLeft, true, ALT);
         modifier(&mut rt, Code::AltRight, false, ALT);
         modifier(&mut rt, Code::AltLeft, false, ALT);
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::AltRight, true), (Modifier::AltLeft, true),
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::AltRight, true), (Modifier::AltLeft, true),
             (Modifier::AltRight, false), (Modifier::AltLeft, false)]);
-        let alt: Vec<bool> = rt.state.app.iter().map(|ev| ev.mods.alt).collect();
+        let alt: Vec<bool> = rt.state().app.iter().map(|ev| ev.mods.alt).collect();
         assert_eq!(alt, [true, true, true, false], "Option stays on while the other side is down");
         assert_eq!((Modifier::AltRight.side(), Modifier::Fn.side()), (Some(KeySide::Right), None));
     }
@@ -283,57 +283,57 @@ mod tests {
         let cmd = Mods { cmd: true, ..Mods::default() };
         let code = if cfg!(target_os = "macos") { Code::SuperLeft } else { Code::ControlLeft };
         modifier(&mut rt, code, true, Mods::default());
-        assert_eq!(rt.state.app[0].mods.cmd, true);
-        assert_eq!(rt.state.chords, 0, "the modifier alone is no chord");
+        assert_eq!(rt.state().app[0].mods.cmd, true);
+        assert_eq!(rt.state().chords, 0, "the modifier alone is no chord");
         rt.physical_with_fallback(PhysicalInput::Key { key: Code::KeyK, mods: cmd, pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Command('k'), mods: cmd }));
         rt.frame(0.0);
-        assert_eq!(rt.state.app[1], KeyEvent { key: Key::Command('k'), mods: cmd });
-        assert_eq!(rt.state.chords, 1);
+        assert_eq!(rt.state().app[1], KeyEvent { key: Key::Command('k'), mods: cmd });
+        assert_eq!(rt.state().chords, 1);
         // Shift held types capitals in a field as before.
         click(&mut rt, "field");
         modifier(&mut rt, Code::ShiftRight, true, Mods::default());
         rt.physical_with_fallback(PhysicalInput::Key { key: Code::KeyA, mods: SHIFT, pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Text("A".into()), mods: SHIFT }));
         rt.frame(0.0);
-        assert_eq!(rt.state.edit.text, "A");
+        assert_eq!(rt.state().edit.text, "A");
     }
 
     #[test]
     fn modifier_keys_never_fire_chords_insert_text_or_repeat() {
         let mut rt = runtime(true);
         click(&mut rt, "field");
-        rt.state.app.clear();
+        rt.state_mut().app.clear();
         for code in [Code::SuperLeft, Code::ControlLeft, Code::AltLeft, Code::ShiftLeft, Code::Fn] {
             modifier(&mut rt, code, true, Mods::default());
             rt.physical_with_fallback(PhysicalInput::Key { key: code, mods: Mods::default(), pressed: true, repeat: true }, None);
             rt.frame(0.0);
             modifier(&mut rt, code, false, Mods::default());
         }
-        assert_eq!(rt.state.chords, 0);
-        assert_eq!(rt.state.edit.text, "");
-        assert_eq!(rt.state.app.len(), 10, "one press and one release each, no repeats");
-        assert!(rt.state.app.iter().all(|ev| matches!(ev.key, Key::Modifier { .. })));
+        assert_eq!(rt.state().chords, 0);
+        assert_eq!(rt.state().edit.text, "");
+        assert_eq!(rt.state().app.len(), 10, "one press and one release each, no repeats");
+        assert!(rt.state().app.iter().all(|ev| matches!(ev.key, Key::Modifier { .. })));
         // A KeyEvent sent straight to a field's editor changes nothing either.
         let ev = KeyEvent { key: Key::Modifier { modifier: Modifier::ShiftLeft, pressed: true }, mods: SHIFT };
-        assert_eq!(rt.state.edit.key(&ev, None), crate::edit::EditOutcome::default());
+        assert_eq!(rt.state_mut().edit.key(&ev, None), crate::edit::EditOutcome::default());
     }
 
     #[test]
     fn a_focused_field_hears_modifiers_before_the_window_unless_nothing_is_focused() {
         let mut rt = runtime(true);
         modifier(&mut rt, Code::ShiftLeft, true, Mods::default());
-        assert_eq!((rt.state.app.len(), rt.state.field.len()), (1, 0), "nothing focused: the window's on_key");
+        assert_eq!((rt.state().app.len(), rt.state().field.len()), (1, 0), "nothing focused: the window's on_key");
         modifier(&mut rt, Code::ShiftLeft, false, SHIFT);
         click(&mut rt, "field");
-        rt.state.app.clear();
-        rt.state.field_takes = true;
+        rt.state_mut().app.clear();
+        rt.state_mut().field_takes = true;
         modifier(&mut rt, Code::ControlRight, true, Mods::default());
-        assert_eq!((rt.state.app.len(), rt.state.field.len()), (0, 1), "the field took it");
-        rt.state.field_takes = false;
+        assert_eq!((rt.state().app.len(), rt.state().field.len()), (0, 1), "the field took it");
+        rt.state_mut().field_takes = false;
         modifier(&mut rt, Code::ControlRight, false, Mods { ctrl: true, ..Mods::default() });
-        assert_eq!((rt.state.app.len(), rt.state.field.len()), (1, 2), "the field passed it on");
-        assert_eq!(rt.state.app[0].key, Key::Modifier { modifier: Modifier::ControlRight, pressed: false });
+        assert_eq!((rt.state().app.len(), rt.state().field.len()), (1, 2), "the field passed it on");
+        assert_eq!(rt.state().app[0].key, Key::Modifier { modifier: Modifier::ControlRight, pressed: false });
     }
 
     #[test]
@@ -345,7 +345,7 @@ mod tests {
         assert!(!flags(&mut rt, Mods::default()));
         rt.physical_input(PhysicalInput::FocusLost);
         rt.frame(0.0);
-        assert!(rt.state.app.is_empty());
+        assert!(rt.state().app.is_empty());
     }
 
     #[test]
@@ -358,13 +358,13 @@ mod tests {
         flags(&mut rt, both);
         modifier(&mut rt, Code::Fn, true, both);
         assert!(flags(&mut rt, ALT), "Shift went off without its key-up");
-        assert_eq!(modifiers(&rt.state.app)[3..], [(Modifier::ShiftLeft, false)]);
+        assert_eq!(modifiers(&rt.state().app)[3..], [(Modifier::ShiftLeft, false)]);
         rt.physical_input(PhysicalInput::FocusLost);
         rt.frame(0.0);
-        assert_eq!(modifiers(&rt.state.app)[4..], [(Modifier::AltRight, false), (Modifier::Fn, false)]);
-        assert!(rt.state.app[4..].iter().all(|ev| ev.mods == Mods::default()));
+        assert_eq!(modifiers(&rt.state().app)[4..], [(Modifier::AltRight, false), (Modifier::Fn, false)]);
+        assert!(rt.state().app[4..].iter().all(|ev| ev.mods == Mods::default()));
         assert!(!modifier(&mut rt, Code::AltRight, false, Mods::default()), "a late key-up is not sent twice");
-        assert_eq!(rt.state.app.len(), 6);
+        assert_eq!(rt.state().app.len(), 6);
     }
 
     #[test]
@@ -374,45 +374,45 @@ mod tests {
         modifier(&mut rt, Code::AltRight, true, Mods::default());
         flags(&mut rt, Mods::default());
         flags(&mut rt, SHIFT);
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::AltRight, true)]);
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::AltRight, true)]);
         modifier(&mut rt, Code::AltRight, false, SHIFT);
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::AltRight, true), (Modifier::AltRight, false)]);
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::AltRight, true), (Modifier::AltRight, false)]);
     }
 
     #[test]
     fn a_recorder_takes_modifiers_first_and_on_key_never_hears_half_of_what_it_took() {
         let mut rt = runtime(true);
         click(&mut rt, "recorder");
-        rt.state.recording = true;
+        rt.state_mut().recording = true;
         // Recording ⌥K: the recorder takes every key, and on_key hears none of it.
         modifier(&mut rt, Code::AltLeft, true, Mods::default());
         flags(&mut rt, ALT);
         rt.physical_with_fallback(PhysicalInput::Key { key: Code::KeyK, mods: ALT, pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Text("k".into()), mods: ALT }));
         rt.frame(0.0);
-        rt.state.recording = false;
+        rt.state_mut().recording = false;
         assert!(!flags(&mut rt, Mods::default()), "Option's flag off is no release: its press was taken");
         assert!(!modifier(&mut rt, Code::AltLeft, false, ALT), "nor is its key-up");
-        assert_eq!(rt.state.recorded.len(), 3);
-        assert!(rt.state.app.is_empty());
+        assert_eq!(rt.state().recorded.len(), 3);
+        assert!(rt.state().app.is_empty());
         // A release the recorder takes ends the key silently, so the next press is heard.
         modifier(&mut rt, Code::ShiftLeft, true, Mods::default());
-        rt.state.recording = true;
+        rt.state_mut().recording = true;
         modifier(&mut rt, Code::ShiftLeft, false, SHIFT);
         modifier(&mut rt, Code::AltRight, true, Mods::default());
-        rt.state.recording = false;
+        rt.state_mut().recording = false;
         modifier(&mut rt, Code::ShiftLeft, true, Mods::default());
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, true)]);
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, true)]);
         // A focus loss the recorder takes ends held keys silently, releases included.
-        rt.state.recording = true;
+        rt.state_mut().recording = true;
         rt.physical_input(PhysicalInput::FocusLost);
         rt.frame(0.0);
-        rt.state.recording = false;
-        assert!(matches!(rt.state.recorded.last(), Some(PhysicalInput::FocusLost)));
-        assert_eq!(rt.state.app.len(), 2);
+        rt.state_mut().recording = false;
+        assert!(matches!(rt.state().recorded.last(), Some(PhysicalInput::FocusLost)));
+        assert_eq!(rt.state().app.len(), 2);
         assert!(!modifier(&mut rt, Code::ShiftLeft, false, SHIFT), "Shift was already ended");
         modifier(&mut rt, Code::AltRight, true, Mods::default());
-        assert_eq!(modifiers(&rt.state.app)[2..], [(Modifier::AltRight, true)], "a key the recorder took is heard next time");
+        assert_eq!(modifiers(&rt.state().app)[2..], [(Modifier::AltRight, true)], "a key the recorder took is heard next time");
     }
 
     #[test]
@@ -424,8 +424,8 @@ mod tests {
         // How `--desktop` and headless scripts blur a window.
         rt.window_focus(false);
         rt.frame(0.0);
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
-        assert_eq!(rt.state.focus_lost, 1, "the recorder hears the blur too");
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
+        assert_eq!(rt.state().focus_lost, 1, "the recorder hears the blur too");
         // A hide, then the blur it may or may not bring.
         rt.window_focus(true);
         modifier(&mut rt, Code::AltRight, true, Mods::default());
@@ -433,12 +433,12 @@ mod tests {
         assert!(rt.keys_queued(), "a hidden host steps a frame to deliver it");
         rt.window_focus(false);
         rt.frame(0.0);
-        assert_eq!(modifiers(&rt.state.app)[2..], [(Modifier::AltRight, true), (Modifier::AltRight, false)]);
-        assert_eq!(rt.state.focus_lost, 2);
+        assert_eq!(modifiers(&rt.state().app)[2..], [(Modifier::AltRight, true), (Modifier::AltRight, false)]);
+        assert_eq!(rt.state().focus_lost, 2);
         rt.window_focus(true);
         rt.keys_lost();
         rt.frame(0.0);
-        assert_eq!(rt.state.focus_lost, 3, "a hide without a blur, after focus came back");
+        assert_eq!(rt.state().focus_lost, 3, "a hide without a blur, after focus came back");
     }
 
     #[test]
@@ -448,7 +448,7 @@ mod tests {
         click(&mut rt, "recorder");
         click(&mut rt, "field");
         modifier(&mut rt, Code::ShiftLeft, false, SHIFT);
-        assert_eq!(modifiers(&rt.state.app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
+        assert_eq!(modifiers(&rt.state().app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
     }
 
     #[test]

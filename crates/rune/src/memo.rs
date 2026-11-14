@@ -335,7 +335,7 @@ impl MemoCache {
     }
 }
 
-impl<S: 'static> crate::Runtime<S> {
+impl crate::runtime::RuntimeCore {
     /// Drops this window's cached subtrees whose memo id starts with `prefix`, wherever they
     /// nest, and those built inside them, then re-runs the view. A library that built them
     /// can unload once the commit after this drops its handlers. A memo enclosing a dropped
@@ -1000,7 +1000,7 @@ mod tests {
         let id = |rt: &Runtime<S>| rt.nodes.iter().find(|n| n.key.as_deref() == Some("button")).unwrap().id;
         let first = id(&rt);
         for _ in 0..3 {
-            rt.state.ticks += 1;
+            rt.state_mut().ticks += 1;
             commit(&mut rt);
         }
         assert_eq!(BUILDS.get(), 1, "other state changing doesn't build the memo");
@@ -1009,9 +1009,9 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.presses, 1, "handlers in a reused subtree run");
+        assert_eq!(rt.state().presses, 1, "handlers in a reused subtree run");
         assert_eq!(BUILDS.get(), 1);
-        rt.state.version += 1;
+        rt.state_mut().version += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), 2, "a new version builds");
         rt.set_system_dark(false);
@@ -1055,10 +1055,10 @@ mod tests {
         commit(&mut rt);
         commit(&mut rt);
         assert_eq!(BUILDS.get(), 2);
-        rt.state.0 += 1;
+        rt.state_mut().0 += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), 3, "the outer builds and finds the inner unchanged");
-        rt.state.1 += 1;
+        rt.state_mut().1 += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), 3, "the outer's version gates its closure, inner included");
     }
@@ -1113,13 +1113,13 @@ mod tests {
         assert_eq!(BUILDS.get(), 500, "a miss builds in the view, mounted or not");
         assert!(rt.nodes.len() < 200, "offscreen rows' children never reach the element tree: {}", rt.nodes.len());
         for _ in 0..5 {
-            rt.state.tick += 1;
+            rt.state_mut().tick += 1;
             commit(&mut rt);
         }
         let scroll = |rt: &mut Runtime<Rows>, dy: f32| {
             for _ in 0..40 {
                 rt.wheel(200.0, 300.0, dy);
-                rt.state.tick += 1;
+                rt.state_mut().tick += 1;
                 commit(rt);
             }
         };
@@ -1152,7 +1152,7 @@ mod tests {
         assert!(rt.find("row-0/field").is_none(), "the focused row scrolled out");
         rt.key(crate::KeyEvent { key: crate::Key::Text("offscreen".into()), mods: Default::default() });
         rt.frame(0.0);
-        assert_eq!(rt.state[0].text, "offscreen");
+        assert_eq!(rt.state()[0].text, "offscreen");
     }
 
     #[test]
@@ -1207,11 +1207,11 @@ mod tests {
         assert_eq!(label(&rt).as_deref(), Some("width 100"), "the first commit settles the read");
         let builds = BUILDS.get();
         for _ in 0..3 {
-            rt.state.ticks += 1;
+            rt.state_mut().ticks += 1;
             commit(&mut rt);
         }
         assert_eq!(BUILDS.get(), builds, "an unmoved read reuses");
-        rt.state.width = 150.0;
+        rt.state_mut().width = 150.0;
         commit(&mut rt);
         assert_eq!(label(&rt).as_deref(), Some("width 150"), "a moved read builds, though the version didn't change");
     }
@@ -1243,11 +1243,11 @@ mod tests {
         assert_eq!(shown(&rt, "cx").as_deref(), Some("Some([100.0, 10.0])"), "settled on the first commit");
         assert_eq!(shown(&rt, "free"), shown(&rt, "cx"));
         let builds = BUILDS.get();
-        rt.state.top = 40.0;
-        rt.state.ticks += 1;
+        rt.state_mut().top = 40.0;
+        rt.state_mut().ticks += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), builds + 1, "a move rebuilds only the whole-rect read");
-        rt.state.width = 150.0;
+        rt.state_mut().width = 150.0;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), builds + 4, "a resize rebuilds all three");
         assert_eq!(shown(&rt, "cx").as_deref(), Some("Some([150.0, 10.0])"));
@@ -1271,12 +1271,12 @@ mod tests {
         let builds = BUILDS.get();
         rt.wheel(100.0, 100.0, -0.3);
         rt.frame(1.0 / 60.0);
-        rt.state.ticks += 1;
+        rt.state_mut().ticks += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), builds, "0.3 pt is within the half point a whole-rect read ignores");
         rt.wheel(100.0, 100.0, -0.3);
         rt.frame(1.0 / 60.0);
-        rt.state.ticks += 1;
+        rt.state_mut().ticks += 1;
         commit(&mut rt);
         assert_eq!(BUILDS.get(), builds + 1, "0.6 pt from what it read builds");
     }
@@ -1349,13 +1349,13 @@ mod tests {
                 let mut rt = Runtime::new(Rows { n, tick: 0, memo }, rows, (400.0, 600.0), Env::new(true, 2.0));
                 rt.frame(0.0);
                 for _ in 0..30 {
-                    rt.state.tick += 1;
+                    rt.state_mut().tick += 1;
                     commit(&mut rt);
                 }
                 let frames = 300;
                 let start = std::time::Instant::now();
                 for _ in 0..frames {
-                    rt.state.tick += 1;
+                    rt.state_mut().tick += 1;
                     commit(&mut rt);
                 }
                 let per = start.elapsed().as_secs_f64() * 1e6 / f64::from(frames);

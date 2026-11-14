@@ -181,9 +181,9 @@ fn reordered_virtual_rows_slide_and_a_scroll_moves_none() {
     // Rows below the reader's first row, then the first row itself.
     for (a, b) in [(2, 3), (0, 1)] {
         let mut rt = virtual_rows();
-        let (ka, kb) = (rt.state[a].0, rt.state[b].0);
-        let (ya, yb, hb) = (y(&rt, ka), y(&rt, kb), rt.state[b].1);
-        let below = rt.state[b + 1].0;
+        let (ka, kb) = (rt.state()[a].0, rt.state()[b].0);
+        let (ya, yb, hb) = (y(&rt, ka), y(&rt, kb), rt.state()[b].1);
+        let below = rt.state()[b + 1].0;
         let y_below = y(&rt, below);
         rt.update(|rows, _| rows.swap(a, b));
         let frames = trace(&mut rt, &[ka, kb, below], 120);
@@ -197,7 +197,7 @@ fn reordered_virtual_rows_slide_and_a_scroll_moves_none() {
     for _ in 0..30 { rt.wheel(100.0, 100.0, -40.0); rt.frame(1.0 / 120.0); }
     for _ in 0..240 { rt.frame(1.0 / 120.0); }
     assert!(rt.elements().iter().all(|e| e.key.as_deref() != Some("v0")), "scrolled past the first rows");
-    let keys: Vec<&str> = rt.state.iter().map(|r| r.0).collect();
+    let keys: Vec<&str> = rt.state().iter().map(|r| r.0).collect();
     assert!(keys.iter().all(|k| !offset_tracked(&rt, k)), "a window shift slides no row");
 }
 

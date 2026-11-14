@@ -293,7 +293,8 @@ fn srgb_blend_frost_over_a_native_material_reads_as_core_animation() {
         let mut renderer = Renderer::new(&gpu.device, format);
         renderer.set_srgb_blend(srgb);
         let target = Offscreen::with_format(&gpu.device, 400, 240, format);
-        renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (400, 240));
+        let core = &mut *rt;
+        renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (400, 240));
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         renderer.draw(&mut enc, &target.view, clear);
         target.copy(&mut enc);

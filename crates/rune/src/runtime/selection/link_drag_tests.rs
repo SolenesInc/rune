@@ -26,7 +26,7 @@ fn a_drag_from_a_drag_selects_link_selects_and_a_click_on_it_presses_it() {
     rt.frame(1.0 / 60.0);
     rt.pointer_up(x, y);
     rt.frame(2.0 / 60.0);
-    assert_eq!(rt.state.pressed, ["mark"], "a click presses the link");
+    assert_eq!(rt.state().pressed, ["mark"], "a click presses the link");
     let ((x0, y0), (x1, _)) = (at(5), at(16));
     rt.pointer_move(x0, y0);
     rt.pointer_down(x0, y0);
@@ -38,5 +38,5 @@ fn a_drag_from_a_drag_selects_link_selects_and_a_click_on_it_presses_it() {
     rt.pointer_up(x1, y0);
     rt.frame(2.0);
     assert!(rt.selected_text().is_some_and(|t| t.contains("passage")), "a drag from the link selects: {:?}", rt.selected_text());
-    assert_eq!(rt.state.pressed, ["mark"], "and presses nothing");
+    assert_eq!(rt.state().pressed, ["mark"], "and presses nothing");
 }

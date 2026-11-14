@@ -49,7 +49,7 @@ fn drop_at(rt: &mut Runtime<Drops>, names: &[&str], at: (f32, f32)) {
 }
 
 fn dropped(rt: &Runtime<Drops>) -> Vec<(&'static str, Vec<&str>)> {
-    rt.state.dropped.iter().map(|(k, f)| (*k, f.iter().map(String::as_str).collect())).collect()
+    rt.state().dropped.iter().map(|(k, f)| (*k, f.iter().map(String::as_str).collect())).collect()
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn files_a_target_refuses_pass_to_the_next_that_accepts_them() {
     let mut rt = run(false);
     drop_at(&mut rt, &["c.png"], (300.0, 250.0));
     assert_eq!(dropped(&rt), [], "with no root handler a drop nothing takes is ignored");
-    assert_eq!(rt.state.hover, [], "and shows no hover");
+    assert_eq!(rt.state().hover, [], "and shows no hover");
 }
 
 #[test]
@@ -83,24 +83,24 @@ fn the_drop_hover_follows_the_drag_and_ends_when_it_leaves_or_drops() {
     rt.drag_files(files(&["a.png"]), Some((50.0, 50.0)));
     assert!(rt.dragging_files());
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.hover, [("inner", true)]);
+    assert_eq!(rt.state().hover, [("inner", true)]);
     assert_eq!(rt.drop_hovered().as_deref(), Some("inner"));
     rt.drag_files_to(Some((150.0, 150.0)));
     rt.frame(2.0 / 60.0);
-    assert_eq!(rt.state.hover[1..], [("inner", false), ("outer", true)], "only the innermost accepting target is hovered");
+    assert_eq!(rt.state().hover[1..], [("inner", false), ("outer", true)], "only the innermost accepting target is hovered");
     rt.drag_files_leave();
     assert!(!rt.dragging_files());
     rt.frame(3.0 / 60.0);
-    assert_eq!(rt.state.hover[3..], [("outer", false)], "leaving the window ends the hover");
+    assert_eq!(rt.state().hover[3..], [("outer", false)], "leaving the window ends the hover");
     assert_eq!(rt.drop_hovered(), None);
 
-    rt.state.hover.clear();
+    rt.state_mut().hover.clear();
     rt.drag_files(files(&["notes.txt"]), Some((50.0, 50.0)));
     rt.frame(4.0 / 60.0);
-    assert_eq!(rt.state.hover, [("outer", true)], "a target that refuses the files isn't hovered");
+    assert_eq!(rt.state().hover, [("outer", true)], "a target that refuses the files isn't hovered");
     rt.drop_files(files(&["notes.txt"]), Some((50.0, 50.0)));
     rt.frame(5.0 / 60.0);
-    assert_eq!(rt.state.hover, [("outer", true), ("outer", false)], "dropping ends the hover");
+    assert_eq!(rt.state().hover, [("outer", true), ("outer", false)], "dropping ends the hover");
     assert_eq!(dropped(&rt), [("outer", vec!["notes.txt"])]);
 }
 
@@ -123,7 +123,7 @@ fn a_covered_window_takes_a_drop_on_the_tree_it_has_now() {
     rt.drop_files(files(&["a.png"]), Some((50.0, 50.0)));
     rt.hidden_wake();
     assert_eq!(dropped(&rt), [("outer", vec!["a.png"])], "not the inner zone, which has gone");
-    assert_eq!(rt.state.hover, [("outer", true), ("outer", false)]);
+    assert_eq!(rt.state().hover, [("outer", true), ("outer", false)]);
 
     // Nor the zone behind a modal opened while covered (which, still fading in, takes none).
     rt.update(|s, _| s.modal = true);
@@ -147,7 +147,7 @@ fn a_drop_outside_the_window_or_an_open_modal_reaches_nothing() {
     assert_eq!(dropped(&rt), []);
     drop_at(&mut rt, &["b.png"], (150.0, 150.0));
     assert_eq!(dropped(&rt), [("modal", vec!["b.png"])]);
-    assert_eq!(rt.state.hover, [("modal", true), ("modal", false)]);
+    assert_eq!(rt.state().hover, [("modal", true), ("modal", false)]);
 }
 
 #[test]
@@ -160,7 +160,7 @@ fn a_hovered_target_that_unmounts_hears_its_hover_end() {
     // The host samples the pointer while the drag lasts; the target under it has changed.
     assert!(rt.drag_files_to(Some((50.0, 50.0))));
     rt.frame(3.0 / 60.0);
-    assert_eq!(rt.state.hover, [("inner", true), ("inner", false), ("outer", true)]);
+    assert_eq!(rt.state().hover, [("inner", true), ("inner", false), ("outer", true)]);
     assert_eq!(rt.drop_hovered().as_deref(), Some("outer"));
 }
 
@@ -191,10 +191,11 @@ fn a_drop_zone_over_other_elements_leaves_their_menus_and_help() {
     rt.secondary_down(10.0, 10.0);
     rt.secondary_up(10.0, 10.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.menus, 1, "the row's context menu");
+    assert_eq!(rt.state().menus, 1, "the row's context menu");
     rt.observe_pointer(10.0, 10.0);
     rt.frame(2.0 / 60.0);
-    rt.frame(rt.help_delay);
+    let core = &mut *rt;
+    core.frame(core.help_delay);
     assert_eq!(rt.help_tooltip().map(|(t, _)| t), Some("Row"));
 }
 
@@ -208,7 +209,7 @@ fn a_covered_window_still_takes_a_drop() {
     assert!(rt.has_pending_input());
     rt.hidden_wake();
     assert_eq!(dropped(&rt), [("inner", vec!["a.png"])]);
-    assert_eq!(rt.state.hover, [("inner", true), ("inner", false)]);
+    assert_eq!(rt.state().hover, [("inner", true), ("inner", false)]);
 }
 
 #[derive(Default)]
@@ -243,41 +244,41 @@ fn a_target_that_hears_rejected_drops_stops_them_and_shows_its_own_hover() {
     rt.frame(0.0);
     rt.drag_files(files(&["notes.txt"]), Some((50.0, 50.0)));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.hover, [("exports-rejected", true)], "not the outer zone's hover");
+    assert_eq!(rt.state().hover, [("exports-rejected", true)], "not the outer zone's hover");
     assert_eq!((rt.drop_rejected_hovered().as_deref(), rt.drop_hovered()), (Some("exports"), None));
     rt.drag_files_to(Some((150.0, 150.0)));
     rt.frame(2.0 / 60.0);
-    assert_eq!(rt.state.hover[1..], [("exports-rejected", false), ("outer", true)]);
+    assert_eq!(rt.state().hover[1..], [("exports-rejected", false), ("outer", true)]);
     assert_eq!((rt.drop_rejected_hovered(), rt.drop_hovered().as_deref()), (None, Some("outer")));
     rt.drag_files_to(Some((50.0, 50.0)));
     rt.drop_files(files(&["notes.txt"]), Some((50.0, 50.0)));
     rt.frame(3.0 / 60.0);
-    assert_eq!(rt.state.hover[3..], [("outer", false), ("exports-rejected", true), ("exports-rejected", false)], "dropping ends it");
-    assert_eq!((rt.state.rejected.as_slice(), rt.state.dropped.as_slice()), (&[vec!["notes.txt".to_owned()]][..], &[][..]));
+    assert_eq!(rt.state().hover[3..], [("outer", false), ("exports-rejected", true), ("exports-rejected", false)], "dropping ends it");
+    assert_eq!((rt.state().rejected.as_slice(), rt.state().dropped.as_slice()), (&[vec!["notes.txt".to_owned()]][..], &[][..]));
 
-    rt.state.hover.clear();
+    rt.state_mut().hover.clear();
     rt.drag_files(files(&["a.json", "b.txt"]), Some((50.0, 50.0)));
     rt.frame(4.0 / 60.0);
-    assert_eq!(rt.state.hover, [("exports", true)], "a drag carrying an export is accepted");
+    assert_eq!(rt.state().hover, [("exports", true)], "a drag carrying an export is accepted");
     rt.drop_files(files(&["a.json", "b.txt"]), Some((50.0, 50.0)));
     rt.frame(5.0 / 60.0);
-    assert_eq!(rt.state.dropped, [("exports", vec!["a.json".to_owned()])]);
-    assert_eq!(rt.state.rejected[1..], [vec!["b.txt".to_owned()]], "and the rest are rejected");
+    assert_eq!(rt.state().dropped, [("exports", vec!["a.json".to_owned()])]);
+    assert_eq!(rt.state().rejected[1..], [vec!["b.txt".to_owned()]], "and the rest are rejected");
 
     rt.drag_files(files(&["a.json"]), Some((50.0, 50.0)));
     rt.frame(6.0 / 60.0);
     rt.drag_files_leave();
     rt.drag_files(files(&["c.txt"]), Some((50.0, 50.0)));
     rt.frame(7.0 / 60.0);
-    assert_eq!(rt.state.hover[2..], [("exports", true), ("exports", false), ("exports-rejected", true)], "the same target swaps hovers");
+    assert_eq!(rt.state().hover[2..], [("exports", true), ("exports", false), ("exports-rejected", true)], "the same target swaps hovers");
 
     rt.drag_files_leave();
     rt.frame(8.0 / 60.0);
-    rt.state.hover.clear();
+    rt.state_mut().hover.clear();
     rt.drag_files(Vec::new(), Some((50.0, 50.0)));
     rt.drop_files(Vec::new(), Some((50.0, 50.0)));
     rt.frame(9.0 / 60.0);
-    assert!(rt.state.hover.is_empty() && rt.drop_rejected_hovered().is_none(), "an empty drag claims no rejected hover");
+    assert!(rt.state().hover.is_empty() && rt.drop_rejected_hovered().is_none(), "an empty drag claims no rejected hover");
 }
 
 #[test]
@@ -297,7 +298,7 @@ fn a_target_that_follows_the_drag_hears_its_point_on_the_element_and_where_it_dr
     }
     let mut rt = Runtime::new(Caret::default(), view, (400.0, 300.0), Env::new(true, 1.0));
     rt.frame(0.0);
-    let take = |rt: &mut Runtime<Caret>| std::mem::take(&mut rt.state.seen);
+    let take = |rt: &mut Runtime<Caret>| std::mem::take(&mut rt.state_mut().seen);
     rt.drag_files(files(&["a.txt"]), Some((30.0, 40.0)));
     rt.frame(1.0 / 60.0);
     assert_eq!(take(&mut rt), [("over", Some((30.0, 20.0))), ("move", Some((30.0, 20.0)))], "points on the element, below its 20 pt neighbour");
@@ -328,8 +329,8 @@ fn a_drag_that_left_or_dropped_carries_nothing_into_the_next_sample() {
     rt.frame(1.0 / 60.0);
     drop_at(&mut rt, &["a.png"], (50.0, 50.0));
     assert!(!rt.dragging_files() && !rt.drag_files_to(Some((150.0, 150.0))));
-    rt.state.hover.clear();
+    rt.state_mut().hover.clear();
     rt.drag_files(files(&["notes.txt"]), Some((50.0, 50.0)));
     rt.frame(3.0 / 60.0);
-    assert_eq!(rt.state.hover, [("outer", true)], "the next drag starts from its own files, not the last one's");
+    assert_eq!(rt.state().hover, [("outer", true)], "the next drag starts from its own files, not the last one's");
 }

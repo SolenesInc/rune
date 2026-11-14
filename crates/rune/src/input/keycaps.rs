@@ -240,7 +240,7 @@ impl Overlay {
             Some((r, _)) => { r.retain(|&(.., t0)| t - t0 < RIPPLE); r.iter().map(|&(id, x, y, _)| (id, x, y)).collect() }
             None => Vec::new(),
         };
-        let s = &self.rt.state;
+        let s = &self.rt.state();
         if s.caps != caps || s.ripples != ripples || s.dark != dark {
             self.rt.update(move |s, _| { s.caps = caps; s.ripples = ripples; s.dark = dark; });
         }

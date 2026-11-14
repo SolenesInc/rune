@@ -95,7 +95,7 @@ fn runtime() -> (Runtime<State>, f64) {
 
 fn idle() -> (usize, usize, u64) {
     let (mut rt, mut now) = runtime();
-    let before = rt.state.script.metrics().vm_calls;
+    let before = rt.state().script.metrics().vm_calls;
     let frames = 1200;
     let mut asked = 0;
     for _ in 0..frames {
@@ -105,7 +105,7 @@ fn idle() -> (usize, usize, u64) {
             asked += 1;
         }
     }
-    (frames, asked, rt.state.script.metrics().vm_calls - before)
+    (frames, asked, rt.state().script.metrics().vm_calls - before)
 }
 
 fn memo_hit(n: usize) -> (Stat, u64) {
@@ -115,8 +115,8 @@ fn memo_hit(n: usize) -> (Stat, u64) {
     for _ in 0..n {
         rt.update(|s, _| s.host_ticks += 1);
         rt.frame(DT);
-        samples.push(us(rt.state.view_time.get()));
-        calls += rt.state.view_calls.get();
+        samples.push(us(rt.state().view_time.get()));
+        calls += rt.state().view_calls.get();
     }
     (Stat::of(samples), calls)
 }
@@ -176,18 +176,18 @@ mod cpu {
 
 fn scroll() -> (Stat, Stat, u64) {
     let (mut rt, _) = runtime();
-    let rows_before = rt.state.script.metrics().rows;
+    let rows_before = rt.state().script.metrics().rows;
     let (mut script, mut frame) = (Vec::new(), Vec::new());
     // 40 points a frame at 120 fps (4,800 pt/s): one or two new rows enter most frames.
     for _ in 0..360 {
-        let m = rt.state.script.metrics();
+        let m = rt.state().script.metrics();
         let start = Instant::now();
         rt.wheel(360.0, 400.0, -40.0);
         rt.frame(DT);
         frame.push(us(start.elapsed()));
-        script.push(us(rt.state.script.metrics().vm_time - m.vm_time));
+        script.push(us(rt.state().script.metrics().vm_time - m.vm_time));
     }
-    (Stat::of(script), Stat::of(frame), rt.state.script.metrics().rows - rows_before)
+    (Stat::of(script), Stat::of(frame), rt.state().script.metrics().rows - rows_before)
 }
 
 fn reload(n: usize) -> (Stat, Stat, Stat, bool) {

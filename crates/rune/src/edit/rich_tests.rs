@@ -34,11 +34,11 @@ fn plain_field_leaves_format_chords_to_the_app() {
     f.focused = true;
     f.set_selection(0, 5);
     let mut rt = Runtime::new(Form { f, keys: vec![] }, view, (200.0, 40.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
+    rt.app_mut().on_key = Some(|s, ev, _| { s.keys.push(ev.key.clone()); true });
     rt.frame(0.0);
     for c in ['b', 'i', 'u'] { rt.key(cmd(c)); rt.frame(0.0); }
-    assert_eq!(rt.state.keys, [Key::Command('b'), Key::Command('i'), Key::Command('u')]);
-    assert!(rt.state.f.marks().is_empty());
+    assert_eq!(rt.state().keys, [Key::Command('b'), Key::Command('i'), Key::Command('u')]);
+    assert!(rt.state().f.marks().is_empty());
     // A field with no formatting lays out as plain text: no spans, blocks or soft breaks.
     let n = rt.nodes.iter().find(|n| n.key.as_deref() == Some("f")).unwrap();
     let t = n.text.as_ref().unwrap();
@@ -102,7 +102,7 @@ fn direct_text_assignment_never_panics() {
     rt.key(k(Key::Right));
     rt.ime(Ime::Commit("あ".into()));
     rt.frame(0.0);
-    assert_invariants(&rt.state.e, "runtime");
+    assert_invariants(&rt.state().e, "runtime");
 }
 
 #[test]
@@ -591,21 +591,21 @@ fn copy_from_one_rich_field_pastes_marks_and_blocks_into_another() {
     rt.key(cmd('c'));
     rt.frame(0.0);
     let copied = m.content().unwrap();
-    assert_eq!(copied.text(), rt.state.a.text);
+    assert_eq!(copied.text(), rt.state().a.text);
     assert!(copied.html().is_some_and(|h| h.contains("<strong>bold</strong>") && h.contains("<ul>")), "{copied:?}");
 
     rt.update(|s, _| { s.a.focused = false; s.b.focused = true; });
     rt.frame(0.0);
     rt.update(|_, tx| tx.request_paste());
     rt.frame(0.0);
-    let (a, b) = (&rt.state.a, &rt.state.b);
+    let (a, b) = (&rt.state().a, &rt.state().b);
     assert_eq!((&b.text, b.marks(), b.blocks()), (&a.text, a.marks(), a.blocks()));
 
     // Cut carries the formatting it removes.
     rt.update(|s, _| s.b.set_selection(6, 10));
     rt.key(cmd('x'));
     rt.frame(0.0);
-    assert_eq!(rt.state.b.text, format!("Hello  link{}", &rt.state.a.text[15..]));
+    assert_eq!(rt.state().b.text, format!("Hello  link{}", &rt.state().a.text[15..]));
     assert!(m.content().unwrap().html().is_some_and(|h| h.contains("<strong>bold</strong>")));
 
     // A plain field pastes the text only and copies no HTML.
@@ -613,8 +613,8 @@ fn copy_from_one_rich_field_pastes_marks_and_blocks_into_another() {
     rt.frame(0.0);
     rt.update(|_, tx| tx.request_paste());
     rt.frame(0.0);
-    assert_eq!(rt.state.plain.text, "bold");
-    assert!(rt.state.plain.is_plain());
+    assert_eq!(rt.state().plain.text, "bold");
+    assert!(rt.state().plain.is_plain());
     rt.update(|s, _| s.plain.set_selection(0, 4));
     rt.key(cmd('c'));
     rt.frame(0.0);
@@ -939,19 +939,19 @@ fn a_pill_copied_from_one_rich_field_pastes_whole_into_another() {
         rt.frame(0.0);
     };
     paste_into(&mut rt, |s| &mut s.b);
-    assert_eq!(pills_of(&rt.state.b), [(2..10, "agent:x".to_owned())], "its own copy pastes the pill back");
+    assert_eq!(pills_of(&rt.state().b), [(2..10, "agent:x".to_owned())], "its own copy pastes the pill back");
 
     // The same HTML from outside (another app's copy) pastes plain labels, even with identical plain text, unless a hook keeps them.
     m.set_content(ClipboardContent::new("a @x-agent b").with_html("a <span data-pill=\"agent:x\">@x-agent</span> b"));
     rt.update(|s, _| s.b.set_selection(0, s.b.text.len()));
     paste_into(&mut rt, |s| &mut s.b);
-    assert_eq!((rt.state.b.text.as_str(), rt.state.b.pills().count()), ("a @x-agent b", 0));
+    assert_eq!((rt.state().b.text.as_str(), rt.state().b.pills().count()), ("a @x-agent b", 0));
     m.set_content(ClipboardContent::new("x @x-agent").with_html("x <span data-pill=\"agent:x\">@x-agent</span>"));
     rt.update(|s, _| s.b.set_selection(0, s.b.text.len()));
     paste_into(&mut rt, |s| &mut s.b);
-    assert_eq!((rt.state.b.text.as_str(), rt.state.b.pills().count()), ("x @x-agent", 0));
+    assert_eq!((rt.state().b.text.as_str(), rt.state().b.pills().count()), ("x @x-agent", 0));
     paste_into(&mut rt, |s| &mut s.hooked);
-    assert_eq!(pills_of(&rt.state.hooked), [(2..10, "agent:x".to_owned())]);
+    assert_eq!(pills_of(&rt.state().hooked), [(2..10, "agent:x".to_owned())]);
 }
 
 #[test]

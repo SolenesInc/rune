@@ -56,13 +56,15 @@ fn frosted_bar_cost() {
             for _ in 0..4 { rt.frame(1.0 / 120.0); }
             let idle = !rt.frame(1.0 / 120.0);
             let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
             (blur, rt, renderer, idle, Vec::new(), Vec::new(), Vec::new(), Vec::new())
         }).collect();
         // Alternate the two sides so clock and thermal drift hit both alike.
         for round in 0..12 {
             for (_, rt, renderer, _, still, scroll, frame_ms, encode_ms) in &mut sides {
-                renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+                let core = &mut **rt;
+                renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
                 let ms = gpu_time(&gpu, |enc| renderer.draw(enc, &target.view, [1.0; 4]));
                 // Scrolling: a 3 pt wheel step each 120 Hz frame, rebuilt, prepared and encoded.
                 let dir = if round % 2 == 0 { -3.0 } else { 3.0 };
@@ -72,7 +74,8 @@ fn frosted_bar_cost() {
                     let t0 = Instant::now();
                     rt.frame(1.0 / 120.0);
                     let t1 = Instant::now();
-                    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+                    let core = &mut **rt;
+                    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
                     renderer.draw(enc, &target.view, [1.0; 4]);
                     frames.push(((t1 - t0).as_secs_f64() * 1000.0, t1.elapsed().as_secs_f64() * 1000.0));
                 });

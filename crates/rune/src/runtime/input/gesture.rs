@@ -18,7 +18,7 @@ pub(super) enum Gesture {
 /// Points of Ctrl + wheel per unit of magnification, where a pinch arrives that way.
 const PINCH_WHEEL: f32 = 200.0;
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// A wheel or trackpad scroll at window point (`ev.x`, `ev.y`), with its modifiers and
     /// phase. The innermost [`El::on_wheel`] handler there hears it first, up to the nearest
     /// scroll view; what none takes scrolls as [`Self::wheel_xy`] does.
@@ -85,7 +85,7 @@ impl<S: 'static> Runtime<S> {
     fn call_wheel(&mut self, path: &str, ev: WheelEvent, tx: &mut Tx) -> Option<bool> {
         let (i, f) = self.gesture_handler(path, |g| g.wheel.clone())?;
         let [x, y] = self.to_local(i, ev.x, ev.y);
-        Some(Tx::took(f(states!(self), WheelEvent { x, y, ..ev }, tx), tx))
+        Some(Tx::took(f(self.app.states(), WheelEvent { x, y, ..ev }, tx), tx))
     }
 
     /// A trackpad pinch at window point (`ev.x`, `ev.y`) for the [`El::on_magnify`] handlers
@@ -124,15 +124,15 @@ impl<S: 'static> Runtime<S> {
             let taken = match gesture {
                 Gesture::Magnify(ev) => self.gesture_handler(&path, |g| g.magnify.clone()).map(|(i, f)| {
                     let [x, y] = self.to_local(i, ev.x, ev.y);
-                    Tx::took(f(states!(self), MagnifyEvent { x, y, ..ev }, tx), tx)
+                    Tx::took(f(self.app.states(), MagnifyEvent { x, y, ..ev }, tx), tx)
                 }),
                 Gesture::Rotate(ev) => self.gesture_handler(&path, |g| g.rotate.clone()).map(|(i, f)| {
                     let [x, y] = self.to_local(i, ev.x, ev.y);
-                    Tx::took(f(states!(self), RotateEvent { x, y, ..ev }, tx), tx)
+                    Tx::took(f(self.app.states(), RotateEvent { x, y, ..ev }, tx), tx)
                 }),
                 Gesture::SmartMagnify(x, y) => self.gesture_handler(&path, |g| g.smart_magnify.clone()).map(|(i, f)| {
                     let [x, y] = self.to_local(i, x, y);
-                    Tx::took(f(states!(self), x, y, tx), tx)
+                    Tx::took(f(self.app.states(), x, y, tx), tx)
                 }),
             };
             if taken == Some(true) { return true; }
@@ -296,7 +296,7 @@ impl<S: 'static> Runtime<S> {
             chain.sort_by_key(|i| shared.iter().position(|s| s == i).map_or(0, |p| p + 1));
         }
         for i in chain {
-            if let Some(f) = self.nodes[i].focus.key_up.clone() && Tx::took(f(states!(self), ev, tx), tx) {
+            if let Some(f) = self.nodes[i].focus.key_up.clone() && Tx::took(f(self.app.states(), ev, tx), tx) {
                 if secure { log_event!(self, "key-up [redacted]") } else { log_event!(self, "key-up {:?}", ev.key) }
                 return true;
             }
@@ -329,20 +329,20 @@ mod tests {
         let space = KeyEvent { key: crate::Key::Text(" ".into()), mods: Mods::default() };
         assert!(rt.physical_with_fallback(release, Some(space.clone())));
         rt.frame(0.0);
-        assert_eq!(rt.state.ups, [space.key.clone()]);
+        assert_eq!(rt.state().ups, [space.key.clone()]);
 
         // A focused `on_physical_input` that takes the release keeps it from `on_key_up`.
         let (x, y) = rt.find("field").unwrap();
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
-        rt.state.swallow = true;
+        rt.state_mut().swallow = true;
         rt.physical_with_fallback(release, Some(space.clone()));
         rt.frame(0.0);
-        assert_eq!(rt.state.ups.len(), 1);
-        rt.state.swallow = false;
+        assert_eq!(rt.state().ups.len(), 1);
+        rt.state_mut().swallow = false;
         rt.physical_with_fallback(release, Some(space));
         rt.frame(0.0);
-        assert_eq!(rt.state.ups.len(), 2);
+        assert_eq!(rt.state().ups.len(), 2);
     }
 
     #[derive(Default)]
@@ -364,7 +364,7 @@ mod tests {
         assert!(rt.wants_key_up());
         rt.key_up(up());
         rt.frame(0.0);
-        assert_eq!(rt.state.log, ["stage"]);
+        assert_eq!(rt.state().log, ["stage"]);
     }
 
     fn pair(_: &Keys, _: &mut crate::Cx<Keys>) -> El {
@@ -384,7 +384,7 @@ mod tests {
         click(&mut rt, "b");
         rt.key_up(up());
         rt.frame(0.0);
-        assert_eq!(rt.state.log, ["a"]);
+        assert_eq!(rt.state().log, ["a"]);
     }
 
     fn modal_view(_: &Keys, _: &mut crate::Cx<Keys>) -> El {
@@ -401,7 +401,7 @@ mod tests {
         rt.frame(0.0);
         rt.key_up(up());
         rt.frame(0.0);
-        assert_eq!(rt.state.log, ["inside"]);
+        assert_eq!(rt.state().log, ["inside"]);
     }
 
     #[derive(Default)]
@@ -427,8 +427,8 @@ mod tests {
         rt.button_up(x + 12.0, y + 10.0, PointerButton::Secondary);
         rt.frame(0.0);
         let secondary = PointerButton::Secondary;
-        assert_eq!(rt.state.log, [("takes", Phase::Down, secondary), ("takes", Phase::Move, secondary), ("takes", Phase::Up, secondary)]);
-        assert!(rt.state.menus.is_empty());
+        assert_eq!(rt.state().log, [("takes", Phase::Down, secondary), ("takes", Phase::Move, secondary), ("takes", Phase::Up, secondary)]);
+        assert!(rt.state().menus.is_empty());
 
         let (mx, my) = rt.find("menu").unwrap();
         rt.button_down(mx, my, secondary);
@@ -437,8 +437,8 @@ mod tests {
         rt.button_down(px, py, secondary);
         rt.button_up(px, py, secondary);
         rt.frame(0.0);
-        assert_eq!(rt.state.log.len(), 3, "an element that did not take the button hears no drag");
-        assert_eq!(rt.state.menus, ["menu", "plain"]);
+        assert_eq!(rt.state().log.len(), 3, "an element that did not take the button hears no drag");
+        assert_eq!(rt.state().menus, ["menu", "plain"]);
     }
 
     #[derive(Default)]
@@ -461,8 +461,8 @@ mod tests {
         rt.pointer_up(wx, wy);
         rt.pointer_move(wx + 1.0, wy);
         rt.frame(0.0);
-        assert_eq!(rt.state.held.first(), Some(&true), "{:?}", rt.state.held);
-        assert_eq!(rt.state.held.last(), Some(&false), "{:?}", rt.state.held);
+        assert_eq!(rt.state().held.first(), Some(&true), "{:?}", rt.state().held);
+        assert_eq!(rt.state().held.last(), Some(&false), "{:?}", rt.state().held);
     }
 
     #[test]
@@ -471,7 +471,7 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.pinch_wheel(50.0, 50.0, -20.0));
         rt.frame(0.0);
-        assert_eq!(rt.state.zoom, [20.0 / PINCH_WHEEL]);
+        assert_eq!(rt.state().zoom, [20.0 / PINCH_WHEEL]);
         assert!(!rt.pinch_wheel(500.0, 50.0, -20.0), "off the window nothing takes it");
     }
 }

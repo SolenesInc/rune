@@ -365,7 +365,7 @@ impl<S: 'static> Host<S> {
             c.render(&mut f);
             animating |= c.animating();
         } else {
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (l.config.width, l.config.height));
+            { let core: &mut crate::runtime::RuntimeCore = &mut **rt; renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (l.config.width, l.config.height)); }
             renderer.draw(&mut enc, target, rt.clear_color());
         }
         if let Some(alpha) = &l.alpha { alpha.draw(&mut enc, &view); }

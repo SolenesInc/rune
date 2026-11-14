@@ -45,14 +45,14 @@ fn buttons_read_their_label_tooltip_shortcut_and_state() {
 
     assert!(act(&mut rt, "save", Action::Click));
     assert!(act(&mut rt, "menu", Action::Expand));
-    assert!(rt.state.open);
+    assert!(rt.state().open);
     assert!(has(node(&rt.accessibility_json(), "menu"), "expanded"));
     assert!(!act(&mut rt, "off", Action::Click), "a disabled button takes no action");
     tap(&mut rt, "close");
     assert!(act(&mut rt, "save", Action::Focus));
     assert_eq!(focused(&rt.accessibility_json()).as_deref(), Some("save"));
     press_key(&mut rt, Key::Text(" ".into()));
-    assert_eq!(rt.state.presses, 12, "assistive click, pointer and Space reach the same handlers");
+    assert_eq!(rt.state().presses, 12, "assistive click, pointer and Space reach the same handlers");
 }
 
 fn toggles(s: &App, _: &mut Cx<App>) -> El {
@@ -90,10 +90,10 @@ fn checkboxes_and_switches_read_checked_and_toggle_by_any_input() {
     let tree = rt.accessibility_json();
     assert!(has(node(&tree, "sync"), "checked") && has(node(&tree, "wifi"), "checked"));
     tap(&mut rt, "wifi");
-    assert!(!rt.state.on);
+    assert!(!rt.state().on);
     act(&mut rt, "wifi", Action::Focus);
     press_key(&mut rt, Key::Text(" ".into()));
-    assert!(rt.state.on && has(node(&rt.accessibility_json(), "wifi"), "checked"));
+    assert!(rt.state().on && has(node(&rt.accessibility_json(), "wifi"), "checked"));
 }
 
 fn radios(s: &App, _: &mut Cx<App>) -> El {
@@ -143,14 +143,14 @@ fn radios_and_segments_read_their_group_place_and_choice() {
     golden("radios", &tree);
 
     assert!(act(&mut rt, "item1", Action::Click));
-    assert_eq!(rt.state.picked, Some(1));
+    assert_eq!(rt.state().picked, Some(1));
     let tree = rt.accessibility_json();
     assert!(has(node(&tree, "item1"), "checked") && has(node(&tree, "segment1"), "checked"));
     tap(&mut rt, "segment0");
-    assert_eq!(rt.state.picked, Some(0));
+    assert_eq!(rt.state().picked, Some(0));
     act(&mut rt, "segment0", Action::Focus);
     press_key(&mut rt, Key::Right);
-    assert_eq!(rt.state.picked, Some(1), "arrows move the choice");
+    assert_eq!(rt.state().picked, Some(1), "arrows move the choice");
 }
 
 fn status(s: &App, _: &mut Cx<App>) -> El {
@@ -240,7 +240,7 @@ fn fields_name_their_editor_and_describe_their_help_and_errors() {
 
     assert!(rt.accessibility_action("input", Action::SetValue, Some(rune::accesskit::ActionData::Value("Ada".into()))));
     settle(&mut rt);
-    assert_eq!(rt.state.edit.text, "Ada");
+    assert_eq!(rt.state().edit.text, "Ada");
     assert_eq!(node(node(&rt.accessibility_json(), "search"), "input")["value"], "Ada");
 }
 
@@ -264,7 +264,7 @@ fn a_shortcut_recorder_reads_its_name_keys_and_recording() {
     golden("shortcut-recorder", &tree);
 
     assert!(act(&mut rt, "show", Action::Click));
-    assert!(rt.state.recorder.is_recording());
+    assert!(rt.state().recorder.is_recording());
     let show = rt.accessibility_json();
     let show = node(&show, "show");
     assert_eq!(show["value"], "Press shortcut");

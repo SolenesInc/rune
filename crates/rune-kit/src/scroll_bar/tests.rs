@@ -487,7 +487,7 @@ fn hidden_overlay_bar_passes_presses_through_to_right_edge_content() {
     rt.pointer_down(196.0, 12.0);
     rt.pointer_up(196.0, 12.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state, 1, "hidden overlay bar lets presses reach content underneath");
+    assert_eq!(*rt.state(), 1, "hidden overlay bar lets presses reach content underneath");
 }
 
 #[test]

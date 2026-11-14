@@ -104,7 +104,7 @@ fn loops_sleep_offscreen_hidden_reduced_and_after_exit() {
         for _ in 0..1200 { if rt.animating { requested += 1; rt.frame(1.0 / 120.0); } }
         assert_eq!(requested, if active { 1200 } else { 0 });
         if active {
-            rt.state.1 = false; rt.invalidate(); rt.frame(0.0);
+            rt.state_mut().1 = false; rt.invalidate(); rt.frame(0.0);
             assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("loop") && e.opacity > 0.0));
             for _ in 0..240 { rt.frame(1.0 / 120.0); }
             assert!(!rt.animating);
@@ -142,7 +142,7 @@ fn slides_sweep_through_their_clip_and_sleep_when_hidden_or_reduced() {
             assert!(xs[..126].windows(2).all(|w| (w[1] - w[0] - step).abs() < 0.05));
         }
         assert_eq!(xs[127], -25.0, "the sweep wraps");
-        rt.state.0 = false; rt.invalidate();
+        rt.state_mut().0 = false; rt.invalidate();
         for _ in 0..240 { rt.frame(1.0 / 120.0); }
         assert!(!rt.animating);
         let mut rt = Runtime::new((true, true, easing), view, (100.0, 100.0), Env::new(true, 2.0));
@@ -168,7 +168,7 @@ fn delayed_opacity_handoff_never_overprints_the_outgoing_label() {
         let mut rt = Runtime::new((false, reduced), view, (100.0, 100.0), Env::new(true, 2.0));
         rt.frame(0.0);
         for busy in [true, false] {
-            rt.state.0 = busy;
+            rt.state_mut().0 = busy;
             rt.invalidate();
             for _ in 0..60 {
                 rt.frame(1.0 / 120.0);

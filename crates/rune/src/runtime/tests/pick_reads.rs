@@ -21,9 +21,9 @@ fn a_pick_read_callback_runs_on_the_frame_clock_its_handler_saw() {
     rt.pointer_down(20.0, 20.0);
     rt.pointer_up(20.0, 20.0);
     rt.frame(1.0);
-    assert!(rt.state.pressed_at >= 100.0, "the press ran after the clock moved: {}", rt.state.pressed_at);
-    assert_eq!(rt.state.picked_at, Some(rt.state.pressed_at), "the callback reads the clock its handler read");
-    assert_eq!(rt.wake_deadline(), Some(rt.state.due), "a deadline the handler stamped wakes when it is due");
+    assert!(rt.state().pressed_at >= 100.0, "the press ran after the clock moved: {}", rt.state().pressed_at);
+    assert_eq!(rt.state().picked_at, Some(rt.state().pressed_at), "the callback reads the clock its handler read");
+    assert_eq!(rt.wake_deadline(), Some(rt.state().due), "a deadline the handler stamped wakes when it is due");
 }
 
 #[test]
@@ -48,12 +48,12 @@ fn find_elements_answers_where_the_last_frame_showed_each_key_after_the_handler(
     rt.pointer_down(20.0, 20.0);
     rt.pointer_up(20.0, 20.0);
     rt.frame(1.0);
-    assert!(rt.state.asked);
-    let shown = rt.state.found[0].expect("shown is on screen");
+    assert!(rt.state().asked);
+    let shown = rt.state().found[0].expect("shown is on screen");
     assert_eq!(shown.0, [0.0, 40.0, 30.0, 20.0]);
     assert_eq!(shown.1, shown.0);
-    let clipped = rt.state.found[1].expect("clipped is laid out");
+    let clipped = rt.state().found[1].expect("clipped is laid out");
     assert_eq!(clipped.0[3], 30.0);
     assert_eq!(clipped.1[3], 10.0, "its parent's clip leaves 10 points of it visible");
-    assert_eq!(rt.state.found[2], None);
+    assert_eq!(rt.state().found[2], None);
 }

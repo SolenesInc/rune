@@ -95,7 +95,7 @@ fn every_paint_cache_walk_matches_dev() {
     let id = rt.nodes[i].id;
     rt.node_caches.clear();
     rt.static_scales.clear();
-    fn walk(rt: &mut Runtime<()>, i: usize, id: NodeId, old: Old, scale: f32, now: f64, generation: u64, depth: u32) {
+    fn walk(rt: &mut crate::runtime::RuntimeCore, i: usize, id: NodeId, old: Old, scale: f32, now: f64, generation: u64, depth: u32) {
         if depth == 5 { return; }
         let saved = rt.node_caches.clone();
         let tracked = rt.static_scales.clone();

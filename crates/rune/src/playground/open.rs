@@ -38,7 +38,7 @@ impl<S: 'static> Live<S> {
     }
 
     /// Checks that story `name` (else the one selected) is there, and picks `variant` of it.
-    pub(super) fn open_at(&mut self, name: Option<&str>, variant: Option<&str>) -> Result<(), String> {
+    pub(crate) fn open_at(&mut self, name: Option<&str>, variant: Option<&str>) -> Result<(), String> {
         if let Some(name) = name && self.find(name).is_none() {
             let names: Vec<_> = self.order.iter().map(|&i| self.path(i)).collect();
             return Err(format!("no story {name:?} in the playground; it has: {}", names.join(", ")));

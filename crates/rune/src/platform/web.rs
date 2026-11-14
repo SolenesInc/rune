@@ -474,9 +474,9 @@ impl<S: 'static> ApplicationHandler<Wake> for Browser<S> {
                     let _ = canvas.style().set_property("height", &format!("{h}px"));
                 }
             }
-            rt.on_focus = on_focus;
-            rt.on_mods = on_mods;
-            rt.on_field_key = on_field_key;
+            rt.app_mut().on_focus = on_focus;
+            rt.app_mut().on_mods = on_mods;
+            rt.app_mut().on_field_key = on_field_key;
             rt.set_modifier_keys(modifier_keys);
             rt.set_tab_visits_controls(tab_visits_controls);
             rt.set_srgb_blend(srgb_blend);
@@ -592,7 +592,8 @@ impl<S: 'static> ApplicationHandler<Wake> for Browser<S> {
                         target: &target, format: r.renderer.format(), size: (r.config.width, r.config.height), dt,
                         update_ms: now.elapsed().as_secs_f64() * 1000.0, rt: &mut r.rt, ui: &mut r.renderer });
                 } else {
-                    r.renderer.prepare(&r.gpu.device, &r.gpu.queue, &mut r.rt.text.atlas, &r.rt.instances, (r.config.width, r.config.height));
+                    let core = &mut *r.rt;
+                    r.renderer.prepare(&r.gpu.device, &r.gpu.queue, &mut core.text.atlas, &core.instances, (r.config.width, r.config.height));
                     r.renderer.draw(&mut encoder, &target, r.rt.clear_color());
                 }
                 r.renderer.submit(&r.gpu.queue, encoder);

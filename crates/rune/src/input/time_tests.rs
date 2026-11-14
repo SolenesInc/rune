@@ -29,7 +29,7 @@ fn view(_: &Seen, _: &mut Cx<Seen>) -> El {
 
 fn app() -> Runtime<Seen> {
     let mut rt = Runtime::new(Seen::default(), view, (100.0, 100.0), Env::new(true, 1.0));
-    rt.on_key = Some(|s, e, tx| { s.keys.push((e.key.clone(), tx.input_time())); true });
+    rt.app_mut().on_key = Some(|s, e, tx| { s.keys.push((e.key.clone(), tx.input_time())); true });
     rt.frame(0.0);
     rt
 }
@@ -60,24 +60,24 @@ fn input_that_piles_up_between_frames_keeps_each_event_s_time() {
         rt.pointer_up(20.0, 20.0);
     }
     rt.frame(0.0);
-    assert_eq!(rt.state.keys, vec![(Key::Down, Some(t1)), (Key::Up, Some(t2))]);
-    assert_eq!(rt.state.presses, vec![Some(t3)]);
+    assert_eq!(rt.state().keys, vec![(Key::Down, Some(t1)), (Key::Up, Some(t2))]);
+    assert_eq!(rt.state().presses, vec![Some(t3)]);
 }
 
 #[test]
 fn handlers_no_input_caused_see_no_input_time() {
     let mut rt = app();
-    rt.poll = Some(|s, _, tx| { s.polls.push(tx.input_time()); false });
+    rt.app_mut().poll = Some(|s, _, tx| { s.polls.push(tx.input_time()); false });
     {
         // A frame run while a host dispatches input still polls without its time.
         let _input = scope(Some(Instant::now()));
         rt.frame(0.0);
     }
-    assert_eq!(rt.state.polls, vec![None]);
+    assert_eq!(rt.state().polls, vec![None]);
     rt.update(|s, tx| s.polls.push(tx.input_time()));
-    assert_eq!(rt.state.polls, vec![None, None], "an update");
+    assert_eq!(rt.state().polls, vec![None, None], "an update");
     rt.key(KeyEvent { key: Key::Down, mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.keys, vec![(Key::Down, None)], "input a program feeds the runtime itself");
+    assert_eq!(rt.state().keys, vec![(Key::Down, None)], "input a program feeds the runtime itself");
     assert_eq!(current(), None, "every scope restored what it held");
 }

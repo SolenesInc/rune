@@ -138,7 +138,7 @@ fn focus(rt: &mut Runtime<App>) {
 }
 
 fn cursor(rt: &Runtime<App>) -> Option<&str> {
-    rt.state.files.cursor()
+    rt.state().files.cursor()
 }
 
 fn rows(rt: &Runtime<App>) -> Vec<ElementInfo> {
@@ -155,7 +155,7 @@ fn arrows_move_open_close_and_climb() {
     press(&mut rt, Key::Down);
     assert_eq!(cursor(&rt), Some("src"));
     press(&mut rt, Key::Right);
-    assert!(rt.state.files.is_expanded("src"), "Right opens");
+    assert!(rt.state().files.is_expanded("src"), "Right opens");
     assert_eq!(cursor(&rt), Some("src"));
     press(&mut rt, Key::Right);
     assert_eq!(cursor(&rt), Some("src/ui/tree"), "Right on an open folder goes to its first child");
@@ -167,15 +167,15 @@ fn arrows_move_open_close_and_climb() {
     press(&mut rt, Key::Left);
     assert_eq!(cursor(&rt), Some("src/ui/tree"), "Left on a file goes to its folder");
     press(&mut rt, Key::Left);
-    assert!(!rt.state.files.is_expanded("src/ui/tree"), "Left on an open folder closes it");
+    assert!(!rt.state().files.is_expanded("src/ui/tree"), "Left on an open folder closes it");
     press(&mut rt, Key::End);
     assert_eq!(cursor(&rt), Some("README.md"));
     press(&mut rt, Key::Home);
     assert_eq!(cursor(&rt), Some("assets"));
     press(&mut rt, Key::Up);
     assert_eq!(cursor(&rt), Some("assets"), "the top stops");
-    assert_eq!(rt.state.picked.last().map(String::as_str), Some("assets"), "moves report the new row");
-    assert!(rt.state.files.is_selected("assets") && !rt.state.files.is_selected("README.md"));
+    assert_eq!(rt.state().picked.last().map(String::as_str), Some("assets"), "moves report the new row");
+    assert!(rt.state().files.is_selected("assets") && !rt.state().files.is_selected("README.md"));
 }
 
 #[test]
@@ -184,12 +184,12 @@ fn return_toggles_a_folder_and_opens_a_file() {
     focus(&mut rt);
     press(&mut rt, Key::End);
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.opened, ["README.md"]);
+    assert_eq!(rt.state().opened, ["README.md"]);
     press(&mut rt, Key::Home);
     press(&mut rt, Key::Enter);
-    assert!(rt.state.files.is_expanded("assets"));
+    assert!(rt.state().files.is_expanded("assets"));
     press(&mut rt, Key::Text(" ".into()));
-    assert!(!rt.state.files.is_expanded("assets"), "Space toggles too");
+    assert!(!rt.state().files.is_expanded("assets"), "Space toggles too");
 }
 
 #[test]
@@ -262,14 +262,14 @@ fn a_click_selects_and_a_folder_click_toggles() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert!(rt.state.files.is_expanded("src") && rt.state.files.is_selected("src"));
+    assert!(rt.state().files.is_expanded("src") && rt.state().files.is_selected("src"));
     assert_eq!(rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key).as_deref(), Some("files"), "the click focuses the tree");
     let (x, y) = at(&rt, "main.rs");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.files.selected().collect::<Vec<_>>(), ["src/main.rs"]);
-    assert_eq!(rt.state.picked, ["src", "src/main.rs"]);
+    assert_eq!(rt.state().files.selected().collect::<Vec<_>>(), ["src/main.rs"]);
+    assert_eq!(rt.state().picked, ["src", "src/main.rs"]);
 }
 
 #[test]
@@ -281,16 +281,16 @@ fn multi_select_extends_with_shift_and_toggles_with_cmd() {
     press(&mut rt, Key::Down);
     press_with(&mut rt, Key::Down, Mods { shift: true, ..Mods::default() });
     press_with(&mut rt, Key::Down, Mods { shift: true, ..Mods::default() });
-    assert_eq!(rt.state.files.selected().collect::<Vec<_>>(), ["assets", "assets/icon2.png", "assets/icon10.png"]);
+    assert_eq!(rt.state().files.selected().collect::<Vec<_>>(), ["assets", "assets/icon2.png", "assets/icon10.png"]);
     let r = rows(&rt).into_iter().find(|e| e.label.as_deref() == Some("lib.rs")).unwrap().rect;
     rt.physical_input(PhysicalInput::Modifiers(Mods { cmd: true, ..Mods::default() }));
     rt.pointer_down(r[0] + 40.0, r[1] + 5.0);
     rt.pointer_up(r[0] + 40.0, r[1] + 5.0);
     rt.frame(0.0);
-    assert_eq!(rt.state.files.selected().count(), 4, "Cmd-click adds a row");
+    assert_eq!(rt.state().files.selected().count(), 4, "Cmd-click adds a row");
     rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
     press_with(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
-    assert_eq!(rt.state.files.selected().count(), rt.state.files.visible_len());
+    assert_eq!(rt.state().files.selected().count(), rt.state().files.visible_len());
 }
 
 /// 50,000 files in 500 folders of 100.
@@ -319,7 +319,7 @@ fn reveal_opens_selects_and_scrolls_to_a_far_row() {
     for f in 1..40 {
         rt.frame(f as f64 / 60.0);
     }
-    assert!(rt.state.files.is_expanded("pkg321") && rt.state.files.is_selected("pkg321/file77.rs"));
+    assert!(rt.state().files.is_expanded("pkg321") && rt.state().files.is_selected("pkg321/file77.rs"));
     let row = rows(&rt).into_iter().find(|e| e.label.as_deref() == Some("file77.rs")).expect("the revealed row is built");
     let r = row.visible;
     assert!(r[3] > 20.0 && r[1] >= 0.0 && r[1] + r[3] <= 240.5, "and on screen: {r:?}");

@@ -145,11 +145,11 @@ fn letter(rt: &mut Runtime<Real>, c: &str) {
 }
 
 fn selected(rt: &Runtime<Real>) -> usize {
-    rt.playground.as_ref().map_or(usize::MAX, |p| p.selected)
+    rt.app().playground.as_ref().map(|p| p.live()).map_or(usize::MAX, |p| p.selected)
 }
 
 fn header(rt: &Runtime<Real>) -> Option<&'static str> {
-    rt.playground.as_ref().and_then(|p| p.header)
+    rt.app().playground.as_ref().map(|p| p.live()).and_then(|p| p.header)
 }
 
 fn focused(rt: &Runtime<Real>) -> Option<String> {
@@ -178,11 +178,11 @@ fn escape(rt: &mut Runtime<Real>) {
 }
 
 fn region(rt: &Runtime<Real>) -> Region {
-    rt.playground.as_ref().map_or(Region::List, |p| p.region())
+    rt.app().playground.as_ref().map(|p| p.live()).map_or(Region::List, |p| p.region())
 }
 
 fn is_open(rt: &Runtime<Real>) -> bool {
-    rt.playground.as_ref().is_some_and(|p| p.is_open())
+    rt.app().playground.as_ref().map(|p| p.live()).is_some_and(|p| p.is_open())
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn the_bar_shortens_the_app_and_opens_the_playground() {
     let bar = find(&rt, "playground-open").unwrap().rect;
     assert!(bar[1] >= 500.0 - BAR, "the bar sits along the bottom edge");
     tap(&mut rt, "inc");
-    assert_eq!(rt.state.count, 1);
+    assert_eq!(rt.state().count, 1);
     tap(&mut rt, "playground-open");
     assert!(is_open(&rt));
     assert_eq!(shows(&rt, "count"), "count 100", "the first scene, from a fresh init");
@@ -209,7 +209,7 @@ fn a_scene_gets_a_fresh_state_and_back_restores_the_real_one() {
     tap(&mut rt, "playground-trigger-d");
     rt.frame(1.0 / 60.0);
     assert_eq!(shows(&rt, "count"), "count 202", "triggers act on the stage");
-    assert_eq!(rt.state.count, 1, "the real state is untouched");
+    assert_eq!(rt.state().count, 1, "the real state is untouched");
     tap(&mut rt, "playground-back");
     assert!(!is_open(&rt));
     assert_eq!(shows(&rt, "count"), "count 1");
@@ -231,7 +231,7 @@ fn the_stage_takes_escape_first() {
     assert!(is_open(&rt) && region(&rt) == Region::List, "unhandled in the stage, Escape gives the list the keyboard");
     escape(&mut rt);
     assert!(!is_open(&rt), "and from the list goes back");
-    assert!(!rt.state.holds_escape);
+    assert!(!rt.state().holds_escape);
 }
 
 #[test]
@@ -268,10 +268,10 @@ fn a_live_page_draws_and_changes_the_real_state() {
 #[test]
 fn the_real_state_keeps_polling_while_open() {
     let mut rt = runtime(Some(None));
-    let before = rt.state.polls;
+    let before = rt.state().polls;
     for _ in 0..5 { rt.frame(1.0 / 60.0); }
-    assert!(rt.state.polls >= before + 5);
-    let scene = rt.playground.as_ref().and_then(|p| p.scene()).map(|s| s.state.polls);
+    assert!(rt.state().polls >= before + 5);
+    let scene = rt.app().playground.as_ref().map(|p| p.live()).and_then(|p| p.scene()).map(|s| s.state.polls);
     assert!(scene.is_some_and(|n| n >= 5), "the scene polls too");
 }
 
@@ -331,7 +331,7 @@ fn a_replay_runs_its_steps_on_the_logical_clock_the_same_every_time() {
         rt.frame(dt);
         assert_eq!(shows(&rt, "fade"), "[\"start\"]", "the replay made the state again");
         for _ in 0..(1.0 / dt) as usize { rt.frame(dt); }
-        let log = rt.playground.as_ref().and_then(|p| p.own()).map(|(own, stage)| {
+        let log = rt.app().playground.as_ref().map(|p| p.live()).and_then(|p| p.own()).map(|(own, stage)| {
             own.state_ref(stage).downcast_ref::<Fade>().unwrap().log.iter().map(|(n, t)| (*n, (t * 1e6).round() as i64)).collect::<Vec<_>>()
         });
         logs.push(log.unwrap());
@@ -397,12 +397,12 @@ fn center(rt: &Runtime<Real>, key: &str) -> (f32, f32) {
 }
 
 fn own_state<P: 'static>(rt: &Runtime<Real>) -> &P {
-    let (own, stage) = rt.playground.as_ref().and_then(|p| p.own()).expect("a story with its own state");
+    let (own, stage) = rt.app().playground.as_ref().map(|p| p.live()).and_then(|p| p.own()).expect("a story with its own state");
     own.state_ref(stage).downcast_ref().unwrap()
 }
 
 fn scene_state(rt: &Runtime<Real>) -> &Real {
-    &rt.playground.as_ref().and_then(|p| p.scene()).expect("a scene").state
+    &rt.app().playground.as_ref().map(|p| p.live()).and_then(|p| p.scene()).expect("a scene").state
 }
 
 #[cfg(feature = "hot")]
@@ -460,7 +460,7 @@ fn root_handlers_reach_the_app_above_the_bar_and_the_stage() {
     rt.frame(DT);
     rt.window_focus(false);
     rt.frame(DT);
-    assert_eq!((rt.state.pastes.as_slice(), rt.state.drops, rt.state.focus.last()), (&["hi".to_owned()][..], 1, Some(&false)));
+    assert_eq!((rt.state().pastes.as_slice(), rt.state().drops, rt.state().focus.last()), (&["hi".to_owned()][..], 1, Some(&false)));
     rt.update(|_, tx| tx.open_playground());
     rt.frame(DT);
     rt.paste("staged");
@@ -471,7 +471,7 @@ fn root_handlers_reach_the_app_above_the_bar_and_the_stage() {
     rt.frame(DT);
     let scene = scene_state(&rt);
     assert_eq!((scene.pastes.as_slice(), scene.drops, scene.focus.as_slice()), (&["staged".to_owned()][..], 2, &[true][..]));
-    assert_eq!((rt.state.pastes.len(), rt.state.drops), (1, 1), "the real state is untouched");
+    assert_eq!((rt.state().pastes.len(), rt.state().drops), (1, 1), "the real state is untouched");
 }
 
 #[test]
@@ -594,7 +594,7 @@ fn a_long_story_list_scrolls_and_reaches_what_was_off_screen() {
     }
     let mut rt = runtime_with(p, Some(None), true);
     rt.frame(DT);
-    let last = rt.playground.as_ref().unwrap().order.last().copied().unwrap();
+    let last = rt.app().playground.as_ref().map(|p| p.live()).unwrap().order.last().copied().unwrap();
     let item = format!("playground-item-{last}");
     let (_, y) = center(&rt, &item);
     assert!(y > 500.0, "the last story starts below the window");

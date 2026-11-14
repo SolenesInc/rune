@@ -91,9 +91,9 @@ fn a_focused_field_keeps_its_own_select_all() {
 #[test]
 fn an_app_that_handles_the_key_keeps_it() {
     let mut rt = runtime(false);
-    rt.state.app_takes = true;
+    rt.state_mut().app_takes = true;
     rt.set_focus(Some("root".to_owned()), false);
     select_all(&mut rt);
-    assert_eq!(rt.state.app_saw, 1);
+    assert_eq!(rt.state().app_saw, 1);
     assert_eq!(rt.selected_text(), None);
 }

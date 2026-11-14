@@ -17,7 +17,8 @@ fn render(gpu: &Gpu, view: fn(&(), &mut Cx<()>) -> El, srgb: bool, transparent: 
     let mut renderer = Renderer::new(&gpu.device, format);
     renderer.set_srgb_blend(srgb);
     let target = Offscreen::with_format(&gpu.device, W, H, format);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (W, H));
+    let core = &mut *rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (W, H));
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, rt.clear_color());
     target.copy(&mut encoder);

@@ -13,8 +13,8 @@ fn script_taps_reach_the_same_state_as_the_schedule() {
     for seed in [1, 2, 3] {
         let cfg = Config { seed, duration: 12.0, ..Config::default() };
         let mut rt = Runtime::new(State::new(), view, (grid::WIDTH, grid::HEIGHT), Env { system_dark: true, scale: 1.0 });
-        rt.state.player = None;
-        rt.state.m = Model::new(seed);
+        rt.state_mut().player = None;
+        rt.state_mut().m = Model::new(seed);
         let mut want = Model::new(seed);
         let dt = 1.0 / 60.0;
         let mut t = 0.0;
@@ -34,7 +34,7 @@ fn script_taps_reach_the_same_state_as_the_schedule() {
             rt.frame(0.0);
             want.apply(e.action);
             assert_eq!(
-                format!("{:?}", rt.state.m),
+                format!("{:?}", rt.state().m),
                 format!("{want:?}"),
                 "seed {seed}: event {n} at {:.3}: tapping {key} ({x:.0}, {y:.0}) for {:?}",
                 e.t,

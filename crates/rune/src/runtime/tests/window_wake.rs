@@ -86,12 +86,12 @@ fn a_hidden_window_that_fits_its_content_learns_its_height_before_it_shows() {
     rt.frame(0.0);
     rt.window_frame.take();
     assert!(!rt.build_for_show(), "unchanged, the last frame still shows it");
-    rt.poll = Some(|s: &mut (usize, bool), _, _: &mut Tx| {
+    rt.app_mut().poll = Some(|s: &mut (usize, bool), _, _: &mut Tx| {
         if !std::mem::take(&mut s.1) { return false; }
         s.0 += 1;
         true
     });
-    rt.state.1 = true;
+    rt.state_mut().1 = true;
     let commits = rt.stats.commits;
     assert!(rt.poll_hidden());
     assert!(rt.window_frame.is_none() && rt.stats.commits == commits, "hidden, nothing builds yet");
@@ -122,11 +122,11 @@ fn timed_wakes_are_exact_coalesced_and_do_not_commit_or_animate() {
         false
     }
     let mut rt = Runtime::new(Vec::new(), view, (100.0, 100.0), Env::new(true, 1.0));
-    rt.poll = Some(poll);
+    rt.app_mut().poll = Some(poll);
     assert!(!rt.frame(0.0));
     assert_eq!(rt.wake_deadlines, [0.25, 0.375]);
     assert!(!rt.frame(0.5));
-    assert_eq!(rt.state, [0.0, 0.25, 0.375, 0.5]);
+    assert_eq!(*rt.state(), [0.0, 0.25, 0.375, 0.5]);
     assert_eq!(rt.commits, 1);
     assert_eq!(rt.wake_deadline(), None);
     assert!((rt.t - 0.05).abs() < 1e-8);
@@ -146,11 +146,11 @@ fn wakes_a_poll_keeps_asking_for_collapse_to_one_poll_a_frame() {
     for delay in [0.0, 1.0 / 60.0, 1.0 / 120.0, 0.505, 0.5] {
         fn view(_: &(usize, f64), _: &mut Cx<(usize, f64)>) -> El { el() }
         let mut rt = Runtime::new((0, delay), view, (100.0, 100.0), Env::new(true, 1.0));
-        rt.poll = Some(poll);
+        rt.app_mut().poll = Some(poll);
         for frame in 0..1000 {
-            rt.state.0 = 0;
+            rt.state_mut().0 = 0;
             rt.frame(1.0 / 60.0);
-            assert_eq!(rt.state.0, 1, "delay {delay}: frame {frame} polled {} times", rt.state.0);
+            assert_eq!(rt.state().0, 1, "delay {delay}: frame {frame} polled {} times", rt.state().0);
         }
         assert!(rt.wake_deadlines.len() <= 32, "delay {delay}: {} deadlines pending", rt.wake_deadlines.len());
     }
@@ -169,10 +169,10 @@ fn a_zero_wake_does_not_hide_a_later_wake_in_a_coarse_frame() {
     }
     fn view(_: &Vec<f64>, _: &mut Cx<Vec<f64>>) -> El { el() }
     let mut rt = Runtime::new(Vec::new(), view, (100.0, 100.0), Env::new(true, 1.0));
-    rt.poll = Some(poll);
+    rt.app_mut().poll = Some(poll);
     rt.frame(0.0);
     rt.frame(0.1);
-    assert_eq!(rt.state, [0.0, 0.017, 0.05, 0.1]);
+    assert_eq!(*rt.state(), [0.0, 0.017, 0.05, 0.1]);
 }
 
 #[test]

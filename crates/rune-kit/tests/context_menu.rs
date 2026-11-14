@@ -31,7 +31,7 @@ fn context_menu_opens_at_pointer_and_stays_inside_viewport() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert!(rt.state.point.is_none());
+    assert!(rt.state().point.is_none());
 }
 
 mod keyboard {
@@ -84,31 +84,31 @@ mod keyboard {
     fn shift_f10_opens_the_focused_rows_menu_and_escape_returns_focus() {
         let mut rt = focused_row();
         press(&mut rt, Key::Function(10), true);
-        let p = rt.state.point.expect("the row's menu opened");
+        let p = rt.state().point.expect("the row's menu opened");
         let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row")).unwrap();
         assert_eq!((p.x, p.y), (row.rect[0], row.rect[1] + row.rect[3]), "at the row's bottom-left");
         assert!(menu_open(&rt));
         press(&mut rt, Key::Escape, false);
-        assert!(!menu_open(&rt) && rt.state.point.is_none());
+        assert!(!menu_open(&rt) && rt.state().point.is_none());
         assert_eq!(focused(&rt).as_deref(), Some("row"), "focus returns to the row");
 
         press(&mut rt, Key::ContextMenu, false);
-        assert!(rt.state.point.is_some() && menu_open(&rt), "the Menu key opens it too");
+        assert!(rt.state().point.is_some() && menu_open(&rt), "the Menu key opens it too");
     }
 
     #[test]
     fn a_key_handler_that_takes_shift_f10_keeps_it_and_nothing_focused_is_a_no_op() {
         let mut rt = focused_row();
-        rt.state.row_keys = true;
+        rt.state_mut().row_keys = true;
         press(&mut rt, Key::Function(10), true);
-        assert!(rt.state.point.is_none());
-        rt.state.row_keys = false;
+        assert!(rt.state().point.is_none());
+        rt.state_mut().row_keys = false;
         press(&mut rt, Key::Function(10), false);
-        assert!(rt.state.point.is_none(), "F10 without Shift");
+        assert!(rt.state().point.is_none(), "F10 without Shift");
 
         let mut rt = Runtime::new(State::default(), view, (400.0, 300.0), Env::new(true, 1.0));
         settle(&mut rt);
         press(&mut rt, Key::ContextMenu, false);
-        assert!(rt.state.point.is_none() && focused(&rt).is_none());
+        assert!(rt.state().point.is_none() && focused(&rt).is_none());
     }
 }

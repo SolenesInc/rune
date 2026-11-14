@@ -17,7 +17,7 @@ fn selected(range: Range<usize>) -> (Range<usize>, Range<usize>) {
     rt.update(|_, tx| tx.select_text("t", range));
     rt.frame(1.0 / 60.0);
     rt.frame(2.0 / 60.0);
-    rt.state.heard.clone().expect("the selection was heard")
+    rt.state().heard.clone().expect("the selection was heard")
 }
 
 #[test]

@@ -37,14 +37,14 @@ fn mirrors_headings_inline_links_and_buttons_and_skips_idle_frames() {
     let link_path = items[1].path.clone();
     assert!(rt.web_a11y_action(&json!({"kind": "a11y_press", "path": btn_path})));
     rt.frame(0.0);
-    assert!(rt.state.0);
+    assert!(rt.state().0);
     let updated = rt.web_a11y(&mut mirror).expect("button flip updates expanded state");
     assert_ne!(first, updated);
     assert!(updated.contains("Hide details"));
 
     assert!(rt.web_a11y_action(&json!({"kind": "a11y_link", "path": link_path, "link": 0})));
     rt.frame(0.0);
-    assert_eq!(rt.state.1, 1);
+    assert_eq!(rt.state().1, 1);
 }
 
 fn page(_: &(), _: &mut Cx<()>) -> El {
@@ -174,7 +174,7 @@ fn fractional_scroll_offsets_never_rewrite_a_page_mirror() {
     for i in 1..20u32 {
         let y = f32::from(u16::try_from(i).expect("small")) * 137.3333;
         assert!(rt.set_page_scroll(y), "each offset is a new page position");
-        rt.state = i;
+        *rt.state_mut() = i;
         rt.frame(0.0);
         assert!(rt.web_a11y(&mut mirror).is_none(), "the mirror changed at {y}");
     }

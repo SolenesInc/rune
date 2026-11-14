@@ -116,7 +116,7 @@ impl FitWindow {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Asks the window for the content's new height, on this commit's spring. The first
     /// commit, a viewport change and `Tx::instant` jump.
     pub(super) fn fit_window(&mut self, height: f32, tx: &Tx, first: bool) {

@@ -46,15 +46,15 @@ fn tab(rt: &mut Runtime<S>) {
 fn presses_hovers_and_cursors_fall_through_to_what_is_under() {
     let mut rt = runtime(false);
     click(&mut rt, (20.0, 20.0));
-    assert_eq!(rt.state.log, ["button"], "without inert, the document takes the press");
+    assert_eq!(rt.state().log, ["button"], "without inert, the document takes the press");
     assert_eq!(rt.cursor(), Cursor::Pointer);
 
     let mut rt = runtime(true);
     click(&mut rt, (20.0, 20.0));
-    assert_eq!(rt.state.log, ["canvas"], "the press goes to the canvas under the document");
+    assert_eq!(rt.state().log, ["canvas"], "the press goes to the canvas under the document");
     assert_eq!(rt.cursor(), Cursor::Crosshair, "with the canvas's cursor");
-    assert!(rt.state.hover.contains(&("canvas", true)));
-    assert!(!rt.state.hover.iter().any(|(k, _)| *k == "button"), "the document never hovers");
+    assert!(rt.state().hover.contains(&("canvas", true)));
+    assert!(!rt.state().hover.iter().any(|(k, _)| *k == "button"), "the document never hovers");
     assert_eq!(info(&rt, "button").hover, 0.0);
 }
 
@@ -66,7 +66,7 @@ fn it_still_draws_and_lays_out() {
     assert_eq!(doc.rect, [0.0, 0.0, 100.0, 100.0]);
     assert!(doc.opacity > 0.99);
     assert!(rt.instances.iter().any(|i| i.rect[2] == 100.0 && i.rect[3] == 100.0), "the document's fill draws");
-    assert_eq!(rt.state.rects.last(), Some(&[0.0, 0.0, 100.0, 100.0]), "on_layout still hears its rect");
+    assert_eq!(rt.state().rects.last(), Some(&[0.0, 0.0, 100.0, 100.0]), "on_layout still hears its rect");
     assert!(doc.inert && info(&rt, "button").inert, "accessibility reports the subtree inert");
     assert!(!info(&runtime(false), "button").inert);
 }
@@ -88,7 +88,7 @@ fn nothing_inside_takes_or_keeps_focus() {
     rt.update(|s, _| s.field.focused = true);
     rt.frame(1.0 / 60.0);
     assert!(!info(&rt, "field").focused);
-    assert!(!rt.state.field.focused, "and the model hears it didn't");
+    assert!(!rt.state().field.focused, "and the model hears it didn't");
 
     // Focus inside drops when the subtree turns inert.
     let mut rt = runtime(false);
@@ -98,7 +98,7 @@ fn nothing_inside_takes_or_keeps_focus() {
     rt.update(|s, _| s.inert = true);
     rt.frame(1.0 / 60.0);
     assert!(!info(&rt, "field").focused);
-    assert!(!rt.state.field.focused);
+    assert!(!rt.state().field.focused);
 }
 
 #[test]
@@ -140,9 +140,9 @@ fn canvas_gestures_help_selection_and_held_hover_respect_inert() {
     rt.button_up(20.0, 20.0, PointerButton::Middle);
     rt.pointer_move(20.0, 20.0);
     rt.frame(1.0);
-    assert_eq!(rt.state.wheels, ["canvas"], "on_wheel passes through inert");
-    assert_eq!(rt.state.pinches, ["canvas"], "on_magnify passes through inert");
-    assert_eq!(rt.state.middle, ["canvas"], "middle-button press passes through inert");
+    assert_eq!(rt.state().wheels, ["canvas"], "on_wheel passes through inert");
+    assert_eq!(rt.state().pinches, ["canvas"], "on_magnify passes through inert");
+    assert_eq!(rt.state().middle, ["canvas"], "middle-button press passes through inert");
     assert!(rt.help_tooltip().is_none(), "inert element shows no tooltip");
 
     // Turning inert while hovered/pressed/selected drops the visual hover, press and selection.

@@ -112,7 +112,7 @@ fn a_streaming_append_keeps_earlier_blocks_mounted() {
     let mut seen = keys(&rt);
     let head = by_key(&rt, "b0").path.clone();
     for step in &steps[1..] {
-        rt.state = (*step).to_owned();
+        *rt.state_mut() = (*step).to_owned();
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         let now = keys(&rt);
@@ -189,18 +189,18 @@ fn links_press_through_on_link() {
     click(&mut rt, centre(&two));
     click(&mut rt, centre(&three));
     click(&mut rt, ((one.rect[0] + one.rect[2] + two.rect[0]) / 2.0, centre(&one).1));
-    assert_eq!(rt.state.opened, ["https://b.dev", "https://c.dev"]);
+    assert_eq!(rt.state().opened, ["https://b.dev", "https://c.dev"]);
     // `--script` taps by key through `find`, which resolves a link by its destination.
     let at = rt.find("https://c.dev").expect("a link is found by its destination");
     click(&mut rt, at);
-    assert_eq!(rt.state.opened.pop().as_deref(), Some("https://c.dev"));
+    assert_eq!(rt.state_mut().opened.pop().as_deref(), Some("https://c.dev"));
 
     // Links are Tab stops in reading order, opened with Enter.
     rt.key(rune::KeyEvent { key: rune::Key::Tab, mods: Default::default() });
     rt.frame(1.0 / 60.0);
     rt.key(rune::KeyEvent { key: rune::Key::Enter, mods: Default::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["https://b.dev", "https://c.dev", "https://a.dev"]);
+    assert_eq!(rt.state().opened, ["https://b.dev", "https://c.dev", "https://a.dev"]);
 
     // Without a handler, links are styled text: no stops, no hand.
     let mut rt = Runtime::new(Reader { src: LINKS.into(), handled: false, opened: Vec::new() }, reader, (480.0, 400.0), Env::new(true, 1.0));
@@ -273,12 +273,12 @@ fn a_streaming_row_does_not_move_the_columns() {
     let before = column_edges(&rt);
     assert_eq!(before.len(), 2, "{:?}", keys(&rt));
     for partial in ["| a much longer first cell that is still arriving", "| a much longer first cell that is still arriving | and more"] {
-        rt.state = format!("{base}{partial}");
+        *rt.state_mut() = format!("{base}{partial}");
         rt.invalidate();
         rt.frame(1.0 / 60.0);
         assert_eq!(column_edges(&rt), before, "{partial:?}");
     }
-    rt.state = format!("{base}| a much longer first cell that is still arriving | and more |\n");
+    *rt.state_mut() = format!("{base}| a much longer first cell that is still arriving | and more |\n");
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     assert_ne!(column_edges(&rt), before, "a finished row sizes the columns");
@@ -741,7 +741,7 @@ fn on_link_tx_reaches_the_tx_and_on_link_still_works() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["https://a.dev"]);
+    assert_eq!(rt.state().opened, ["https://a.dev"]);
     assert_eq!(rt.copy_request.as_deref(), Some("https://a.dev"));
 
     let mut rt = chip_rt(false);
@@ -750,7 +750,7 @@ fn on_link_tx_reaches_the_tx_and_on_link_still_works() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.opened, ["session:abc"]);
+    assert_eq!(rt.state().opened, ["session:abc"]);
     assert!(rt.copy_request.is_none());
 
     // Setting both on_link and on_link_tx keeps whichever was called last.
@@ -779,7 +779,7 @@ fn on_link_tx_reaches_the_tx_and_on_link_still_works() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state, ["tx:session:1"]);
+    assert_eq!(*rt.state(), ["tx:session:1"]);
     assert_eq!(rt.copy_request.as_deref(), Some("session:1"));
 
     let mut rt = Runtime::new(Vec::new(), plain_last, (200.0, 100.0), Env::new(true, 1.0));
@@ -789,7 +789,7 @@ fn on_link_tx_reaches_the_tx_and_on_link_still_works() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state, ["plain:session:1"]);
+    assert_eq!(*rt.state(), ["plain:session:1"]);
     assert!(rt.copy_request.is_none());
 }
 
@@ -840,13 +840,13 @@ fn styled_links_keep_inner_styles_select_copy_and_stream_across_chunks() {
     rt.frame(0.0);
     assert!(fill_rects(&rt, CHIP_BG).is_empty(), "unclosed link syntax is still plain text");
 
-    rt.state = "Start [First **bold** `code`](session:one)".to_owned();
+    *rt.state_mut() = "Start [First **bold** `code`](session:one)".to_owned();
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     assert_eq!(fill_rects(&rt, CHIP_BG).len(), 1, "completed link gets one merged chip rect");
 
     // 2. Appending a second styled link fades its glyphs in through word reveal and wraps cleanly.
-    rt.state = "Start [First **bold** `code`](session:one) and *[Second](session:two)* on the next line.".to_owned();
+    *rt.state_mut() = "Start [First **bold** `code`](session:one) and *[Second](session:two)* on the next line.".to_owned();
     rt.invalidate();
     rt.frame(1.0 / 60.0);
     let chips = fill_rects(&rt, CHIP_BG);

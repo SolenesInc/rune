@@ -28,10 +28,10 @@ fn properties_change_without_view_layout_or_shaping_and_stop_at_rest() {
     let mut rt = runtime(state());
     rt.frame(0.0);
     let commits = rt.stats.commits;
-    rt.state.offset.set([60.0, 80.0]);
-    rt.state.opacity.set(0.4);
-    rt.state.scale.set(1.5);
-    rt.state.fill.set(Color { r: 0.2, g: 0.4, b: 0.6, a: 1.0 });
+    rt.state().offset.set([60.0, 80.0]);
+    rt.state().opacity.set(0.4);
+    rt.state().scale.set(1.5);
+    rt.state().fill.set(Color { r: 0.2, g: 0.4, b: 0.6, a: 1.0 });
     assert!(rt.live_pending());
     assert!(!rt.frame(1.0 / 120.0));
     assert!(!rt.live_pending());
@@ -44,7 +44,7 @@ fn properties_change_without_view_layout_or_shaping_and_stop_at_rest() {
     rt.invalidate(); rt.frame(0.0);
     let n = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("live")).unwrap();
     assert!((n.fill.r - 0.2).abs() < 0.001, "live fill survives an unrelated view rebuild");
-    assert!(!rt.state.opacity.set(0.4));
+    assert!(!rt.state().opacity.set(0.4));
     assert!(!rt.live_pending());
 }
 
@@ -52,7 +52,7 @@ fn properties_change_without_view_layout_or_shaping_and_stop_at_rest() {
 fn one_source_wakes_two_windows_independently_and_unbinding_stops_wakes() {
     let mut a = runtime(state());
     let mut b_state = state();
-    b_state.opacity = a.state.opacity.clone();
+    b_state.opacity = a.state().opacity.clone();
     let mut b = runtime(b_state);
     let count = Arc::new(AtomicUsize::new(0));
     for rt in [&mut a, &mut b] {
@@ -60,19 +60,19 @@ fn one_source_wakes_two_windows_independently_and_unbinding_stops_wakes() {
         rt.set_live_waker(Arc::new(move || { count.fetch_add(1, Ordering::Relaxed); }));
         rt.frame(0.0);
     }
-    a.state.opacity.set(0.2);
+    a.state().opacity.set(0.2);
     assert_eq!(count.load(Ordering::Relaxed), 2);
     a.frame(0.01); b.frame(0.01);
     b.set_live_visible(false);
-    a.state.opacity.set(0.3);
+    a.state().opacity.set(0.3);
     assert_eq!(count.load(Ordering::Relaxed), 3);
     a.frame(0.01);
     b.set_live_visible(true);
     assert_eq!(count.load(Ordering::Relaxed), 4);
     b.frame(0.01);
-    b.state.bound = false;
+    b.state_mut().bound = false;
     b.invalidate(); b.frame(0.01);
-    a.state.opacity.set(0.4);
+    a.state().opacity.set(0.4);
     assert_eq!(count.load(Ordering::Relaxed), 5);
     assert!(!b.live_pending());
 }
@@ -82,14 +82,14 @@ fn smoothing_survives_rebuild_and_retargets_then_settles() {
     let mut s = state(); s.smooth = true;
     let mut rt = runtime(s);
     assert!(!rt.frame(0.0));
-    rt.state.offset.set([160.0, 20.0]);
+    rt.state().offset.set([160.0, 20.0]);
     assert!(rt.frame(0.05));
     let x = |rt: &Runtime<State>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("live")).unwrap().rect[0];
     let before = x(&rt);
     assert!(before > 10.0 && before < 160.0);
     rt.invalidate(); rt.frame(0.0);
     assert_eq!(x(&rt), before);
-    rt.state.offset.set([80.0, 20.0]);
+    rt.state().offset.set([80.0, 20.0]);
     rt.frame(0.01);
     for _ in 0..240 { rt.frame(1.0 / 120.0); }
     assert_eq!(x(&rt), 80.0);
@@ -99,12 +99,12 @@ fn smoothing_survives_rebuild_and_retargets_then_settles() {
 #[test]
 fn removing_last_binding_consumes_an_already_pending_wake() {
     let mut rt = runtime(state()); rt.frame(0.0);
-    rt.state.opacity.set(0.3);
+    rt.state().opacity.set(0.3);
     assert!(rt.live_pending());
-    rt.state.bound = false;
+    rt.state_mut().bound = false;
     rt.invalidate(); rt.frame(0.0);
     assert!(!rt.live_pending());
-    rt.state.offset.set([200.0, 200.0]);
+    rt.state().offset.set([200.0, 200.0]);
     assert!(!rt.live_pending());
 }
 
@@ -116,7 +116,7 @@ fn connecting_a_waker_to_a_hidden_runtime_keeps_publications_asleep() {
     let wakes = count.clone();
     rt.set_live_waker(Arc::new(move || { wakes.fetch_add(1, Ordering::Relaxed); }));
     rt.frame(0.0);
-    rt.state.opacity.set(0.2);
+    rt.state().opacity.set(0.2);
     assert_eq!(count.load(Ordering::Relaxed), 0);
     assert!(!rt.live_pending());
     rt.set_live_visible(true);
@@ -139,11 +139,11 @@ fn live_rect_changes_presentation_without_reflow_and_unbinding_restores_layout()
     rt.frame(0.0);
     assert_eq!(rect(&rt, "box"), [10.0, 20.0, 80.0, 40.0]);
     assert_eq!(rect(&rt, "sibling")[0], 40.0);
-    rt.state.0.set([20.0, 30.0, 60.0, 50.0]); rt.frame(0.01);
+    rt.state().0.set([20.0, 30.0, 60.0, 50.0]); rt.frame(0.01);
     assert_eq!(rt.stats.commits, 1);
     rt.invalidate(); rt.frame(0.0);
     assert_eq!(rect(&rt, "box"), [20.0, 30.0, 60.0, 50.0]);
-    rt.state.1 = false; rt.settle_all(); rt.frame(0.0);
+    rt.state_mut().1 = false; rt.settle_all(); rt.frame(0.0);
     assert_eq!(rect(&rt, "box"), [0.0, 0.0, 40.0, 20.0]);
 }
 

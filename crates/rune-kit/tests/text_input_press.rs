@@ -32,13 +32,13 @@ fn textbox_padding_requires_exactly_one_reachable_editor() {
     rt.pointer_down(2.0, 2.0);
     rt.pointer_up(2.0, 2.0);
     rt.frame(0.0);
-    assert!(!rt.state.first.focused && !rt.state.second.focused, "padding cannot choose between two editors");
+    assert!(!rt.state().first.focused && !rt.state().second.focused, "padding cannot choose between two editors");
     rt.update(|s, tx| { s.hide_second = true; tx.instant(); });
     rt.frame(0.0);
     rt.pointer_down(2.0, 2.0);
     rt.pointer_up(2.0, 2.0);
     rt.frame(0.0);
-    assert!(rt.state.first.focused && !rt.state.second.focused, "hidden ancestors exclude an editor");
+    assert!(rt.state().first.focused && !rt.state().second.focused, "hidden ancestors exclude an editor");
 }
 
 #[test]
@@ -55,8 +55,8 @@ fn a_copy_button_without_a_handler_still_keeps_its_press() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
-    assert!(rt.state.focused);
-    assert_eq!(rt.state.range(), (1, 1), "the button press must not place the input's caret");
+    assert!(rt.state().focused);
+    assert_eq!(rt.state().range(), (1, 1), "the button press must not place the input's caret");
 }
 
 #[test]
@@ -70,8 +70,8 @@ fn padding_focus_reaches_an_editor_inside_an_auto_grow_scroll() {
     rt.pointer_down(2.0, 2.0);
     rt.pointer_up(2.0, 2.0);
     rt.frame(0.0);
-    assert!(rt.state.focused);
-    assert_eq!(rt.state.range(), (0, 0));
+    assert!(rt.state().focused);
+    assert_eq!(rt.state().range(), (0, 0));
 }
 
 fn state() -> S {
@@ -154,46 +154,46 @@ fn pressing_any_part_of_a_field_focuses_without_blurring_or_dragging() {
     // 1. Clicking the leading icon focuses the field, puts the caret at the start, and does not drag the window.
     click(&mut rt, lead.rect[0] + lead.rect[2] * 0.5, lead.rect[1] + lead.rect[3] * 0.5);
     assert!(rt.take_titlebar_action().is_none(), "pressing a field in a titlebar never drags the window");
-    assert!(rt.state.input.focused, "leading icon focuses the field");
-    assert_eq!(rt.state.input.range(), (0, 0), "leading icon places caret at start");
+    assert!(rt.state().input.focused, "leading icon focuses the field");
+    assert_eq!(rt.state().input.range(), (0, 0), "leading icon places caret at start");
 
     // 2. While already focused, clicking the trailing accessory area (not a button) or top/bottom padding keeps focus and moves the caret to the end.
     click(&mut rt, hint.rect[0] + hint.rect[2] * 0.5, ti.rect[1] + 2.0);
     assert!(rt.take_titlebar_action().is_none());
-    assert!(rt.state.input.focused, "clicking trailing accessory area or top padding must not blur");
-    assert_eq!(rt.state.input.range(), (7, 7), "trailing side places caret at end");
+    assert!(rt.state().input.focused, "clicking trailing accessory area or top padding must not blur");
+    assert_eq!(rt.state().input.range(), (7, 7), "trailing side places caret at end");
 
     // Clicking the bottom-left padding moves the caret back to the start without blurring.
     click(&mut rt, ti.rect[0] + 3.0, ti.rect[1] + ti.rect[3] - 2.0);
-    assert!(rt.state.input.focused, "clicking bottom-left padding must not blur");
-    assert_eq!(rt.state.input.range(), (0, 0), "leading padding places caret at start");
+    assert!(rt.state().input.focused, "clicking bottom-left padding must not blur");
+    assert_eq!(rt.state().input.range(), (0, 0), "leading padding places caret at start");
 
     // 3. Trailing buttons still take their own press.
     click(&mut rt, reveal.rect[0] + reveal.rect[2] * 0.5, reveal.rect[1] + reveal.rect[3] * 0.5);
-    assert!(rt.state.revealed, "trailing reveal button takes its own press");
+    assert!(rt.state().revealed, "trailing reveal button takes its own press");
     click(&mut rt, clear.rect[0] + clear.rect[2] * 0.5, clear.rect[1] + clear.rect[3] * 0.5);
-    assert_eq!(rt.state.actions, 1, "clear button takes its own press");
+    assert_eq!(rt.state().actions, 1, "clear button takes its own press");
 
     // 4. TextField: leading and trailing padding focus and place the caret; copy button takes its own press.
     let wrapper = find(&rt, "wrapper");
     let copy = find(&rt, "copy");
     click(&mut rt, wrapper.rect[0] + wrapper.rect[2] - 30.0, wrapper.rect[1] + 2.0);
-    assert!(rt.state.field.focused, "TextField padding focuses the field");
-    assert_eq!(rt.state.field.range(), (5, 5), "TextField trailing padding places caret at end");
+    assert!(rt.state().field.focused, "TextField padding focuses the field");
+    assert_eq!(rt.state().field.range(), (5, 5), "TextField trailing padding places caret at end");
     click(&mut rt, wrapper.rect[0] + 3.0, wrapper.rect[1] + wrapper.rect[3] - 2.0);
-    assert!(rt.state.field.focused, "TextField leading padding keeps focus");
-    assert_eq!(rt.state.field.range(), (0, 0), "TextField leading padding places caret at start");
+    assert!(rt.state().field.focused, "TextField leading padding keeps focus");
+    assert_eq!(rt.state().field.range(), (0, 0), "TextField leading padding places caret at start");
     click(&mut rt, copy.rect[0] + copy.rect[2] * 0.5, copy.rect[1] + copy.rect[3] * 0.5);
-    assert_eq!(rt.state.copied, 1, "TextField copy button takes its own press");
+    assert_eq!(rt.state().copied, 1, "TextField copy button takes its own press");
 
     // 5. TextArea: bottom/trailing padding focuses at end; leading padding focuses at start without blurring.
     let ta = find(&rt, "ta");
     click(&mut rt, ta.rect[0] + ta.rect[2] - 4.0, ta.rect[1] + ta.rect[3] - 4.0);
-    assert!(rt.state.area.focused, "TextArea bottom-right padding focuses the field");
-    assert_eq!(rt.state.area.range(), (5, 5), "TextArea trailing/bottom padding places caret at end");
+    assert!(rt.state().area.focused, "TextArea bottom-right padding focuses the field");
+    assert_eq!(rt.state().area.range(), (5, 5), "TextArea trailing/bottom padding places caret at end");
     click(&mut rt, ta.rect[0] + 2.0, ta.rect[1] + 4.0);
-    assert!(rt.state.area.focused, "TextArea leading padding keeps focus");
-    assert_eq!(rt.state.area.range(), (0, 0), "TextArea leading padding places caret at start");
+    assert!(rt.state().area.focused, "TextArea leading padding keeps focus");
+    assert_eq!(rt.state().area.range(), (0, 0), "TextArea leading padding places caret at start");
 }
 
 #[test]
@@ -278,7 +278,7 @@ fn a_launcher_size_style_scales_the_box_and_the_caret() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.launcher.focused);
+    assert!(rt.state().launcher.focused);
     let caret = by_path(&rt, "launcher/value/input").caret.expect("focused launcher caret");
     assert_eq!(caret[3], 24.0, "caret height matches the 24 pt line height");
     assert!(((caret[1] + caret[3] * 0.5) - box_cy).abs() < 0.01, "caret is vertically centred in the 56 pt box: {caret:?}");
@@ -301,13 +301,13 @@ fn any_unfocusable_element_can_keep_an_outside_field_focused_and_still_press() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.pressed, 10, "the press still reaches on_press");
-    assert!(rt.state.field.focused, "the field keeps focus");
+    assert_eq!(rt.state().pressed, 10, "the press still reaches on_press");
+    assert!(rt.state().field.focused, "the field keeps focus");
     let (x, y) = rt.find("plain").unwrap();
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.field.focused, "without the flag a press blurs, as before");
+    assert!(!rt.state().field.focused, "without the flag a press blurs, as before");
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn a_plain_field_draws_no_box_but_still_focuses_on_a_press_anywhere_and_types() 
     rt.pointer_down(outer[0] + 2.0, b_cy);
     rt.pointer_up(outer[0] + 2.0, b_cy);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.plain.focused, "outer role(\"textbox\") padding focuses the plain field");
+    assert!(rt.state().plain.focused, "outer role(\"textbox\") padding focuses the plain field");
     assert_eq!(ink(&rt, "plain"), 0, "focused plain draws no outline");
     let caret = by_path(&rt, "plain/value/input").caret.expect("focused plain caret");
     let ime = rt.ime_area.expect("focused plain IME area");
@@ -451,19 +451,19 @@ fn a_plain_field_draws_no_box_but_still_focuses_on_a_press_anywhere_and_types() 
     // Typing and pressing inside the plain field's own padding and clear button work as in the boxed field.
     rt.key(rune::KeyEvent { key: rune::Key::Text("hi".into()), mods: rune::Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.plain.text, "hi");
+    assert_eq!(rt.state().plain.text, "hi");
     rt.pointer_down(b[0] + 1.0, b[1] + b[3] - 1.0);
     rt.pointer_up(b[0] + 1.0, b[1] + b[3] - 1.0);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.plain.focused && rt.state.plain.range() == (0, 0), "plain padding keeps focus and moves caret to start");
+    assert!(rt.state().plain.focused && rt.state().plain.range() == (0, 0), "plain padding keeps focus and moves caret to start");
     rt.key(rune::KeyEvent { key: rune::Key::Text("x".into()), mods: rune::Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.plain.text, "xhi", "typing reaches the field");
+    assert_eq!(rt.state().plain.text, "xhi", "typing reaches the field");
     rt.pointer_down(clear[0] + 2.0, clear[1] + 2.0);
     rt.pointer_up(clear[0] + 2.0, clear[1] + 2.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.actions, 1, "on_action still fires");
-    assert!(rt.state.plain.focused, "clear button inside plain field does not blur it");
+    assert_eq!(rt.state().actions, 1, "on_action still fires");
+    assert!(rt.state().plain.focused, "clear button inside plain field does not blur it");
 }
 
 #[test]
@@ -515,7 +515,7 @@ fn secure_text_input_revealed_draws_plain_glyphs_and_keeps_secure_protections() 
     let mut rt = Runtime::new(Form { plain, secret, revealed: true }, view, (320.0, 120.0), Env::new(true, 1.0));
     rt.frame(0.0);
 
-    assert!(rt.state.secret.is_secure() && rt.state.secret.is_revealed());
+    assert!(rt.state().secret.is_secure() && rt.state().secret.is_revealed());
     assert!(rt.has_secure_focus());
     assert!(rt.find("action").is_none(), "plain copy button stays suppressed on secure TextInput");
     let secret_inp = rt.elements().into_iter().find(|e| e.path.ends_with("secret/value/input")).unwrap();
@@ -532,7 +532,7 @@ fn secure_text_input_revealed_draws_plain_glyphs_and_keeps_secure_protections() 
     // Toggling revealed off masks the field and moves the caret to the 2-bullet position for "hé".
     rt.update(|s, _| { s.plain.focused = false; s.secret.focused = true; s.revealed = false; });
     rt.frame(0.0);
-    assert!(rt.state.secret.is_secure() && !rt.state.secret.is_revealed());
+    assert!(rt.state().secret.is_secure() && !rt.state().secret.is_revealed());
     let masked_inp = rt.elements().into_iter().find(|e| e.path.ends_with("secret/value/input")).unwrap();
     let masked_caret = masked_inp.caret.expect("focused masked TextInput caret");
     assert_ne!(masked_caret[0], secret_caret[0], "masked bullet width differs from plain text width");
@@ -577,7 +577,7 @@ fn secure_text_area_masks_multiline_secrets_wraps_long_tokens_when_revealed_and_
     rt.pointer_down(area0.rect[0] + 20.0, area0.rect[1] + 20.0);
     rt.pointer_up(area0.rect[0] + 20.0, area0.rect[1] + 20.0);
     rt.frame(0.0);
-    assert!(rt.state.secret.is_secure() && rt.has_secure_focus());
+    assert!(rt.state().secret.is_secure() && rt.has_secure_focus());
 
     let line_blob = "AAAAB3NzaC1yc2EAAAADAQABAAABAQDfakebase64keymaterialwithoutspaces0123456789ABCDEF==";
     let pem = format!(
@@ -589,8 +589,8 @@ fn secure_text_area_masks_multiline_secrets_wraps_long_tokens_when_revealed_and_
     rt.key(KeyEvent { key: Key::Text("-----END FAKE PRIVATE KEY-----".into()), mods: Mods::default() });
     rt.frame(0.0);
 
-    assert_eq!(rt.state.submitted, 0, "Enter in secure TextArea inserts newline without submitting");
-    assert_eq!(rt.state.secret.text.lines().count(), 5);
+    assert_eq!(rt.state().submitted, 0, "Enter in secure TextArea inserts newline without submitting");
+    assert_eq!(rt.state().secret.text.lines().count(), 5);
 
     // Hidden mode keeps the fixed height and fixed mask regardless of secret length/line count.
     let area_hidden = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("area")).unwrap();
@@ -640,7 +640,7 @@ fn secure_text_area_masks_multiline_secrets_wraps_long_tokens_when_revealed_and_
     assert_eq!(inp_rehidden.rect[3], inp0.rect[3]);
     let area_rehidden = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("area")).unwrap();
     assert_eq!(area_rehidden.rect[3], area_hidden.rect[3]);
-    assert_eq!(rt.state.secret.text.lines().count(), 5);
+    assert_eq!(rt.state().secret.text.lines().count(), 5);
 }
 
 #[test]
@@ -689,15 +689,15 @@ fn secure_text_area_replaces_pristine_secret_on_first_edit() {
     rt.pointer_down(area.rect[0] + 16.0, area.rect[1] + 16.0);
     rt.pointer_up(area.rect[0] + 16.0, area.rect[1] + 16.0);
     rt.frame(0.0);
-    assert!(rt.state.is_pristine());
+    assert!(rt.state().is_pristine());
 
     rt.paste("replacement-line-1\nreplacement-line-2");
     rt.frame(0.0);
-    assert_eq!(rt.state.text, "replacement-line-1\nreplacement-line-2");
-    assert!(!rt.state.is_pristine());
+    assert_eq!(rt.state().text, "replacement-line-1\nreplacement-line-2");
+    assert!(!rt.state().is_pristine());
 
     rt.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
     rt.key(KeyEvent { key: Key::Text("replacement-line-3".into()), mods: Mods::default() });
     rt.frame(0.0);
-    assert_eq!(rt.state.text, "replacement-line-1\nreplacement-line-2\nreplacement-line-3");
+    assert_eq!(rt.state().text, "replacement-line-1\nreplacement-line-2\nreplacement-line-3");
 }

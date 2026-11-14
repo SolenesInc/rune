@@ -31,27 +31,27 @@ fn a_select_opens_on_its_value_and_chooses_or_dismisses_from_the_keyboard() {
     press(&mut rt, Key::Tab);
     assert_eq!(focused(&rt).as_deref(), Some("fruit-trigger"));
     press(&mut rt, Key::Down);
-    assert!(rt.state.open, "Down opens a popup button");
+    assert!(rt.state().open, "Down opens a popup button");
     assert_eq!(focused(&rt).as_deref(), Some("option1"), "the listbox opens on the current value");
     press(&mut rt, Key::Down);
     press(&mut rt, Key::Tab);
     assert_eq!(focused(&rt).as_deref(), Some("option2"), "Tab stays inside the open listbox");
     press(&mut rt, Key::Escape);
-    assert!(!rt.state.open);
-    assert_eq!(rt.state.value, "Banana");
+    assert!(!rt.state().open);
+    assert_eq!(rt.state().value, "Banana");
     assert_eq!(focused(&rt).as_deref(), Some("fruit-trigger"), "focus returns to the trigger");
 
     press(&mut rt, Key::Text(" ".into()));
-    assert!(rt.state.open);
+    assert!(rt.state().open);
     press(&mut rt, Key::Text("c".into()));
     press(&mut rt, Key::Enter);
-    assert_eq!(rt.state.value, "Cherry");
-    assert!(!rt.state.open);
+    assert_eq!(rt.state().value, "Cherry");
+    assert!(!rt.state().open);
     assert_eq!(focused(&rt).as_deref(), Some("fruit-trigger"));
 
     press(&mut rt, Key::Up);
     let (x, y) = (390.0, 290.0);
     rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(1.0 / 60.0);
-    assert!(!rt.state.open, "a press outside closes it");
-    assert_eq!(rt.state.value, "Cherry");
+    assert!(!rt.state().open, "a press outside closes it");
+    assert_eq!(rt.state().value, "Cherry");
 }

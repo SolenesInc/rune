@@ -37,7 +37,7 @@ fn accordions_and_collapsibles_read_open_and_open_by_any_input() {
 
     // Both triggers are keyed "trigger"; the first in the tree is the accordion's.
     assert!(act(&mut rt, "trigger", Action::Expand));
-    assert!(rt.state.open);
+    assert!(rt.state().open);
     let tree = rt.accessibility_json();
     let general = node(node(&tree, "item0"), "trigger");
     assert!(has(general, "expanded") && can(general, "collapse"));
@@ -48,9 +48,9 @@ fn accordions_and_collapsibles_read_open_and_open_by_any_input() {
 
     act(&mut rt, "trigger", Action::Focus);
     press_key(&mut rt, Key::Text(" ".into()));
-    assert!(!rt.state.open, "Space on the focused trigger closes it");
+    assert!(!rt.state().open, "Space on the focused trigger closes it");
     tap(&mut rt, "details");
-    assert!(rt.state.on, "a press opens the collapsible");
+    assert!(rt.state().on, "a press opens the collapsible");
     assert!(has(node(node(&rt.accessibility_json(), "details"), "trigger"), "expanded"));
 }
 
@@ -97,7 +97,7 @@ fn a_file_tree_reads_level_open_state_and_selection() {
     golden("file-tree", &tree);
 
     assert!(act(&mut rt, "src", Action::Expand));
-    assert!(rt.state.files.is_expanded("src"));
+    assert!(rt.state().files.is_expanded("src"));
     let tree = rt.accessibility_json();
     let src = node(&tree, "src");
     assert!(has(src, "expanded") && has(src, "selected"), "an assistive click selects and opens: {src}");
@@ -112,9 +112,9 @@ fn a_file_tree_reads_level_open_state_and_selection() {
     assert_eq!(node(&tree, "files")["activeDescendant"], "src/lib.rs", "focus stays on the tree; a reader follows the cursor row");
     press_key(&mut rt, Key::Left);
     press_key(&mut rt, Key::Left);
-    assert!(!rt.state.files.is_expanded("src"));
+    assert!(!rt.state().files.is_expanded("src"));
     assert!(has(node(&rt.accessibility_json(), "src"), "collapsed"));
     tap(&mut rt, "README.md");
     press_key(&mut rt, Key::Enter);
-    assert_eq!(rt.state.chosen.as_deref(), Some("README.md"));
+    assert_eq!(rt.state().chosen.as_deref(), Some("README.md"));
 }

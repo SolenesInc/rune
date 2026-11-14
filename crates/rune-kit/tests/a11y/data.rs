@@ -42,11 +42,11 @@ fn lists_read_their_rows_place_and_selection() {
     golden("list", &tree);
 
     assert!(act(&mut rt, "item0", Action::Click));
-    assert_eq!(rt.state.picked, Some(0));
+    assert_eq!(rt.state().picked, Some(0));
     act(&mut rt, "item0", Action::Focus);
     press_key(&mut rt, Key::Down);
     press_key(&mut rt, Key::Enter);
-    assert_eq!(rt.state.picked, Some(1));
+    assert_eq!(rt.state().picked, Some(1));
     assert!(has(node(&rt.accessibility_json(), "item1"), "selected"));
 }
 
@@ -100,7 +100,7 @@ fn a_table_reads_its_headers_rows_and_selection() {
     assert!(has(node(&tree, "f2"), "selected"));
     assert_eq!(node(&tree, "table")["activeDescendant"], "f2", "focus stays on the table; a reader follows the cursor row");
     press_key(&mut rt, Key::Enter);
-    assert_eq!(rt.state.chosen.as_deref(), Some("f2"));
+    assert_eq!(rt.state().chosen.as_deref(), Some("f2"));
 }
 
 fn card(_: &App, _: &mut Cx<App>) -> El {

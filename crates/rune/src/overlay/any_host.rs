@@ -258,7 +258,7 @@ impl<T: 'static> PendingOverlay for Overlay<T> {
             self.rt.hot = Some(crate::hot::Session::connect(rerun()));
         }
         if let Some(setup) = self.setup.take() {
-            setup(&mut self.rt.state, rerun());
+            setup(&mut self.rt.state_mut(), rerun());
         }
         // Requests made before the loop existed.
         wake();

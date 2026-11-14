@@ -26,7 +26,7 @@ pub(super) enum Activation {
     Held { physical: Option<PhysicalKeyCode>, key: Option<crate::Key>, focus: Option<String> },
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Queue physical input without a logical fallback (also useful for headless drivers).
     /// A modifier key still gets its `Key::Modifier` when modifier keys are on.
     pub fn physical_input(&mut self, event: PhysicalInput) {
@@ -184,15 +184,10 @@ impl<S: 'static> Runtime<S> {
     }
     /// `App::on_modifiers`, when the held modifiers changed since it last heard them.
     fn dispatch_mods(&mut self, tx: &mut Tx, live: &mut Option<bool>) -> bool {
-        let Some(f) = self.on_mods.filter(|_| self.held_mods != self.mods_heard) else { return false };
+        if !self.app.has(app_side::Hook::Mods) || self.held_mods == self.mods_heard { return false; }
         self.mods_heard = self.held_mods;
         let mut one = self.transaction();
-        let state = match &mut self.playground {
-            Some(playground) => playground.key_state(&mut self.state),
-            None => Some(&mut self.state),
-        };
-        let Some(state) = state else { return false };
-        f(state, self.mods_heard, &mut one);
+        if !self.app.mods(self.mods_heard, &mut one) { return false; }
         fold_live(live, true, &one);
         merge(tx, one);
         true
@@ -202,7 +197,7 @@ impl<S: 'static> Runtime<S> {
         let Some(handler) = self.focus.path().and_then(|p| self.node(p))
             .and_then(|n| n.focus.physical.clone()) else { return false };
         let mut one = Tx { key_repeat: matches!(event, PhysicalInput::Key { repeat: true, .. }), ..self.transaction() };
-        let consumed = Tx::took(handler(states!(self), event, &mut one), &mut one);
+        let consumed = Tx::took(handler(self.app.states(), event, &mut one), &mut one);
         fold_live(live, consumed, &one);
         merge(tx, one);
         consumed
@@ -239,7 +234,7 @@ mod tests {
     #[test]
     fn physical_dispatch_precedes_modal_app_and_paste_after_same_frame_click() {
         let mut rt = Runtime::new(State::default(), view, (300.0, 200.0), Env { system_dark: true, scale: 1.0 });
-        rt.on_key = Some(|s, _, _| { s.logical += 1; true });
+        rt.app_mut().on_key = Some(|s, _, _| { s.logical += 1; true });
         rt.frame(0.0);
         let (x, y) = rt.find("recorder").unwrap(); rt.pointer_down(x, y); rt.pointer_up(x, y);
         let mods = Mods { cmd: true, ..Mods::default() };
@@ -248,10 +243,10 @@ mod tests {
         rt.physical_with_fallback(PhysicalInput::Key { key: PhysicalKeyCode::Escape, mods: Mods::default(), pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Escape, mods: Mods::default() }));
         rt.frame(0.0);
-        assert_eq!((rt.state.physical, rt.state.logical, rt.state.dismissed), (2, 0, 0));
-        assert_eq!(rt.state.edit.text, "");
+        assert_eq!((rt.state().physical, rt.state().logical, rt.state().dismissed), (2, 0, 0));
+        assert_eq!(rt.state().edit.text, "");
         assert!(rt.paste_request.is_none(), "capture must not read the clipboard");
-        rt.state.capture = false;
+        rt.state_mut().capture = false;
         let (x, y) = rt.find("edit").unwrap(); rt.pointer_down(x, y); rt.pointer_up(x, y);
         rt.physical_with_fallback(PhysicalInput::Key { key: PhysicalKeyCode::KeyV, mods, pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Command('v'), mods }));
@@ -259,11 +254,11 @@ mod tests {
         let target = rt.paste_request.take().expect("paste requested");
         rt.paste_result(target, crate::ClipboardContent::new("paste"));
         rt.frame(0.0);
-        assert_eq!(rt.state.edit.text, "paste");
+        assert_eq!(rt.state().edit.text, "paste");
         rt.physical_with_fallback(PhysicalInput::Key { key: PhysicalKeyCode::Escape, mods: Mods::default(), pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Escape, mods: Mods::default() }));
         rt.frame(0.0);
-        assert_eq!(rt.state.dismissed, 1);
+        assert_eq!(rt.state().dismissed, 1);
     }
 
     #[test]
@@ -280,24 +275,24 @@ mod tests {
         // The click already requested a frame. Do not deliver modifiers to the old
         // focus or request another frame before that queued click starts capture.
         assert!(!rt.physical_with_fallback(modifiers, None));
-        assert_eq!(rt.state.physical, 0);
+        assert_eq!(rt.state().physical, 0);
         rt.frame(0.0);
-        assert_eq!(rt.state.physical, 1);
+        assert_eq!(rt.state().physical, 1);
         for event in [modifiers, release] {
             assert!(rt.physical_with_fallback(event, None));
             assert!(rt.dirty, "consumption must commit the handler's state changes");
             rt.frame(0.0);
         }
-        assert_eq!(rt.state.physical, 3);
-        rt.state.capture = false;
+        assert_eq!(rt.state().physical, 3);
+        rt.state_mut().capture = false;
         assert!(!rt.physical_with_fallback(release, None), "a declining handler needs no frame");
-        rt.state.capture = true;
+        rt.state_mut().capture = true;
         click(&mut rt, "edit");
         assert!(!rt.physical_with_fallback(modifiers, None));
         rt.frame(0.0);
-        let delivered = rt.state.physical; // FocusLost may notify the old recorder.
+        let delivered = rt.state().physical; // FocusLost may notify the old recorder.
         assert!(!rt.physical_with_fallback(release, None));
-        assert_eq!(rt.state.physical, delivered);
+        assert_eq!(rt.state().physical, delivered);
         assert!(rt.queue.is_empty() && !rt.dirty);
     }
 
@@ -310,15 +305,15 @@ mod tests {
         rt.frame(0.0);
         click(&mut rt, "recorder");
         rt.frame(0.0);
-        assert!(rt.state.capture);
-        let heard = rt.state.physical;
+        assert!(rt.state().capture);
+        let heard = rt.state().physical;
         rt.update(|s, _| s.gone = true);
         let modifiers = PhysicalInput::Modifiers(Mods { shift: true, ..Mods::default() });
         assert!(rt.physical_with_fallback(modifiers, None), "it asks for the frame that builds the new view");
-        assert_eq!(rt.state.physical, heard, "the last frame's recorder doesn't hear it");
+        assert_eq!(rt.state().physical, heard, "the last frame's recorder doesn't hear it");
         rt.frame(0.0);
         assert!(rt.find("recorder").is_none());
-        assert_eq!(rt.state.physical, heard, "and the new view has none");
+        assert_eq!(rt.state().physical, heard, "and the new view has none");
     }
 
     #[derive(Default)]
@@ -342,7 +337,7 @@ mod tests {
     }
     fn fields_runtime(secure: bool) -> Runtime<Fields> {
         let mut rt = Runtime::new(Fields { secure, ..Fields::default() }, fields, (300.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, _, _| { s.app_keys += 1; true });
+        rt.app_mut().on_key = Some(|s, _, _| { s.app_keys += 1; true });
         rt.frame(0.0); rt
     }
 
@@ -352,18 +347,18 @@ mod tests {
         key(&mut rt, PhysicalKeyCode::KeyV, Key::Command('v'));
         rt.frame(0.0);
         assert!(rt.paste_request.is_none(), "no focused editor or paste handler: no clipboard read");
-        assert_eq!(rt.state.app_keys, 1);
+        assert_eq!(rt.state().app_keys, 1);
         click(&mut rt, "first");
         key(&mut rt, PhysicalKeyCode::KeyV, Key::Command('v'));
         rt.frame(0.0);
         let first = rt.paste_request.take().unwrap();
         assert!(first.is_some());
-        assert_eq!((rt.state.keys, rt.state.app_keys), (0, 1));
+        assert_eq!((rt.state().keys, rt.state().app_keys), (0, 1));
         // Image-only clipboard sends no reply. An empty text reply also never falls
         // through to either key handler.
         rt.paste_result(first.clone(), crate::ClipboardContent::new(""));
         rt.frame(0.0);
-        assert_eq!((rt.state.keys, rt.state.app_keys), (0, 1));
+        assert_eq!((rt.state().keys, rt.state().app_keys), (0, 1));
         key(&mut rt, PhysicalKeyCode::KeyV, Key::Command('v'));
         click(&mut rt, "second");
         rt.frame(0.0);
@@ -372,7 +367,7 @@ mod tests {
         assert_ne!(target, rt.paste_target());
         rt.paste_result(target, crate::ClipboardContent::new("late"));
         rt.frame(0.0);
-        assert!(rt.state.first.text.is_empty() && rt.state.second.text.is_empty());
+        assert!(rt.state().first.text.is_empty() && rt.state().second.text.is_empty());
     }
 
     #[test]
@@ -382,7 +377,7 @@ mod tests {
             click(&mut rt, "first");
             key(&mut rt, PhysicalKeyCode::KeyX, Key::Text("x".into()));
             rt.frame(0.0);
-            assert_eq!(rt.state.first.text, "x");
+            assert_eq!(rt.state().first.text, "x");
             assert_eq!(rt.has_secure_focus(), secure);
             key(&mut rt, PhysicalKeyCode::KeyA, Key::Command('a'));
             key(&mut rt, PhysicalKeyCode::KeyC, Key::Command('c'));
@@ -393,7 +388,7 @@ mod tests {
             let target = rt.paste_request.take().unwrap();
             rt.paste_result(target, crate::ClipboardContent::new("replacement"));
             rt.frame(0.0);
-            assert_eq!(rt.state.first.text, "replacement");
+            assert_eq!(rt.state().first.text, "replacement");
             if secure {
                 let elements = rt.elements();
                 let field = elements.iter().find(|e| e.key.as_deref() == Some("first")).unwrap();
@@ -424,38 +419,38 @@ mod tests {
     #[test]
     fn key_handlers_see_a_held_keys_repeats_and_editing_keeps_repeating() {
         let mut rt = Runtime::new(Held::default(), held, (300.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.key_repeat())); true });
+        rt.app_mut().on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.key_repeat())); true });
         rt.frame(0.0);
         // No focus: the app handler gets first refusal, so it sees both presses.
         press(&mut rt, PhysicalKeyCode::Enter, Key::Enter, false);
         press(&mut rt, PhysicalKeyCode::Enter, Key::Enter, true);
-        assert_eq!(rt.state.app, [(Key::Enter, false), (Key::Enter, true)]);
+        assert_eq!(rt.state().app, [(Key::Enter, false), (Key::Enter, true)]);
         click(&mut rt, "field");
         rt.frame(0.0);
         press(&mut rt, PhysicalKeyCode::KeyX, Key::Text("x".into()), false);
         press(&mut rt, PhysicalKeyCode::KeyX, Key::Text("x".into()), true);
         press(&mut rt, PhysicalKeyCode::KeyX, Key::Text("x".into()), true);
-        assert_eq!(rt.state.input, [false, true, true]);
-        assert_eq!(rt.state.edit.text, "xxx", "a held letter keeps typing");
+        assert_eq!(rt.state().input, [false, true, true]);
+        assert_eq!(rt.state().edit.text, "xxx", "a held letter keeps typing");
         // Held Tab keeps moving focus, and Rune consumes it before the app handler.
         press(&mut rt, PhysicalKeyCode::Tab, Key::Tab, true);
         assert_eq!(focused(&rt).as_deref(), Some("other"));
         press(&mut rt, PhysicalKeyCode::Tab, Key::Tab, true);
         assert_eq!(focused(&rt).as_deref(), Some("field"));
-        assert_eq!(rt.state.app.len(), 2);
+        assert_eq!(rt.state().app.len(), 2);
     }
 
     #[test]
     fn a_queued_repeat_reaches_the_app_handler_with_the_flag_set() {
         let mut rt = Runtime::new(Held::default(), held, (300.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.key_repeat())); true });
+        rt.app_mut().on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.key_repeat())); true });
         rt.frame(0.0);
         rt.key(KeyEvent { key: Key::Text("s".into()), mods: Mods::default() });
         rt.repeat_key(KeyEvent { key: Key::Text("s".into()), mods: Mods::default() });
         rt.key(KeyEvent { key: Key::Text("s".into()), mods: Mods::default() });
         rt.frame(0.0);
         let s = Key::Text("s".into());
-        assert_eq!(rt.state.app, [(s.clone(), false), (s.clone(), true), (s, false)]);
+        assert_eq!(rt.state().app, [(s.clone(), false), (s.clone(), true), (s, false)]);
     }
 
     #[test]
@@ -475,7 +470,7 @@ mod tests {
                 .on_input_change(|s: &mut Codes, tx| s.change.push(tx.physical_key()))
                 .on_input_key(|s: &mut Codes, _, tx| { s.input.push(tx.physical_key()); false }));
         let mut rt = Runtime::new(Codes::default(), view, (300.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.physical_key(), tx.key_repeat())); true });
+        rt.app_mut().on_key = Some(|s, ev, tx| { s.app.push((ev.key.clone(), tx.physical_key(), tx.key_repeat())); true });
         rt.frame(0.0);
         click(&mut rt, "field");
         rt.frame(0.0);
@@ -489,17 +484,17 @@ mod tests {
             rt.frame(0.0);
         }
         let seven = Some(PhysicalKeyCode::Digit7);
-        assert_eq!(rt.state.input, [seven, seven]);
-        assert_eq!(rt.state.app, [(Key::Command('/'), seven, false), (Key::Command('&'), seven, true)]);
-        assert_eq!(rt.state.ups, [seven, seven]);
+        assert_eq!(rt.state().input, [seven, seven]);
+        assert_eq!(rt.state().app, [(Key::Command('/'), seven, false), (Key::Command('&'), seven, true)]);
+        assert_eq!(rt.state().ups, [seven, seven]);
         // A logical key with no physical origin has none, and non-key callbacks (`on_input_change`)
         // never inherit the key handler's physical key.
         rt.key(KeyEvent { key: Key::Command('&'), mods });
         rt.physical_with_fallback(PhysicalInput::Key { key: PhysicalKeyCode::KeyA, mods: Mods::default(), pressed: true, repeat: false },
             Some(KeyEvent { key: Key::Text("a".into()), mods: Mods::default() }));
         rt.frame(0.0);
-        assert_eq!(rt.state.app.last(), Some(&(Key::Command('&'), None, false)));
-        assert_eq!(rt.state.change, [None]);
+        assert_eq!(rt.state().app.last(), Some(&(Key::Command('&'), None, false)));
+        assert_eq!(rt.state().change, [None]);
     }
 
     #[test]
@@ -510,15 +505,15 @@ mod tests {
             .child(text_input(&s.edit, TextStyle::new(14.0, 400.0)).key("field").size(200.0, 32.0).on_edit(|s: &mut Rich| &mut s.edit));
         let edit = TextEdit::new("ab").rich().allow_marks([crate::Mark::Bold]);
         let mut rt = Runtime::new(Rich { edit, app: Vec::new() }, view, (300.0, 200.0), Env::new(true, 1.0));
-        rt.on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); true });
+        rt.app_mut().on_key = Some(|s, ev, _| { s.app.push(ev.key.clone()); true });
         rt.frame(0.0);
         click(&mut rt, "field");
         rt.frame(0.0);
         let cmd = |c| KeyEvent { key: Key::Command(c), mods: Mods { cmd: true, ..Mods::default() } };
         for c in ['a', 'u', 'b'] { rt.key(cmd(c)); }
         rt.frame(0.0);
-        assert_eq!(rt.state.app, [Key::Command('u')]);
-        assert!(rt.state.edit.marks().iter().all(|m| m.mark == crate::Mark::Bold) && !rt.state.edit.marks().is_empty());
+        assert_eq!(rt.state().app, [Key::Command('u')]);
+        assert!(rt.state().edit.marks().iter().all(|m| m.mark == crate::Mark::Bold) && !rt.state().edit.marks().is_empty());
     }
 
     fn release<S: 'static>(rt: &mut Runtime<S>, physical: PhysicalKeyCode) {
@@ -534,17 +529,17 @@ mod tests {
         press(&mut rt, PhysicalKeyCode::Escape, Key::Escape, false);
         release(&mut rt, PhysicalKeyCode::Escape);
         assert!(!rt.has_focus(), "Escape blurred the field");
-        let before = rt.state.app_keys;
+        let before = rt.state().app_keys;
         press(&mut rt, PhysicalKeyCode::ArrowDown, Key::Down, true);
         press(&mut rt, PhysicalKeyCode::ArrowDown, Key::Down, true);
-        assert_eq!(rt.state.app_keys, before + 2, "the held arrow's repeats still arrive");
+        assert_eq!(rt.state().app_keys, before + 2, "the held arrow's repeats still arrive");
         // The same without a release, from a script: only Escape's own repeats are dropped.
         click(&mut rt, "first");
         rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() }); rt.frame(0.0);
         rt.repeat_key(KeyEvent { key: Key::Down, mods: Mods::default() });
         rt.repeat_key(KeyEvent { key: Key::Escape, mods: Mods::default() });
         rt.frame(0.0);
-        assert_eq!(rt.state.app_keys, before + 3);
+        assert_eq!(rt.state().app_keys, before + 3);
     }
 
     #[test]
@@ -558,7 +553,7 @@ mod tests {
         rt.repeat_key(KeyEvent { key: Key::Down, mods: Mods::default() });
         rt.repeat_key(KeyEvent { key: Key::Enter, mods: Mods::default() });
         rt.frame(0.0);
-        assert_eq!(rt.state.keys, 2, "scripted repeats reach the newly focused field");
+        assert_eq!(rt.state().keys, 2, "scripted repeats reach the newly focused field");
     }
 
     #[derive(Default)]
@@ -606,14 +601,14 @@ mod tests {
         assert_eq!(focused_key(&rt).as_deref(), Some("sink"));
         press(&mut rt, PhysicalKeyCode::Space, Key::Text(" ".into()), true);
         press(&mut rt, PhysicalKeyCode::Space, Key::Text(" ".into()), true);
-        assert_eq!(rt.state.sink, 0);
+        assert_eq!(rt.state().sink, 0);
         // A physical handler consumes the first press and opens it: still recorded and dropped.
         let mut rt = opener_focused_on(2);
         assert_eq!(focused_key(&rt).as_deref(), Some("grab"));
         press(&mut rt, PhysicalKeyCode::Enter, Key::Enter, false);
         assert_eq!(focused_key(&rt).as_deref(), Some("sink"));
         press(&mut rt, PhysicalKeyCode::Enter, Key::Enter, true);
-        assert_eq!(rt.state.sink, 0);
+        assert_eq!(rt.state().sink, 0);
     }
 
     #[test]
@@ -626,7 +621,7 @@ mod tests {
             Some(KeyEvent { key: Key::Text(" ".into()), mods }));
         rt.frame(0.0);
         assert_eq!(focused_key(&rt).as_deref(), Some("sink"));
-        assert_eq!((rt.state.go_repeats, rt.state.sink), (0, 0), "the repeat went nowhere");
+        assert_eq!((rt.state().go_repeats, rt.state().sink), (0, 0), "the repeat went nowhere");
     }
 
     /// A `keys_first` menu item's key: the focused field, then `on_key`, see it before the item,
@@ -635,7 +630,7 @@ mod tests {
     fn a_menu_item_handing_over_its_key_runs_only_when_no_handler_takes_it() {
         use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
         let mut rt = fields_runtime(false);
-        rt.on_key = Some(|s, ev, _| { s.app_keys += 1; ev.is_command(']') });
+        rt.app_mut().on_key = Some(|s, ev, _| { s.app_keys += 1; ev.is_command(']') });
         let ran = Arc::new(AtomicUsize::new(0));
         let item = { let ran = ran.clone(); Unhandled::Menu(Arc::new(move || { ran.fetch_add(1, Ordering::Relaxed); })) };
         let mods = Mods { cmd: true, ..Mods::default() };
@@ -648,12 +643,12 @@ mod tests {
         assert_eq!(chord(&mut rt, PhysicalKeyCode::BracketRight, ']', false), 0, "the app's on_key took it");
         assert_eq!(chord(&mut rt, PhysicalKeyCode::BracketLeft, '[', false), 1, "nobody took it: the item runs");
         assert_eq!(chord(&mut rt, PhysicalKeyCode::BracketLeft, '[', true), 2, "and repeats");
-        assert_eq!(rt.state.app_keys, 3);
+        assert_eq!(rt.state().app_keys, 3);
         // A field that takes the key (⌘A selects all) keeps it from the item and from on_key.
         click(&mut rt, "first");
         rt.frame(0.0);
         assert_eq!(chord(&mut rt, PhysicalKeyCode::KeyA, 'a', false), 2);
-        assert_eq!(rt.state.app_keys, 3);
+        assert_eq!(rt.state().app_keys, 3);
     }
 
     #[test]
@@ -669,6 +664,6 @@ mod tests {
         let target = rt.paste_request.take().unwrap();
         rt.paste_result(target, crate::ClipboardContent::new("app"));
         rt.frame(0.0);
-        assert_eq!(rt.state, "app");
+        assert_eq!(rt.state(), "app");
     }
 }

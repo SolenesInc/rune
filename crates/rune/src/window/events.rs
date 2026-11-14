@@ -434,8 +434,8 @@ impl<S: 'static> Host<S> {
                 match rt.pointer() {
                     // Off macOS a trackpad pinch is a Ctrl + wheel.
                     Some((x, y)) if !cfg!(target_os = "macos") && self.mods.control_key() && rt.pinch_wheel(x, y, dy) => {}
-                    Some((x, y)) => rt.wheel_event(crate::WheelEvent::new(dx / rt.zoom(), dy / rt.zoom()).at(x, y).mods(map_mods(self.mods))
-                        .phase(phase).precise(precise)),
+                    Some((x, y)) => { let k = rt.zoom(); rt.wheel_event(crate::WheelEvent::new(dx / k, dy / k).at(x, y).mods(map_mods(self.mods))
+                        .phase(phase).precise(precise)) }
                     None if phase == crate::GesturePhase::Began => rt.wheel_began(),
                     None if phase == crate::GesturePhase::Ended => rt.wheel_ended(),
                     None => {}
@@ -461,7 +461,7 @@ impl<S: 'static> Host<S> {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                rt.pointer_move(position.x as f32 / rt.input_scale(), position.y as f32 / rt.input_scale());
+                { let core: &mut crate::runtime::RuntimeCore = &mut **rt; core.pointer_move(position.x as f32 / core.input_scale(), position.y as f32 / core.input_scale()); }
                 // AppKit needs the drag session started inside this mouse-dragged event.
                 if let Some(start) = rt.take_drag_out() {
                     let image = self.gpu.as_ref().filter(|_| start.item.drag_image().is_none()).and_then(|(gpu, renderer)|

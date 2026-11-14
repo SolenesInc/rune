@@ -39,16 +39,16 @@ fn return_in_a_text_area_breaks_the_line_and_cmd_or_ctrl_return_submits() {
     type_text(&mut rt, "first");
     key(&mut rt, Mods::default());
     type_text(&mut rt, "second");
-    assert_eq!(rt.state.area.text, "first\nsecond");
-    assert_eq!(rt.state.sent, 0, "plain Return does not submit");
+    assert_eq!(rt.state().area.text, "first\nsecond");
+    assert_eq!(rt.state().sent, 0, "plain Return does not submit");
 
     key(&mut rt, Mods { shift: true, ..Mods::default() });
     type_text(&mut rt, "third");
-    assert_eq!(rt.state.area.text, "first\nsecond\nthird", "Shift+Return still breaks the line");
+    assert_eq!(rt.state().area.text, "first\nsecond\nthird", "Shift+Return still breaks the line");
 
     key(&mut rt, Mods { cmd: true, ..Mods::default() });
-    assert_eq!(rt.state.sent, 1);
+    assert_eq!(rt.state().sent, 1);
     key(&mut rt, Mods { ctrl: true, ..Mods::default() });
-    assert_eq!(rt.state.sent, 2);
-    assert_eq!(rt.state.area.text, "first\nsecond\nthird", "submitting adds no line");
+    assert_eq!(rt.state().sent, 2);
+    assert_eq!(rt.state().area.text, "first\nsecond\nthird", "submitting adds no line");
 }

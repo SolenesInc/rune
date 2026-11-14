@@ -193,7 +193,7 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
 fn runtime(diff: DiffState, size: (f32, f32)) -> Runtime<App> {
     let app = App { diff, selections: Vec::new(), comments: Vec::new(), visible: Vec::new(), actions: Vec::new() };
     let mut rt = Runtime::new(app, view, size, Env::new(true, 2.0));
-    rt.on_key = Some(on_key);
+    rt.app_mut().on_key = Some(on_key);
     rt.frame(0.0);
     settle(&mut rt);
     rt
@@ -245,14 +245,14 @@ fn annotations_sit_under_their_line_and_push_the_rest_down() {
     assert_eq!(find(&rt, "df0.c11").rect[1], bottom(&c2), "the next line after both");
 
     // Split: under the new side's half.
-    rt.state.diff.set_mode(DiffMode::Split);
+    rt.state_mut().diff.set_mode(DiffMode::Split);
     rt.invalidate();
     rt.frame(1.0);
     let line = find(&rt, "df0.o10/line");
     let c1 = find(&rt, "note-c1");
     assert_eq!(c1.rect[1], bottom(&line));
     assert!(c1.rect[0] >= 450.0, "in the new half: {:?}", c1.rect);
-    assert!(rt.state.diff.annotations().len() == 2);
+    assert!(rt.state().diff.annotations().len() == 2);
 }
 
 #[test]
@@ -377,8 +377,8 @@ fn line_numbers_select_lines_and_the_plus_comments_on_them() {
     let mut rt = runtime(DiffState::new(vec![FileDiff::from_texts("a.rs", &old, &new)]), (800.0, 900.0));
     press(&mut rt, "df0.c3/gutter/nn");
     let three = LineRange::line(0, LineRef::new(Side::New, 3));
-    assert_eq!(rt.state.diff.selection(), Some(three));
-    assert_eq!(rt.state.selections, [Some(three)]);
+    assert_eq!(rt.state().diff.selection(), Some(three));
+    assert_eq!(rt.state().selections, [Some(three)]);
     // Dragging down the numbers.
     let (a, b) = (find(&rt, "df0.c3/gutter/nn"), find(&rt, "df0.n5/gutter/nn"));
     let x = a.rect[0] + a.rect[2] / 2.0;
@@ -392,17 +392,17 @@ fn line_numbers_select_lines_and_the_plus_comments_on_them() {
     rt.pointer_up(x, y1);
     tick(&mut rt);
     let range = LineRange { file: 0, start: LineRef::new(Side::New, 3), end: LineRef::new(Side::New, 5) };
-    assert_eq!(rt.state.diff.selection(), Some(range));
-    assert_eq!(rt.state.selections.last(), Some(&Some(range)));
+    assert_eq!(rt.state().diff.selection(), Some(range));
+    assert_eq!(rt.state().selections.last(), Some(&Some(range)));
     // The "+" on a selected line comments on the selection; on another line, on that line.
     press(&mut rt, "df0.c4/gutter/plus");
-    assert_eq!(rt.state.comments, [range]);
+    assert_eq!(rt.state().comments, [range]);
     press(&mut rt, "df0.c9/gutter/plus");
-    assert_eq!(rt.state.comments[1], LineRange::line(0, LineRef::new(Side::New, 9)));
+    assert_eq!(rt.state().comments[1], LineRange::line(0, LineRef::new(Side::New, 9)));
     // Escape clears the selection.
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     tick(&mut rt);
-    assert_eq!(rt.state.diff.selection(), None);
+    assert_eq!(rt.state().diff.selection(), None);
 }
 
 #[test]
@@ -415,7 +415,7 @@ fn unified_file_headers_span_the_viewport_while_code_scrolls_sideways() {
     d.set_mode(DiffMode::Unified);
     let app = App { diff: d, selections: Vec::new(), comments: Vec::new(), visible: Vec::new(), actions: Vec::new() };
     let mut rt = Runtime::new(app, view, (600.0, 400.0), Env::new(true, 2.0));
-    rt.on_key = Some(on_key);
+    rt.app_mut().on_key = Some(on_key);
     // Frame 0 already settles the viewport width in the same commit, with no one-frame lag.
     rt.frame(0.0);
     let inside = |rt: &Runtime<App>, w: f32, end: &str| {
@@ -441,7 +441,7 @@ fn unified_file_headers_span_the_viewport_while_code_scrolls_sideways() {
 
     // Header actions on the shifted in-list header remain clickable after scrolling sideways.
     press(&mut rt, "df0/inner/actions");
-    assert_eq!(rt.state.actions, vec![0]);
+    assert_eq!(rt.state().actions, vec![0]);
 
     // Window resizes update the header width on the resize frame itself (not a frame later).
     for w in [800.0, 450.0, 600.0] {
@@ -450,7 +450,7 @@ fn unified_file_headers_span_the_viewport_while_code_scrolls_sideways() {
         check(&rt, w);
     }
     press(&mut rt, "df0/inner/actions");
-    assert_eq!(rt.state.actions, vec![0, 0]);
+    assert_eq!(rt.state().actions, vec![0, 0]);
 
     rt.wheel(300.0, 200.0, -150.0);
     settle(&mut rt);
@@ -458,7 +458,7 @@ fn unified_file_headers_span_the_viewport_while_code_scrolls_sideways() {
     assert!(sticky.rect[0].abs() < 0.5 && (sticky.rect[2] - 600.0).abs() < 0.5, "sticky spans the viewport: {:?}", sticky.rect);
     inside(&rt, 600.0, "sticky/inner/adds");
     press(&mut rt, "sticky/inner/actions");
-    assert_eq!(rt.state.actions, vec![0, 0, 0]);
+    assert_eq!(rt.state().actions, vec![0, 0, 0]);
 }
 
 #[test]
@@ -466,8 +466,8 @@ fn cancelling_a_gutter_drag_restores_selection_without_notifying_a_drop() {
     let (old, new) = numbered(20, 5);
     let mut rt = runtime(DiffState::new(vec![FileDiff::from_texts("a.rs", &old, &new)]), (800.0, 900.0));
     press(&mut rt, "df0.c3/gutter/nn");
-    let original = rt.state.diff.selection();
-    let calls = rt.state.selections.len();
+    let original = rt.state().diff.selection();
+    let calls = rt.state().selections.len();
     let a = find(&rt, "df0.c4/gutter/nn");
     let (x, y) = (a.rect[0] + a.rect[2] / 2.0, a.rect[1] + 10.0);
     rt.pointer_down(x, y);
@@ -475,11 +475,11 @@ fn cancelling_a_gutter_drag_restores_selection_without_notifying_a_drop() {
     tick(&mut rt);
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     tick(&mut rt);
-    assert_eq!(rt.state.diff.selection(), original);
-    assert_eq!(rt.state.selections.len(), calls);
+    assert_eq!(rt.state().diff.selection(), original);
+    assert_eq!(rt.state().selections.len(), calls);
     rt.pointer_up(x, y + 40.0);
     tick(&mut rt);
-    assert_eq!(rt.state.selections.len(), calls);
+    assert_eq!(rt.state().selections.len(), calls);
 }
 
 #[test]
@@ -508,7 +508,7 @@ fn unified_gutters_stay_at_the_left_edge_while_code_scrolls_sideways() {
     // Pressing either number column (including the blank new-side column on a removed row)
     // selects the line after the sideways scroll without selecting scrolled code underneath.
     press(&mut rt, "df0.o6/gutter/nn");
-    assert_eq!(rt.state.diff.selection(), Some(LineRange::line(0, LineRef::new(Side::Old, 6))));
+    assert_eq!(rt.state().diff.selection(), Some(LineRange::line(0, LineRef::new(Side::Old, 6))));
     assert!(rt.selected_text().is_none(), "gutter press does not select code under the gutter");
 
     // Dragging down the stuck gutter while the view scrolls vertically selects across the scroll.
@@ -526,7 +526,7 @@ fn unified_gutters_stay_at_the_left_edge_while_code_scrolls_sideways() {
     rt.pointer_up(x, y1);
     tick(&mut rt);
     assert_eq!(
-        rt.state.diff.selection(),
+        rt.state().diff.selection(),
         Some(LineRange { file: 0, start: LineRef::new(Side::Old, 4), end: LineRef::new(Side::Old, 10) }),
     );
 }
@@ -546,15 +546,15 @@ fn rows_read_as_their_change_and_keys_move_between_files() {
     let text = |c: &str| KeyEvent { key: Key::Text(c.into()), mods: Mods::default() };
     rt.key(text("]"));
     settle(&mut rt);
-    assert_eq!(rt.state.diff.visible_file(), 1);
+    assert_eq!(rt.state().diff.visible_file(), 1);
     assert!(find(&rt, "df1").rect[1].abs() < 1.0, "the next file's header at the top");
     rt.key(text("j"));
     settle(&mut rt);
-    assert_eq!(rt.state.diff.visible_file(), 1);
+    assert_eq!(rt.state().diff.visible_file(), 1);
     rt.key(text("["));
     settle(&mut rt);
-    assert_eq!(rt.state.diff.visible_file(), 0);
-    assert_eq!(rt.state.visible.last(), Some(&0));
+    assert_eq!(rt.state().diff.visible_file(), 0);
+    assert_eq!(rt.state().visible.last(), Some(&0));
 }
 
 #[test]
@@ -594,7 +594,7 @@ fn focused_annotation_input_keeps_navigation_and_escape_keys() {
     let sel = LineRange::line(0, LineRef::new(Side::New, 10));
     diff.set_selection(Some(sel));
     let mut rt = Runtime::new(ComposeApp { diff, comment: TextEdit::default() }, compose_view, (600.0, 600.0), Env::new(true, 2.0));
-    rt.on_key = Some(compose_key);
+    rt.app_mut().on_key = Some(compose_key);
     rt.frame(0.0);
     for _ in 0..30 {
         rt.frame(1.0 / 60.0);
@@ -625,12 +625,12 @@ fn focused_annotation_input_keeps_navigation_and_escape_keys() {
     rt.pointer_down(inp.rect[0] + 10.0, inp.rect[1] + 10.0);
     rt.pointer_up(inp.rect[0] + 10.0, inp.rect[1] + 10.0);
     rt.frame(1.0 / 60.0);
-    assert!(rt.state.comment.focused);
+    assert!(rt.state().comment.focused);
     for ch in ["]", "[", "j", "k"] {
         rt.key(KeyEvent { key: Key::Text(ch.into()), mods: Mods::default() });
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.comment.text, "][jk", "keys type into the focused comment box");
+    assert_eq!(rt.state().comment.text, "][jk", "keys type into the focused comment box");
     let inp = find_el(&rt, "input-c1");
     let caret = inp.caret.expect("focused input reports caret");
     assert!(
@@ -649,19 +649,19 @@ fn focused_annotation_input_keeps_navigation_and_escape_keys() {
         pop.rect,
         inp.rect
     );
-    assert_eq!(rt.state.diff.visible_file(), 0, "did not jump files");
-    assert_eq!(rt.state.diff.selection(), Some(sel), "selection intact");
+    assert_eq!(rt.state().diff.visible_file(), 0, "did not jump files");
+    assert_eq!(rt.state().diff.selection(), Some(sel), "selection intact");
 
     // Escape blurs the comment box first without clearing the diff's line selection.
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert!(!rt.state.comment.focused, "Escape blurred the comment box");
-    assert_eq!(rt.state.diff.selection(), Some(sel), "Escape did not steal the diff's selection while blurring the field");
+    assert!(!rt.state().comment.focused, "Escape blurred the comment box");
+    assert_eq!(rt.state().diff.selection(), Some(sel), "Escape did not steal the diff's selection while blurring the field");
 
     // Now that the comment box is blurred, Escape clears the diff's selection.
     rt.key(KeyEvent { key: Key::Escape, mods: Mods::default() });
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.diff.selection(), None);
+    assert_eq!(rt.state().diff.selection(), None);
 }
 
 /// The code cells' hover handler calls `Tx::live_only` when the copy side stays: debug builds
@@ -698,7 +698,7 @@ fn a_live_only_event_while_hovering_scrolling_or_selecting_builds_nothing_new() 
         d.set_mode(mode);
         d.set_wrap(wrap);
         let mut rt = runtime(d, (900.0, 600.0));
-        rt.on_key = Some(|_, _, tx| { tx.live_only(); true });
+        rt.app_mut().on_key = Some(|_, _, tx| { tx.live_only(); true });
         rt.check_live_only(false);
         let probe = |rt: &mut Runtime<App>| {
             rt.check_live_only(true);
@@ -731,7 +731,7 @@ fn a_live_only_event_while_hovering_scrolling_or_selecting_builds_nothing_new() 
         sweep(&mut rt, 300.0);
         assert!(rt.live_only_warnings().is_empty(), "{mode:?} wrap {wrap}: {:#?}", rt.live_only_warnings());
         // The probe does compare: a handler that switches the mode is named.
-        rt.on_key = Some(|s, _, tx| {
+        rt.app_mut().on_key = Some(|s, _, tx| {
             s.diff.set_mode(if s.diff.mode() == DiffMode::Split { DiffMode::Unified } else { DiffMode::Split });
             tx.live_only();
             true

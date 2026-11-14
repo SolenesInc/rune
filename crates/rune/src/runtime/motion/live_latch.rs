@@ -165,7 +165,7 @@ impl LiveLane {
     }
 }
 
-impl<S: 'static> Runtime<S> {
+impl RuntimeCore {
     /// Install before the first frame. Live updates use this separate coalesced wake lane.
     pub fn set_live_waker(&mut self, waker: Waker) {
         for sub in &self.live_subscriptions { sub.active.store(false, Ordering::Release); }
@@ -180,8 +180,8 @@ impl<S: 'static> Runtime<S> {
         if !visible { self.loop_wake = None; }
         // The window's own setup shows and hides it before the first frame; the app hears the
         // changes after that (`App::on_visibility`).
-        if changed && self.commits > 0 && let Some(f) = self.on_visibility {
-            self.update(|s, tx| f(s, visible, tx));
+        if changed && self.commits > 0 && self.app.has(app_side::Hook::Visibility) {
+            self.update_app(&mut |app, tx| { app.visibility(visible, tx); true });
         }
     }
     /// What asks for this runtime's next frame as a live value does, from any thread.

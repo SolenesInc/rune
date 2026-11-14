@@ -54,11 +54,11 @@ fn a_focused_field_s_keys_reach_the_app_first_and_what_it_leaves_reaches_the_fie
     press(&mut rt, Key::Text("a".into()), Mods::default());
     press(&mut rt, Key::Command('z'), command());
     assert_eq!(
-        rt.state.log,
+        rt.state().log,
         [r#"app Text("a") in Some("field") field true"#, r#"field Text("a")"#, r#"app Command('z') in Some("field") field true"#],
         "the app hears each key first; the field never hears the one the app took"
     );
-    assert_eq!(rt.state.field.text, "a", "the field typed what the app left");
+    assert_eq!(rt.state().field.text, "a", "the field typed what the app left");
 }
 
 #[test]
@@ -68,5 +68,5 @@ fn keys_with_no_text_field_focused_never_reach_the_field_hook() {
     rt.update(|_, tx| tx.focus("pad", false));
     rt.frame(0.0);
     press(&mut rt, Key::Command('z'), command());
-    assert!(rt.state.log.is_empty(), "{:?}", rt.state.log);
+    assert!(rt.state().log.is_empty(), "{:?}", rt.state().log);
 }

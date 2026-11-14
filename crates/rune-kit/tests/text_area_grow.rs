@@ -69,7 +69,7 @@ fn auto_grow_fits_lines_springs_and_then_scrolls() {
 
     // Cmd+Enter submits; clearing the draft shrinks it back to one row.
     key(&mut rt, Key::Enter, Mods { cmd: true, ..Mods::default() });
-    assert_eq!(rt.state.sent, 1);
+    assert_eq!(rt.state().sent, 1);
     key(&mut rt, Key::Command('a'), Mods { cmd: true, ..Mods::default() });
     key(&mut rt, Key::Backspace, Mods::default());
     settle(&mut rt);

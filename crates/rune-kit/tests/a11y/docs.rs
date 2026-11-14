@@ -74,10 +74,10 @@ fn markdown_reads_as_a_document() {
     golden("markdown", &tree);
 
     assert!(act(&mut rt, "https://example.com/guide", Action::Click));
-    assert_eq!(rt.state.chosen.as_deref(), Some("https://example.com/guide"));
+    assert_eq!(rt.state().chosen.as_deref(), Some("https://example.com/guide"));
     let docs = with_role(&rt.accessibility_json(), "check-box")[1]["key"].as_str().unwrap().to_owned();
     assert!(act(&mut rt, &docs, Action::Click));
-    assert!(rt.state.on, "a reader's click checks the task");
+    assert!(rt.state().on, "a reader's click checks the task");
 }
 
 const NOTE: &str = "```facts

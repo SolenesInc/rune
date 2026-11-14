@@ -49,7 +49,7 @@ fn side_panel_wraps_once_and_releases_height_after_stable_width() {
             crate::tooling::Trace::open(&dir.join("trace.jsonl"), (480.0, 700.0), fps as f64, 2.0)
         });
         if let Some(trace) = &mut trace { trace.frame(&mut rt, 0.0, 0.0); }
-        rt.state.0 = 160.0;
+        rt.state_mut().0 = 160.0;
         rt.invalidate();
         rt.frame(0.0);
         let commits = rt.stats.commits;
@@ -71,11 +71,11 @@ fn side_panel_wraps_once_and_releases_height_after_stable_width() {
         }
         assert!((rt.grows[&id].h - measured).abs() < 0.05);
         // A second target during a hold restarts the stable-width interval.
-        rt.state.0 = 80.0;
+        rt.state_mut().0 = 80.0;
         rt.invalidate();
         rt.frame(0.0);
         for _ in 0..fps / 10 { rt.frame(1.0 / fps as f64); }
-        rt.state.0 = 120.0;
+        rt.state_mut().0 = 120.0;
         rt.invalidate();
         rt.frame(0.0);
         for _ in 0..fps / 10 { rt.frame(1.0 / fps as f64); }
@@ -108,7 +108,7 @@ fn measurement_cannot_change_presented_geometry_or_motion_policy() {
     rt.frame(0.0);
     let id = rt.nodes.iter().find(|n| n.key.as_deref() == Some("row")).unwrap().id;
     let before = rt.scene.presented(id).unwrap().rect;
-    rt.state = true;
+    *rt.state_mut() = true;
     let measured = rt.measure(&Tx::default());
     assert_eq!(rt.scene.presented(id).unwrap().rect, before);
     assert_eq!(rt.scene.store().active_len(), 0);
@@ -141,7 +141,7 @@ fn send_flight_follows_the_measured_bubble_while_earlier_rows_land() {
     draft.focused = true;
     let mut rt = Runtime::new(State { draft, sent: false, height: 80.0 }, view, (400.0, 300.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state.height = 400.0;
+    rt.state_mut().height = 400.0;
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     rt.key(KeyEvent { key: crate::edit::Key::Enter, mods: Default::default() });
@@ -206,7 +206,7 @@ fn virtual_rows_match_full_layout_while_paging_and_keep_a_keyed_anchor() {
         window.frame(1.0 / 120.0);
     }
     let before = visible(&window);
-    window.state.keys.insert(0, 9000);
+    window.state_mut().keys.insert(0, 9000);
     window.invalidate();
     window.frame(1.0 / 120.0);
     assert_eq!(before, visible(&window), "prepending outside the window preserves its keyed anchor");
@@ -240,7 +240,7 @@ fn reduced_motion_rows_land_immediately_but_keep_the_presence_fade() {
     }
     let mut rt = Runtime::new(false, view, (200.0, 300.0), Env::new(true, 2.0));
     assert!(!rt.frame(0.0));
-    rt.state = true;
+    *rt.state_mut() = true;
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row")).unwrap();
@@ -249,7 +249,7 @@ fn reduced_motion_rows_land_immediately_but_keep_the_presence_fade() {
     rt.frame(0.2);
     assert!(!rt.animating);
     assert_eq!(rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row")).unwrap().opacity, 1.0);
-    rt.state = false;
+    *rt.state_mut() = false;
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row")).unwrap();
@@ -268,7 +268,7 @@ fn streaming_fill_and_width_rewrap_land_on_completion() {
     }
     let mut rt = Runtime::new(("one".into(), true), view, (180.0, 500.0), Env::new(true, 2.0));
     rt.frame(0.0);
-    rt.state.0 = "one two three four five six seven eight nine ten eleven".into();
+    rt.state_mut().0 = "one two three four five six seven eight nine ten eleven".into();
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     let row = rt.nodes.iter().find(|n| n.key.as_deref() == Some("row")).unwrap().id;
@@ -279,24 +279,24 @@ fn streaming_fill_and_width_rewrap_land_on_completion() {
     assert!(!rt.animating, "partial line at rest must stop ticking");
     let old_h = rt.grows[&row].h;
     rt.set_viewport((600.0, 500.0), 2.0);
-    rt.state.0.push_str(" twelve");
+    rt.state_mut().0.push_str(" twelve");
     rt.invalidate();
     rt.frame(1.0 / 120.0);
     assert_eq!(rt.grows[&row].target, old_h, "rewrap waits for stable width");
     for _ in 0..15 { rt.frame(1.0 / 120.0); }
     assert!(rt.grows[&row].target < old_h, "width change may shrink a streaming row");
     assert!(rt.grows[&row].h > rt.grows[&row].target, "rewrapped height eases instead of snapping");
-    rt.state.0 = "one two".into();
+    rt.state_mut().0 = "one two".into();
     rt.invalidate();
     rt.frame(0.0);
     assert!(rt.grows[&row].target < rt.grows[&row].h, "streaming may still shrink inside the 400 ms rewrap window");
     for _ in 0..120 { rt.frame(1.0 / 120.0); }
     let landed = rt.grows[&row].h;
-    rt.state.0 = "o".into();
+    rt.state_mut().0 = "o".into();
     rt.invalidate();
     rt.frame(0.0);
     assert_eq!(rt.grows[&row].target, landed, "streaming cannot shrink after the rewrap window");
-    rt.state.1 = false;
+    rt.state_mut().1 = false;
     rt.invalidate();
     for _ in 0..240 { rt.frame(1.0 / 120.0); }
     assert!(!rt.animating);
@@ -321,7 +321,7 @@ fn retained_layout_matches_fresh_tree_across_edits() {
     for seed in 0..40 {
         let size = (240.0 + (seed % 4) as f32 * 30.0, 600.0);
         let scale = if seed % 3 == 0 { 1.0 } else { 2.0 };
-        cached.state = seed;
+        *cached.state_mut() = seed;
         cached.set_viewport(size, scale);
         cached.settle_all();
         cached.frame(0.0);

@@ -80,8 +80,8 @@ mod tests {
         board.set_content(ClipboardContent::new("Hi").with_html("<b>Hi</b><img src=x onerror=alert(1)>"));
         rt.update(|_, tx| tx.request_paste());
         rt.frame(0.0);
-        assert_eq!(rt.state.field.text, "Hi");
-        let (how, content) = rt.state.last.clone().unwrap();
+        assert_eq!(rt.state().field.text, "Hi");
+        let (how, content) = rt.state().last.clone().unwrap();
         assert_eq!((how, content.html()), ("Pasted", Some(r#"<b>Hi</b><img src="x">"#)));
 
         let (x, y) = rt.find("copy").unwrap();

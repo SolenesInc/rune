@@ -77,6 +77,6 @@ mod tests {
         assert!(rt.events.iter().any(|e| e.starts_with("drag-out ") && e.ends_with("app")), "{:?}", rt.events);
         rt.frame(0.0);
         // No system took the drag here, so it ends Cancelled in the same frame it started.
-        assert_eq!((rt.state.dragging, rt.state.last), (None, Some(("app", DragOutcome::Cancelled))));
+        assert_eq!((rt.state().dragging, rt.state().last), (None, Some(("app", DragOutcome::Cancelled))));
     }
 }

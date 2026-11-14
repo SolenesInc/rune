@@ -35,7 +35,7 @@ fn glyph_keys<T>(rt: &Runtime<T>, key: &str) -> Vec<(String, String)> {
 }
 
 fn retext(rt: &mut Runtime<S>, text: &str) {
-    rt.state.text = text.into();
+    rt.state_mut().text = text.into();
     rt.invalidate();
 }
 
@@ -211,7 +211,7 @@ fn an_emoji_sequence_is_one_cell() {
 fn kept_glyphs_glide_to_their_new_advance() {
     let font = TextStyle::new(13.0, 400.0);
     let mut rt = pair("1:00", font);
-    rt.state.text = "11:00".into();
+    rt.state_mut().text = "11:00".into();
     rt.invalidate();
     rt.frame(0.0);
     for _ in 0..240 {

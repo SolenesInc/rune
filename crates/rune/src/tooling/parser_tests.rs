@@ -74,7 +74,7 @@ fn a_script_paste_can_carry_html_rtf_and_an_image() {
     }
     rt.frame(0.0);
     let _ = std::fs::remove_file(&png);
-    let texts: Vec<_> = rt.state.iter().map(|c| (c.text(), c.html(), c.rtf(), c.image().map(crate::ClipboardImage::size))).collect();
+    let texts: Vec<_> = rt.state().iter().map(|c| (c.text(), c.html(), c.rtf(), c.image().map(crate::ClipboardImage::size))).collect();
     assert_eq!(texts, [
         ("plain", None, None, None), ("short", None, None, None),
         ("Hi", Some(r#"<b>Hi</b><img src="x">"#), Some("{\\rtf1 Hi}"), None), ("", None, None, Some((1, 2))),
@@ -89,7 +89,7 @@ fn a_script_key_with_a_code_reaches_handlers_with_its_physical_key() {
     ]));
     type Seen = Vec<(Key, Option<crate::PhysicalKeyCode>)>;
     let mut rt = Runtime::new(Seen::new(), |_: &Seen, _: &mut crate::Cx<Seen>| crate::el(), (100.0, 100.0), Env::default());
-    rt.on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.physical_key())); true });
+    rt.app_mut().on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.physical_key())); true });
     for event in script {
         match event.kind {
             Kind::Key(k, _) => rt.key(k),
@@ -98,7 +98,7 @@ fn a_script_key_with_a_code_reaches_handlers_with_its_physical_key() {
         }
         rt.frame(0.0);
     }
-    assert_eq!(rt.state, [(Key::Command('&'), Some(crate::PhysicalKeyCode::Digit7)), (Key::Command('&'), None)]);
+    assert_eq!(*rt.state(), [(Key::Command('&'), Some(crate::PhysicalKeyCode::Digit7)), (Key::Command('&'), None)]);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_script_key_with_a_code_reaches_handlers_with_its_unmodified_character() {
     let view = |_: &Seen, _: &mut crate::Cx<Seen>| crate::el()
         .on_key_up(|s: &mut Seen, ev, tx| { s.push((ev.key.clone(), tx.key_base())); true });
     let mut rt = Runtime::new(Seen::new(), view, (100.0, 100.0), Env::default());
-    rt.on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.key_base())); true });
+    rt.app_mut().on_key = Some(|s, ev, tx| { s.push((ev.key.clone(), tx.key_base())); true });
     for event in script {
         match event.kind {
             Kind::Key(k, _) => rt.key(k),
@@ -123,7 +123,7 @@ fn a_script_key_with_a_code_reaches_handlers_with_its_unmodified_character() {
         }
         rt.frame(0.0);
     }
-    assert_eq!(rt.state, [
+    assert_eq!(*rt.state(), [
         (Key::Text("å".into()), Some('a')),
         (Key::Command('k'), Some('k')),
         (Key::Command('&'), None),
@@ -140,7 +140,7 @@ fn a_script_key_can_be_a_held_keys_repeat() {
         {"t": 0.2, "physical": "f5", "repeat": true},
     ]));
     let mut rt = Runtime::new(Vec::new(), |_: &Vec<bool>, _: &mut crate::Cx<Vec<bool>>| crate::el(), (100.0, 100.0), Env::default());
-    rt.on_key = Some(|s, _, tx| { s.push(tx.key_repeat()); true });
+    rt.app_mut().on_key = Some(|s, _, tx| { s.push(tx.key_repeat()); true });
     let mut physical = Vec::new();
     for event in script {
         match event.kind {
@@ -151,7 +151,7 @@ fn a_script_key_can_be_a_held_keys_repeat() {
         }
     }
     rt.frame(0.0);
-    assert_eq!(rt.state, [false, true]);
+    assert_eq!(*rt.state(), [false, true]);
     assert_eq!(physical, [(true, true), (false, false)], "the release that ends a hold is not a repeat");
 }
 
@@ -159,13 +159,13 @@ fn a_script_key_can_be_a_held_keys_repeat() {
 fn window_panel_headless_focus_steps_preserve_false_and_event_order() {
     let script = parse_script(serde_json::json!([{"focus":true}, {"t":0.1,"focus":false}, {"t":0.2,"focus":false}]));
     let mut rt = Runtime::new(Vec::new(), |_: &Vec<bool>, _: &mut crate::Cx<Vec<bool>>| crate::el(), (100.0, 100.0), Env::default());
-    rt.on_focus = Some(|s, focused, _| s.push(focused));
+    rt.app_mut().on_focus = Some(|s, focused, _| s.push(focused));
     assert_eq!(script.len(), 3);
     for event in script {
         let Kind::Focus(focused) = event.kind else { panic!("focus parsed as pointer action") };
         rt.window_focus(focused);
     }
-    assert_eq!(rt.state, [true, false]);
+    assert_eq!(*rt.state(), [true, false]);
 }
 
 #[test]

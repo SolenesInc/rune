@@ -225,7 +225,8 @@ impl<S: 'static> Running<S> {
                 if self.rt.touching() { return false; }
                 // The mirror's pointer is in window points; the canvas draws the band.
                 let (x, y) = (event["x"].as_f64().unwrap_or(0.0) as f32, event["y"].as_f64().unwrap_or(0.0) as f32);
-                self.rt.pointer_move(x, y + self.rt.page_window().0);
+                let top = self.rt.page_window().0;
+                self.rt.pointer_move(x, y + top);
                 return true;
             }
             _ => {}

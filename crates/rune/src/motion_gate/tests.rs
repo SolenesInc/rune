@@ -104,7 +104,7 @@ fn feed(_: &Feed, _: &mut Cx<Feed>) -> El {
 
 fn scroll_cell(polls_change: bool) -> Recording {
     let mut rt = Runtime::new(Feed { polls_change }, feed, (400.0, 300.0), Env::new(true, 1.0));
-    rt.poll = Some(|s, _, _| s.polls_change);
+    rt.app_mut().poll = Some(|s, _, _| s.polls_change);
     let mut r = Run::new(rt, 120.0);
     r.idle(0.5);
     r.step();

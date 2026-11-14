@@ -4,7 +4,8 @@ use rune::{Color, Cx, El, Env, Runtime, ScrollSpec, col, el, text};
 fn pixels<S: 'static>(gpu: &Gpu, rt: &mut Runtime<S>, size: (u32, u32)) -> Vec<u8> {
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let target = Offscreen::new(&gpu.device, size.0, size.1);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, size);
+    let core = &mut **rt;
+    renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, size);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     renderer.draw(&mut encoder, &target.view, [0.0; 4]);
     target.copy(&mut encoder);
@@ -68,11 +69,11 @@ fn a_press_outside_the_box_misses_clipped_content() {
     rt.pointer_down(50.0, 160.0);
     rt.pointer_up(50.0, 160.0);
     rt.frame(1.0 / 120.0);
-    assert!(!rt.state.pressed, "the overflowing part of the child isn't hit");
+    assert!(!rt.state().pressed, "the overflowing part of the child isn't hit");
     rt.pointer_down(50.0, 130.0);
     rt.pointer_up(50.0, 130.0);
     rt.frame(1.0 / 120.0);
-    assert!(rt.state.pressed, "the visible part still is");
+    assert!(rt.state().pressed, "the visible part still is");
 }
 
 #[test]
@@ -181,7 +182,8 @@ fn nested_row_text_keeps_full_alpha_in_the_middle_of_a_faded_list() {
             if old_bug {
                 for instance in &mut rt.instances { instance.fade[2] = 0; }
             }
-            renderer.prepare(&gpu.device, &gpu.queue, &mut rt.text.atlas, &rt.instances, (w, h));
+            let core = &mut *rt;
+            renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (w, h));
             let mut encoder = gpu.device.create_command_encoder(&Default::default());
             renderer.draw(&mut encoder, &target.view, [0.0; 4]);
             target.copy(&mut encoder);

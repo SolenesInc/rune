@@ -27,7 +27,7 @@ fn a_page_lays_out_at_its_height_and_draws_the_band_it_is_scrolled_to() {
     rt.pointer_down(100.0, 80.0);
     rt.pointer_up(100.0, 80.0);
     rt.frame(0.0);
-    assert_eq!(rt.state, 1);
+    assert_eq!(*rt.state(), 1);
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn a_band_knows_which_part_of_it_the_window_shows() {
     rt.page_mode();
     rt.set_band(712.0, 200.0);
     for _ in 0..3 { rt.frame(0.0); }
-    assert_eq!(rt.state, 1, "the button is on screen at the top");
+    assert_eq!(*rt.state(), 1, "the button is on screen at the top");
 
     // Inside the skirt no frame is drawn at all: the window moves within the band, and the band
     // still holds the button where it drew it.
@@ -147,7 +147,7 @@ fn a_band_knows_which_part_of_it_the_window_shows() {
     for _ in 0..3 { rt.frame(0.0); }
     assert_eq!(rt.page_window(), (380.0, 200.0), "the window is inside the band, not at its top");
     assert_eq!(rt.drawn_box(1)[1], 0.0, "the band still draws it where it was drawn");
-    assert_eq!(rt.state, 0, "but the window has moved past it");
+    assert_eq!(*rt.state(), 0, "but the window has moved past it");
 }
 
 #[test]

@@ -19,7 +19,7 @@ fn fitted_segments_share_the_widest_labels_width_and_the_indicator_slides_betwee
     assert!(widths[1] >= label + 24.0 - 0.01, "the widest label fits with its padding: {widths:?} vs {label}");
     assert!((rect(&rt, "seg")[2] - widths.iter().sum::<f32>()).abs() < 0.01);
     assert_eq!(rect(&rt, "indicator")[0], rect(&rt, "segment0")[0]);
-    rt.state = 2;
+    *rt.state_mut() = 2;
     rt.invalidate();
     for _ in 0..120 { rt.frame(1.0 / 60.0); }
     let (indicator, target) = (rect(&rt, "indicator"), rect(&rt, "segment2"));

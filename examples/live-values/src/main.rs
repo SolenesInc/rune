@@ -82,7 +82,7 @@ fn bench_mode(rebuild: bool) {
         let mut rt = Runtime::new(state, view, (560.0, 440.0), Env::new(true, 2.0));
         let wakes = Arc::new(AtomicUsize::new(0)); let count = wakes.clone();
         rt.set_live_waker(Arc::new(move || { count.fetch_add(1, Ordering::Relaxed); }));
-        rt.poll = Some(poll);
+        rt.app_mut().poll = Some(poll);
         rt.frame(0.0);
         let mut times = Vec::new();
         for _ in 0..480 {
@@ -96,7 +96,7 @@ fn bench_mode(rebuild: bool) {
             let wake_count = wakes.load(Ordering::Relaxed);
             let mut frames = 0;
             for _ in 0..1200 {
-                sample(&mut rt.state, 480);
+                sample(&mut rt.state_mut(), 480);
                 if rt.live_pending() || rt.animating { rt.frame(1.0 / 120.0); frames += 1; }
             }
             println!("METRIC simulated_wakes_per_second={} idle_frames={} idle_wakes={}", wake_count as f64 / 4.0,

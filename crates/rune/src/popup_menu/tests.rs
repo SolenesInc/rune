@@ -55,10 +55,10 @@ fn a_press_handler_asks_for_a_menu_that_opens_over_its_anchor() {
     assert_eq!(rt.take_popup(), None, "one menu at a time");
 
     rt.resolve_popup(Some("dark")).unwrap();
-    assert_eq!(rt.state.picks, [Some("dark".to_owned())]);
+    assert_eq!(rt.state().picks, [Some("dark".to_owned())]);
     assert_eq!(rt.popup_menu(), None);
     rt.frame(0.0);
-    assert_eq!(rt.state.theme, "dark");
+    assert_eq!(rt.state().theme, "dark");
 }
 
 #[test]
@@ -81,14 +81,14 @@ fn a_context_menu_opens_at_the_press() {
     assert_eq!(rt.resolve_popup(Some("nope")), Err(PopupMenuError::UnknownItem("nope".into())));
     assert!(rt.popup_menu().is_some(), "a refused answer leaves the menu open");
     rt.resolve_popup(Some("share")).unwrap();
-    assert_eq!(rt.state.picks, [Some("share".to_owned())], "submenu items answer too");
+    assert_eq!(rt.state().picks, [Some("share".to_owned())], "submenu items answer too");
     assert_eq!(rt.resolve_popup(None), Err(PopupMenuError::NotOpen));
 }
 
 #[test]
 fn a_point_anchor_with_a_selection_puts_that_item_under_the_point() {
     let mut rt = runtime();
-    rt.state.anchor = Some((5.0, 6.0).into());
+    rt.state_mut().anchor = Some((5.0, 6.0).into());
     click(&mut rt, "theme");
     let show = rt.take_popup().unwrap().unwrap();
     assert_eq!((show.at, show.positioned.as_deref(), show.min_width), ((5.0, 6.0), Some("system"), 0.0));
@@ -102,7 +102,7 @@ fn a_menu_that_cannot_open_answers_none() {
     rt.update(|_, tx| tx.popup_menu(PopupMenu::new().item(PopupItem::new("", "Blank")), "theme", record));
     rt.update(|_, tx| tx.popup_menu(theme_menu("light"), "theme", record));
     rt.open_popup_headless();
-    assert_eq!(rt.state.picks, [None, None, None], "a missing anchor, a repeated id and an empty id each answer None");
+    assert_eq!(rt.state().picks, [None, None, None], "a missing anchor, a repeated id and an empty id each answer None");
     assert_eq!(rt.popup_menu(), Some(&theme_menu("light")), "the next valid menu opens");
     assert!(rt.popups.is_open());
 }
@@ -120,7 +120,7 @@ fn menus_asked_for_together_open_one_after_another() {
     assert!(!rt.popups.is_open(), "the next waits for the host to open it");
     rt.open_popup_headless();
     rt.resolve_popup(Some("light")).unwrap();
-    assert_eq!(rt.state.picks, [None, Some("light".to_owned())]);
+    assert_eq!(rt.state().picks, [None, Some("light".to_owned())]);
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn a_window_going_away_answers_every_waiting_menu_none_once() {
     let showing = Rc::new(Session::default());
     presenter.session = Some(showing.clone());
     presenter.cancel(&mut rt);
-    assert_eq!(rt.state.picks, [None, None, None]);
+    assert_eq!(rt.state().picks, [None, None, None]);
     assert_eq!(rt.popup_menu(), None);
     assert!(!rt.popups.is_open());
     assert!(showing.is_cancelled(), "a tracking menu stops, and one not yet up never opens");
@@ -189,7 +189,7 @@ fn a_window_going_away_answers_every_waiting_menu_none_once() {
     showing.resolve(Some("dark".into()), None);
     assert!(!presenter.answer(&mut rt), "a late answer doesn't call back a second time");
     presenter.cancel(&mut rt);
-    assert_eq!(rt.state.picks, [None, None, None]);
+    assert_eq!(rt.state().picks, [None, None, None]);
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn a_callback_that_always_asks_again_cannot_hold_a_closing_window() {
     let mut rt = runtime();
     rt.update(|_, tx| tx.popup_menu(theme_menu("system"), "theme", again));
     rt.cancel_popups();
-    assert_eq!(rt.state.picks.len(), 64);
+    assert_eq!(rt.state().picks.len(), 64);
     assert_eq!(rt.popup_menu(), None);
 }
 
@@ -211,12 +211,12 @@ fn a_menu_from_a_press_ends_the_hover_in_that_frame() {
     let (x, y) = rt.find("theme").unwrap();
     rt.pointer_move(x, y);
     rt.frame(0.0);
-    assert_eq!(rt.state.hovers, [true]);
+    assert_eq!(rt.state().hovers, [true]);
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.0);
     assert!(rt.popup_menu().is_some());
-    assert_eq!(rt.state.hovers, [true, false], "the hover ends with the frame that asked for the menu");
+    assert_eq!(rt.state().hovers, [true, false], "the hover ends with the frame that asked for the menu");
     assert_eq!((rt.pointer(), rt.pressing()), (None, false), "nothing draws hovered or pressed under the menu");
 }
 
@@ -230,7 +230,7 @@ fn a_menu_from_an_update_ends_the_hover_when_it_opens() {
     rt.open_popup_headless();
     assert_eq!(rt.pointer(), None);
     rt.frame(0.0);
-    assert_eq!(rt.state.hovers, [true, false]);
+    assert_eq!(rt.state().hovers, [true, false]);
 }
 
 #[test]
@@ -250,7 +250,7 @@ fn a_menu_a_pick_asks_for_waits_for_the_element_the_pick_mounts() {
     assert!(!rt.popup_waits_for_layout());
     let show = rt.take_popup().unwrap().unwrap();
     assert_eq!((show.at, show.min_width), ((150.0, 5.0), 30.0));
-    assert_eq!(rt.state.picks, [Some("dark".to_owned())]);
+    assert_eq!(rt.state().picks, [Some("dark".to_owned())]);
 }
 
 #[test]

@@ -401,7 +401,7 @@ impl Presenter {
             let _ = rt.resolve_popup(None);
         }
         // In window points; the view's are over its zoom.
-        if let Some((x, y)) = pointer && rt.pointer().is_none() { rt.pointer_move(x / rt.zoom(), y / rt.zoom()); }
+        if let Some((x, y)) = pointer && rt.pointer().is_none() { let k = rt.zoom(); rt.pointer_move(x / k, y / k); }
         true
     }
 
