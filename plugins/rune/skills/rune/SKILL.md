@@ -17,7 +17,7 @@ Rune is a GPU UI framework for Rust: a view is a function from the app's state t
 - **The window's frame** (`rune_kit::shell`): `SplitView`, `Sidebar`, `SidebarRow`, `Toolbar`, `Page`. Never build a sidebar, a toolbar or a title bar by hand.
 
 ```rust
-let k: &Kit = /* the app's kit for this appearance */;
+let k = &Kit::neutral(cx.system_dark());           // or the app's own kit
 let mut layer = Vec::new();                        // overlays mount here
 let body = col().gap(12.0)
     .child(text("Sync").font(k.ty.body_medium).color(k.c.text_base))
@@ -27,6 +27,7 @@ let body = col().gap(12.0)
 rune_kit::root(body, layer)                        // the view's root
 ```
 
+- An app that depends on `rune` alone has no kit yet. Add `rune-kit` to its `Cargo.toml` from the same git revision as `rune`, and make the kit once per view: `Kit::neutral(cx.system_dark())`, or `Kit::from_palette(PaletteSeed { bg, fg, accent })` for the app's own colours. Then replace hand-drawn controls (an `el()` with `.role("button")`) with the kit's as you touch them.
 - Take every colour, text style, radius and shadow from the `Kit` (`k.c.text_muted`, `k.ty.body`, `k.radius.md`, `k.elevation.raised`). A literal colour or font size in a view is a defect.
 - Overlays build with `.build(k, &mut layer)` and need `rune_kit::root(body, layer)`, or they never show.
 - Give each element you will script, test or crop a `.key("name")`.
