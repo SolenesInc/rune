@@ -52,6 +52,17 @@ Give your coding agent this repo. Have it start from [`examples/hello`](examples
 
 > Build me a <thing> with Rune (github.com/anomalyco/rune). Start from examples/hello and check your work headlessly.
 
+### Claude Code
+
+This repository is a plugin marketplace with one plugin, `rune`. Its skill tells an agent to build screens from rune-kit and to look at a headless render before it reports UI work done.
+
+```
+/plugin marketplace add SolenesInc/rune
+/plugin install rune@rune
+```
+
+`claude plugin eval plugins/rune` runs its eval cases, each with and without the plugin.
+
 ## Add it
 
 ```toml
