@@ -201,6 +201,14 @@ pub fn measure_with(
     })
 }
 
+/// The Parley layout of `text` (with `spans`) set in `style`, wrapped at `max_width` points when
+/// given, in points, as [`measure`] lays it out. An editor that keeps its own document and draws
+/// each line with [`crate::rich`] moves its caret, hit-tests a press and boxes its selection with
+/// [`parley::editing::Selection`] on it. Laying out the same line again is a cache lookup.
+pub fn layout(text: &str, spans: &[Span], style: TextStyle, max_width: Option<f32>) -> std::rc::Rc<parley::Layout<super::Ink>> {
+    with_text(|t| t.layout_rich(text, spans, style, 1.0, max_width))
+}
+
 /// CSS's min-content and max-content widths of `text` (with `spans`) in `style`, in points and
 /// unrounded, as a browser's automatic table layout reads a cell: its widest unbreakable run,
 /// and its width on one line, neither counting the spaces that end a line.

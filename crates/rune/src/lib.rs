@@ -73,6 +73,7 @@ pub(crate) use window::titlebar;
 /// AccessKit's types, for [`Runtime::accessibility_tree`] and [`Runtime::accessibility_action`].
 pub use a11y::AccessibilityLink;
 pub use accesskit;
+pub use parley;
 pub use app::App;
 pub use app::AppHandle;
 pub use clipboard::ClipboardContent;

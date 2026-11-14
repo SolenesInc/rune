@@ -86,7 +86,7 @@ pub use case::TextCase;
 pub use hash::text_hash;
 pub(crate) use hash::{directed, elide_key, shape_key};
 pub(crate) use families::choose_families;
-pub use measure::{FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, measure, measure_with, with_families};
+pub use measure::{FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, layout, measure, measure_with, with_families};
 pub use rich_layout::RichLayoutOptions;
 pub use run::{Run, RunLayout};
 pub(crate) use case::Source as CaseSource;
