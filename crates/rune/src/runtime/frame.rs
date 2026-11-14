@@ -180,7 +180,7 @@ impl<S: 'static> Runtime<S> {
     /// and `on_close` reach the clipboard without a frame, and applies clipboard requests to a
     /// memory clipboard at once. A secret clear drops an earlier secret copy not yet written.
     pub(super) fn latch_requests(&mut self, tx: &mut Tx) {
-        self.run_pick_reads(tx);
+        self.run_frame_reads(tx);
         self.shell_request = self.shell_request.max(tx.shell.take());
         if std::mem::take(&mut tx.minimize) { self.minimize_step(crate::window::MinimizeEvent::Asked); }
         self.titlebar.toggle_maximized |= std::mem::take(&mut tx.toggle_maximized);
@@ -551,7 +551,7 @@ impl<S: 'static> Runtime<S> {
                 ran |= r;
                 if r { why |= CommitWhy::INPUT; }
             }
-            self.run_pick_reads(&mut tx);
+            self.run_frame_reads(&mut tx);
         }
         // Once a frame, however often a drag moved the selection, and in time for this commit.
         for action in self.selection_changes() {

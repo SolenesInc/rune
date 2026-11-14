@@ -178,7 +178,7 @@ fn stall_path(action: &Action) -> Option<&str> {
 }
 
 pub(crate) fn merge(tx: &mut Tx, one: Tx) {
-    tx.pick_reads.extend(one.pick_reads);
+    tx.frame_reads.extend(one.frame_reads);
     tx.paste |= one.paste;
     tx.clipboard_reads.extend(one.clipboard_reads);
     if let Some(one) = one.trace {
