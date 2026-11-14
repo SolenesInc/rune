@@ -259,8 +259,9 @@ impl TextInput {
     /// Focus shows only as the caret and selection, and an invalid field only as red text.
     /// Everything else works as in the boxed field, including press-anywhere focus, the
     /// leading icon, trailing slot, copy and clear buttons, and the same inner padding (8 points
-    /// before the leading icon or 2 before the text, 8 after the trailing end; the clear button
-    /// reaches the right edge). Width and height still apply; use `.width(None)` to fill the
+    /// before the leading icon, 8 after the trailing end; the clear button reaches the right
+    /// edge), except that text with no leading icon starts 2 points in, so it lines up with the
+    /// label or list it sits over. Width and height still apply; use `.width(None)` to fill the
     /// parent. A disabled plain field is dimmed.
     pub fn plain(mut self) -> Self {
         self.plain = true;
@@ -351,6 +352,8 @@ impl TextInput {
         let mut value = row().key("value").grow(1.0).shrink().min_w(0.0).gap(6.0).center_y().clip_rounded(0.0);
         if let Some(i) = self.leading {
             value = value.child(el().key("leading").pl(8.0).center().child(icon(i, self.leading_size).color(c.icon_muted)).a11y_hidden());
+        } else if self.plain {
+            value = value.pl(2.0);
         } else {
             value = value.child(el().w(2.0));
         }

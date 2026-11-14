@@ -58,3 +58,25 @@ fn a_read_only_field_s_editor_reads_as_read_only_and_an_editable_one_does_not() 
     }
     assert_eq!((read_only(&tree, "sending"), read_only(&tree, "typing")), (Some(true), Some(false)), "{tree}");
 }
+
+fn inset(s: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    col()
+        .padding(20.0)
+        .child(TextInput::new(&s.name).key("plain").plain().on_edit(|s: &mut S| &mut s.name).build(&k))
+        .child(TextInput::new(&s.notes).key("boxed").on_edit(|s: &mut S| &mut s.notes).build(&k))
+}
+
+#[test]
+fn a_plain_field_s_text_starts_two_points_in_and_a_boxed_field_s_eight() {
+    let mut rt = Runtime::new(S::default(), inset, (600.0, 400.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let tree = rt.accessibility_json();
+    fn left(n: &serde_json::Value, key: &str) -> Option<f64> {
+        if n["key"] == key {
+            return n["bounds"][0].as_f64();
+        }
+        n["children"].as_array()?.iter().find_map(|c| left(c, key))
+    }
+    assert_eq!((left(&tree, "plain"), left(&tree, "boxed")), (Some(22.0), Some(28.0)), "{tree}");
+}
