@@ -185,21 +185,34 @@ impl PillStyle {
     }
 }
 pub(crate) type InputPasteFn = Rc<dyn Fn(crate::states::States<'_>, &crate::ClipboardContent, &mut Tx) -> bool>;
-pub(crate) type PickFn = Box<dyn FnOnce(crate::states::States<'_>, Option<crate::Picked>, &mut Tx)>;
-
+/// What a [`FrameRead`] asks of the last presented frame.
 #[derive(Clone)]
-pub(crate) struct PickRead {
-    pub within: Option<String>,
-    pub x: f32,
-    pub y: f32,
-    pub pick: crate::Pick,
-    pub(crate) f: Rc<std::cell::Cell<Option<PickFn>>>,
+pub(crate) enum ReadQuery {
+    /// The element at a point ([`Tx::element_at`]).
+    At { within: Option<String>, x: f32, y: f32, pick: crate::Pick },
+    /// The element each key names ([`Tx::find_elements`]).
+    Keys(Vec<String>),
 }
-impl PickRead {
-    pub fn take(&self) -> Option<PickFn> { self.f.take() }
+
+/// The frame's answer to a [`ReadQuery`], of the same variant.
+pub(crate) enum ReadAnswer {
+    At(Option<crate::Picked>),
+    Keys(Vec<Option<crate::ElementInfo>>),
 }
-impl std::fmt::Debug for PickRead {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("PickRead") }
+
+pub(crate) type FrameReadFn = Box<dyn FnOnce(crate::states::States<'_>, ReadAnswer, &mut Tx)>;
+
+/// A handler's question about the last presented frame, answered after the handler runs.
+#[derive(Clone)]
+pub(crate) struct FrameRead {
+    pub query: ReadQuery,
+    pub(crate) f: Rc<std::cell::Cell<Option<FrameReadFn>>>,
+}
+impl FrameRead {
+    pub fn take(&self) -> Option<FrameReadFn> { self.f.take() }
+}
+impl std::fmt::Debug for FrameRead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("FrameRead") }
 }
 
 /// What an `El::selection_copy` element copies for a selection inside it.

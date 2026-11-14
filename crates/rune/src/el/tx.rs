@@ -48,7 +48,7 @@ pub struct Tx {
     pub(crate) copy: Option<crate::ClipboardWrite>,
     pub(crate) paste: bool,
     pub(crate) clipboard_reads: Vec<ClipboardRead>,
-    pub(crate) pick_reads: Vec<PickRead>,
+    pub(crate) frame_reads: Vec<FrameRead>,
     pub(crate) clear_secret: bool,
     pub(crate) text_flights: Vec<(String, String)>,
     /// `Tx::launch`: (source, destination).
@@ -292,10 +292,29 @@ impl Tx {
     }
 
     fn pick_read<S: 'static>(&mut self, within: Option<String>, x: f32, y: f32, pick: crate::Pick, f: impl FnOnce(&mut S, Option<crate::Picked>, &mut Tx) + 'static) {
-        let f: PickFn = Box::new(move |s, picked, tx| {
-            if let Some(s) = s.cast::<S>() { f(s, picked, tx); }
+        self.frame_read(ReadQuery::At { within, x, y, pick }, move |s: &mut S, answer, tx| {
+            if let ReadAnswer::At(picked) = answer { f(s, picked, tx); }
         });
-        self.pick_reads.push(PickRead { within, x, y, pick, f: Rc::new(std::cell::Cell::new(Some(f))) });
+    }
+
+    /// The element each of `keys` names in the last presented frame, as
+    /// [`Runtime::elements`](crate::Runtime::elements) lists it: the first live element whose
+    /// key or key path matches, as [`Cx::layout`](crate::Cx::layout) matches, or `None` when
+    /// none shows. `rect` says where it is in the window, `visible` the part of it its
+    /// ancestors' clips leave, and `inert` whether a modal layer over it keeps input from it.
+    /// Runs `f` after this handler, as [`Tx::element_at`] does, for a handler that must answer
+    /// from what the window shows, such as which parts of it are on screen now.
+    pub fn find_elements<S: 'static>(&mut self, keys: Vec<String>, f: impl FnOnce(&mut S, Vec<Option<crate::ElementInfo>>, &mut Tx) + 'static) {
+        self.frame_read(ReadQuery::Keys(keys), move |s: &mut S, answer, tx| {
+            if let ReadAnswer::Keys(found) = answer { f(s, found, tx); }
+        });
+    }
+
+    fn frame_read<S: 'static>(&mut self, query: ReadQuery, f: impl FnOnce(&mut S, ReadAnswer, &mut Tx) + 'static) {
+        let f: FrameReadFn = Box::new(move |s, answer, tx| {
+            if let Some(s) = s.cast::<S>() { f(s, answer, tx); }
+        });
+        self.frame_reads.push(FrameRead { query, f: Rc::new(std::cell::Cell::new(Some(f))) });
     }
 
     /// [`Runtime::invalidate_memos_by_prefix`](crate::Runtime::invalidate_memos_by_prefix) on
@@ -311,7 +330,7 @@ impl Tx {
     /// Work only a frame carries out that changes its pixels without a model change: a scroll
     /// or a text flight. A `wake_after` only schedules.
     pub(crate) fn frame_work(&self) -> bool {
-        !self.pick_reads.is_empty() || !self.scroll_to.is_empty() || !self.scroll_bottom.is_empty() || !self.scroll_pages.is_empty() || !self.scroll_offsets.is_empty()
+        !self.frame_reads.is_empty() || !self.scroll_to.is_empty() || !self.scroll_bottom.is_empty() || !self.scroll_pages.is_empty() || !self.scroll_offsets.is_empty()
             || !self.keep_on_screen.is_empty() || !self.text_flights.is_empty() || !self.launches.is_empty() || self.select.is_some()
     }
 

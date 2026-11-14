@@ -429,16 +429,26 @@ impl<S: 'static> Runtime<S> {
         self.element_at_within(None, x, y, pick)
     }
 
-    pub(super) fn run_pick_reads(&mut self, tx: &mut Tx) {
-        for read in std::mem::take(&mut tx.pick_reads) {
-            let picked = self.element_at_within(read.within.as_deref(), read.x, read.y, read.pick);
+    pub(super) fn run_frame_reads(&mut self, tx: &mut Tx) {
+        let reads = std::mem::take(&mut tx.frame_reads);
+        let mut elements = None;
+        for read in reads {
+            let answer = match &read.query {
+                crate::el::ReadQuery::At { within, x, y, pick } => crate::el::ReadAnswer::At(self.element_at_within(within.as_deref(), *x, *y, *pick)),
+                crate::el::ReadQuery::Keys(keys) => {
+                    let elements = elements.get_or_insert_with(|| self.elements());
+                    crate::el::ReadAnswer::Keys(keys.iter().map(|key| {
+                        elements.iter().find(|e| !e.exiting && crate::flight::selects(key, &e.path, e.key.as_deref())).cloned()
+                    }).collect())
+                }
+            };
             if let Some(f) = read.take() {
-                f(states!(self), picked, tx);
+                f(states!(self), answer, tx);
                 self.dirty = true;
             }
         }
         // A callback may ask again, but cannot keep this dispatch running indefinitely.
-        self.pending.pick_reads.append(&mut tx.pick_reads);
+        self.pending.frame_reads.append(&mut tx.frame_reads);
     }
 
     /// [`Runtime::element_at`] restricted to an element and its descendants, ignoring other
