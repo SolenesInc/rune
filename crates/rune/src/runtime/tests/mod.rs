@@ -47,6 +47,7 @@ mod text_keys;
 mod text_rebreak;
 mod titlebar_press;
 mod unseen_entrances;
+mod wheel_chain;
 mod window_wake;
 
 thread_local! {

@@ -478,22 +478,38 @@ impl<S: 'static> Runtime<S> {
 
     /// The innermost scroll viewport at (x, y) that moves on the horizontal axis or the vertical.
     pub(super) fn scroll_at_axis(&self, x: f32, y: f32, horizontal: bool) -> Option<NodeId> {
+        self.scrolls_at_axis(x, y, horizontal).next()
+    }
+
+    /// The scroll viewports at (x, y) that move on the horizontal axis or the vertical, innermost first.
+    fn scrolls_at_axis(&self, x: f32, y: f32, horizontal: bool) -> impl Iterator<Item = NodeId> + '_ {
         self.nodes
             .iter()
             .enumerate()
             .rev()
-            .filter(|(i, n)| n.scroll.is_some() && n.scroll_axes.has(horizontal) && !self.subtree_exiting(*i) && self.pointer_allowed(*i))
-            .find(|(i, _)| self.node_contains(*i, x, y))
+            .filter(move |(i, n)| n.scroll.is_some() && n.scroll_axes.has(horizontal) && !self.subtree_exiting(*i) && self.pointer_allowed(*i))
+            .filter(move |(i, _)| self.node_contains(*i, x, y))
             .map(|(_, n)| n.id)
     }
 
+    /// The innermost vertical viewport at (x, y) with room to move toward `dy` (positive moves
+    /// content down), else the innermost: one with nothing to scroll that way passes the wheel to
+    /// the viewport around it, as a browser's scroll chaining does.
+    fn scroll_toward(&self, x: f32, y: f32, dy: f32) -> Option<NodeId> {
+        let has_room = |id: &NodeId| {
+            self.scrolls.get(id).is_some_and(|st| if dy > 0.0 { st.offset > 0.0 } else { dy < 0.0 && st.offset < st.max })
+        };
+        self.scrolls_at_axis(x, y, false).find(has_room).or_else(|| self.scroll_at(x, y))
+    }
+
     /// Wheel or trackpad delta in points (positive `dy` moves content down, like a browser's
-    /// negative deltaY). Applied 1:1: the platform supplies its own momentum phases.
+    /// negative deltaY). Applied 1:1: the platform supplies its own momentum phases. It scrolls the
+    /// innermost viewport under the pointer with room to move that way.
     pub fn wheel(&mut self, x: f32, y: f32, dy: f32) {
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();
-        let Some(id) = self.scroll_at(x, y) else { return };
+        let Some(id) = self.scroll_toward(x, y, dy) else { return };
         let stick = self.node_index.get(&id).and_then(|&i| self.nodes[i].scroll).is_some_and(|s| s.stick_bottom);
         if let Some(st) = self.scrolls.get_mut(&id) {
             let before = st.offset;
@@ -511,7 +527,7 @@ impl<S: 'static> Runtime<S> {
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();
-        let Some(id) = self.scroll_at(x, y) else { return };
+        let Some(id) = self.scroll_toward(x, y, velocity) else { return };
         if let Some(st) = self.scrolls.get_mut(&id) {
             st.mode = st.mode.to_momentum(-velocity);
             log_event!(self, "fling {velocity:.0}");
