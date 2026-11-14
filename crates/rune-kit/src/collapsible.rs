@@ -6,6 +6,7 @@ use rune::{El, Tx, col, el, icon, row, text};
 use crate::{Acts, Kit, State};
 
 pub struct Collapsible {
+    key: Option<String>,
     title: String,
     open: bool,
     ghost: bool,
@@ -17,12 +18,25 @@ pub struct Collapsible {
 impl Collapsible {
     pub fn new(title: impl Into<String>, open: bool) -> Collapsible {
         Collapsible {
+            key: None,
             title: title.into(),
             open,
             ghost: false,
             content: Vec::new(),
             state: State::Rest,
             acts: Acts::default(),
+        }
+    }
+    /// Keys the trigger `{key}-trigger` and the content `{key}-content`, so several on one page
+    /// are pressed, focused and found apart. Unkeyed, they are `trigger` and `content`.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
+    }
+    fn part(&self, name: &str) -> String {
+        match &self.key {
+            Some(key) => format!("{key}-{name}"),
+            None => name.to_string(),
         }
     }
     pub fn ghost(mut self) -> Self {
@@ -64,7 +78,7 @@ impl Collapsible {
             .child(icon(glyph, 14.0).color(c.icon_weaker));
         let enabled = self.state != State::Disabled;
         let trigger = row()
-            .key("trigger")
+            .key(self.part("trigger"))
             .role("button")
             .label(self.title.clone())
             .expanded(self.open)
@@ -82,11 +96,16 @@ impl Collapsible {
                     .child(arrow)
                     .a11y_hidden(),
             );
+        let content_key = self.part("content");
         let trigger = self.acts.apply(trigger, enabled);
         let mut root = col().role("group").w_full().radius(k.radius.md).child(trigger);
         if self.open {
-            root = root.child(col().key("content").role("region").label(self.title).w_full().children(self.content));
+            root = root.child(col().key(content_key).role("region").label(self.title).w_full().children(self.content));
         }
         root
     }
 }
+
+#[cfg(test)]
+#[path = "collapsible_tests.rs"]
+mod tests;
