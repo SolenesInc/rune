@@ -15,3 +15,7 @@
 *.metallib binary
 *.rgba binary
 *.bin binary
+
+# The ledger: parallel branches each append a row, and union keeps both. attn's scripts/rune-bump
+# refuses a merge where union kept two versions of one line.
+FORK.md merge=union
