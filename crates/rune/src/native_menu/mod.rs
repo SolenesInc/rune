@@ -149,7 +149,7 @@ fn validate<S>(items: &[MenuItem<S>]) -> Result<(), MenuError> {
 
 impl<S: 'static> App<S> {
     /// Add a custom native item at startup. Deferred failures (including Unsupported on
-    /// Windows/Linux) are available through AppHandle::take_menu_errors().
+    /// Linux) are available through AppHandle::take_menu_errors().
     pub fn menu_item(self, item: MenuItem<S>) -> Self {
         let mut state = self.shared.menus.0.lock().unwrap();
         state.items.push(item); state.revision.next();
@@ -160,7 +160,7 @@ impl<S: 'static> App<S> {
 impl<S: 'static> AppHandle<S> {
     /// Replace all this App's custom items, preserving native defaults. Validates and queues
     /// the new snapshot; enabled/checked changes reach AppKit on the next event-loop drain.
-    /// Native installation failures are retained by take_menu_errors(). On Windows/Linux this
+    /// Native installation failures are retained by take_menu_errors(). On Linux this
     /// returns Unsupported without changing anything (except inside a headless run). On macOS
     /// the menus and standard items Rune made also take the app's current labels
     /// (`rune::set_labels`), so an app calls this again after its language changes.

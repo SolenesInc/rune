@@ -61,9 +61,7 @@ impl<T: 'static> Overlay<T> {
         self.options.exclude_from_capture = exclude;
         #[cfg(target_os = "macos")]
         let support = self.panel.as_ref().map(|panel| panel.set_capture_exclusion(exclude));
-        #[cfg(target_os = "windows")]
-        let support = self.native.as_mut().map(|native| native.set_capture_exclusion(exclude));
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(target_os = "macos"))]
         let support: Option<crate::OverlaySupport> = None;
         if let Some(support) = support { self.shared.native.lock().unwrap().1.capture_exclusion = support; }
     }

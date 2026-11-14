@@ -6,8 +6,8 @@ license.workspace = true
 
 [features]
 default = ["wasi-allocator"]
-# Luau native code generation for modules that open with `--!native` (Windows and Linux, x86-64 and
-# arm64; enable it only for those targets). Off, they run in the interpreter. On, every VM makes
+# Luau native code generation for modules that open with `--!native` (Linux, x86-64 and arm64;
+# enable it only for those targets). Off, they run in the interpreter. On, every VM makes
 # a code generator as it starts: a 4 MiB committed code block per VM, used or not (21 VMs in
 # OpenCode held 88 MB of commit this way with no native module among them).
 native-code = ["mlua/luau-jit"]

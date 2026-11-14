@@ -235,8 +235,6 @@ impl<T: 'static> Overlay<T> {
         // Publish the geometry just rendered, never a layout cached from the preceding frame.
         #[cfg(target_os = "macos")]
         if let Some(panel) = &self.panel { panel.set_regions(self.rt.hit_regions()); }
-        #[cfg(target_os = "windows")]
-        if let Some(native) = &self.native { native.set_regions(self.rt.hit_regions(), live.scale); }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         if self.options.input == OverlayInput::Regions && let Some(x11) = &mut self.x11 { x11.regions(self.rt.hit_regions(), live.scale); }
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]

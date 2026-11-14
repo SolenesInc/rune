@@ -58,17 +58,6 @@ pub(crate) struct A11yTree {
     full: bool,
     /// The root's name when the runtime has no window title (an overlay's name).
     pub(crate) name: String,
-    /// What the last update changed, beyond what AccessKit announces itself.
-    changes: Changes,
-}
-
-/// What an update changed that AccessKit's platform adapters don't announce: nodes added,
-/// removed or reordered, and boxes that moved (a scroll). Windows hosts raise WinEvents for
-/// them, so tools waiting on a reaction to their input see one.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Changes {
-    pub(crate) structure: bool,
-    pub(crate) moved: bool,
 }
 
 struct Sent {
@@ -147,10 +136,6 @@ impl RuntimeCore {
     /// Nobody listens any more: drop the tree and stop building it.
     pub(crate) fn a11y_deactivate(&mut self) { self.a11y = None; }
 
-    /// What the last update changed that AccessKit doesn't announce.
-    #[cfg_attr(not(all(feature = "accessibility", target_os = "windows")), allow(dead_code))]
-    pub(crate) fn a11y_changes(&self) -> Changes { self.a11y.as_ref().map_or_else(Changes::default, |t| t.changes) }
-
     /// The update to send the adapter, when the tree is active and something it shows changed
     /// since the last one. `None` before the first frame has laid anything out.
     pub(crate) fn a11y_update(&mut self) -> Option<TreeUpdate> {
@@ -177,19 +162,15 @@ impl RuntimeCore {
             if let Some(old) = tree.sent.get_mut(&s.id.0) { old.pass = pass; }
         }
         let mut out = Vec::with_capacity(nodes.len());
-        let (mut structure, mut moved) = (false, false);
         for (id, node, print) in nodes {
             // A text's lines and links come and go with it, and carry its fingerprint.
             match tree.sent.get_mut(&id.0) {
                 Some(old) => {
-                    structure |= old.node.children() != node.children();
-                    moved |= old.node.bounds() != node.bounds() || old.node.transform() != node.transform();
                     old.pass = pass;
                     old.print = print;
                     old.node = node.clone();
                 }
                 None => {
-                    structure = true;
                     tree.sent.insert(id.0, Sent { print, pass, node: node.clone() });
                 }
             }
@@ -202,10 +183,7 @@ impl RuntimeCore {
                 if let Some(old) = tree.sent.get_mut(&k) { old.pass = pass; }
             }
         }
-        let before = tree.sent.len();
         tree.sent.retain(|_, s| s.pass == pass);
-        structure |= tree.sent.len() != before;
-        tree.changes = Changes { structure, moved };
         tree.scrollers = found.scrollers;
         #[cfg(test)]
         self.a11y_check_sent();
@@ -247,7 +225,6 @@ impl RuntimeCore {
         let tree = self.a11y.as_mut()?;
         tree.scrollers = scrollers;
         tree.stamp = Some(stamp);
-        tree.changes = Changes { structure: false, moved: !changed.is_empty() };
         let focus = self.a11y_focus_now();
         Some(TreeUpdate { nodes: changed, tree: None, tree_id: TreeId::ROOT, focus })
     }

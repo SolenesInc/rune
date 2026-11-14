@@ -204,7 +204,6 @@ pub use native_menu::MenuItem;
 pub use native_surface::NativeSurface;
 pub use native_surface::SurfaceFit;
 pub use open_url::OpenUrlError;
-pub use open_url::instance::{release_instance, single_instance};
 pub use overlay::Availability;
 pub use overlay::OverlayHandle;
 pub use overlay::OverlaySpec;
@@ -225,8 +224,6 @@ pub use pixels::Pixels;
 pub use platform::accent::SystemAccent;
 pub use platform::accent::system_accent;
 pub use platform::app_icon::set_app_icon;
-#[cfg(target_os = "windows")]
-pub use platform::app_icon::set_app_icon_resource;
 #[cfg(target_vendor = "apple")]
 pub use platform::embed;
 #[cfg(target_os = "macos")]

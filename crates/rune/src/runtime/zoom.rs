@@ -76,7 +76,7 @@ impl RuntimeCore {
         self.zoom.k = k;
         let (viewport, scale) = self.zoom.view();
         self.change_viewport(viewport, scale);
-        // The window's controls and the caption buttons it draws are in window points.
+        // The window's controls are in window points.
         self.dirty = true;
         true
     }

@@ -1,6 +1,6 @@
 //! Linux and the BSDs: system font files found through fontconfig, in process (fontique's
-//! system collection over the dlopened `libfontconfig`, which reads fontconfig's own cache), as
-//! DirectWrite finds them on Windows (`direct_write`): no font folder is walked and no
+//! system collection over the dlopened `libfontconfig`, which reads fontconfig's own cache): no
+//! font folder is walked and no
 //! `fc-match` or `fc-list` is started. A character the app's fonts lack goes to fontconfig's
 //! match for its script and language, the font a GTK or Qt app falls back to.
 

@@ -6,7 +6,7 @@ takes upstream changes by cherry-pick. Apps pin revisions of `main`, which is
 never rewritten; `dev` mirrors upstream. [FORK.md](FORK.md) lists every change
 we made and every upstream commit we picked.
 
-A native GPU-rendered Rust UI framework for macOS, Windows, Linux and the web, with its own renderer, text, layout and springs.
+A native GPU-rendered Rust UI framework for macOS, Linux, iOS and the web, with its own renderer, text, layout and springs.
 
 Every app can run headless, so an agent can render to PNG, dump the element tree and drive it with scripted input.
 

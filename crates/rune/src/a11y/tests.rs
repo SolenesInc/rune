@@ -420,23 +420,3 @@ fn help_describes_unless_it_repeats_the_name_and_rows_point_at_their_active_desc
     let (_, bad) = whole.nodes.iter().find(|(_, n)| n.author_id() == Some("bad")).unwrap();
     assert_eq!(bad.invalid(), Some(accesskit::Invalid::True));
 }
-
-#[test]
-fn updates_report_structure_and_motion_beyond_accesskit_events() {
-    let mut rt = Runtime::new(List { rows: 200 }, list, (300.0, 200.0), Env::new(true, 1.0));
-    for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_activate("List");
-    rt.a11y_update();
-    rt.update(|s, _| s.rows = 3);
-    for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_update();
-    assert!(rt.a11y_changes().structure, "rows went");
-    rt.pointer_move(50.0, 50.0);
-    rt.update(|s, _| s.rows = 200);
-    for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_update();
-    rt.wheel_event(crate::WheelEvent::new(0.0, -30.0).precise(true).at(50.0, 50.0));
-    rt.frame(1.0 / 60.0);
-    assert!(rt.a11y_update().is_some(), "a scroll sends its viewport");
-    assert!(rt.a11y_changes().moved, "a scroll moves boxes");
-}

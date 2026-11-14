@@ -24,12 +24,12 @@ pub(super) struct FillBindings<'a> {
 }
 
 impl FillPass {
-    pub(super) fn new(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &dxbc::Shaders, bindings: FillBindings<'_>) -> FillPass {
+    pub(super) fn new(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule, bindings: FillBindings<'_>) -> FillPass {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("atlas fill"),
             layout: Some(layout),
             vertex: wgpu::VertexState {
-                module: &shader.vertex,
+                module: shader,
                 entry_point: Some("vs"),
                 compilation_options: Default::default(),
                 buffers: &[Some(metallib::uber_vertex_layout())],
@@ -38,7 +38,7 @@ impl FillPass {
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader.fragment,
+                module: shader,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState { format: wgpu::TextureFormat::R8Unorm, blend: None, write_mask: wgpu::ColorWrites::ALL })],

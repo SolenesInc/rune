@@ -118,12 +118,12 @@ pub(super) const fn uber_abi_hash() -> u64 {
 }
 
 /// [`uber_abi_hash`] for another set of uber bindings (the Windfoil variant's).
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 pub(super) const fn abi_hash_of(entries: &[wgpu::BindGroupLayoutEntry]) -> u64 {
     layout_hash(entries, &uber_vertex_layout(), uber_primitive())
 }
 
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 const fn layout_hash(entries: &[wgpu::BindGroupLayoutEntry], vertex: &wgpu::VertexBufferLayout<'_>, primitive: wgpu::PrimitiveState) -> u64 {
     // The normal uber pipeline has one group and no immediates; the springs pipeline has a
     // second group and never uses the precompiled shaders.
@@ -134,7 +134,7 @@ const fn layout_hash(entries: &[wgpu::BindGroupLayoutEntry], vertex: &wgpu::Vert
 /// immediate size that decides what a precompiled uber shader binds. A `const fn`: the build
 /// knows the layout's hash, so a launch compares nothing. Destructured whole, so a field wgpu
 /// adds doesn't compile until it's hashed too.
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 const fn descriptor_hash(entries: &[wgpu::BindGroupLayoutEntry], vertex: &wgpu::VertexBufferLayout<'_>, primitive: wgpu::PrimitiveState, groups: usize, immediate_size: u32) -> u64 {
     let mut h = Fnv(0xcbf29ce484222325).word(entries.len() as u64);
     let mut i = 0;
@@ -172,10 +172,10 @@ const fn descriptor_hash(entries: &[wgpu::BindGroupLayoutEntry], vertex: &wgpu::
 }
 
 /// FNV-1a, a word at a time, for constants.
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 struct Fnv(u64);
 
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos"))]
 impl Fnv {
     const fn word(self, value: u64) -> Fnv {
         let (mut h, mut i) = (self.0, 0);
@@ -205,19 +205,18 @@ fn wgsl_shader(device: &wgpu::Device, wgsl: &str) -> wgpu::ShaderModule {
 
 pub(super) fn uber_shader_and_pipeline(
     device: &wgpu::Device,
-    mut make_pipeline: impl FnMut(&super::dxbc::Shaders) -> wgpu::RenderPipeline,
-) -> (super::dxbc::Shaders, wgpu::RenderPipeline) {
+    mut make_pipeline: impl FnMut(&wgpu::ShaderModule) -> wgpu::RenderPipeline,
+) -> (wgpu::ShaderModule, wgpu::RenderPipeline) {
     #[cfg(target_os = "macos")]
     if metallib_enabled()
-        && let Some((shader, pipeline)) = try_uber_metallib(device, uber_metallib(device), UBER_WGSL_BLAKE3, |shader| make_pipeline(&super::dxbc::Shaders::one(shader.clone())))
+        && let Some((shader, pipeline)) = try_uber_metallib(device, uber_metallib(device), UBER_WGSL_BLAKE3, |shader| make_pipeline(shader))
     {
         METALLIB_LOADS.with(|n| n.set(n.get() + 1));
-        return (super::dxbc::Shaders::one(shader), pipeline);
+        return (shader, pipeline);
     }
-    // Windows ships bytecode for Windfoil alone (render/dxbc.rs): Classic compiles its WGSL there.
-    let shaders = super::dxbc::Shaders::one(wgsl_shader(device, uber_wgsl()));
-    let pipeline = make_pipeline(&shaders);
-    (shaders, pipeline)
+    let shader = wgsl_shader(device, uber_wgsl());
+    let pipeline = make_pipeline(&shader);
+    (shader, pipeline)
 }
 
 #[cfg(target_os = "macos")]
@@ -759,14 +758,12 @@ pub(super) const UBER_WGSL_BLAKE3: &str = \"{wgsl_hash}\";", uber_abi_hash());
             "a failed pipeline must not retain the passthrough shader");
     }
 
-    /// The precompiled uber shader (a metallib on macOS, DXBC on Windows) and WGSL draw the same pixels.
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    /// The precompiled uber shader (a metallib) and WGSL draw the same pixels.
+    #[cfg(target_os = "macos")]
     #[test]
     fn metallib_and_wgsl_render_identical_pixels() {
         #[cfg(target_os = "macos")]
         use super::with_metallib_enabled as with_precompiled;
-        #[cfg(target_os = "windows")]
-        use super::super::dxbc::with_dxbc_enabled as with_precompiled;
         use super::super::{
             Blend, Gpu, Instance, KIND_GLYPH, KIND_GRADIENT, KIND_IMAGE, KIND_INSET, KIND_RECT,
             KIND_SEGMENT, KIND_SHADOW, KIND_TRIANGLE, LayerSpec, NO_CLIP, OFFSCREEN_FORMAT,

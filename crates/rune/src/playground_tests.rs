@@ -118,17 +118,15 @@ fn runtime(open: Option<Option<String>>) -> Runtime<Real> {
 fn replacing_stage_cancels_titlebar_press() {
     fn bar(_: &Real, _: &mut Cx<Real>) -> El { el().key("bar").size(120.0, 50.0).window_drag() }
     let mut rt = runtime_with(base().page("First", bar).page("Second", bar), None, true);
-    rt.set_caption(Some(crate::titlebar::Caption::new(28.0)));
     rt.open_playground("First", None);
     let (x, y) = center(&rt, "bar");
-    rt.secondary_down(x, y);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    assert_eq!(rt.take_titlebar_action(), Some(crate::TitlebarAction::Drag));
     rt.open_playground("Second", None);
     let (x, y) = center(&rt, "bar");
-    rt.secondary_up(x, y);
-    assert_eq!(rt.take_window_menu(), None);
-    rt.secondary_down(x, y);
-    rt.secondary_up(x, y);
-    assert!(rt.take_window_menu().is_some(), "a fresh click opens the menu");
+    rt.pointer_down(x, y);
+    assert_eq!(rt.take_titlebar_action(), Some(crate::TitlebarAction::Drag), "the new stage's press starts a new pair");
 }
 
 fn press_with(rt: &mut Runtime<Real>, key: Key, mods: Mods) {

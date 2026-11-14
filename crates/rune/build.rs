@@ -1,10 +1,8 @@
 //! Joins the uber shader's WGSL once, when Rune builds, so a launch doesn't.
 //!
 //! Classic is `clip.wgsl` and `shader.wgsl`; Windfoil (render/variant.rs) is Classic with
-//! `outline.wgsl`'s glyph branch put before shader.wgsl's atlas branch, then outline.wgsl. Each
-//! file's `\r\n` is read as `\n`, so a checkout with CRLF line endings (Git for Windows'
-//! `core.autocrlf=true`) builds the same text, and the same hashes, as an LF one. The text and its
-//! BLAKE3 go to `$OUT_DIR/uber_wgsl.rs` (render/uber_wgsl.rs includes it). When a hash differs from
+//! `outline.wgsl`'s glyph branch put before shader.wgsl's atlas branch, then outline.wgsl. The
+//! text and its BLAKE3 go to `$OUT_DIR/uber_wgsl.rs` (render/uber_wgsl.rs includes it). When a hash differs from
 //! the one recorded beside a precompiled shader (`src/render/uber/*_hash.rs`), the build says so
 //! and names the command that rebuilds it: that shader isn't used until then.
 
@@ -19,8 +17,7 @@ fn main() {
     // Paths are from the package's folder, where cargo runs this.
     let read = |path: &str| {
         println!("cargo::rerun-if-changed={path}");
-        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-        text.replace("\r\n", "\n")
+        std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"))
     };
     let classic = format!("{}\n{}", read("src/clip.wgsl"), read("src/shader.wgsl"));
     assert!(classic.matches(GLYPH_BRANCH).count() == 1,
@@ -36,8 +33,6 @@ fn main() {
     let stale = |what: &str, recorded: String, now: &str, fix: &str| if recorded != now {
         println!("cargo::warning={what} was built from other WGSL (blake3 {recorded}, the sources now hash {now}), so it isn't used: run {fix}");
     };
-    stale("The precompiled DX12 uber shader (uber.vs.dxbc, uber.fs.dxbc)", recorded("src/render/uber/dxbc_hash.rs", "UBER_DXBC_WGSL_BLAKE3"),
-        &windfoil_hash, "`cargo run -p rune --example regen_dxbc` on Windows; until then every Windows launch compiles it with FXC, which takes seconds");
     stale("The precompiled Metal uber shader (uber.metallib)", recorded("src/render/uber/metallib_hash.rs", "UBER_WGSL_BLAKE3"),
         &classic_hash, "scripts/precompile-metal-shaders.sh on a Mac");
     stale("The precompiled Metal Windfoil shader (uber_windfoil.metallib)", recorded("src/render/uber/windfoil_hash.rs", "WINDFOIL_WGSL_BLAKE3"),
@@ -55,7 +50,7 @@ fn main() {
          pub(crate) const CLASSIC_BLAKE3: &str = \"{classic_hash}\";\n\
          /// Classic with outline.wgsl's glyph branch, then outline.wgsl.\n\
          pub(crate) const WINDFOIL: &str = include_str!(concat!(env!(\"OUT_DIR\"), \"/uber_windfoil.wgsl\"));\n\
-         /// BLAKE3 of [`WINDFOIL`], which Windows and macOS ship bytecode for.\n\
-         #[cfg_attr(not(any(target_os = \"macos\", target_os = \"windows\")), allow(dead_code))]\n\
+         /// BLAKE3 of [`WINDFOIL`], which only macOS ships a library for.\n\
+         #[cfg_attr(not(target_os = \"macos\"), allow(dead_code))]\n\
          pub(crate) const WINDFOIL_BLAKE3: &str = \"{windfoil_hash}\";\n"));
 }

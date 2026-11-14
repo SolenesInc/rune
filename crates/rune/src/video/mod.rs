@@ -41,16 +41,10 @@ pub(crate) use macos::test_frames;
 #[cfg(any(target_os = "macos", test))]
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod turn;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(target_os = "macos"))]
 mod unsupported;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(target_os = "macos"))]
 use unsupported as backend;
-#[cfg(target_os = "windows")]
-mod windows;
-#[cfg(target_os = "windows")]
-use self::windows as backend;
-#[cfg(target_os = "windows")]
-pub(crate) use self::windows::{layer, unlayer};
 mod waker;
 
 use phases::{Effect, Event, Run, Stage, step};

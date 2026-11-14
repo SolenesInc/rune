@@ -52,13 +52,6 @@ struct Prepared {
     isolated: std::sync::atomic::AtomicBool,
 }
 
-/// Clears a video's place by its coverage, colour and alpha alike: the window's pixels there go
-/// transparent and the clip's own layer underneath shows (`video::windows::layer`).
-#[cfg(target_os = "windows")]
-const PUNCH: wgpu::BlendState = wgpu::BlendState { color: CLEAR, alpha: CLEAR };
-#[cfg(target_os = "windows")]
-const CLEAR: wgpu::BlendComponent = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add };
-
 /// Bind groups a draw keeps for textures it may show again (a video decoder's ring).
 const KEPT_BINDS: usize = 8;
 
@@ -111,8 +104,6 @@ pub struct SurfaceRenderer {
     staging: Option<rune_staging::Staging>,
     #[cfg(target_os = "macos")]
     importer: Option<macos::Importer>,
-    #[cfg(target_os = "windows")]
-    shared: Option<windows::Importer>,
 }
 impl SurfaceRenderer {
     #[cfg(target_arch = "wasm32")]
@@ -136,7 +127,7 @@ impl SurfaceRenderer {
     }
 
     /// Starts compiling the renderer's pipeline on a thread of its own, and runs `done` once
-    /// it's ready. The shader compiler takes hundreds of milliseconds (FXC on Windows), which
+    /// it's ready. The shader compiler can take hundreds of milliseconds, which
     /// on the UI thread froze a window's input and held the first picture back.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, done: Box<dyn FnOnce() + Send>) -> Building {
@@ -148,9 +139,6 @@ impl SurfaceRenderer {
             let _ = sender.send(Self::pipeline(&device_for, &layout_for, format, Blend::SourceOver));
             done();
             // A clip's layer (Windows) needs the punch; it compiles once the pictures can show.
-            #[cfg(target_os = "windows")]
-            let _ = punch_sender.send(Self::pipeline_with(&device_for, &layout_for, format, PUNCH));
-            #[cfg(not(target_os = "windows"))]
             drop(punch_sender);
         });
         let ok = spawned.is_ok();
@@ -229,8 +217,6 @@ impl SurfaceRenderer {
             staging: None,
             #[cfg(target_os = "macos")]
             importer: None,
-            #[cfg(target_os = "windows")]
-            shared: None,
         }
     }
 
@@ -443,10 +429,6 @@ impl SurfaceRenderer {
             count += 1;
         }
         self.draws.truncate(count);
-        #[cfg(target_os = "windows")]
-        if let Some(shared) = &mut self.shared {
-            shared.forget_gone();
-        }
         #[cfg(target_os = "macos")]
         if let Some(i) = &self.importer {
             i.flush();
@@ -487,20 +469,6 @@ impl SurfaceRenderer {
                     self.importer.as_ref().unwrap().import(b, frame.format, frame.size)
                 })?
             }
-            #[cfg(target_os = "windows")]
-            Source::Shared(t) => {
-                if self.shared.is_none() {
-                    self.shared = Some(windows::Importer::new(device)?);
-                }
-                self.shared.as_mut().unwrap().import(queue, t)?
-            }
-            #[cfg(target_os = "windows")]
-            Source::Decoded(planes, value) => {
-                if self.shared.is_none() {
-                    self.shared = Some(windows::Importer::new(device)?);
-                }
-                self.shared.as_mut().unwrap().import_decoded(queue, planes, *value)?
-            }
         };
         Ok(Imported { frame, textures })
     }
@@ -535,44 +503,6 @@ impl SurfaceRenderer {
                 end_of_pass_write_index: Some(slot.start + 1),
             }
         })
-    }
-    #[cfg(target_os = "windows")]
-    /// Punches these surfaces' places out of the window's pixels from the next `prepare` on,
-    /// once the punch pipeline has compiled (`punch_ready`).
-    pub(crate) fn set_punched(&mut self, keys: Vec<usize>) {
-        self.punched = keys;
-    }
-
-    /// The punch pipeline has compiled. A renderer made without `build` starts compiling it here,
-    /// on a thread of its own as `build` does.
-    #[cfg(target_os = "windows")]
-    pub(crate) fn punch_ready(&mut self) -> bool {
-        if self.punch.is_some() {
-            return true;
-        }
-        if self.punch_building.is_none() {
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let (device, layout, format) = (self.device.clone(), self.layout.clone(), self.format);
-            let spawned = std::thread::Builder::new()
-                .name("rune-video-punch".into())
-                .spawn(move || drop(sender.send(Self::pipeline_with(&device, &layout, format, PUNCH))));
-            if spawned.is_err() {
-                return false;
-            }
-            self.punch_building = Some(receiver);
-        }
-        if let Some(p) = self.punch_building.as_ref().and_then(|b| b.try_recv().ok()) {
-            self.punch = Some(p);
-            self.punch_building = None;
-        }
-        self.punch.is_some()
-    }
-
-    #[cfg(target_os = "windows")]
-    /// Whether the last frame drew surface `key` inside an isolated layer, where a punch
-    /// can't reach the window; None when it didn't draw it.
-    pub(crate) fn drew_isolated(&self, key: usize) -> Option<bool> {
-        self.draws.iter().find(|d| d.surface.key() == key).map(|d| d.isolated.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// Draws `index` in the window's own pass: punched out when asked, else as any other.
@@ -727,13 +657,6 @@ impl SurfaceRenderer {
     /// Decoded video pictures this submission drew may be written again once it's done.
     #[cfg(not(target_arch = "wasm32"))]
     fn release_decoded(&self, queue: &wgpu::Queue) {
-        #[cfg(target_os = "windows")]
-        for p in self.draws.iter().filter(|p| p.drawn.load(std::sync::atomic::Ordering::Relaxed)) {
-            if let Source::Decoded(planes, value) = &p.imported.frame.source {
-                windows::release_decoded(queue, planes, *value);
-            }
-        }
-        #[cfg(not(target_os = "windows"))]
         let _ = queue;
     }
 }

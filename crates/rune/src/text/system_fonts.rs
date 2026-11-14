@@ -3,22 +3,17 @@
 //!
 //! None is touched at launch: a system font loads the first time a text has a character the
 //! app's own fonts lack (`TextSystem::load_fallbacks`). The platform's own fallback names the
-//! font and its files, as browsers ask it: DirectWrite on Windows (`direct_write`), CoreText on
-//! Apple platforms (`core_text`), fontconfig in process elsewhere (`fontconfig`). No font
-//! folder is walked and no process is started.
+//! font and its files, as browsers ask it: CoreText on Apple platforms (`core_text`), fontconfig
+//! in process elsewhere (`fontconfig`). No font folder is walked and no process is started.
 
 use super::*;
 
 #[cfg(target_vendor = "apple")]
 mod core_text;
-#[cfg(windows)]
-mod direct_write;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
 mod fontconfig;
 #[cfg(target_vendor = "apple")]
 use core_text as platform;
-#[cfg(windows)]
-use direct_write as platform;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
 use fontconfig as platform;
 /// Android and the web: no system fonts to ask.
@@ -39,15 +34,11 @@ pub(super) const SYMBOL_FAMILIES: &[&str] = &["System Font", ".SF NS", "Apple Sy
 #[cfg(target_vendor = "apple")]
 // SF italic rides along so `Family::Named("System Font").italic()` gets the real face.
 pub(super) const SYMBOL_FONT_FILES: &[&str] = &["sfnsttf", "sfnsitalic", "applesymbols", "sfnssymbols", "menlo", "applecoloremoji"];
-// Windows loads its symbol fonts as its own fallback names them (`direct_write::fallback_files`),
-// and this colour emoji family for a `U+FE0F` sequence.
-#[cfg(windows)]
-pub(super) const SYMBOL_FAMILIES: &[&str] = &["Segoe UI Emoji"];
 // DejaVu Sans lacks ⎋ (U+238B), which DejaVu Sans Mono has; `dejavusans` loads both files.
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(target_vendor = "apple"))]
 pub(super) const SYMBOL_FAMILIES: &[&str] =
     &["DejaVu Sans", "Noto Sans Symbols2", "Noto Sans Symbols", "DejaVu Sans Mono", "Noto Color Emoji"];
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(target_vendor = "apple"))]
 pub(super) const SYMBOL_FONT_FILES: &[&str] = &["dejavusans", "notosanssymbols", "notocoloremoji"];
 
 // `Family::SystemMono`: the platform's monospaced UI families, most preferred first, and the
@@ -56,14 +47,10 @@ pub(super) const SYMBOL_FONT_FILES: &[&str] = &["dejavusans", "notosanssymbols",
 const SYSTEM_MONO_FAMILIES: &[&str] = &[".SF NS Mono", "Menlo"];
 #[cfg(target_vendor = "apple")]
 const SYSTEM_MONO_FILES: &[&str] = &["sfnsmono", "menlo"];
-#[cfg(windows)]
-const SYSTEM_MONO_FAMILIES: &[&str] = &["Cascadia Mono", "Consolas", "Courier New"];
-#[cfg(windows)]
-const SYSTEM_MONO_FILES: &[&str] = &["cascadiamono", "consola", "cour"];
 // After fontconfig's own answer (`fontconfig_monospace`).
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(target_vendor = "apple"))]
 const SYSTEM_MONO_FAMILIES: &[&str] = &["DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Ubuntu Mono"];
-#[cfg(not(any(target_vendor = "apple", windows)))]
+#[cfg(not(target_vendor = "apple"))]
 const SYSTEM_MONO_FILES: &[&str] = &["dejavusansmono", "liberationmono", "notosansmono", "ubuntumono"];
 
 /// The installed `Family::SystemMono` families, most preferred first, loading their files.
@@ -180,18 +167,14 @@ fn register_system_cjk(collection: &mut Collection, loaded: &mut LoadedFiles, fi
 pub(super) struct Fallbacks {
     /// The app's own font files, whose characters need no system font.
     own: Vec<&'static [u8]>,
-    /// Characters already looked up (Windows: each asked of DirectWrite once).
+    /// Characters already looked up.
     asked: std::collections::HashSet<char>,
-    /// The locales the system's CJK fonts were looked up for (Windows), or whether they were
-    /// loaded at all (elsewhere: `Some(None)`).
+    /// The locales the system's CJK fonts were looked up for.
     cjk: Vec<Option<String>>,
-    /// The symbol families were loaded (elsewhere than Windows, where each comes on its own).
+    /// The symbol families were loaded.
     symbols: bool,
     /// Every CJK fallback family, the app's then the system's in the order they loaded.
     cjk_families: Vec<FamilyId>,
-    /// Segoe UI Symbol is loaded, for symbols with a text form (Windows).
-    #[cfg_attr(not(windows), allow(dead_code))]
-    text_symbols: bool,
 }
 
 impl Fallbacks {
@@ -232,8 +215,7 @@ fn intern(name: &str) -> &'static str {
 impl TextSystem {
     /// Loads the system fonts `text` needs and the app's fonts lack, each the first time:
     /// a script's fallback (`fallback::SCRIPT_FONTS`), CJK fonts, math fonts, the colour emoji
-    /// family, and (Windows) the font Windows falls back to for any other character; elsewhere
-    /// the symbol families. Latin text the app's fonts cover loads nothing.
+    /// family and the symbol families. Latin text the app's fonts cover loads nothing.
     pub(super) fn load_fallbacks(&mut self, text: &str, language: Option<parley::fontique::Language>) {
         if text.is_ascii() {
             return;
@@ -264,8 +246,7 @@ impl TextSystem {
                 }
                 continue;
             }
-            // Windows' fallback covers symbol blocks; only math alphanumerics want one math font.
-            math |= self.math.is_none() && if cfg!(windows) { fallback::is_math_alphanumeric(ch) } else { fallback::needs_symbols(ch) };
+            math |= self.math.is_none() && fallback::needs_symbols(ch);
             // An emoji by default (✅ ⚡) wants the colour emoji family as `U+FE0F` does.
             emoji |= (ch == '\u{FE0F}' || fallback::is_emoji(ch.encode_utf8(&mut [0; 4]))) && self.emoji.is_none() && !self.fallbacks.asked.contains(&'\u{FE0F}');
             if !needs_no_font(ch) && !self.fallbacks.asked.contains(&ch) && !missing.contains(&ch) && !covered(ch) {
@@ -297,23 +278,6 @@ impl TextSystem {
         if emoji {
             self.fallbacks.asked.insert('\u{FE0F}');
         }
-        #[cfg(windows)]
-        {
-            if emoji {
-                self.add_symbol_files(direct_write::family_files(SYMBOL_FAMILIES));
-            }
-            if !missing.is_empty() {
-                // A symbol that isn't an emoji by default (☺ ✓ ♥) draws in Segoe UI Symbol's
-                // text form, as Chromium draws it, not in the colour emoji Windows maps it to.
-                if !self.fallbacks.text_symbols && missing.iter().any(|&c| fallback::needs_symbols(c) && !fallback::is_emoji(c.encode_utf8(&mut [0; 4]))) {
-                    self.fallbacks.text_symbols = true;
-                    self.add_symbol_files(direct_write::family_files(&["Segoe UI Symbol"]));
-                }
-                self.fallbacks.asked.extend(missing.iter().copied());
-                self.add_symbol_files(direct_write::fallback_family_files(&missing, locale.as_deref()));
-            }
-        }
-        #[cfg(not(windows))]
         {
             if (emoji || !missing.is_empty()) && !self.fallbacks.symbols {
                 self.load_symbol_families();
@@ -328,7 +292,6 @@ impl TextSystem {
         crate::marks::mark("text.fallback.loaded");
     }
 
-    #[cfg(not(windows))]
     fn load_symbol_families(&mut self) {
         self.fallbacks.symbols = true;
         self.symbol_families = load_families(&mut self.font_cx.collection, SYMBOL_FONT_FILES, SYMBOL_FAMILIES);
@@ -343,13 +306,6 @@ impl TextSystem {
         if slot_resolves(collection, &self.sans) && slot_resolves(collection, &self.mono) {
             return;
         }
-        #[cfg(windows)]
-        // Windows' fallback for Latin; `asked` is otherwise never given ASCII.
-        if self.fallbacks.asked.insert('A') {
-            let locale = self.language.as_ref().map(|l| l.to_string());
-            self.add_symbol_files(direct_write::fallback_files(&['A'], locale.as_deref()));
-        }
-        #[cfg(not(windows))]
         if !self.fallbacks.symbols {
             self.load_symbol_families();
         }
@@ -381,8 +337,7 @@ impl TextSystem {
 }
 
 /// The files of the installed family `name` (any of its names, case aside), found through the
-/// platform's own list of fonts: DirectWrite's system collection on Windows, CoreText on macOS
-/// and fontconfig on Linux. The lookup runs in a collection of its own, so the app's collection
+/// platform's own list of fonts: CoreText on macOS and fontconfig on Linux. The lookup runs in a collection of its own, so the app's collection
 /// gains only the files of the families text asks for, and its own families still come first.
 pub(super) fn installed_family_files(name: &str) -> Vec<std::path::PathBuf> {
     platform::family_files(&[name])
@@ -492,9 +447,6 @@ fn walk_font_dirs() -> Vec<(String, std::path::PathBuf)> {
         }
     } else if cfg!(target_os = "ios") {
         dirs.push("/System/Library/Fonts".into());
-    } else if cfg!(windows) {
-        let root = std::env::var_os("WINDIR").map_or_else(|| "C:\\Windows".into(), std::path::PathBuf::from);
-        dirs.push(root.join("Fonts"));
     } else {
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
         let data_home = std::env::var_os("XDG_DATA_HOME")

@@ -57,10 +57,7 @@ pub(crate) fn map_key(key: &WKey, m: ModifiersState) -> Option<KeyEvent> {
             NamedKey::ContextMenu => Key::ContextMenu,
             _ => return None,
         },
-        // Windows treats Left Ctrl + Left Alt as AltGr: a character typed with both is text
-        // ("@" on a German layout's Q), not a chord. A chord that types nothing comes through
-        // `map_key_event`'s fallback instead.
-        WKey::Character(c) if mods.cmd && !(cfg!(target_os = "windows") && mods.ctrl && mods.alt) => {
+        WKey::Character(c) if mods.cmd => {
             Key::Command(c.chars().next()?.to_ascii_lowercase())
         }
         WKey::Character(c) => Key::Text(c.to_string()),
@@ -69,7 +66,7 @@ pub(crate) fn map_key(key: &WKey, m: ModifiersState) -> Option<KeyEvent> {
     Some(KeyEvent { key, mods })
 }
 
-/// `map_key` for a window's key event. Windows names no logical key for a chord whose
+/// `map_key` for a window's key event. A platform can name no logical key for a chord whose
 /// modifiers type nothing on the layout, such as Ctrl+Alt+B on US English (Ctrl+Alt is AltGr
 /// there); it still arrives as a chord on the character the key types unmodified. Off macOS, a
 /// chord on a key that types a non-ASCII character (Ctrl+М on a Russian layout, Ctrl+Ü on a
@@ -92,7 +89,7 @@ pub(crate) fn map_key_event(event: &winit::event::KeyEvent, m: ModifiersState) -
 fn unidentified(event: &winit::event::KeyEvent, m: ModifiersState) -> Option<KeyEvent> {
     let WKey::Unidentified(_) = event.logical_key else { return None };
     let mods = map_mods(m);
-    // Ctrl+Pause is Break, which Windows names `VK_CANCEL` and winit leaves unnamed: it arrives as
+    // Ctrl+Pause is Break, which winit leaves unnamed: it arrives as
     // Ctrl+Pause, so a terminal can send Ctrl+Break.
     if event.physical_key == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::Pause) {
         return Some(KeyEvent { key: Key::Pause, mods });
@@ -106,7 +103,7 @@ fn unidentified(event: &winit::event::KeyEvent, m: ModifiersState) -> Option<Key
 /// The character `event`'s key types under the current layout with no modifiers, for
 /// `Tx::key_base`.
 pub(crate) fn key_base(event: &winit::event::KeyEvent) -> Option<char> {
-    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
         match event.key_without_modifiers() {
@@ -115,7 +112,7 @@ pub(crate) fn key_base(event: &winit::event::KeyEvent) -> Option<char> {
             _ => None,
         }
     }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { let _ = event; None }
 }
 

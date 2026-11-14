@@ -94,15 +94,14 @@ fn each_mode_keys_its_own_glyphs_and_changes_the_pixels() {
 #[test]
 fn off_draws_coverage_as_is_on_apple_platforms() {
     let inks = [[0.0, 0.0, 0.0, 1.0], [0.11, 0.12, 0.13, 1.0], [0.9, 0.9, 0.9, 1.0], [1.0, 1.0, 1.0, 1.0], [0.4, 0.4, 0.4, 0.5]];
-    for mode in [FontSmoothing::On, FontSmoothing::Off, FontSmoothing::DirectWrite, FontSmoothing::Windfoil] {
+    for mode in [FontSmoothing::On, FontSmoothing::Off, FontSmoothing::Windfoil] {
         for fill in inks {
-            assert_eq!(coverage_exponent(mode, fill, true, false), 1.0, "{mode:?} {fill:?} on macOS");
+            assert_eq!(coverage_exponent(mode, fill, true), 1.0, "{mode:?} {fill:?} on macOS");
         }
     }
-    let off = |fill| coverage_exponent(FontSmoothing::Off, fill, false, false);
+    let off = |fill| coverage_exponent(FontSmoothing::Off, fill, false);
     assert!(off([0.0, 0.0, 0.0, 1.0]) > 1.0 && off([1.0, 1.0, 1.0, 1.0]) < 1.0, "Off elsewhere takes the gamma");
-    assert_eq!(coverage_exponent(FontSmoothing::On, [1.0; 4], false, false), 1.0);
-    assert_eq!(coverage_exponent(FontSmoothing::DirectWrite, [1.0; 4], false, true), 1.0, "DirectWrite masks carry their own gamma");
+    assert_eq!(coverage_exponent(FontSmoothing::On, [1.0; 4], false), 1.0);
     if cfg!(any(target_os = "macos", target_os = "ios")) {
         let mut text = TextSystem::default();
         text.set_font_smoothing(FontSmoothing::Off);

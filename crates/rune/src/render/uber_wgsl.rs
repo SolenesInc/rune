@@ -5,7 +5,7 @@
 include!(concat!(env!("OUT_DIR"), "/uber_wgsl.rs"));
 
 /// Whether two strings are equal, for constants.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 pub(super) const fn same(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
     if a.len() != b.len() { return false; }

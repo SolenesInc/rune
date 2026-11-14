@@ -51,8 +51,6 @@ impl<S: 'static> Host<S> {
     pub(super) fn flush_files(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(target_os = "macos")]
         let appkit = self.win.as_ref().map(|l| crate::platform::macos::drop::take(&l.window)).unwrap_or_default();
-        #[cfg(target_os = "windows")]
-        let ole = self.win.as_ref().map(|l| crate::platform::win32::drop_target::take(&l.window)).unwrap_or_default();
         let Some(l) = self.win.as_ref().filter(|_| self.life.shown()) else {
             self.files = FileDrop::default();
             return;
@@ -67,20 +65,6 @@ impl<S: 'static> Host<S> {
                 Step::Enter(paths, at) => { self.rt.drag_files(paths, Some(at)); true }
                 Step::Move(at) => self.rt.drag_files_to(Some(at)),
                 Step::Drop(paths, at) => { self.rt.drop_files(paths, Some(at)); true }
-                Step::Leave => { self.rt.drag_files_leave(); true }
-            };
-        }
-        // Rune's OLE target says where each step is too (`platform::win32::drop_target`).
-        #[cfg(target_os = "windows")]
-        for step in ole {
-            use crate::platform::win32::drop_target::Step;
-            // Window points, as the pointer's samples are, in the zoomed app's points.
-            let z = self.rt.zoom();
-            let at = |(x, y): (f32, f32)| Some((x / z, y / z));
-            queued |= match step {
-                Step::Enter(paths, p) => { self.rt.drag_files(paths, at(p)); true }
-                Step::Move(p) => self.rt.drag_files_to(at(p)),
-                Step::Drop(paths, p) => { self.rt.drop_files(paths, at(p)); true }
                 Step::Leave => { self.rt.drag_files_leave(); true }
             };
         }
@@ -152,15 +136,7 @@ impl<S: 'static> Host<S> {
                 self.shell(event_loop);
             }
             WakeEvent::A11y(_) => self.a11y_receive(),
-            WakeEvent::Covered(_, covered) => {
-                if covered { self.land_frame(); }
-                self.set_cover(Cover::Windows, covered);
-            }
-            #[cfg(target_os = "windows")]
-            WakeEvent::GpuReady(_) => self.gpu_ready(),
-            #[cfg(not(target_os = "windows"))]
-            WakeEvent::GpuReady(_) => {}
-            WakeEvent::Reopen | WakeEvent::Turn | WakeEvent::Quit(_) => {}
+            WakeEvent::Reopen | WakeEvent::Turn => {}
         }
     }
 
@@ -260,9 +236,9 @@ impl<S: 'static> Host<S> {
         let scale = l.window.scale_factor() as f32;
         let (chrome, titlebar) = (self.chrome, self.titlebar);
         // A finger presses through `WindowEvent::Touch`; the mouse events a system makes up
-        // from it (Windows promotes touches) would press a second time.
+        // from it would press a second time.
         if matches!(event, WindowEvent::CursorMoved { .. } | WindowEvent::CursorLeft { .. } | WindowEvent::MouseInput { .. })
-            && (rt.touching() || touch_promoted()) { return; }
+            && rt.touching() { return; }
         match event {
             WindowEvent::Moved(_) => {
                 // winit queues `ScaleFactorChanged` in `kCFRunLoopDefaultMode`, which waits
@@ -312,15 +288,6 @@ impl<S: 'static> Host<S> {
                     self.shell(event_loop);
                     return;
                 }
-                // Windows sizes the window in its own loop and shows the new size at once: the
-                // swap chain just took it, so a frame drawn later would leave the old pixels
-                // stretched over it until then.
-                #[cfg(target_os = "windows")]
-                if crate::platform::win32::in_size_move(&l.window) {
-                    self.draw(true);
-                    self.shell(event_loop);
-                    return;
-                }
                 l.request_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
@@ -329,11 +296,6 @@ impl<S: 'static> Host<S> {
                 let scale = scale_factor as f32;
                 let size = l.window.inner_size();
                 // Still the old scale's size: Windows resizes the window after this event.
-                #[cfg(target_os = "windows")]
-                let size = {
-                    let (width, height) = crate::window::frame::rescaled((size.width, size.height), f64::from(rt.window_scale()), scale_factor);
-                    winit::dpi::PhysicalSize::new(width, height)
-                };
                 if size.width > 0 && size.height > 0 {
                     let resized = l.resize_surface(gpu, size);
                     let viewport = (size.width as f32 / scale, size.height as f32 / scale);
@@ -393,12 +355,8 @@ impl<S: 'static> Host<S> {
                 // A release's logical key only matters to `on_key_up` handlers.
                 let logical = (pressed || rt.wants_key_up()).then(|| map_key_event(&event, self.mods)).flatten();
                 let mut redraw = false;
-                // A menu item handing Rune its key: it acts after, if no handler takes it. So does
-                // the window menu's Alt+Space, posted rather than run inside the key's message.
-                let unhandled = crate::native_menu::take_unhandled(logical.as_ref().filter(|_| pressed)).or_else(|| {
-                    logical.as_ref().filter(|ev| pressed && ev.is_window_menu_chord() && chrome::has_window_menu(&l.window))
-                        .map(|_| crate::runtime::Unhandled::WindowMenu)
-                });
+                // A menu item handing Rune its key: it acts after, if no handler takes it.
+                let unhandled = crate::native_menu::take_unhandled(logical.as_ref().filter(|_| pressed));
                 if let winit::keyboard::PhysicalKey::Code(key) = event.physical_key {
                     redraw = rt.physical_then(crate::PhysicalInput::Key {
                         key, mods: map_mods(self.mods), pressed, repeat: event.repeat,
@@ -515,8 +473,6 @@ impl<S: 'static> Host<S> {
             WindowEvent::MouseInput { state, button, .. } => {
                 if let Some((x, y)) = button_at(rt, &l.window) {
                     crate::window::mouse_button(rt, x, y, button, state);
-                    // At the pointer, while it's still where the click was.
-                    if let Some(menu) = rt.take_window_menu() { chrome::window_menu(&l.window, menu, Some((x * rt.zoom(), y * rt.zoom()))); }
                 }
                 l.request_redraw();
             }
@@ -525,34 +481,12 @@ impl<S: 'static> Host<S> {
     }
 }
 
-/// Whether the mouse message being handled is one Windows made up from a touch or a pen
-/// (`GetMessageExtraInfo` carries `MI_WP_SIGNATURE`). winit handles the message inside the
-/// window procedure, so the extra info is still the message's own.
-#[cfg(target_os = "windows")]
-fn touch_promoted() -> bool {
-    const MI_WP_SIGNATURE: u32 = 0xFF51_5700;
-    // SAFETY: reads the calling thread's current message info; no pointers involved.
-    let info = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetMessageExtraInfo() } as u32;
-    info & 0xFFFF_FF00 == MI_WP_SIGNATURE
-}
-
-#[cfg(not(target_os = "windows"))]
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn touch_promoted() -> bool { false }
-
-/// Where a mouse button acts. On Windows, the point its message carries
-/// (`platform::win32::press_point`). Elsewhere, where the runtime last saw the pointer, else
+/// Where a mouse button acts: where the runtime last saw the pointer, else
 /// where the system says it is: a menu that took the mouse (`release_pointer_for_popup`) leaves
 /// the runtime no pointer, and winit reports no move for a cursor that hasn't moved since, so a
 /// click at the same spot after the menu closes would otherwise be lost. The pointer moves
 /// there first, so hover is under it as the press lands.
 fn button_at<S: 'static>(rt: &mut Runtime<S>, window: &winit::window::Window) -> Option<(f32, f32)> {
-    #[cfg(target_os = "windows")]
-    if let Some((x, y)) = crate::platform::win32::press_point::current(window) {
-        let at = (x as f32 / rt.input_scale(), y as f32 / rt.input_scale());
-        if rt.pointer() != Some(at) { rt.pointer_move(at.0, at.1); }
-        return Some(at);
-    }
     if let Some(at) = rt.pointer() { return Some(at); }
     let (x, y) = crate::input::drop_pointer::DropPointer::new().sample(window, rt.zoom())?;
     rt.pointer_move(x, y);
@@ -578,10 +512,6 @@ impl<S: 'static> Host<S> {
         if let Some(l) = self.win.as_ref().filter(|l| l.native.full_screen.take()) {
             sync_chrome(&mut self.rt, l, self.chrome, self.titlebar);
         }
-        // The window procedure asks for this paint when a caption button's hover or
-        // press changes.
-        #[cfg(target_os = "windows")]
-        if let Some(l) = &self.win { sync_chrome(&mut self.rt, l, self.chrome, self.titlebar); }
         self.redraw();
         self.shell(event_loop);
         // What asked for a frame while it painted waits for the turn's end.

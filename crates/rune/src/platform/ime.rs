@@ -1,21 +1,7 @@
 //! Telling the platform's input method that Rune ended a composition itself (a blur, a click,
 //! the window going inactive): the field already wrote what it showed, so the input method
 //! drops its own copy rather than carry it into the next field. winit only switches the input
-//! method off and on, which leaves the composition in Windows' input context and in AppKit's.
-
-/// Drops the window's open composition, if any.
-#[cfg(target_os = "windows")]
-pub(crate) fn cancel(window: &winit::window::Window) {
-    use windows_sys::Win32::UI::Input::Ime::{CPS_CANCEL, ImmGetContext, ImmNotifyIME, ImmReleaseContext, NI_COMPOSITIONSTR};
-    let Some(hwnd) = super::win32::hwnd(window) else { return };
-    // SAFETY: `hwnd` is this thread's live window; a context it hands out is released here.
-    unsafe {
-        let himc = ImmGetContext(hwnd);
-        if himc.is_null() { return; }
-        ImmNotifyIME(himc, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
-        ImmReleaseContext(hwnd, himc);
-    }
-}
+//! method off and on, which leaves the composition in AppKit's.
 
 /// Drops the window's open composition, if any.
 #[cfg(target_os = "macos")]
@@ -36,5 +22,5 @@ pub(crate) fn cancel(window: &winit::window::Window) {
 
 /// Wayland's and X11's input methods end the composition when winit turns them off, as the
 /// web's text field does when it blurs.
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn cancel(_window: &winit::window::Window) {}

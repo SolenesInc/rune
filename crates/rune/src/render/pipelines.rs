@@ -1,7 +1,7 @@
 //! Building the renderer and its uber pipelines: the pipeline for each target format and blend,
 //! the sampled textures the CPU fills, and the bind group the uber shader reads.
 
-use super::{Blend, CLIP_WGSL, Renderer, dxbc, metallib, variant};
+use super::{Blend, CLIP_WGSL, Renderer, metallib, variant};
 
 impl Renderer {
     pub(super) fn create(device: &wgpu::Device, format: wgpu::TextureFormat, properties: Option<(&[crate::gpu::springs::Node], &[u32])>, classic: bool) -> Renderer {
@@ -43,9 +43,9 @@ impl Renderer {
                 let layout = device.create_pipeline_layout(&metallib::uber_pipeline_layout(
                     &layouts, properties.is_some(),
                 ));
-                let make_pipeline = |shader: &dxbc::Shaders| Self::pipeline(device, &layout, shader, format, vertex_entry, Blend::SourceOver);
+                let make_pipeline = |shader: &wgpu::ShaderModule| Self::pipeline(device, &layout, shader, format, vertex_entry, Blend::SourceOver);
                 let (shader, pipeline) = match spring_shader {
-                    Some(shader) => { let shader = dxbc::Shaders::one(shader); let pipeline = make_pipeline(&shader); (shader, pipeline) }
+                    Some(shader) => { let pipeline = make_pipeline(&shader); (shader, pipeline) }
                     None => metallib::uber_shader_and_pipeline(device, make_pipeline),
                 };
                 (bgl, layout, shader, pipeline)
@@ -96,7 +96,7 @@ impl Renderer {
     pub(super) fn pipeline(
         device: &wgpu::Device,
         layout: &wgpu::PipelineLayout,
-        shader: &dxbc::Shaders,
+        shader: &wgpu::ShaderModule,
         format: wgpu::TextureFormat,
         vertex_entry: &str,
         blend: Blend,
@@ -105,7 +105,7 @@ impl Renderer {
             label: Some("uber"),
             layout: Some(layout),
             vertex: wgpu::VertexState {
-                module: &shader.vertex,
+                module: shader,
                 entry_point: Some(vertex_entry),
                 compilation_options: Default::default(),
                 buffers: &[Some(metallib::uber_vertex_layout())],
@@ -114,7 +114,7 @@ impl Renderer {
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader.fragment,
+                module: shader,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {

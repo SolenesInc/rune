@@ -7,17 +7,15 @@
 //! let crash_log = dirs.logs().join("crash.log");
 //! ```
 //!
-//! | Folder | macOS, iOS | Windows | elsewhere (XDG) |
-//! | --- | --- | --- | --- |
-//! | config | `~/Library/Application Support/<id>` | `%APPDATA%\<id>` | `$XDG_CONFIG_HOME/<id>` (`~/.config`) |
-//! | data | `~/Library/Application Support/<id>` | `%APPDATA%\<id>` | `$XDG_DATA_HOME/<id>` (`~/.local/share`) |
-//! | cache | `~/Library/Caches/<id>` | `%LOCALAPPDATA%\<id>\Cache` | `$XDG_CACHE_HOME/<id>` (`~/.cache`) |
-//! | state | `~/Library/Application Support/<id>` | `%LOCALAPPDATA%\<id>` | `$XDG_STATE_HOME/<id>` (`~/.local/state`) |
-//! | logs | `~/Library/Logs/<id>` | `%LOCALAPPDATA%\<id>\Logs` | `$XDG_STATE_HOME/<id>/logs` |
+//! | Folder | macOS, iOS | elsewhere (XDG) |
+//! | --- | --- | --- |
+//! | config | `~/Library/Application Support/<id>` | `$XDG_CONFIG_HOME/<id>` (`~/.config`) |
+//! | data | `~/Library/Application Support/<id>` | `$XDG_DATA_HOME/<id>` (`~/.local/share`) |
+//! | cache | `~/Library/Caches/<id>` | `$XDG_CACHE_HOME/<id>` (`~/.cache`) |
+//! | state | `~/Library/Application Support/<id>` | `$XDG_STATE_HOME/<id>` (`~/.local/state`) |
+//! | logs | `~/Library/Logs/<id>` | `$XDG_STATE_HOME/<id>/logs` |
 //!
-//! Home is `HOME`, or `USERPROFILE` on Windows. Windows falls back to `<home>\AppData\Roaming`
-//! and `<home>\AppData\Local` when `APPDATA` or `LOCALAPPDATA` is unset, and a relative XDG
-//! variable is ignored, as the XDG spec says.
+//! Home is `HOME`. A relative XDG variable is ignored, as the XDG spec says.
 //!
 //! [`ROOT_ENV`] (`RUNE_DIRS_ROOT`) moves every folder an app writes under one root,
 //! `<root>/{config,data,cache,state,logs}/<id>` and `<root>/downloads`, so a test or an isolated
@@ -76,10 +74,10 @@ impl AppDirs {
     /// The folder name these paths end in: the app id with characters a folder can't hold as `_`.
     pub fn id(&self) -> &str { &self.id }
 
-    /// Settings the user chose, roaming with the profile on Windows.
+    /// Settings the user chose.
     pub fn config(&self) -> &Path { &self.config }
 
-    /// Documents and records the app keeps, roaming with the profile on Windows.
+    /// Documents and records the app keeps.
     pub fn data(&self) -> &Path { &self.data }
 
     /// Files the app can rebuild, kept on this machine and safe to delete.
@@ -101,8 +99,7 @@ impl AppDirs {
     pub fn is_rooted(&self) -> bool { self.bases.rooted }
 }
 
-/// The user's home folder from the process environment: `HOME`, or `USERPROFILE` (then
-/// `HOMEDRIVE` + `HOMEPATH`) on Windows.
+/// The user's home folder from the process environment: `HOME`.
 pub fn home() -> Option<PathBuf> {
     home_from(|k| std::env::var_os(k))
 }
@@ -110,16 +107,7 @@ pub fn home() -> Option<PathBuf> {
 /// [`home`] with the environment looked up through `var`.
 pub fn home_from(var: impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
     let set = |k: &str| var(k).filter(|v| !v.is_empty()).map(PathBuf::from);
-    #[cfg(target_os = "windows")]
-    {
-        set("USERPROFILE").or_else(|| {
-            let mut drive = var("HOMEDRIVE").filter(|v| !v.is_empty())?;
-            drive.push(var("HOMEPATH").filter(|v| !v.is_empty())?);
-            Some(PathBuf::from(drive))
-        })
-    }
-    #[cfg(not(target_os = "windows"))]
-    { set("HOME") }
+    set("HOME")
 }
 
 /// The base a [`crate::prefs::Prefs`] app folder goes in, without the id.
@@ -214,24 +202,7 @@ impl Bases {
         })
     }
 
-    #[cfg(all(not(target_arch = "wasm32"), target_os = "windows"))]
-    fn platform(set: &impl Fn(&str) -> Option<PathBuf>, home: Option<PathBuf>) -> Option<Bases> {
-        let app_data = |k: &str, leaf: &str| set(k).or_else(|| home.as_ref().map(|h| h.join("AppData").join(leaf)));
-        let roaming = app_data("APPDATA", "Roaming")?;
-        let local = app_data("LOCALAPPDATA", "Local")?;
-        Some(Bases {
-            config: Place::at(roaming.clone()),
-            data: Place::at(roaming),
-            cache: Place::nested(local.clone(), "Cache"),
-            state: Place::at(local.clone()),
-            logs: Place::nested(local, "Logs"),
-            downloads: home.as_ref().map(|h| h.join("Downloads")),
-            home,
-            rooted: false,
-        })
-    }
-
-    #[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "macos", target_os = "ios", target_os = "windows"))))]
+    #[cfg(all(not(target_arch = "wasm32"), not(any(target_os = "macos", target_os = "ios"))))]
     fn platform(set: &impl Fn(&str) -> Option<PathBuf>, home: Option<PathBuf>) -> Option<Bases> {
         let xdg = |k: &str, fallback: &[&str]| {
             set(k).filter(|p| p.is_absolute()).or_else(|| home.as_ref().map(|h| fallback.iter().fold(h.clone(), |p, part| p.join(part))))

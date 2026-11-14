@@ -24,7 +24,7 @@ impl Tx {
     /// and ⇧A, and `'a'` for AZERTY's A key, which sits where QWERTY's Q does. A binding by
     /// letter, as macOS's `DefaultKeyBinding.dict` binds ⌥-letters, matches this rather than
     /// [`Tx::physical_key`], which names where the key sits (`KeyQ` there). `None` off
-    /// macOS, Windows and Linux, for a key that types no single character (arrows, Return),
+    /// macOS and Linux, for a key that types no single character (arrows, Return),
     /// for a key with no physical origin (`Runtime::key`, a script's `"key"` without a
     /// `"code"`) and outside key handlers.
     pub fn key_base(&self) -> Option<char> { self.key_base }

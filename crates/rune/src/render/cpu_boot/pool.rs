@@ -1,7 +1,7 @@
 //! A small persistent pool of painting threads: parked between frames, woken together for one
 //! job, which the calling thread runs too, and joined before `run` returns, so a job may borrow
-//! the frame. Spawning threads per frame costs tens of microseconds each on Windows; waking a
-//! parked one costs a few.
+//! the frame. Spawning threads per frame costs tens of microseconds each; waking a parked one
+//! costs a few.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};

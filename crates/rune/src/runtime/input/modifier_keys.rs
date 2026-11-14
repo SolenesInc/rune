@@ -79,10 +79,6 @@ fn with(mut mods: Mods, m: Modifier, on: bool) -> Mods {
     mods
 }
 
-/// Windows clears Control and Alt in the flags while AltGr (Right Alt) is down, even with
-/// Left Control or Left Alt held.
-const ALTGR_CLEARS_FLAGS: bool = cfg!(target_os = "windows");
-
 impl ModifierKeys {
     fn event(&self, m: Modifier, pressed: bool, mods: Mods) -> KeyEvent {
         // Platforms differ on whether a modifier's own key event carries the flags from
@@ -94,7 +90,7 @@ impl ModifierKeys {
     /// a release not held and a repeat change nothing. `Modifiers` releases held keys whose
     /// flag turns off (Fn has none, so only its key-up or focus loss ends it); `FocusLost`
     /// releases them all.
-    fn changes(&self, event: &PhysicalInput, altgr_clears: bool) -> (u16, u16) {
+    fn changes(&self, event: &PhysicalInput) -> (u16, u16) {
         if !self.enabled { return (0, 0); }
         match *event {
             PhysicalInput::Key { key, pressed, repeat, .. } => match modifier(key) {
@@ -102,12 +98,7 @@ impl ModifierKeys {
                 _ => (0, 0),
             },
             PhysicalInput::Modifiers(now) => {
-                let altgr = altgr_clears && self.held & bit(Modifier::AltRight) != 0;
-                let lifted = ALL.into_iter().filter(|&m| {
-                    use Modifier::*;
-                    let cleared = altgr && matches!(m, ControlLeft | ControlRight | AltLeft | AltRight);
-                    self.held & bit(m) != 0 && active(self.last, m) && !active(now, m) && !cleared
-                });
+                let lifted = ALL.into_iter().filter(|&m| self.held & bit(m) != 0 && active(self.last, m) && !active(now, m));
                 (0, lifted.fold(0, |all, m| all | bit(m)))
             }
             PhysicalInput::FocusLost => (0, self.held),
@@ -115,15 +106,15 @@ impl ModifierKeys {
     }
 
     /// Whether `event` presses or releases a modifier key.
-    fn pending(&self, event: &PhysicalInput) -> bool { self.changes(event, ALTGR_CLEARS_FLAGS) != (0, 0) }
+    fn pending(&self, event: &PhysicalInput) -> bool { self.changes(event) != (0, 0) }
 
     /// Takes `event` in, with the `Key::Modifier` events it makes. None when a physical handler
     /// `consumed` it: a press it took is never held, so its release is never sent either, and a
     /// release or focus loss it took ends held keys silently. That is the one way `on_key` sees
     /// a press without its release: a handler, such as a shortcut recorder that starts while a
     /// modifier is down, takes the key-up.
-    fn apply(&mut self, event: &PhysicalInput, consumed: bool, altgr_clears: bool) -> Vec<KeyEvent> {
-        let (pressed, released) = self.changes(event, altgr_clears);
+    fn apply(&mut self, event: &PhysicalInput, consumed: bool) -> Vec<KeyEvent> {
+        let (pressed, released) = self.changes(event);
         let mods = match *event {
             PhysicalInput::Key { mods, .. } => mods,
             PhysicalInput::Modifiers(now) => { self.last = now; now }
@@ -161,7 +152,7 @@ impl RuntimeCore {
     pub(super) fn modifier_dispatch(&mut self, event: &PhysicalInput, consumed: bool, tx: &mut Tx, live: &mut Option<bool>) -> bool {
         let mut ran = false;
         let code = match *event { PhysicalInput::Key { key, .. } => Some(key), _ => None };
-        for ev in self.modifier_keys.apply(event, consumed, ALTGR_CLEARS_FLAGS) {
+        for ev in self.modifier_keys.apply(event, consumed) {
             let mut one = self.transaction();
             one.physical_key = code;
             let took = self.route_modifier(&ev, &mut one);
@@ -449,28 +440,5 @@ mod tests {
         click(&mut rt, "field");
         modifier(&mut rt, Code::ShiftLeft, false, SHIFT);
         assert_eq!(modifiers(&rt.state().app), [(Modifier::ShiftLeft, true), (Modifier::ShiftLeft, false)]);
-    }
-
-    #[test]
-    fn windows_altgr_clearing_control_and_alt_is_no_release() {
-        let key = |key, pressed, mods| PhysicalInput::Key { key, mods, pressed, repeat: false };
-        let ctrl = Mods { ctrl: true, ..Mods::default() };
-        let sent = |out: Vec<KeyEvent>| modifiers(&out);
-        for altgr_clears in [true, false] {
-            let mut keys = ModifierKeys { enabled: true, ..ModifierKeys::default() };
-            keys.apply(&key(Code::ControlLeft, true, Mods::default()), false, altgr_clears);
-            keys.apply(&PhysicalInput::Modifiers(ctrl), false, altgr_clears);
-            keys.apply(&key(Code::AltRight, true, ctrl), false, altgr_clears);
-            // Windows clears both flags while AltGr is down; X11 and Wayland leave Control on.
-            let cleared = sent(keys.apply(&PhysicalInput::Modifiers(Mods::default()), false, altgr_clears));
-            if !altgr_clears {
-                assert_eq!(cleared, [(Modifier::ControlLeft, false)], "elsewhere a flag off is a key-up");
-                continue;
-            }
-            assert!(cleared.is_empty(), "Left Control is still down");
-            assert_eq!(sent(keys.apply(&key(Code::AltRight, false, Mods::default()), false, true)), [(Modifier::AltRight, false)]);
-            assert!(sent(keys.apply(&PhysicalInput::Modifiers(ctrl), false, true)).is_empty());
-            assert_eq!(sent(keys.apply(&key(Code::ControlLeft, false, ctrl), false, true)), [(Modifier::ControlLeft, false)]);
-        }
     }
 }

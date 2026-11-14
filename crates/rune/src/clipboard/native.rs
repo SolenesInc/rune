@@ -53,13 +53,6 @@ fn worker() -> &'static mpsc::Sender<Request> {
     &WORKER.get_or_init(|| Worker::spawn(|| None::<Board>)).sender
 }
 
-/// Called by the shared event-loop exit path, including overlay-only applications.
-/// `clipboard::clear_secret_now`: the worker clears the last secret if it still holds the clipboard.
-#[cfg(target_os = "windows")]
-pub(super) fn clear_secret_now() {
-    if let Some(w) = WORKER.get() { let _ = w.sender.send(Request::Clear(None)); }
-}
-
 pub(super) fn shutdown() {
     if let Some(worker) = WORKER.get() { worker.stop(); }
 }
@@ -72,20 +65,16 @@ impl Backend for arboard::Clipboard {
     fn content(&mut self, all: bool) -> Option<ClipboardContent> {
         macos::read(&*unsafe { objc2_app_kit::NSPasteboard::generalPasteboard() }, all)
     }
-    /// Text, HTML, and with `all` an image and files; RTF isn't read here. Windows and Linux
-    /// images come through arboard as pixels (Windows `PNG` or `CF_DIBV5`, Linux `image/png`),
-    /// encoded as PNG again.
+    /// Text, HTML, and with `all` an image and files; RTF isn't read here. Linux images come
+    /// through arboard as pixels (`image/png`), encoded as PNG again.
     #[cfg(not(target_os = "macos"))]
     fn content(&mut self, all: bool) -> Option<ClipboardContent> {
         let text = self.text();
-        #[cfg(target_os = "windows")]
-        let html = windows_read_html().or_else(|| self.get().html().ok()).filter(|h| !h.is_empty() && h.len() <= html::MAX_RICH_BYTES);
-        #[cfg(not(target_os = "windows"))]
         let html = self.get().html().ok().filter(|h| !h.is_empty() && h.len() <= html::MAX_RICH_BYTES);
-        #[cfg(any(target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android")))))]
+        #[cfg(all(unix, not(any(target_os = "ios", target_os = "android"))))]
         let image = all.then(|| self.get_image().ok()).flatten()
             .and_then(|i| u32::try_from(i.width).ok().zip(u32::try_from(i.height).ok()).and_then(|(w, h)| ClipboardImage::from_rgba(w, h, &i.bytes)));
-        #[cfg(not(any(target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android"))))))]
+        #[cfg(not(all(unix, not(any(target_os = "ios", target_os = "android")))))]
         let image: Option<ClipboardImage> = None;
         let files = if all { self.get().file_list().unwrap_or_default() } else { Vec::new() };
         if text.is_none() && html.is_none() && image.is_none() && files.is_empty() { return None; }
@@ -139,13 +128,13 @@ fn write(cb: &mut arboard::Clipboard, copy: &ClipboardWrite) -> Result<(), Strin
     write_text(cb, copy).map_err(|e| e.to_string())
 }
 
-/// Windows and Linux hold one of Rune's forms per write: the files, else the image, else HTML
-/// beside the text (CF_HTML, `text/html`), else the text. RTF isn't written.
+/// Linux holds one of Rune's forms per write: the files, else the image, else HTML beside the
+/// text (`text/html`), else the text. RTF isn't written.
 #[cfg(all(not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
 fn write_one_form(cb: &mut arboard::Clipboard, content: &ClipboardContent) -> Result<(), String> {
     let error = |e: arboard::Error| e.to_string();
     if !content.files().is_empty() { return cb.set().file_list(content.files()).map_err(error); }
-    #[cfg(any(target_os = "windows", all(unix, not(any(target_os = "ios", target_os = "android")))))]
+    #[cfg(all(unix, not(any(target_os = "ios", target_os = "android"))))]
     if let Some(rgba) = content.image().and_then(ClipboardImage::to_rgba) {
         let (width, height) = (rgba.width() as usize, rgba.height() as usize);
         return cb.set_image(arboard::ImageData { width, height, bytes: rgba.into_raw().into() }).map_err(error);
@@ -162,8 +151,6 @@ fn write_text(cb: &mut arboard::Clipboard, copy: &ClipboardWrite) -> Result<(), 
     if copy.clear_after.is_none() { return cb.set_text(text); }
     #[cfg(target_os = "macos")]
     { use arboard::SetExtApple; return cb.set().exclude_from_history().text(text); }
-    #[cfg(target_os = "windows")]
-    { use arboard::SetExtWindows; return cb.set().exclude_from_monitoring().text(text); }
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
     { use arboard::SetExtLinux; return cb.set().exclude_from_history().text(text); }
     #[allow(unreachable_code)]
@@ -174,45 +161,8 @@ fn write_text(cb: &mut arboard::Clipboard, copy: &ClipboardWrite) -> Result<(), 
 fn revision() -> Option<u64> {
     #[cfg(target_os = "macos")]
     { return Some(unsafe { objc2_app_kit::NSPasteboard::generalPasteboard().changeCount() } as u64); }
-    #[cfg(target_os = "windows")]
-    { return Some(unsafe { windows_sys::Win32::System::DataExchange::GetClipboardSequenceNumber() } as u64); }
     // Linux's portable clipboard API has no generation counter; compare the current text.
     #[allow(unreachable_code)]
     None
-}
-
-/// Reads Windows `CF_HTML` (`HTML Format`) directly so `-1` offsets and `<!--StartFragment-->`
-/// markers from other apps work instead of failing `clipboard-win`'s unsigned offset parser.
-#[cfg(target_os = "windows")]
-fn windows_read_html() -> Option<String> {
-    use windows_sys::Win32::System::DataExchange::{
-        CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
-    };
-    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
-    const NAME: &[u16] = &[b'H' as u16, b'T' as u16, b'M' as u16, b'L' as u16, b' ' as u16, b'F' as u16, b'o' as u16, b'r' as u16, b'm' as u16, b'a' as u16, b't' as u16, 0];
-    unsafe {
-        let format = RegisterClipboardFormatW(NAME.as_ptr());
-        if format == 0 || IsClipboardFormatAvailable(format) == 0 { return None; }
-        let mut opened = false;
-        for _ in 0..5 {
-            if OpenClipboard(core::ptr::null_mut()) != 0 { opened = true; break; }
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        if !opened { return None; }
-        let handle = GetClipboardData(format);
-        let out = if !handle.is_null() {
-            let size = GlobalSize(handle);
-            let ptr = GlobalLock(handle) as *const u8;
-            let res = (!ptr.is_null() && size > 0 && size <= html::MAX_RICH_BYTES * 2)
-                .then(|| html::unpack_cf_html(core::slice::from_raw_parts(ptr, size)))
-                .flatten();
-            if !ptr.is_null() { let _ = GlobalUnlock(handle); }
-            res
-        } else {
-            None
-        };
-        let _ = CloseClipboard();
-        out
-    }
 }
 

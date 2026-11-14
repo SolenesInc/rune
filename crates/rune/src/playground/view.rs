@@ -141,10 +141,7 @@ impl<S: 'static> Live<S> {
                 }))
         });
         let hint = self.hint(variants.len(), slot.is_some() || !variants.is_empty() || !triggers.is_empty());
-        // The Windows caption buttons sit over the column's top.
-        let chrome = cx.chrome_insets();
-        let under_caption = if chrome.trailing > 0.0 { chrome.height } else { 0.0 };
-        col().key("playground-side").w(side_w).h(height).px(12.0).pt(12.0 + under_caption).pb(12.0).gap(12.0)
+        col().key("playground-side").w(side_w).h(height).padding(12.0).gap(12.0)
             .children(title)
             .children(slot)
             .children(picker)

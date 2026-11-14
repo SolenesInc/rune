@@ -109,7 +109,7 @@ pub(crate) fn report(setup: f64, init: f64, view: f64, total: f64) -> Option<Str
 /// How long this process has run, from the system's record of its start.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn process_age() -> Option<std::time::Duration> {
-    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     use std::time::Duration;
     #[cfg(target_os = "macos")]
     {
@@ -133,19 +133,6 @@ pub(crate) fn process_age() -> Option<std::time::Duration> {
         let up: f64 = std::fs::read_to_string("/proc/uptime").ok()?.split_whitespace().next()?.parse().ok()?;
         (ticks > 0.0).then(|| Duration::from_secs_f64((up - start / ticks).max(0.0)))
     }
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::{Foundation::FILETIME, System::Threading::{GetCurrentProcess, GetProcessTimes}};
-        let mut created = FILETIME { dwLowDateTime: 0, dwHighDateTime: 0 };
-        let (mut exited, mut kernel, mut user) = (created, created, created);
-        // SAFETY: the current-process pseudo-handle is valid and all four outputs are live,
-        // writable FILETIMEs. The pseudo-handle is borrowed, not closed.
-        if unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) } == 0 { return None }
-        // FILETIME counts 100 ns ticks from 1601.
-        let ticks = ((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime)).checked_sub(116_444_736_000_000_000)?;
-        let start = std::time::UNIX_EPOCH + Duration::from_nanos(ticks * 100);
-        std::time::SystemTime::now().duration_since(start).ok()
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     { None }
 }

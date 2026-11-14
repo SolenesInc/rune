@@ -30,7 +30,7 @@
 //! - **Hot reload**: [`Script::reload`] (or `Script::watch` with the `watch` feature) swaps the
 //!   VM, carrying `saveHotState()` into `loadHotState(state)`.
 //!
-//! Luau runs with native code generation on Windows and Linux (x86-64, arm64), and as its
+//! Luau runs with native code generation on Linux (x86-64, arm64), and as its
 //! interpreter on macOS, iOS and the web. On `wasm32-unknown-unknown`, Luau's C++ builds with
 //! WASI SDK: `scripts/web-build.sh` sets that up when `WASI_SDK_PATH` is set.
 
@@ -80,5 +80,5 @@ pub use workers::Completer;
 pub use workers::spawn_blocking;
 
 /// Whether this build compiles `--!native` modules to native code (the `native-code` feature, on
-/// Windows and Linux) rather than interpreting them.
+/// Linux) rather than interpreting them.
 pub const NATIVE_CODE: bool = cfg!(luau_jit);

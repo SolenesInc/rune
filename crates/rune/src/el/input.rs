@@ -127,15 +127,6 @@ impl El {
         self.handlers.on_spellcheck = Some((on, Rc::new(move |s, on, tx| f(downcast::<S>(s), on, tx))));
         self
     }
-    /// Beside [`El::on_spellcheck`], where the platform has dictionaries to choose
-    /// ([`crate::spell::available_languages`]): the fields' menus add a Spellcheck Languages
-    /// submenu, as Chromium's do off macOS. Picking a dictionary checks with the new choice at
-    /// once ([`crate::spell::set_languages`]) and calls `f` with it, for the app to keep and
-    /// pass to `set_languages` at its next launch.
-    pub fn on_spellcheck_languages<S: 'static>(mut self, f: impl Fn(&mut S, Vec<String>, &mut Tx) + 'static) -> Self {
-        self.handlers.on_spellcheck_languages = Some(Rc::new(move |s, tags, tx| f(downcast::<S>(s), tags, tx)));
-        self
-    }
     /// Mask a text element or text input before layout; disable undo, copy, cut, selection and
     /// IME composition, omit accessibility text, redact [`Debug`], bypass layout/raster caches,
     /// and zeroize owned buffers on conceal and drop.

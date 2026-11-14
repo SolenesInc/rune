@@ -59,7 +59,7 @@ fn dual_wgsl() -> Option<String> {
 }
 
 /// Windfoil's subpixel pipeline for the window, built the first frame text draws subpixel masks
-/// (`FontSmoothing::WindfoilRgb`, `ClearType`) on a Windfoil renderer whose device blends by a
+/// (`FontSmoothing::WindfoilRgb`) on a Windfoil renderer whose device blends by a
 /// second output. Layers keep the plain pipeline, so text in them draws grayscale.
 pub(super) enum Lcd {
     Unbuilt,
@@ -80,7 +80,7 @@ pub(crate) const fn windfoil_bind_entries() -> [wgpu::BindGroupLayoutEntry; 5] {
 }
 
 /// Windfoil's pipeline ABI, as `metallib::uber_abi_hash` hashes Classic's.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 pub(crate) const fn windfoil_abi_hash() -> u64 {
     metallib::abi_hash_of(&windfoil_bind_entries())
 }
@@ -89,7 +89,7 @@ pub(crate) const fn windfoil_abi_hash() -> u64 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Source {
     /// The bytecode Rune ships for it (DXBC on Windows, a metallib on macOS).
-    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Precompiled,
     /// Its WGSL, compiled at run time.
     Compiled,
@@ -167,7 +167,7 @@ pub(super) struct BuildContext<'a> {
 pub(super) struct Built {
     pub bind_layout: wgpu::BindGroupLayout,
     pub layout: wgpu::PipelineLayout,
-    pub shader: dxbc::Shaders,
+    pub shader: wgpu::ShaderModule,
     pub pipeline: wgpu::RenderPipeline,
     pub source: Source,
 }
@@ -246,14 +246,10 @@ impl Renderer {
         }
         let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: None, entries: &windfoil_bind_entries() });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: None, bind_group_layouts: &[Some(&bind_layout)], immediate_size: 0 });
-        let make_pipeline = |shader: &dxbc::Shaders| Self::pipeline(device, &layout, shader, format, vertex_entry, Blend::SourceOver);
-        #[cfg(target_os = "windows")]
-        if let Some((shader, pipeline)) = dxbc::uber(device, make_pipeline) {
-            return Ok(Built { bind_layout, layout, shader, pipeline, source: Source::Precompiled });
-        }
+        let make_pipeline = |shader: &wgpu::ShaderModule| Self::pipeline(device, &layout, shader, format, vertex_entry, Blend::SourceOver);
         #[cfg(target_os = "macos")]
         if let Some((shader, pipeline)) = windfoil_metallib::load(device, make_pipeline) {
-            return Ok(Built { bind_layout, layout, shader: dxbc::Shaders::one(shader), pipeline, source: Source::Precompiled });
+            return Ok(Built { bind_layout, layout, shader, pipeline, source: Source::Precompiled });
         }
         let (shader, pipeline) = compile(device, windfoil_wgsl(), make_pipeline)?;
         Ok(Built { bind_layout, layout, shader, pipeline, source: Source::Compiled })
@@ -284,11 +280,11 @@ impl Renderer {
             color: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrc1, operation: wgpu::BlendOperation::Add },
             alpha: wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add },
         };
-        let make_pipeline = |shader: &dxbc::Shaders| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let make_pipeline = |shader: &wgpu::ShaderModule| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("uber subpixel"),
             layout: Some(&self.layout),
             vertex: wgpu::VertexState {
-                module: &shader.vertex,
+                module: shader,
                 entry_point: Some(self.vertex_entry),
                 compilation_options: Default::default(),
                 buffers: &[Some(metallib::uber_vertex_layout())],
@@ -297,7 +293,7 @@ impl Renderer {
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader.fragment,
+                module: shader,
                 entry_point: Some("fs"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState { format: self.format, blend: Some(blend), write_mask: wgpu::ColorWrites::ALL })],
@@ -327,10 +323,10 @@ impl Renderer {
 }
 
 /// `wgsl`'s module and pipeline, compiled now, or the error the device reported.
-fn compile(device: &wgpu::Device, wgsl: &str, make_pipeline: impl FnOnce(&dxbc::Shaders) -> wgpu::RenderPipeline) -> Result<(dxbc::Shaders, wgpu::RenderPipeline), String> {
+fn compile(device: &wgpu::Device, wgsl: &str, make_pipeline: impl FnOnce(&wgpu::ShaderModule) -> wgpu::RenderPipeline) -> Result<(wgpu::ShaderModule, wgpu::RenderPipeline), String> {
     #[cfg(not(target_arch = "wasm32"))]
     let scopes = (device.push_error_scope(wgpu::ErrorFilter::Validation), device.push_error_scope(wgpu::ErrorFilter::Internal));
-    let shader = dxbc::Shaders::one(device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("uber"), source: wgpu::ShaderSource::Wgsl(wgsl.into()) }));
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("uber"), source: wgpu::ShaderSource::Wgsl(wgsl.into()) });
     let pipeline = make_pipeline(&shader);
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(error) = pollster::block_on(scopes.1.pop()).or(pollster::block_on(scopes.0.pop())) {
