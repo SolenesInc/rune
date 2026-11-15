@@ -9,6 +9,7 @@ use super::ns_window;
 /// wait for the GPU to schedule each frame, so it is on only while a frame moves.
 pub(crate) fn present_with_transaction(surface: &wgpu::Surface, on: bool) {
     use objc2_video::runtime::Bool;
+    let on = on || forced_transaction();
     // SAFETY: a live CAMetalLayer, on the main thread, between frames.
     crate::gpu::with_layer(surface, |layer| unsafe { let _: () = objc2_video::msg_send![layer, setPresentsWithTransaction: Bool::new(on)]; });
 }
@@ -33,6 +34,7 @@ fn top_left_gravity(contents_flipped: bool) -> &'static objc2::runtime::AnyObjec
 /// them to the display (untagged, a wide-gamut display shows them oversaturated). Either
 /// surface format holds sRGB-encoded values; wgpu's reconfigures keep the tag.
 pub(crate) fn pin_contents_top_left(surface: &wgpu::Surface) {
+    if forced_transaction() { present_with_transaction(surface, true); }
     use objc2::runtime::{AnyObject, Bool};
     use objc2_core_graphics::{CGColorSpace, kCGColorSpaceSRGB};
     // SAFETY: a live CAMetalLayer, on the main thread, under wgpu's lock.
@@ -162,3 +164,10 @@ pub(super) fn occlusion_hidden(window: &NSWindow) -> bool {
 #[cfg(test)]
 #[path = "surface_tests.rs"]
 mod tests;
+
+/// Diagnostic: `RUNE_PRESENT_WITH_TRANSACTION=1` keeps every drawable inside a Core Animation
+/// transaction, to compare presentation in the macOS VM.
+fn forced_transaction() -> bool {
+    static FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FORCED.get_or_init(|| std::env::var("RUNE_PRESENT_WITH_TRANSACTION").is_ok_and(|v| v == "1"))
+}
