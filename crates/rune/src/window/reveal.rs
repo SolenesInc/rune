@@ -11,6 +11,9 @@ pub(super) enum Reveal {
     Show,
     /// `AppHandle::open` or `activate`: restores a minimised window and focuses it.
     Open,
+    /// `WindowHandle::show_key`: as `Show`, then the window takes the app's keys without
+    /// activating the app.
+    Key,
     /// A launcher shows the frame it kept rendering while hidden, and takes the keys.
     Cached,
 }
@@ -51,6 +54,9 @@ pub(super) enum RevealEffect {
     Number,
     /// Focuses it, or on Wayland activates it with the open's token.
     Focus,
+    /// Makes it the app's key window, in front of the app's others, leaving the app's
+    /// activation alone.
+    MakeKey,
     Redraw,
     /// Asks for a frame only when the frame it reveals left motion running.
     RedrawIfMoving,
@@ -63,6 +69,7 @@ impl Reveal {
         let (hidden, covered, minimized) = match found {
             Found::Missing => {
                 if self != Reveal::Cached { out.extend([ReadSystem, Create]); }
+                if self == Reveal::Key { out.push(MakeKey); }
                 return out;
             }
             Found::Hidden { minimized } => (true, false, minimized),
@@ -82,7 +89,11 @@ impl Reveal {
         // A minimised window doesn't draw (on macOS occlusion says so instead).
         let stays_minimized = minimized && !restores && !cfg!(target_os = "macos");
         out.extend([Shown { live: !stays_minimized }, CancelTimerFrame, Number]);
-        if self == Reveal::Open { out.push(Focus); }
+        match self {
+            Reveal::Open => out.push(Focus),
+            Reveal::Key => out.push(MakeKey),
+            Reveal::Show | Reveal::Cached => {}
+        }
         out.push(Redraw);
         out
     }

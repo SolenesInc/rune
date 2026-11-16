@@ -171,7 +171,7 @@ impl<S: 'static> Window<S> {
 
     fn request(&mut self, request: WindowRequest, changes: &mut Changes) {
         match request {
-            WindowRequest::Open(_) | WindowRequest::Show if self.life.finished() => {}
+            WindowRequest::Open(_) | WindowRequest::Show | WindowRequest::ShowKey if self.life.finished() => {}
             WindowRequest::Open(_) => {
                 self.show();
                 changes.front = true;
@@ -182,6 +182,11 @@ impl<S: 'static> Window<S> {
                 changes.front = true;
                 // A launcher takes keys when it shows.
                 changes.keys |= self.launcher;
+            }
+            WindowRequest::ShowKey => {
+                self.show();
+                changes.front = true;
+                changes.keys = true;
             }
             WindowRequest::Hide => self.hide(),
             WindowRequest::Close => self.close(),

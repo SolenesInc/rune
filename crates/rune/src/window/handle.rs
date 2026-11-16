@@ -145,6 +145,11 @@ impl WindowHandle {
         self.send(move |slot| WakeEvent::Window(slot, request));
     }
     pub fn show(&self) { self.set_visible(true); }
+    /// Show, in front of the app's other windows and with the app's keys, without activating
+    /// the app: the window takes the keyboard now if the app has it, and when the app next
+    /// does otherwise, as a window the app opens itself does. Elsewhere than macOS the window
+    /// manager decides, as for a new window.
+    pub fn show_key(&self) { self.send(|slot| WakeEvent::Window(slot, WindowRequest::ShowKey)); }
     pub fn hide(&self) { self.set_visible(false); }
     /// Focus/activate an already-visible window, restoring it if minimized. Wayland requests attention.
     pub fn focus(&self) { self.send(WakeEvent::Focus); }

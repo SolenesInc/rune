@@ -813,6 +813,9 @@ pub(crate) enum WindowRequest {
     /// Show and focus, with an activation token when one was forwarded.
     Open(Option<String>),
     Show,
+    /// Show in front of the app's other windows with its keys, leaving the app's activation
+    /// alone (`WindowHandle::show_key`).
+    ShowKey,
     Hide,
     Close,
 }
