@@ -81,3 +81,22 @@ fn handlers_no_input_caused_see_no_input_time() {
     assert_eq!(rt.state().keys, vec![(Key::Down, None)], "input a program feeds the runtime itself");
     assert_eq!(current(), None, "every scope restored what it held");
 }
+
+#[test]
+fn input_fed_to_a_runtime_under_an_arrival_keeps_that_arrival_time() {
+    let mut rt = app();
+    let ago = Duration::from_millis(300);
+    let before = Instant::now();
+    let after = {
+        let _arrival = crate::input_arrived(ago);
+        let after = Instant::now();
+        rt.key(KeyEvent { key: Key::Down, mods: Mods::default() });
+        after
+    };
+    rt.key(KeyEvent { key: Key::Up, mods: Mods::default() });
+    rt.frame(0.0);
+    let keys = &rt.state().keys;
+    let arrived = keys[0].1.expect("the key under the arrival has its time");
+    assert!((before - ago..=after - ago).contains(&arrived), "it arrived 300 ms before it was fed");
+    assert_eq!(keys[1], (Key::Up, None), "the arrival ends with its guard");
+}

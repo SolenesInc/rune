@@ -39,7 +39,7 @@ impl Tx {
     /// AppKit dispatched it in, elsewhere when the window took it from winit. Input that piles
     /// up between frames keeps each event's own time. `None` in handlers no input caused
     /// (timers, polls, updates, layout callbacks) and for input fed to a `Runtime` directly
-    /// (`Runtime::key` and kin, headless scripts).
+    /// (`Runtime::key` and kin, headless scripts) outside [`input_arrived`](crate::input_arrived).
     pub fn input_time(&self) -> Option<crate::time::Instant> { self.input_time }
 
     /// The key of the element that had focus when the event arrived, `None` when nothing had:
