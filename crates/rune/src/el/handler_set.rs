@@ -89,6 +89,7 @@ impl Handlers {
         self.on_pointer_move.is_some()
             || self.on_press.is_some()
             || self.on_press_within.is_some()
+            || self.keeps_press_from_within
             || self.on_double_press.is_some()
             || self.on_secondary_press.is_some()
             || self.on_hover.is_some()

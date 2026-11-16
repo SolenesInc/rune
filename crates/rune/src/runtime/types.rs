@@ -238,11 +238,6 @@ impl Node {
     pub(super) fn has_primary_handler(&self) -> bool {
         self.handlers.get().is_some_and(crate::el::Handlers::has_primary)
     }
-    /// A press on this node's own surface stops on it: it handles the press, or hears presses
-    /// within it (`El::on_press_within`).
-    pub(super) fn takes_press(&self) -> bool {
-        self.handlers.get().is_some_and(|h| h.has_primary() || h.on_press_within.is_some())
-    }
     /// Whether `selector` names this node, as `Cx::layout` reads it: its key, its full path, or
     /// a key path such as `msg-42/body` (see `flight::selects`).
     pub(crate) fn named(&self, selector: &str) -> bool {
