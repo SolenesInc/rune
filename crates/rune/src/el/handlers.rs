@@ -23,7 +23,9 @@ impl El {
     /// holding this one included, so a pane can take the keyboard for a click on any control
     /// inside it, as a DOM `mousedown` listener hears what bubbles up. A press on something
     /// drawn over the element that it doesn't hold, or one a modal keeps from it, doesn't
-    /// reach it.
+    /// reach it. The element is the pane of the selectable text inside it: a press on that
+    /// text goes no further out than the element, so a drag across the text selects it even
+    /// when something holding the element drags.
     pub fn on_press_within<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.handlers.on_press_within = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self

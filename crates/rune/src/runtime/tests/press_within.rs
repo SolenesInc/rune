@@ -80,3 +80,24 @@ fn a_primary_press_on_a_surface_that_keeps_its_press_reaches_what_holds_it_witho
     assert_eq!(press(10.0, 10.0, PointerButton::Primary), ["pane", "close"]);
     assert_eq!(press(60.0, 20.0, PointerButton::Secondary), ["pane", "menu"]);
 }
+
+#[test]
+fn a_drag_across_text_inside_selects_it_though_what_holds_the_element_drags() {
+    #[derive(Default)]
+    struct D { dragged: u32 }
+    fn view(_: &D, _: &mut Cx<D>) -> El {
+        col().w_full().h_full()
+            .on_drag(|s: &mut D, _: &mut crate::Drag, _| s.dragged += 1)
+            .child(col().key("pane").size(200.0, 100.0).on_press_within(|_: &mut D, _| {})
+                .child(text("words to select").key("words").selectable(true)))
+    }
+    let mut rt = Runtime::new(D::default(), view, (300.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.pointer_move(1.0, 6.0);
+    rt.pointer_down(1.0, 6.0);
+    rt.pointer_move(150.0, 6.0);
+    rt.pointer_up(150.0, 6.0);
+    rt.frame(1.0);
+    assert_eq!(rt.state().dragged, 0, "the drag beyond the pane doesn't hear it");
+    assert!(rt.selected_text().is_some_and(|t| t.starts_with("words")), "{:?}", rt.selected_text());
+}
