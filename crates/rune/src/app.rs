@@ -389,6 +389,12 @@ impl<S: 'static> App<S> {
         self
     }
 
+    /// Whether closing the window keeps its state (`keep_running`, `windowless`), so a harness
+    /// that drives the app's runtime headless can close it as the native host would.
+    pub fn keeps_running(&self) -> bool {
+        self.keep_running
+    }
+
     /// Closing the window also releases the GPU device and renderer (and destroys the window
     /// everywhere), so an app idling without a window holds no UI GPU memory. Reopening
     /// recreates them, which costs a device creation.
@@ -966,6 +972,13 @@ mod tests {
         fn save(_: &mut u32, _: &mut Tx) {}
         fn tidy(_: &mut u32, _: &mut Tx) {}
         let _ = App::new(spec()).on_quit(save).on_quit(tidy);
+    }
+
+    #[test]
+    fn an_app_says_whether_closing_its_window_keeps_its_state() {
+        assert!(!App::new(spec()).keeps_running());
+        assert!(App::new(spec()).keep_running().keeps_running());
+        assert!(App::new(spec()).windowless().keeps_running());
     }
 
     #[test]
