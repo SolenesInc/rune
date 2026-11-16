@@ -28,6 +28,14 @@ impl El {
         self.handlers.on_press_within = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
+    /// A primary press on this element's own surface, not on a control inside it, runs no
+    /// [`El::on_press_within`] of the elements holding it, as a DOM `pointerdown` that prevents
+    /// its default keeps its `mousedown` from them. A header that drags its pane by its surface
+    /// uses it, so starting a drag doesn't select the pane.
+    pub fn keeps_press_from_within(mut self) -> Self {
+        self.handlers.keeps_press_from_within = true;
+        self
+    }
     /// [`El::on_press_tx`] in place.
     pub fn set_on_press_tx<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> &mut Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));

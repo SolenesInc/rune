@@ -334,6 +334,7 @@ fn same_handlers(
         on_press,
         on_press_outside,
         on_press_within,
+        keeps_press_from_within,
         on_double_press,
         on_secondary_press,
         on_hover,
@@ -379,6 +380,7 @@ fn same_handlers(
         && opt_rc_eq(&a.on_press, on_press)
         && opt_rc_eq(&a.on_press_outside, on_press_outside)
         && opt_rc_eq(&a.on_press_within, on_press_within)
+        && a.keeps_press_from_within == *keeps_press_from_within
         && opt_rc_eq(&a.on_double_press, on_double_press)
         && opt_rc_eq(&a.on_secondary_press, on_secondary_press)
         && opt_rc_eq(&a.on_hover, on_hover)

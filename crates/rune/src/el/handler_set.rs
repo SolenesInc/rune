@@ -19,6 +19,8 @@ pub(crate) struct Handlers {
     pub on_press_outside: Option<PressFn>,
     /// `El::on_press_within`: a press landed on the element or on something it holds.
     pub on_press_within: Option<PressFn>,
+    /// `El::keeps_press_from_within`.
+    pub keeps_press_from_within: bool,
     pub on_double_press: Option<PressFn>,
     pub on_secondary_press: Option<PointerFn>,
     pub on_hover: Option<PressFn>,
@@ -107,6 +109,7 @@ impl Empty for Handlers {
         on_press: None,
         on_press_outside: None,
         on_press_within: None,
+        keeps_press_from_within: false,
         on_double_press: None,
         on_secondary_press: None,
         on_hover: None,

@@ -1,6 +1,6 @@
 use super::*;
 use crate::PointerButton;
-use crate::el::{col, el, text};
+use crate::el::{col, el, row, text};
 
 #[derive(Default)]
 struct S { heard: Vec<&'static str> }
@@ -53,4 +53,29 @@ fn a_press_outside_or_on_something_drawn_over_it_does_not_tell_it() {
     let mut rt = rt();
     assert_eq!(press(&mut rt, 150.0, 150.0, PointerButton::Primary), ["window"]);
     assert_eq!(press(&mut rt, 75.0, 75.0, PointerButton::Primary), ["over"]);
+}
+
+#[test]
+fn a_primary_press_on_a_surface_that_keeps_its_press_does_not_tell_the_element_but_a_control_on_it_does() {
+    #[derive(Default)]
+    struct H { heard: Vec<&'static str> }
+    fn view(_: &H, _: &mut Cx<H>) -> El {
+        col().key("pane").size(100.0, 100.0).on_press_within(|s: &mut H, _| s.heard.push("pane"))
+            .child(row().key("header").w_full().h(40.0).keeps_press_from_within()
+                .on_drag(|s: &mut H, d: &mut crate::Drag, _| if d.phase == crate::Phase::Down { s.heard.push("drag") })
+                .on_secondary_press(|s: &mut H, _, _| s.heard.push("menu"))
+                .child(el().key("close").size(20.0, 20.0).on_press(|s: &mut H| s.heard.push("close"))))
+    }
+    let mut rt = Runtime::new(H::default(), view, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let mut press = |x: f32, y: f32, button: PointerButton| {
+        rt.pointer_move(x, y);
+        rt.button_down(x, y, button);
+        rt.button_up(x, y, button);
+        rt.frame(1.0);
+        std::mem::take(&mut rt.state_mut().heard)
+    };
+    assert_eq!(press(60.0, 20.0, PointerButton::Primary), ["drag"]);
+    assert_eq!(press(10.0, 10.0, PointerButton::Primary), ["pane", "close"]);
+    assert_eq!(press(60.0, 20.0, PointerButton::Secondary), ["pane", "menu"]);
 }
