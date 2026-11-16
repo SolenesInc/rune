@@ -9,6 +9,7 @@ impl<S: 'static> Host<S> {
         match request {
             WindowRequest::Open(token) => self.open(event_loop, token),
             WindowRequest::Show => self.show(event_loop),
+            WindowRequest::ShowKey => self.show_key(event_loop),
             WindowRequest::Hide => self.hide(event_loop),
             WindowRequest::Close => self.close(event_loop),
         }
@@ -34,6 +35,11 @@ impl<S: 'static> Host<S> {
     pub(super) fn show(&mut self, event_loop: &ActiveEventLoop) {
         if self.launcher() { self.reveal_launcher(event_loop); return; }
         self.reveal(event_loop, Reveal::Show, None);
+    }
+
+    pub(super) fn show_key(&mut self, event_loop: &ActiveEventLoop) {
+        if self.launcher() { self.reveal_launcher(event_loop); return; }
+        self.reveal(event_loop, Reveal::Key, None);
     }
 
     pub(super) fn open(&mut self, event_loop: &ActiveEventLoop, token: Option<String>) {
@@ -92,6 +98,7 @@ impl<S: 'static> Host<S> {
                     self.native_handle.native.number.store(native_window_number(&w.window).unwrap_or(0), Ordering::Release);
                 },
                 RevealEffect::Focus => self.activate(event_loop, token.take()),
+                RevealEffect::MakeKey => if let Some(w) = &self.win { w.make_key() },
                 RevealEffect::Redraw => if let Some(w) = &self.win { w.request_redraw() },
                 // No settle, frame, surface configure or acquisition on a cached reveal, unless
                 // the refreshed frame left motion running.
@@ -208,7 +215,7 @@ impl<S: 'static> Host<S> {
         if let Some(visible) = requests.dock {
             crate::platform::macos::set_dock_icon(visible);
         }
-        let shows = matches!(requests.window, Some(WindowRequest::Show | WindowRequest::Open(_)));
+        let shows = matches!(requests.window, Some(WindowRequest::Show | WindowRequest::ShowKey | WindowRequest::Open(_)));
         let polled = wake && !quiet && self.poll_hidden(event_loop, shows);
         if let Some(position) = requests.position { self.set_position(event_loop, position); }
         if let Some(place) = requests.place { self.place(event_loop, place); }

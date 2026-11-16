@@ -214,6 +214,14 @@ impl Win {
         if focus { self.window.focus_window(); }
     }
 
+    pub(super) fn make_key(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(panel) = &self.native.panel { panel.request_keys(); return; }
+            crate::platform::macos::make_key(&self.window);
+        }
+    }
+
     /// When a cloaked window shows without its frame.
     pub(super) fn cloak_deadline(&self) -> Option<Instant> {
         None
