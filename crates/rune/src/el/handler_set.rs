@@ -17,6 +17,8 @@ pub(crate) struct Handlers {
     pub on_press: Option<PressFn>,
     /// `El::on_press_outside`: a primary press landed outside where the element is drawn.
     pub on_press_outside: Option<PressFn>,
+    /// `El::on_press_within`: a press landed on the element or on something it holds.
+    pub on_press_within: Option<PressFn>,
     pub on_double_press: Option<PressFn>,
     pub on_secondary_press: Option<PointerFn>,
     pub on_hover: Option<PressFn>,
@@ -84,6 +86,7 @@ impl Handlers {
     pub(crate) fn takes_hit(&self) -> bool {
         self.on_pointer_move.is_some()
             || self.on_press.is_some()
+            || self.on_press_within.is_some()
             || self.on_double_press.is_some()
             || self.on_secondary_press.is_some()
             || self.on_hover.is_some()
@@ -103,6 +106,7 @@ impl Empty for Handlers {
         modal: None,
         on_press: None,
         on_press_outside: None,
+        on_press_within: None,
         on_double_press: None,
         on_secondary_press: None,
         on_hover: None,

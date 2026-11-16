@@ -198,6 +198,18 @@ impl RuntimeCore {
         }
     }
 
+    /// Queues `on_press_within` for each element holding the topmost hit at (x, y), innermost
+    /// first, up to a node the pointer may not reach.
+    pub(super) fn queue_presses_within(&mut self, x: f32, y: f32) {
+        let top = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
+        let within: Vec<String> = std::iter::successors(top, |&i| self.nodes[i].parent)
+            .take_while(|&i| !self.subtree_exiting(i) && self.pointer_allowed(i))
+            .filter(|&i| self.nodes[i].handlers.get().is_some_and(|h| h.on_press_within.is_some()))
+            .map(|i| self.nodes[i].path.clone())
+            .collect();
+        self.queue.extend(within.into_iter().map(Action::PressWithin));
+    }
+
     pub fn pointer_down(&mut self, x: f32, y: f32) {
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
@@ -211,6 +223,7 @@ impl RuntimeCore {
         self.release_hover_hold();
         self.focus.step(focus_machine::FocusEvent::Pointed);
         self.queue_presses_outside(x, y);
+        self.queue_presses_within(x, y);
         self.press_help(x, y);
         // A press cancels the waits to report an enter; the next move after it starts them again.
         self.press_hover_delays();

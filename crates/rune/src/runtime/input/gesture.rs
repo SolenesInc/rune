@@ -185,6 +185,7 @@ impl RuntimeCore {
         if self.press.is_held() { return; }
         self.pointer = Some((x, y));
         self.dismiss_help();
+        self.queue_presses_within(x, y);
         let Some(i) = target else { return };
         let n = &self.nodes[i];
         let r = n.target;

@@ -149,7 +149,7 @@ impl RuntimeCore {
             let i = *self.node_index.get(&id)?;
             let n = &self.nodes[i];
             // A secondary-only child must not obscure primary input or background blur.
-            (!self.subtree_exiting(i) && self.pointer_allowed(i) && (n.has_primary_handler() || n.input.is_some() || n.role == "textbox"
+            (!self.subtree_exiting(i) && self.pointer_allowed(i) && (n.takes_press() || n.input.is_some() || n.role == "textbox"
                 || (n.role == "button" && n.vis_flags.hit()) || n.window_drag != crate::el::WindowDrag::None || n.focus.enabled || n.handlers.modal.is_some()
                 || self.is_selectable(i))).then_some(i)
         })
@@ -163,7 +163,7 @@ impl RuntimeCore {
         let i = self.top_target(x, y)?;
         let n = &self.nodes[i];
         if !self.is_selectable(i) || n.has_primary_handler() || self.link_at(i, x, y).is_some() { return Some(i); }
-        let handles = |n: &Node| n.has_primary_handler() || n.focus.enabled;
+        let handles = |n: &Node| n.takes_press() || n.focus.enabled;
         let mut p = n.parent;
         while let Some(a) = p {
             if self.subtree_exiting(a) || !self.pointer_allowed(a) || self.nodes[a].handlers.modal.is_some() { break; }

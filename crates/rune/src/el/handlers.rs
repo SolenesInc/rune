@@ -18,6 +18,16 @@ impl El {
         self.handlers.on_press_outside = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
+    /// Runs `f` when a press of any button lands on this element or on anything it holds,
+    /// before the press acts. The press still goes where it was aimed, so a pane can take the
+    /// keyboard for a click on any control inside it, as a DOM `mousedown` listener hears what
+    /// bubbles up. A press on the element's own plain surface stops on it instead of passing
+    /// to what is drawn beneath. A press on something drawn over the element that it doesn't
+    /// hold, or one a modal keeps from it, doesn't reach it.
+    pub fn on_press_within<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.handlers.on_press_within = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
+        self
+    }
     /// [`El::on_press_tx`] in place.
     pub fn set_on_press_tx<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> &mut Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));

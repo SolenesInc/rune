@@ -29,6 +29,7 @@ impl RuntimeCore {
         self.release_hover_hold();
         self.focus.step(focus_machine::FocusEvent::Pointed);
         self.dismiss_help();
+        self.queue_presses_within(x, y);
         let path = self.secondary_target(x, y).map(str::to_owned);
         let i = path.as_ref().and_then(|p| self.nodes.iter().position(|n| n.path == *p));
         self.secondary = match path {
