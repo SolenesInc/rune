@@ -214,6 +214,12 @@ impl RuntimeCore {
     }
 
     pub fn pointer_down(&mut self, x: f32, y: f32) {
+        let other_button_held = self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary);
+        self.press_down(x, y);
+        if !other_button_held { self.queue_presses_within(x, y, crate::PointerButton::Primary); }
+    }
+
+    fn press_down(&mut self, x: f32, y: f32) {
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
             return;
@@ -226,7 +232,6 @@ impl RuntimeCore {
         self.release_hover_hold();
         self.focus.step(focus_machine::FocusEvent::Pointed);
         self.queue_presses_outside(x, y);
-        self.queue_presses_within(x, y, crate::PointerButton::Primary);
         self.press_help(x, y);
         // A press cancels the waits to report an enter; the next move after it starts them again.
         self.press_hover_delays();

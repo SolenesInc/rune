@@ -418,6 +418,7 @@ impl RuntimeCore {
             Action::PressWithin(path) => {
                 let Some(f) = self.node(&path).and_then(|n| n.handlers.on_press_within.clone()) else { return false };
                 log_event!(self, "press within {path}");
+                one.focus_within = self.live_index(&path).is_some_and(|i| self.focus_within(i));
                 f(self.app.states(), &mut one);
                 true
             }
