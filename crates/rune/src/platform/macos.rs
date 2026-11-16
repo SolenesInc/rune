@@ -199,6 +199,7 @@ impl Panel {
             panel.setFloatingPanel(true);
             panel.setBecomesKeyOnlyIfNeeded(options.keys == KeyPolicy::None);
             panel.setHidesOnDeactivate(false);
+            panel.setCanHide(false);
             panel.setBackgroundColor(Some(&NSColor::clearColor()));
             panel.setCollectionBehavior(
                 NSWindowCollectionBehavior::CanJoinAllSpaces
@@ -302,6 +303,14 @@ impl Panel {
         }
     }
     pub fn is_key(&self) -> bool { self.panel.isKeyWindow() }
+
+    /// Moves the panel with the pointer, from inside the mouse-down AppKit is handling.
+    pub fn drag(&self) {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        if let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() {
+            self.panel.performWindowDragWithEvent(&event);
+        }
+    }
 }
 
 impl Drop for Panel {

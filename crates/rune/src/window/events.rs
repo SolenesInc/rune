@@ -457,9 +457,7 @@ impl<S: 'static> Host<S> {
                             rt.physical_input(crate::PhysicalInput::Modifiers(map_mods(self.mods)));
                             // AppKit needs the drag started inside this mouse-down.
                             match rt.take_titlebar_action() {
-                                Some(TitlebarAction::Drag) => {
-                                    let _ = l.window.drag_window();
-                                }
+                                Some(TitlebarAction::Drag) => l.drag(),
                                 Some(TitlebarAction::DoubleClick) => titlebar_double_click(&l.window),
                                 None => {}
                             }

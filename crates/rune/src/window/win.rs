@@ -222,6 +222,14 @@ impl Win {
         }
     }
 
+    /// Moves the window with the pointer, from inside the press that started it. A panel moves
+    /// itself: winit's own window is hidden behind it.
+    pub(super) fn drag(&self) {
+        #[cfg(target_os = "macos")]
+        if let Some(panel) = &self.native.panel { panel.drag(); return; }
+        let _ = self.window.drag_window();
+    }
+
     /// When a cloaked window shows without its frame.
     pub(super) fn cloak_deadline(&self) -> Option<Instant> {
         None
