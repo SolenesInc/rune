@@ -157,3 +157,43 @@ fn under_controls_keep_focus_a_press_on_a_control_that_takes_physical_keys_focus
 fn rt_focused(rt: &Runtime<Recorder>) -> Option<String> {
     rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
 }
+
+#[derive(Default)]
+struct Panel {
+    field: TextEdit,
+    surface_keeps_focus: bool,
+}
+
+fn panel_view(s: &Panel, _: &mut Cx<Panel>) -> El {
+    col()
+        .size(300.0, 100.0)
+        .window_drag()
+        .preserve_focus_on_press(s.surface_keeps_focus)
+        .child(
+            crate::text_input(&s.field, TextStyle::new(14.0, 400.0))
+                .key("field")
+                .w(150.0)
+                .on_edit(|s: &mut Panel| &mut s.field),
+        )
+}
+
+fn press_panel_surface(surface_keeps_focus: bool) -> Option<String> {
+    let mut s = Panel { surface_keeps_focus, ..Panel::default() };
+    s.field.focused = true;
+    let mut rt = Runtime::new(s, panel_view, (300.0, 100.0), Env::default());
+    rt.frame(0.0);
+    rt.pointer_down(250.0, 80.0);
+    rt.pointer_up(250.0, 80.0);
+    rt.frame(1.0 / 60.0);
+    rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
+}
+
+#[test]
+fn a_press_on_a_window_drag_surface_that_keeps_focus_leaves_the_field_focused() {
+    assert_eq!(press_panel_surface(true).as_deref(), Some("field"));
+}
+
+#[test]
+fn a_press_on_a_bare_window_drag_surface_blurs_the_field() {
+    assert_eq!(press_panel_surface(false), None);
+}

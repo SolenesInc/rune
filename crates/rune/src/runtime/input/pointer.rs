@@ -273,7 +273,7 @@ impl RuntimeCore {
         let now = self.now_clock();
         if self.bare_drag_region(ti) {
             self.titlebar.press_region(now, x, y, self.double_click_interval);
-            if self.focus.path().is_some() {
+            if self.focus.path().is_some() && !self.press_keeps_focus(ti) {
                 self.queue.push(Action::Blur);
             }
             return;
