@@ -29,6 +29,8 @@ pub struct Tx {
     pub(crate) focused: Option<String>,
     /// `Tx::in_text_field`.
     pub(crate) in_text_field: bool,
+    /// `Tx::focus_within`.
+    pub(crate) focus_within: bool,
     /// What this change does with motion ([`Tx::instant`], [`Tx::animated`], [`Tx::settle`]).
     pub(crate) commit: Commit,
     /// The motion this change's layout moves on ([`Tx::motion`], [`Tx::motion_curve`]).

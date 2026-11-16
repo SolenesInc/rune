@@ -55,6 +55,14 @@ impl Tx {
         self.focused.as_deref()
     }
 
+    /// In an [`El::on_press_within`](crate::El::on_press_within) handler, whether the focus is
+    /// on the element or inside it (CSS `:focus-within`) after the press moved it, as a press in
+    /// a text field focuses the field. A pane that takes the keyboard on a press keeps that
+    /// focus, and takes the keys off a control elsewhere.
+    pub fn focus_within(&self) -> bool {
+        self.focus_within
+    }
+
     /// Whether the element that had focus when the key arrived is a text field. A window's
     /// `on_key` that also hears a field's keys through `App::on_field_key` reads it to leave a
     /// key it already declined there.

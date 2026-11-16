@@ -101,3 +101,29 @@ fn a_drag_across_text_inside_selects_it_though_what_holds_the_element_drags() {
     assert_eq!(rt.state().dragged, 0, "the drag beyond the pane doesn't hear it");
     assert!(rt.selected_text().is_some_and(|t| t.starts_with("words")), "{:?}", rt.selected_text());
 }
+
+#[test]
+fn the_element_hears_whether_the_press_left_the_focus_inside_it() {
+    #[derive(Default)]
+    struct F { focus_within: Vec<bool>, elsewhere: crate::TextEdit, inside: crate::TextEdit }
+    fn view(s: &F, _: &mut Cx<F>) -> El {
+        let style = crate::TextStyle::new(14.0, 400.0);
+        col().w_full().h_full()
+            .child(crate::text_input(&s.elsewhere, style).key("elsewhere").size(100.0, 30.0).on_edit(|s: &mut F| &mut s.elsewhere))
+            .child(col().key("pane").size(100.0, 100.0).on_press_within(|s: &mut F, tx| s.focus_within.push(tx.focus_within()))
+                .child(crate::text_input(&s.inside, style).key("field").size(100.0, 30.0).on_edit(|s: &mut F| &mut s.inside))
+                .child(el().key("button").size(40.0, 40.0).on_press(|_: &mut F| {})))
+    }
+    let mut rt = Runtime::new(F::default(), view, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let mut press = |x: f32, y: f32| {
+        rt.pointer_move(x, y);
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(1.0);
+    };
+    press(10.0, 10.0);
+    press(10.0, 80.0);
+    press(10.0, 45.0);
+    assert_eq!(rt.state().focus_within, [false, true], "a button pressed while a field outside has the focus, then the field inside");
+}

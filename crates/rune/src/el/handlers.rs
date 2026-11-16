@@ -18,8 +18,10 @@ impl El {
         self.handlers.on_press_outside = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
-    /// Runs `f` when a press of any button lands on this element or on anything it holds,
-    /// before the press acts. The press still goes where it was aimed, a handler of an element
+    /// Runs `f` when a press of any button lands on this element or on anything it holds, once
+    /// the press has moved the focus and before its release, so [`Tx::focus_within`] says
+    /// whether the press left the focus inside the element. The press still goes where it was
+    /// aimed, a handler of an element
     /// holding this one included, so a pane can take the keyboard for a click on any control
     /// inside it, as a DOM `mousedown` listener hears what bubbles up. A press on something
     /// drawn over the element that it doesn't hold, or one a modal keeps from it, doesn't
