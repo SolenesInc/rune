@@ -137,7 +137,7 @@ fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_standard_menu_and_men
 
 fn standard_menu_with_quiet_choices(_: &(), _: &mut Cx<()>) -> El {
     let mut k = Kit::neutral(true);
-    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted });
+    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted, focused_ink: k.c.text_strong });
     let mut layer = Vec::new();
     let menu = Menu::new("snooze")
         .standard()
@@ -165,6 +165,51 @@ fn a_standard_menu_draws_its_labels_details_and_note_in_the_kit_s_menu_text() {
     assert_eq!(row.label.as_deref(), Some("For an hour"));
     let (detail_right, row_right) = (detail.rect[0] + detail.rect[2], row.rect[0] + row.rect[2]);
     assert!(row_right - detail_right <= 9.0, "the detail ends the row: {:?} {:?}", detail.rect, row.rect);
+}
+
+fn standard_menu_of_quiet_choices(open: &bool, _: &mut Cx<bool>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted, focused_ink: k.c.text_strong });
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze")
+        .standard()
+        .anchor("row.actions")
+        .item(MenuItem::new("For an hour"))
+        .item(MenuItem::new("Until tomorrow"))
+        .open(*open)
+        .on_close(|open: &mut bool| *open = false)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn the_row_the_keys_or_pointer_reach_draws_its_label_in_the_focused_ink() {
+    let mut rt = Runtime::new(false, standard_menu_of_quiet_choices, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    rt.update(|open, _| *open = true);
+    rt.frame(2.0 / 60.0);
+    let neutral = Kit::neutral(true);
+    let (rest, lit) = (Some(neutral.c.text_muted), Some(neutral.c.text_strong));
+    let inks = |rt: &Runtime<bool>| {
+        let elements = rt.elements();
+        let ink = |said: &str| elements.iter().find(|e| e.text.as_deref() == Some(said)).and_then(|e| e.text_color);
+        (ink("For an hour"), ink("Until tomorrow"))
+    };
+    assert_eq!(inks(&rt), (rest, rest));
+
+    rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
+    rt.frame(3.0 / 60.0);
+    assert_eq!(inks(&rt), (lit, rest));
+
+    rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
+    rt.frame(4.0 / 60.0);
+    assert_eq!(inks(&rt), (rest, lit));
+
+    let first = rt.elements().iter().find(|e| e.key.as_deref() == Some("snooze-item0")).expect("the first row").rect;
+    rt.pointer_move(first[0] + first[2] / 2.0, first[1] + first[3] / 2.0);
+    rt.frame(5.0 / 60.0);
+    assert_eq!(inks(&rt), (lit, rest));
 }
 
 fn standard_menu_with_inset_separators(_: &(), _: &mut Cx<()>) -> El {

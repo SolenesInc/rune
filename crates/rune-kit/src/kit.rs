@@ -239,11 +239,12 @@ pub struct StandardMenu {
 }
 
 /// How a standard menu draws its items' labels: an app whose menus list choices in a quieter
-/// face than the kit's.
+/// face than the kit's. `focused_ink` is the label's ink on the row the keys or pointer reach.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MenuLabel {
     pub font: TextStyle,
     pub ink: Color,
+    pub focused_ink: Color,
 }
 
 impl StandardMenu {
@@ -273,7 +274,7 @@ pub struct Kit {
     pub radius: Radius,
     pub standard_menu: StandardMenu,
     /// The text of a standard menu's items. None draws `ty.text_small_medium` in
-    /// `c.text_strong`.
+    /// `c.text_strong`, focused or not.
     pub standard_menu_label: Option<MenuLabel>,
     pub motion: Motion,
     /// The surface translucent colours are solved over when the window blends in linear light
