@@ -56,6 +56,8 @@ pub(crate) struct FocusSpec {
     pub key_up: Option<InputKeyFn>,
     /// `El::on_key`: keys while this element or one inside it has focus.
     pub key: Option<InputKeyFn>,
+    /// `El::on_blur`.
+    pub blur: Option<PressFn>,
 }
 
 impl crate::cold::Empty for FocusSpec {
@@ -83,6 +85,7 @@ impl crate::cold::Empty for FocusSpec {
         step_limit: None,
         key_up: None,
         key: None,
+        blur: None,
     };
 }
 
@@ -187,6 +190,12 @@ impl El {
     /// focus by its fill alone also sets [`El::no_focus_ring`].
     pub fn focus_fill(mut self, color: Color) -> Self {
         self.cold_mut().focus.fill = Some(color);
+        self
+    }
+    /// Focus left this element, as an input's `blur` event: to another element, to none, or
+    /// with the window. It runs in the input that moved focus, so it needs no later frame.
+    pub fn on_blur<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.cold_mut().focus.blur = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
     /// The window's default button, which Return presses (AppKit's `keyEquivalent = "\r"`).
