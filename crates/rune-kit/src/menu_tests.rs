@@ -166,3 +166,30 @@ fn a_standard_menu_draws_its_labels_details_and_note_in_the_kit_s_menu_text() {
     let (detail_right, row_right) = (detail.rect[0] + detail.rect[2], row.rect[0] + row.rect[2]);
     assert!(row_right - detail_right <= 9.0, "the detail ends the row: {:?} {:?}", detail.rect, row.rect);
 }
+
+fn standard_menu_with_inset_separators(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu = crate::StandardMenu { edge_alpha: 1.0, radius: 8.0, inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
+    let mut layer = Vec::new();
+    let menu = Menu::new("session")
+        .standard()
+        .anchor("row.actions")
+        .separator_inset(3.0)
+        .item(MenuItem::new("Rename session"))
+        .separator()
+        .item(MenuItem::new("Close session"))
+        .open(true)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_menus_separators_sit_its_separator_inset_inside_its_rows() {
+    let mut rt = Runtime::new((), standard_menu_with_inset_separators, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let element = |key: &str| rt.elements().iter().find(|e| e.key.as_deref() == Some(key)).cloned().unwrap_or_else(|| panic!("no {key}"));
+    let (menu, rule) = (element("session-menu").rect, element("sep1").rect);
+    assert_eq!(rule[0] - menu[0], 8.0, "{menu:?} {rule:?}");
+    assert_eq!((menu[0] + menu[2]) - (rule[0] + rule[2]), 8.0, "{menu:?} {rule:?}");
+}

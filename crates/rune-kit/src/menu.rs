@@ -281,6 +281,7 @@ pub struct Menu {
     dismiss: Option<(El, Modal)>,
     label: Option<String>,
     anchor: Option<String>,
+    separator_inset: Option<f32>,
 }
 
 /// Makes an open surface modal: it takes focus, Escape and outside presses dismiss it, and
@@ -318,6 +319,7 @@ impl Menu {
             dismiss: None,
             label: None,
             anchor: None,
+            separator_inset: None,
         }
     }
     pub fn trigger(mut self, t: El) -> Self {
@@ -326,6 +328,12 @@ impl Menu {
     }
     pub fn item(mut self, i: MenuItem) -> Self {
         self.entries.push(MenuEntry::Item(Box::new(i)));
+        self
+    }
+    /// Insets each separator this far inside the rows' edges, in place of reaching past them
+    /// to the menu's edges.
+    pub fn separator_inset(mut self, inset: f32) -> Self {
+        self.separator_inset = Some(inset);
         self
     }
     pub fn separator(mut self) -> Self {
@@ -407,7 +415,8 @@ impl Menu {
                 }
                 MenuEntry::Separator => {
                     let (m, color) = if standard { (4.0, c.border_weak) } else { (2.0, c.border_muted) };
-                    el().key(format!("sep{i}")).h(1.0).mt(m).mb(m).ml(-m).mr(-m).fill(color).a11y_hidden()
+                    let x = self.separator_inset.unwrap_or(-m);
+                    el().key(format!("sep{i}")).h(1.0).mt(m).mb(m).ml(x).mr(x).fill(color).a11y_hidden()
                 }
                 MenuEntry::Note(n) => {
                     let (m, color) = if standard { (4.0, c.border_weak) } else { (2.0, c.border_muted) };
