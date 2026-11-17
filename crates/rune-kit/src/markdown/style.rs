@@ -77,6 +77,8 @@ pub struct MarkdownStyle {
     pub(super) table_bar: Option<[Color; 2]>,
     /// The text column's width, when the app knows it (see [`MarkdownStyle::text_width`]).
     pub(super) text_width: Option<f32>,
+    /// The widest a top-level prose block runs (see [`MarkdownStyle::prose_measure`]).
+    pub(super) prose_measure: Option<f32>,
     /// How far a wide code block's sides fade while it scrolls sideways.
     pub(super) wide_fade: f32,
     /// The icon before a link to a web page: its size and gap (`None`: no icon).
@@ -263,6 +265,7 @@ impl MarkdownStyle {
             code_margin: [12.0, 24.0],
             table_bar: None,
             text_width: None,
+            prose_measure: None,
             wide_fade: 12.0,
             link_icon: None,
             diff_add: tint(c.layer_01, c.success.icon, if k.dark { 0.11 } else { 0.14 }),
@@ -614,6 +617,14 @@ impl MarkdownStyle {
         self.text_width = (points.is_finite() && points > 0.0).then_some(points);
         self
     }
+    /// The widest a top-level paragraph, heading, list, quote or alert, and any image, runs,
+    /// starting at the column's start, as a web page's `max-width` on those blocks keeps a
+    /// reading measure while tables, code, diagrams, front matter and rules take the whole
+    /// column (none by default). Tables and code inside a capped list or quote fit its measure.
+    pub fn prose_measure(mut self, points: f32) -> Self {
+        self.prose_measure = (points.is_finite() && points > 0.0).then_some(points);
+        self
+    }
     /// How far the sides of a code block that scrolls sideways ([`Markdown::scroll_wide`]) fade
     /// out, in points: 12 by default, 0 for a hard edge as a web page's `overflow: auto` clips.
     pub fn wide_fade(mut self, points: f32) -> Self {
@@ -814,6 +825,7 @@ impl std::hash::Hash for MarkdownStyle {
             code_margin,
             table_bar,
             text_width,
+            prose_measure,
             wide_fade,
             link_icon,
             diff_add,
@@ -853,7 +865,7 @@ impl std::hash::Hash for MarkdownStyle {
         (table_outline, table_rule, table_head_fill, table_head_text, table_head_rule, table_head_weight.map(f32_bits), table_tabular, table_font).hash(state);
         ([f32_bits(table_pad[0]), f32_bits(table_pad[1])], table_flush_left, table_head_pad.map(|p| p.map(f32_bits)), table_full_width, table_margin.map(f32_bits), code_margin.map(f32_bits)).hash(state);
         table_frame.map(|TableFrame { fill, ring, pad }| (fill, ring, f32_bits(pad))).hash(state);
-        (table_bar, text_width.map(f32_bits), f32_bits(wide_fade), link_icon.map(|l| l.map(f32_bits))).hash(state);
+        (table_bar, text_width.map(f32_bits), prose_measure.map(f32_bits), f32_bits(wide_fade), link_icon.map(|l| l.map(f32_bits))).hash(state);
         match table_body {
             None => 0u8.hash(state),
             Some(TableBody { fill, radius, shadows }) => {

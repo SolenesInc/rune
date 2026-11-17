@@ -153,6 +153,13 @@ fn block_key(i: usize, keys: &[String], used: &mut Vec<String>) -> String {
     cand
 }
 
+/// Whether `b` keeps [`MarkdownStyle::prose_measure`] at the top level: the blocks a reader
+/// reads line by line, not the tables, code, diagrams and front matter that want the room. An
+/// image takes the measure as its own widest ([`Renderer::image`]).
+fn measured(b: &Block) -> bool {
+    matches!(b, Block::Para(_) | Block::Heading(..) | Block::List { .. } | Block::Quote(_) | Block::Alert(..))
+}
+
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
 pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
     match b {
@@ -507,7 +514,17 @@ impl Renderer {
             }
             let own = bidi::blocks_dir(std::slice::from_ref(b));
             let prose = !matches!(b, Block::Code(_) | Block::Diff(_) | Block::Mermaid(_) | Block::Image { .. } | Block::Rule);
+            let measure = self.s.prose_measure.filter(|_| top_level && measured(b));
+            let flow = self.flow.get();
+            if let (Some(measure), Some(width)) = (measure, self.s.text_width) {
+                self.flow.set(Flow { inset: flow.inset + (width - measure).max(0.0), ..flow });
+            }
             let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
+            self.flow.set(flow);
+            let drawn = match measure {
+                Some(measure) => drawn.max_w(measure),
+                None => drawn,
+            };
             let drawn = if prose { bidi::directed(drawn, own.or(last)) } else { drawn };
             if own.is_some() {
                 last = own;
