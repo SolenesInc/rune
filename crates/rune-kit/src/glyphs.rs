@@ -26,6 +26,18 @@ pub static CHEVRON_UP: Icon = Icon {
     view: 16.0,
     body: r#"<path d="M11 9.5L8 6.5L5 9.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
+/// A macOS pop-up button's indicator: a chevron up over a chevron down.
+pub static CHEVRON_UP_DOWN: Icon = Icon {
+    name: "kit-chevron-up-down",
+    view: 16.0,
+    body: r#"<path d="M5.5 6.25L8 3.75L10.5 6.25M5.5 9.75L8 12.25L10.5 9.75" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+/// The grip in a resizable field's bottom-right corner: two strokes across the corner.
+pub static RESIZE_GRIP: Icon = Icon {
+    name: "kit-resize-grip",
+    view: 10.0,
+    body: r#"<path d="M9 3L3 9M9 6.5L6.5 9" stroke="currentColor" stroke-linecap="round"/>"#,
+};
 pub static CARET_RIGHT: Icon =
     Icon { name: "kit-caret-right", view: 16.0, body: r#"<path d="M6 4L10 8L6 12V4Z" fill="currentColor"/>"# };
 pub static TRIANGLE_DOWN: Icon =
@@ -181,4 +193,6 @@ pub const DEFAULT: Glyphs = Glyphs {
     eye_off: &EYE_OFF,
     circle_x: &CIRCLE_X,
     dash: &DASH,
+    select: None,
+    resize_grip: &RESIZE_GRIP,
 };

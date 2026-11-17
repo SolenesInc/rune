@@ -1,5 +1,6 @@
 use rune::{Cx, El, Env, Ime, Runtime, TextEdit, col};
-use super::{TextArea, TextField, TextInput};
+use super::{TextField, TextInput};
+use crate::TextArea;
 use crate::Kit;
 
 #[derive(Default)]

@@ -7,8 +7,10 @@ use rune::Icon;
 use rune::text::icon_coverage;
 use rune_kit::glyphs;
 
-const ALL: [&Icon; 28] = [
+const ALL: [&Icon; 30] = [
     &glyphs::CHECK,
+    &glyphs::CHEVRON_UP_DOWN,
+    &glyphs::RESIZE_GRIP,
     &glyphs::CHECK_SMALL,
     &glyphs::CHEVRON_DOWN,
     &glyphs::CHEVRON_UP,

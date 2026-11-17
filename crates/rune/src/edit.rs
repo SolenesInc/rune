@@ -17,6 +17,7 @@ use crate::text::Link;
 mod caret_motion;
 use caret_motion::Column;
 mod display;
+mod field_height;
 mod history;
 mod html;
 mod ime;
@@ -74,6 +75,8 @@ pub struct TextEdit {
     /// a byte there has a place at the end of one run and at the start of the other. Arrows
     /// and presses set it; anything else puts it before the byte that follows.
     pub(crate) affinity: parley::Affinity,
+    /// The height a person dragged the field to ([`TextEdit::dragged_height`]).
+    dragged_height: Option<f32>,
 }
 
 impl std::fmt::Debug for TextEdit {
@@ -118,6 +121,7 @@ impl std::hash::Hash for TextEdit {
         self.secure.hash(h);
         self.revealed.hash(h);
         self.is_single_line().hash(h);
+        self.dragged_height.map(f32::to_bits).hash(h);
     }
 }
 
@@ -191,6 +195,7 @@ impl TextEdit {
             edited_tag: EditedTag::default(),
             column: Column::Free,
             affinity: parley::Affinity::Downstream,
+            dragged_height: None,
         }
     }
 

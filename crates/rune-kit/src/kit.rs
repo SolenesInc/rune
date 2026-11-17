@@ -165,6 +165,11 @@ pub struct Glyphs {
     pub circle_x: &'static Icon,
     /// A short horizontal rule (card title placeholder).
     pub dash: &'static Icon,
+    /// A select's indicator, open or closed, such as [`crate::glyphs::CHEVRON_UP_DOWN`] for a
+    /// macOS pop-up button. `None`: `chevron_down`, turning to `chevron_up` while open.
+    pub select: Option<&'static Icon>,
+    /// The grip of a [`crate::TextArea::resizable`] field.
+    pub resize_grip: &'static Icon,
 }
 
 /// The type scale. Sizes, weights, line heights and tracking in points.

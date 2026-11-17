@@ -251,7 +251,11 @@ impl Select {
             Some(v) => (v.clone(), if red { c.danger.fg } else { c.text_base }),
             None => (self.placeholder.clone(), if red { c.danger.fg } else { c.text_faint }),
         };
-        let chevron: &'static Icon = if self.open { k.glyph.chevron_up } else { k.glyph.chevron_down };
+        let chevron: &'static Icon = match k.glyph.select {
+            Some(indicator) => indicator,
+            None if self.open => k.glyph.chevron_up,
+            None => k.glyph.chevron_down,
+        };
         // Named for what it chooses, its value the chosen option; the text and chevron inside
         // show the same.
         let name = self.name.clone().unwrap_or_else(|| self.placeholder.clone());

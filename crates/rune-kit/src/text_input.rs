@@ -1,11 +1,11 @@
 //! TextInput and Textarea (`@opencode/ui` forms/text-input, forms/textarea), and the older
 //! TextField (`components/text-field`).
 
-use rune::{Color, El, Icon, RichStyle, Span, TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input};
+use rune::{Color, El, Icon, RichStyle, TextEdit, TextStyle, Tx, col, el, icon, row, text, text_input};
 
 use crate::{Acts, Kit, State, over, shadows};
 
-fn kit_rich_style(k: &Kit) -> RichStyle {
+pub(crate) fn kit_rich_style(k: &Kit) -> RichStyle {
     RichStyle {
         link: k.c.text_accent,
         code_fg: None,
@@ -19,7 +19,7 @@ fn kit_rich_style(k: &Kit) -> RichStyle {
 /// Shared shell painting (text-input.css:5-75, textarea.css): the base fill, input elevation,
 /// hover overlay, a 1 point focus or invalid ring just inside the box in place of the shadow,
 /// disabled dimming.
-fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool) -> El {
+pub(crate) fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool) -> El {
     let c = &k.c;
     let hover = state == State::Hover && !invalid && !focused;
     let mut e = e
@@ -46,20 +46,20 @@ fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool) -> El {
 /// The rich-text builders every field forwards to its inner text element.
 macro_rules! rich_forwarders {
     () => {
-        pub fn spans(mut self, spans: impl Into<Vec<Span>>) -> Self {
+        pub fn spans(mut self, spans: impl Into<Vec<rune::Span>>) -> Self {
             let spans = spans.into();
             self.edits.visual(move |e| e.spans(spans));
             self
         }
-        pub fn decorations(self, spans: impl Into<Vec<Span>>) -> Self {
+        pub fn decorations(self, spans: impl Into<Vec<rune::Span>>) -> Self {
             self.spans(spans)
         }
-        pub fn rich_style(mut self, style: RichStyle) -> Self {
+        pub fn rich_style(mut self, style: rune::RichStyle) -> Self {
             self.edits.visual(move |e| e.rich_style(style));
             self
         }
         /// See [`El::pill_icon`](rune::El::pill_icon).
-        pub fn pill_icon(mut self, icon: impl Fn(&str) -> Option<&'static Icon> + 'static) -> Self {
+        pub fn pill_icon(mut self, icon: impl Fn(&str) -> Option<&'static rune::Icon> + 'static) -> Self {
             self.edits.visual(move |e| e.pill_icon(icon));
             self
         }
@@ -69,37 +69,38 @@ macro_rules! rich_forwarders {
             self
         }
         /// See [`El::pill_colors`](rune::El::pill_colors).
-        pub fn pill_colors(mut self, bg: Color, fg: Option<Color>) -> Self {
+        pub fn pill_colors(mut self, bg: rune::Color, fg: Option<rune::Color>) -> Self {
             self.edits.visual(move |e| e.pill_colors(bg, fg));
             self
         }
     };
 }
+pub(crate) use rich_forwarders;
 
 /// Edit bindings collected for the inner text field.
 #[derive(Default)]
-struct EditActs {
-    handlers: Vec<Box<dyn FnOnce(El) -> El>>,
+pub(crate) struct EditActs {
+    pub(crate) handlers: Vec<Box<dyn FnOnce(El) -> El>>,
     visual: Vec<Box<dyn FnOnce(El) -> El>>,
 }
 
 impl EditActs {
-    fn edit<S: 'static>(&mut self, f: impl for<'a> Fn(&'a mut S) -> &'a mut TextEdit + 'static) {
+    pub(crate) fn edit<S: 'static>(&mut self, f: impl for<'a> Fn(&'a mut S) -> &'a mut TextEdit + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_edit(f)));
     }
-    fn submit<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
+    pub(crate) fn submit<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_submit(f)));
     }
-    fn key<S: 'static>(&mut self, f: impl Fn(&mut S, &rune::KeyEvent, &mut Tx) -> bool + 'static) {
+    pub(crate) fn key<S: 'static>(&mut self, f: impl Fn(&mut S, &rune::KeyEvent, &mut Tx) -> bool + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_input_key(f)));
     }
-    fn change<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
+    pub(crate) fn change<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_input_change(f)));
     }
-    fn visual(&mut self, f: impl FnOnce(El) -> El + 'static) {
+    pub(crate) fn visual(&mut self, f: impl FnOnce(El) -> El + 'static) {
         self.visual.push(Box::new(f));
     }
-    fn apply(self, mut e: El, disabled: bool) -> El {
+    pub(crate) fn apply(self, mut e: El, disabled: bool) -> El {
         for f in self.visual {
             e = f(e);
         }
@@ -114,7 +115,7 @@ impl EditActs {
 
 /// What assistive technology reads for a field's editor: its name (the label, else the
 /// placeholder), a description, and whether it can be used.
-fn name_field(e: El, label: Option<&str>, placeholder: &str, description: Option<&str>, disabled: bool) -> El {
+pub(crate) fn name_field(e: El, label: Option<&str>, placeholder: &str, description: Option<&str>, disabled: bool) -> El {
     let e = match label.filter(|l| !l.is_empty()).or(Some(placeholder).filter(|p| !p.is_empty())) {
         Some(name) => e.label(name),
         None => e,
@@ -396,185 +397,6 @@ impl TextInput {
         if self.plain {
             return if disabled { e.layer_opacity(0.5) } else { e };
         }
-        shell(k, e, self.state, self.invalid && !disabled, self.edit.focused && !disabled)
-    }
-}
-
-/// A multi-line field (`Textarea`): 80 points tall at least, 13/1.35 type, 8 points of padding.
-/// Return breaks the line, as in a `<textarea>`; Cmd/Ctrl+Return calls [`TextArea::on_submit`].
-pub struct TextArea {
-    edit: TextEdit,
-    key: String,
-    label: Option<String>,
-    placeholder: String,
-    width: Option<f32>,
-    rows: usize,
-    grow: Option<(usize, usize)>,
-    max_height: Option<f32>,
-    invalid: bool,
-    state: State,
-    edits: EditActs,
-}
-
-impl TextArea {
-    /// The key of the editor inside, `"input"` unless set: what `Tx::focused` reports while it has
-    /// focus and what `Tx::focus` takes, so an app with several fields tells them apart.
-    pub fn key(mut self, key: impl Into<String>) -> Self {
-        self.key = key.into();
-        self
-    }
-    /// Protect the model like a password field. Hidden non-empty values use a fixed one-line
-    /// mask. Clicks and unshifted navigation move to the end; shifted navigation selects all.
-    /// Typing/paste append, or replace the whole value if selected; Backspace deletes at the
-    /// end. Reveal to edit an interior position. Enter inserts a newline; Cmd/Ctrl+Enter submits.
-    pub fn secure(mut self) -> Self {
-        self.edit.set_secure(true);
-        self
-    }
-    /// Show the text without enabling undo, copy, cut, IME or accessibility text.
-    /// Toggling preserves the model selection until a hidden edit or navigation occurs.
-    pub fn revealed(mut self, revealed: bool) -> Self {
-        self.edit.set_revealed(revealed);
-        self.edits.visual(move |e| e.revealed(revealed));
-        self
-    }
-    /// Mark misspelled words and offer their suggestions in the field's menu (`El::spellcheck`).
-    pub fn spellcheck(mut self, on: bool) -> Self {
-        self.edits.visual(move |e| e.spellcheck(on));
-        self
-    }
-    pub fn new(edit: &TextEdit) -> TextArea {
-        TextArea {
-            key: "input".into(),
-            edit: edit.clone(),
-            label: None,
-            placeholder: String::new(),
-            width: Some(280.0),
-            rows: 3,
-            grow: None,
-            max_height: None,
-            invalid: false,
-            state: State::Rest,
-            edits: EditActs::default(),
-        }
-    }
-    pub fn placeholder(mut self, p: impl Into<String>) -> Self {
-        self.placeholder = p.into();
-        self
-    }
-    /// The accessible name, as [`TextInput::label`].
-    pub fn label(mut self, l: impl Into<String>) -> Self {
-        self.label = Some(l.into());
-        self
-    }
-    pub fn width(mut self, w: Option<f32>) -> Self {
-        self.width = w;
-        self
-    }
-    pub fn rows(mut self, r: usize) -> Self {
-        self.rows = r.max(1);
-        self
-    }
-    /// Fit the text: at least `min_rows` lines tall, growing with each wrapped line up to
-    /// `max_rows`, then scrolling inside with the caret kept in view. The height springs on
-    /// the kit's control motion.
-    pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
-        let min = min_rows.max(1);
-        self.grow = Some((min, max_rows.max(min)));
-        self
-    }
-    /// Cap the field's height and scroll overflowing text. With [`TextArea::auto_grow`],
-    /// also stop growing at this many points of text.
-    pub fn max_height(mut self, h: f32) -> Self {
-        self.max_height = Some(h);
-        self
-    }
-    pub fn animate_edit_layout(mut self) -> Self {
-        self.edits.handlers.push(Box::new(El::animate_edit_layout));
-        self
-    }
-    /// See [`El::wrap_anywhere`](rune::El::wrap_anywhere).
-    pub fn wrap_anywhere(mut self) -> Self {
-        self.edits.visual(El::wrap_anywhere);
-        self
-    }
-    pub fn invalid(mut self, i: bool) -> Self {
-        self.invalid = i;
-        self
-    }
-    pub fn state(mut self, s: State) -> Self {
-        self.state = s;
-        self
-    }
-    pub fn disabled(mut self, d: bool) -> Self {
-        if d {
-            self.state = State::Disabled;
-        }
-        self
-    }
-    pub fn on_edit<S: 'static>(mut self, f: impl for<'a> Fn(&'a mut S) -> &'a mut TextEdit + 'static) -> Self {
-        self.edits.edit(f);
-        self
-    }
-    pub fn on_submit<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.edits.submit(f);
-        self
-    }
-    pub fn on_key<S: 'static>(mut self, f: impl Fn(&mut S, &rune::KeyEvent, &mut Tx) -> bool + 'static) -> Self {
-        self.edits.key(f);
-        self
-    }
-    pub fn on_change<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.edits.change(f);
-        self
-    }
-    rich_forwarders!();
-
-    pub fn build(self, k: &Kit) -> El {
-        let c = &k.c;
-        let disabled = self.state == State::Disabled;
-        let style = TextStyle { line_height: (13.0f32 * 1.35 * 2.0).round() / 2.0, ..k.ty.ui };
-        let red = self.invalid && !disabled && k.invalid_text;
-        let ink = if red { c.danger.fg } else { c.text_base };
-        let hint = if red { c.danger.fg } else { c.text_faint };
-        let field = text_input(&self.edit, style)
-            .key(self.key.clone())
-            .w_full()
-            .color(ink)
-            .rich_style(kit_rich_style(k))
-            .placeholder(self.placeholder.clone(), hint)
-            .caret(ink, k.selection())
-            .return_breaks_line();
-        let field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled);
-        let field = self.edits.apply(field, disabled);
-        let line = style.line_px();
-        let mut e = col().role("textbox").padding(8.0);
-        e = if let Some((min_rows, max_rows)) = self.grow {
-            let viewport = rune::auto_grow(field, min_rows, max_rows);
-            e.child(match self.max_height {
-                Some(h) => viewport.max_h(h.min(max_rows as f32 * line).max(line)),
-                None => viewport,
-            })
-        } else if let Some(h) = self.max_height {
-            let max_inner = (h - 16.0).max(line);
-            let min_inner = (self.rows as f32 * line).max(80.0 - 16.0).min(max_inner);
-            let viewport = col()
-                .key("scroll")
-                .w_full()
-                .shrink()
-                .min_h(min_inner)
-                .max_h(max_inner)
-                .scroll(rune::ScrollSpec { stick_bottom: false })
-                .child(field.animate_edit_layout());
-            e.min_h(min_inner + 16.0).child(viewport)
-        } else {
-            // A <textarea rows=3>: rows of its line height plus padding, at least 80.
-            e.min_h((self.rows as f32 * line + 16.0).max(80.0)).child(field)
-        };
-        e = match self.width {
-            Some(w) => e.w(w),
-            None => e.w_full(),
-        };
         shell(k, e, self.state, self.invalid && !disabled, self.edit.focused && !disabled)
     }
 }
