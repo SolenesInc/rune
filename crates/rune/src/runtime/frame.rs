@@ -205,6 +205,7 @@ impl RuntimeCore {
         if let Some(srgb) = tx.srgb_blend.take() { self.set_srgb_blend(srgb); }
         if let Some(rewind) = tx.rewind.take() { self.rewind = rewind; }
         if std::mem::take(&mut tx.blur) {
+            self.focus_request.to = None;
             if self.focus.path().is_some() {
                 self.focus_request.blur = true;
                 self.dirty = true;

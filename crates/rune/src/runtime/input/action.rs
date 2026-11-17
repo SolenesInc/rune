@@ -224,6 +224,7 @@ pub(crate) fn merge(tx: &mut Tx, one: Tx) {
     tx.font_smoothing = one.font_smoothing.or(tx.font_smoothing);
     if one.font_families.is_some() { tx.font_families = one.font_families; }
     if one.rewind.is_some() { tx.rewind = one.rewind; }
+    if one.blur { tx.focus_to = None; }
     tx.blur |= one.blur;
     if one.focus_to.is_some() { tx.focus_to = one.focus_to; }
     if one.select.is_some() {
