@@ -55,3 +55,23 @@ fn a_select_opens_on_its_value_and_chooses_or_dismisses_from_the_keyboard() {
     assert!(!rt.state().open, "a press outside closes it");
     assert_eq!(rt.state().value, "Cherry");
 }
+
+#[test]
+fn a_select_opened_by_the_pointer_walks_its_options_with_the_arrow_keys() {
+    let mut rt = Runtime::new(State { open: false, value: "Banana".into() }, view, (400.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let trigger = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("fruit-trigger")).unwrap();
+    let [x, y, w, h] = trigger.rect;
+    let (x, y) = (x + w / 2.0, y + h / 2.0);
+    rt.pointer_down(x, y); rt.pointer_up(x, y);
+    for _ in 0..30 { rt.frame(1.0 / 60.0); }
+    assert!(rt.state().open);
+    assert_eq!(focused(&rt).as_deref(), Some("option1"), "the listbox opens on the current value");
+    press(&mut rt, Key::Up);
+    assert_eq!(focused(&rt).as_deref(), Some("option0"), "Up moves to the previous option");
+    press(&mut rt, Key::Down);
+    press(&mut rt, Key::Down);
+    assert_eq!(focused(&rt).as_deref(), Some("option2"), "Down moves to the next option");
+    press(&mut rt, Key::Enter);
+    assert_eq!(rt.state().value, "Cherry");
+}

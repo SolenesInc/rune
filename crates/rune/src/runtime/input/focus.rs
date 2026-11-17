@@ -601,10 +601,11 @@ impl RuntimeCore {
                 Some(match ev.key {
                     Key::Home => 0, Key::End => items.len() - 1,
                     Key::PageUp | Key::PageDown => self.page_item(&items, pos, ev.key == Key::PageDown),
-                    // A highlight the user cannot see yet appears where it is (a popup's checked
-                    // item, else the first) before arrows move it; Up from nothing is the last.
-                    _ if self.nodes[i].focus.highlight.is_some() && !shown =>
-                        if backward && !self.nodes[i].focus.selected { items.len() - 1 } else { pos },
+                    // A highlight the user cannot see yet appears on the first item before arrows
+                    // move it; Up from nothing is the last. On a popup's checked item, which its
+                    // check mark already shows, arrows move at once (NSPopUpButton).
+                    _ if self.nodes[i].focus.highlight.is_some() && !shown && !self.nodes[i].focus.selected =>
+                        if backward { items.len() - 1 } else { pos },
                     _ if CLAMPED_ROLES.contains(&self.nodes[g].role) =>
                         if backward { pos.saturating_sub(1) } else { (pos + 1).min(items.len() - 1) },
                     _ if backward => (pos + items.len() - 1) % items.len(),
@@ -1050,11 +1051,11 @@ mod tests {
     }
 
     #[test]
-    fn a_hidden_highlight_appears_on_the_checked_item_or_from_the_end() {
+    fn arrows_move_from_a_checked_item_at_once_and_into_an_unchecked_menu_from_the_end() {
         let mut rt = menu_runtime(Menu { open: true, checked: Some(2), ..Default::default() });
         assert_eq!(focused(&rt), "Bravo", "a popup opens on its checked item");
         press(&mut rt, Key::Up);
-        assert_eq!(focused(&rt), "Bravo");
+        assert_eq!(focused(&rt), "Beta", "its check mark shows where Up starts");
         let mut rt = menu_runtime(Menu { open: true, ..Default::default() });
         press(&mut rt, Key::Up);
         assert_eq!(focused(&rt), "Charlie", "Up into an unchecked menu starts from the bottom");
