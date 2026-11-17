@@ -246,6 +246,9 @@ pub struct Kit {
     /// Invalid inputs also paint their text, placeholder and caret in `c.danger.fg`
     /// (`@opencode/ui`'s look). Otherwise only the outline turns `danger`.
     pub invalid_text: bool,
+    /// Draws one key of a [`crate::Keybind`], and so of a shortcut recorder's value, for an app
+    /// whose keycaps have their own look. None draws the kit's small filled cap.
+    pub keycap: Option<fn(&Kit, String) -> El>,
 }
 
 impl Kit {
