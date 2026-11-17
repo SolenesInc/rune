@@ -154,9 +154,10 @@ fn block_key(i: usize, keys: &[String], used: &mut Vec<String>) -> String {
 }
 
 /// Whether `b` keeps [`MarkdownStyle::prose_measure`] at the top level: the blocks a reader
-/// reads line by line, not the tables, code, diagrams and front matter that want the room.
+/// reads line by line, not the tables, code, diagrams and front matter that want the room. An
+/// image takes the measure as its own widest ([`Renderer::image`]).
 fn measured(b: &Block) -> bool {
-    matches!(b, Block::Para(_) | Block::Heading(..) | Block::List { .. } | Block::Quote(_) | Block::Alert(..) | Block::Image { .. })
+    matches!(b, Block::Para(_) | Block::Heading(..) | Block::List { .. } | Block::Quote(_) | Block::Alert(..))
 }
 
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
@@ -521,8 +522,6 @@ impl Renderer {
             let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
             self.flow.set(flow);
             let drawn = match measure {
-                // An image keeps its own narrower cap inside the measure.
-                Some(measure) if matches!(b, Block::Image { .. }) => col().w_full().max_w(measure).child(drawn),
                 Some(measure) => drawn.max_w(measure),
                 None => drawn,
             };

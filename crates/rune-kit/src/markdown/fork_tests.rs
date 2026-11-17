@@ -644,10 +644,20 @@ fn an_inline_code_chip_pads_the_fonts_ascent_and_descent_by_its_vertical_pad() {
 #[test]
 fn a_prose_measure_caps_top_level_prose_while_tables_code_and_front_matter_take_the_column() {
     const MEASURE: f32 = 760.0;
-    let src = "---\ntitle: Plan\n---\n# Heading\n\nA paragraph long enough to wrap if it had to, and then some more words after that.\n\n- an item\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```rust\nfn main() {}\n```\n\n---\n";
+    let src = "---\ntitle: Plan\n---\n# Heading\n\nA paragraph long enough to wrap if it had to, and then some more words after that.\n\n- an item\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```rust\nfn main() {}\n```\n\n---\n\n![Wide](wide.png)\n";
     fn view((src, column): &(String, f32), _: &mut Cx<(String, f32)>) -> El {
+        thread_local! {
+            static WIDE: rune::Image = {
+                let cache = rune::ImageCache::new(std::sync::Arc::new(|| {}));
+                let image = cache.rgba(1200, 8, [40u8, 80, 120, 255].repeat(1200 * 8));
+                image.wait().unwrap();
+                image
+            };
+        }
+        let picture = WIDE.with(|p| p.clone());
         let style = MarkdownStyle::from_kit(&Kit::neutral(true)).table_full_width(true).text_width(*column).prose_measure(MEASURE);
-        col().w_full().child(Markdown::new(src.clone()).style(style).build(&Kit::neutral(true)))
+        let md = Markdown::new(src.clone()).style(style).images(move |_| Some(picture.clone()));
+        col().w_full().child(md.build(&Kit::neutral(true)))
     }
     let widths = |column: f32| {
         let mut rt = Runtime::new((src.to_owned(), column), view, (column, 1200.0), Env::new(true, 1.0));
@@ -661,7 +671,7 @@ fn a_prose_measure_caps_top_level_prose_while_tables_code_and_front_matter_take_
             })
             .collect::<Vec<_>>()
     };
-    // Front matter, heading, paragraph, list, quote, table, code and rule, in order.
-    assert_eq!(widths(1600.0), [1600.0, MEASURE, MEASURE, MEASURE, MEASURE, 1600.0, 1600.0, 1600.0]);
-    assert_eq!(widths(500.0), [500.0; 8]);
+    // Front matter, heading, paragraph, list, quote, table, code, rule and a picture 1200 wide.
+    assert_eq!(widths(1600.0), [1600.0, MEASURE, MEASURE, MEASURE, MEASURE, 1600.0, 1600.0, 1600.0, MEASURE]);
+    assert_eq!(widths(500.0), [500.0; 9]);
 }
