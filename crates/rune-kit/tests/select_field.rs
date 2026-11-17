@@ -1,5 +1,6 @@
 //! A kit that sets `glyph.select` draws that indicator in a Select, open or closed, as a macOS
 //! pop-up button keeps its up-down chevron; without it the chevron points down and turns up open.
+//! A field select takes the height it is given.
 use rune::{Cx, El, Env, Runtime, col};
 use rune_kit::{Kit, Select, SelectAppearance, glyphs, root};
 use rune_ref::{Atlas, Frame, Primitive, Scene};
@@ -70,4 +71,18 @@ fn a_kit_s_select_indicator_shows_open_and_closed() {
 fn without_one_the_select_chevron_points_down_and_turns_up_open() {
     assert_eq!(ink_above_and_below(false, false), (false, false), "closed: one chevron in the middle");
     assert_eq!(ink_above_and_below(false, true), (false, false), "open: one chevron in the middle");
+}
+
+fn short(_: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    let mut layer = Vec::new();
+    let select = Select::new("root", &["Notebook"]).appearance(SelectAppearance::Field).height(24.0).build(&k, &mut layer);
+    root(col().padding(16.0).child(select), layer)
+}
+
+#[test]
+fn a_field_select_takes_the_height_it_is_given() {
+    let mut rt = Runtime::new((false, false), short, (W as f32, H as f32), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(rt.presented("root-trigger").expect("the trigger").0[3], 24.0);
 }
