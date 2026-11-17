@@ -176,7 +176,7 @@ impl MenuItem {
             .key(key.clone())
             .role(if self.checked.is_some() { "menuitemcheckbox" } else { "menuitem" })
             .label(self.label)
-            .radius(if standard { k.radius.sm } else { 4.0 })
+            .radius(if standard { k.raised.row_radius } else { 4.0 })
             .gap(8.0)
             .center_y();
         if let Some(on) = self.checked {
@@ -194,7 +194,7 @@ impl MenuItem {
             e = e.expanded(*open);
         }
         e = match (standard, self.description.is_some()) {
-            (true, _) => e.px(8.0).py(4.0),
+            (true, _) => e.px(k.raised.row_padding.0).py(k.raised.row_padding.1),
             (false, false) => e.h(28.0).pl(12.0).pr(6.0),
             (false, true) => e.min_h(28.0).py(6.0).pl(12.0).pr(6.0),
         };
@@ -375,11 +375,12 @@ impl Menu {
         let frame = col().key(format!("{}-menu", self.key)).role("menu").focus_group().min_w(self.min_width).items_stretch();
         let frame = match self.label.clone() { Some(label) => frame.label(label), None => frame };
         let frame = if standard {
-            shadows(k, frame.radius(k.radius.md).fill(c.surface_raised).border(1.0, k.alpha(c.std_border, 0.5)), &k.elevation.md)
+            let edge = k.alpha(c.std_border, k.raised.border_alpha);
+            shadows(k, frame.radius(k.raised.menu_radius).fill(c.surface_menu).border(1.0, edge), &k.elevation.md)
         } else {
             shadows(k, frame.radius(6.0).fill(c.layer_01), &k.elevation.floating)
         };
-        let mut list = col().key("rows").items_stretch().padding(if standard { 4.0 } else { 2.0 });
+        let mut list = col().key("rows").items_stretch().padding(if standard { k.raised.menu_inset } else { 2.0 });
         for (i, entry) in self.entries.into_iter().enumerate() {
             list = list.child(match entry {
                 MenuEntry::Item(mut item) => {

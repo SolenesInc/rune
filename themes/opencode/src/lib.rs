@@ -17,7 +17,7 @@ pub mod tree_icons;
 use std::sync::OnceLock;
 
 use rune::{Color, TextStyle, Theme};
-use rune_kit::{Elevation, Glyphs, Kit, Motion, Palette, Radius, StateColors, Type, css, glyphs};
+use rune_kit::{Elevation, Glyphs, Kit, Motion, Palette, Radius, Raised, StateColors, Type, css, glyphs};
 use serde_json::Value;
 
 /// The theme as data: palette, light and dark tokens, computed shadows and numbers.
@@ -177,6 +177,7 @@ fn build(dark: bool) -> Kit {
         surface_weak: c("surface-weak"),
         surface_hover: or("surface-hover", Color::TRANSPARENT),
         surface_raised: c("surface-raised-stronger-non-alpha"),
+        surface_menu: c("surface-raised-stronger-non-alpha"),
         surface_raised_base: c("surface-raised-base"),
         surface_raised_hover: c("surface-raised-base-hover"),
         surface_float: c("surface-float-base"),
@@ -229,6 +230,7 @@ fn build(dark: bool) -> Kit {
         glyph: GLYPHS,
         ty,
         radius: Radius { xs: 2.0, sm: 4.0, md: 6.0, lg: 8.0, xl: 10.0 },
+        raised: Raised::STANDARD,
         // The web's 85–170 ms ease-outs, as critically damped springs of similar feel.
         motion: Motion {
             control: rune::Spring::new(0.2, 0.0),

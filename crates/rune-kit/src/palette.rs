@@ -205,6 +205,7 @@ impl Kit {
             surface_weak: l1,
             surface_hover: hover,
             surface_raised: l1,
+            surface_menu: l1,
             surface_raised_base: l1,
             surface_raised_hover: l3,
             surface_float: fg,
