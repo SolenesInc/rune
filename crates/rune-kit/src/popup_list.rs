@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use rune::{Align, Color, El, GrowthSpec, Side, Transition, Tx, col, el, row, text};
+use rune::{Align, Color, El, GrowthSpec, Side, TextStyle, Transition, Tx, col, el, row, text};
 
 use crate::overlay::{Placement, anchor_at, scrim};
 use crate::popover::{fit_scroll, raised};
@@ -77,6 +77,8 @@ impl From<ComboboxOption> for PopupItem {
         Self::new(o.id, o.label).description(o.detail).disabled(o.disabled)
     }
 }
+
+const ROW_HEIGHT: f32 = 28.0;
 
 type ActiveFn<S> = Rc<dyn Fn(&mut S, usize)>;
 type ChooseFn<S> = Rc<dyn Fn(&mut S, &str, &mut Tx)>;
@@ -233,63 +235,36 @@ impl<S: 'static> PopupList<S> {
 
     pub(crate) fn build_list(self, k: &Kit) -> El {
         let active = self.active.filter(|&i| self.items.get(i).is_some_and(|item| !item.disabled));
-        let mut rows = col().key("rows").w_full().growth(GrowthSpec::default()).virtualize(28.0).reveal_selected(true);
-        for (i, option) in self.items.iter().enumerate() {
-            let id = option.id.clone();
-            let is_active = active == Some(i);
-            let mut item = row()
-                .key(format!("{}-option-{}", self.key, id))
-                .role("option")
-                .label(&option.label)
-                .description(option.description.clone().unwrap_or_default())
-                .position_in_set(i + 1, self.items.len())
-                .focus_selected(is_active)
-                .w_full()
-                .h(28.0)
-                .px(8.0)
-                .gap(8.0)
-                .center_y()
-                .radius(self.row_radius)
-                .transition(Transition::opacity())
-                .fill(if is_active { k.c.hover } else { Color::TRANSPARENT });
-            if let Some(leading) = &option.leading {
-                item = item.child(leading.clone());
-            }
-            if let Some(desc) = option.description.as_deref().filter(|d| !d.is_empty()) {
-                item = item
-                    .child(text(&option.label).font(k.ty.ui_compact).color(k.c.text_base).shrink().truncate().a11y_hidden())
-                    .child(text(desc).key("description").font(k.ty.ui_compact).color(k.c.text_weak).grow(1.0).shrink().truncate().a11y_hidden());
-            } else {
-                item = item.child(text(&option.label).font(k.ty.ui_compact).color(k.c.text_base).grow(1.0).shrink().truncate().a11y_hidden());
-            }
-            if let Some(trailing) = &option.trailing {
-                item = item.child(trailing.clone());
-            }
-            if option.disabled {
-                item = item.layer_opacity(0.5).disabled(true).on_press(|_: &mut S| {});
-            } else {
-                if let Some(on_active) = &self.on_active {
-                    let on_active = on_active.clone();
-                    item = item.on_hover(move |s: &mut S| on_active(s, i));
-                }
-                if let Some(on_choose) = &self.on_choose {
-                    let on_choose = on_choose.clone();
-                    item = item.on_press_tx(move |s: &mut S, tx| on_choose(s, &id, tx));
-                } else {
-                    item = item.on_press(|_: &mut S| {});
-                }
-            }
-            rows = rows.child(item);
-        }
+        let count = self.items.len();
+        let row_keys: Rc<[String]> = self.items.iter().map(|item| format!("{}-option-{}", self.key, item.id)).collect();
+        let active_key = active.map(|i| row_keys[i].clone());
+        let rows = Rc::new(PopupRows {
+            items: self.items,
+            active,
+            row_radius: self.row_radius,
+            hover: k.c.hover,
+            text_base: k.c.text_base,
+            text_weak: k.c.text_weak,
+            font: k.ty.ui_compact,
+            on_active: self.on_active,
+            on_choose: self.on_choose,
+        });
+        let keys = row_keys.clone();
+        let rows = col()
+            .key("rows")
+            .w_full()
+            .growth(GrowthSpec::default())
+            .virtual_rows(count, ROW_HEIGHT, move |_: &S, i| keys[i].clone().into(), move |_: &S, i| rows.row(i))
+            .reveal_row(active_key);
         // The viewport and the empty state both stay mounted, so the popover's height springs
         // between them as the search edits it instead of swapping one box for the other.
-        let empty = self.items.is_empty();
+        let empty = count == 0;
         let mut viewport = fit_scroll(rows)
             .key("viewport")
             .role("listbox")
-            .h((self.items.len() as f32 * 28.0).min(self.max_height))
+            .h((count as f32 * ROW_HEIGHT).min(self.max_height))
             // A window too short for the list still shows one row to scroll.
-            .min_h(if empty { 0.0 } else { 28.0 })
+            .min_h(if empty { 0.0 } else { ROW_HEIGHT })
             .clip_soft(0.0);
         if let Some(label) = self.label.as_deref() {
             viewport = viewport.label(label);
@@ -303,7 +278,7 @@ impl<S: 'static> PopupList<S> {
             .child(crate::scroll_bar(k, &format!("{}-scroll-area", self.key), "viewport", viewport).w_full().shrink().min_h(0.0))
             .child(
                 el().key("empty")
-                    .h(if empty { 28.0 } else { 0.0 })
+                    .h(if empty { ROW_HEIGHT } else { 0.0 })
                     .px(8.0)
                     .center_y()
                     .clip_soft(0.0)
@@ -340,5 +315,67 @@ impl<S: 'static> PopupList<S> {
             content = content.instant_changes();
         }
         layer.push(anchor_at(k, raised(k, content, k.radius.md), &anchor, side, align, gutter));
+    }
+}
+
+/// What a [`PopupList`]'s rows are built from, kept for the rows its window mounts.
+struct PopupRows<S> {
+    items: Vec<PopupItem>,
+    active: Option<usize>,
+    row_radius: f32,
+    hover: Color,
+    text_base: Color,
+    text_weak: Color,
+    font: TextStyle,
+    on_active: Option<ActiveFn<S>>,
+    on_choose: Option<ChooseFn<S>>,
+}
+
+impl<S: 'static> PopupRows<S> {
+    fn row(&self, i: usize) -> El {
+        let option = &self.items[i];
+        let id = option.id.clone();
+        let is_active = self.active == Some(i);
+        let mut item = row()
+            .role("option")
+            .label(&option.label)
+            .description(option.description.clone().unwrap_or_default())
+            .position_in_set(i + 1, self.items.len())
+            .focus_selected(is_active)
+            .w_full()
+            .h(ROW_HEIGHT)
+            .px(8.0)
+            .gap(8.0)
+            .center_y()
+            .radius(self.row_radius)
+            .transition(Transition::opacity())
+            .fill(if is_active { self.hover } else { Color::TRANSPARENT });
+        if let Some(leading) = &option.leading {
+            item = item.child(leading.clone());
+        }
+        if let Some(desc) = option.description.as_deref().filter(|d| !d.is_empty()) {
+            item = item
+                .child(text(&option.label).font(self.font).color(self.text_base).shrink().truncate().a11y_hidden())
+                .child(text(desc).key("description").font(self.font).color(self.text_weak).grow(1.0).shrink().truncate().a11y_hidden());
+        } else {
+            item = item.child(text(&option.label).font(self.font).color(self.text_base).grow(1.0).shrink().truncate().a11y_hidden());
+        }
+        if let Some(trailing) = &option.trailing {
+            item = item.child(trailing.clone());
+        }
+        if option.disabled {
+            return item.layer_opacity(0.5).disabled(true).on_press(|_: &mut S| {});
+        }
+        if let Some(on_active) = &self.on_active {
+            let on_active = on_active.clone();
+            item = item.on_hover(move |s: &mut S| on_active(s, i));
+        }
+        match &self.on_choose {
+            Some(on_choose) => {
+                let on_choose = on_choose.clone();
+                item.on_press_tx(move |s: &mut S, tx| on_choose(s, &id, tx))
+            }
+            None => item.on_press(|_: &mut S| {}),
+        }
     }
 }

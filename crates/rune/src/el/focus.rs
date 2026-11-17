@@ -6,6 +6,17 @@ use crate::color::Color;
 use crate::el::{El, InputKeyFn, Outline, PressFn, RoleTag, StepFn, StepLimitFn, Tx};
 use crate::states::downcast;
 
+/// How a virtual list finds the selected row it reveals ([`El::reveal_selected`],
+/// [`El::reveal_row`]).
+#[derive(Clone, PartialEq)]
+pub(crate) enum Reveal {
+    Off,
+    /// The built row marked [`El::focus_selected`].
+    Selected,
+    /// The row with this key.
+    Row(Option<String>),
+}
+
 #[derive(Clone)]
 pub(crate) struct FocusSpec {
     pub physical: Option<crate::input::physical_input::Handler>,
@@ -17,7 +28,7 @@ pub(crate) struct FocusSpec {
     pub order: i32,
     pub group: bool,
     pub selected: bool,
-    pub reveal_selected: bool,
+    pub reveal: Reveal,
     pub preserve_on_press: crate::runtime::selectable::OnPress,
     pub ring: Option<Outline>,
     /// `focus_within_ring`: `ring` shows while focus is on this element or inside it, from
@@ -56,7 +67,7 @@ impl crate::cold::Empty for FocusSpec {
         order: 0,
         group: false,
         selected: false,
-        reveal_selected: false,
+        reveal: Reveal::Off,
         preserve_on_press: crate::runtime::selectable::OnPress { focus: false, selection: false },
         ring: None,
         within: false,
@@ -133,8 +144,15 @@ impl El {
     /// Off by default; useful for suggestions controlled by an outside text field.
     pub fn reveal_selected(mut self, enabled: bool) -> Self {
         if enabled || !self.cold.focus.is_empty() {
-            self.cold_mut().focus.reveal_selected = enabled;
+            self.cold_mut().focus.reveal = if enabled { Reveal::Selected } else { Reveal::Off };
         }
+        self
+    }
+    /// [`El::reveal_selected`] for an [`El::virtual_rows`] list, whose rows outside the mounted
+    /// window aren't built, so the list can't find its selected row among them: names the
+    /// selected row by its key, `None` when no row is selected.
+    pub fn reveal_row(mut self, key: Option<impl Into<String>>) -> Self {
+        self.cold_mut().focus.reveal = Reveal::Row(key.map(Into::into));
         self
     }
     /// A press on this element or its descendants leaves focus where it was, a field focused

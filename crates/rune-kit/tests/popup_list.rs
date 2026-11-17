@@ -310,3 +310,28 @@ fn ordinary_listbox_selection_does_not_reveal_and_press_still_blurs() {
     rt.pointer_down(x, y); rt.pointer_up(x, y); rt.frame(0.0);
     assert!(!rt.state().composer.focused, "ordinary listbox presses still blur the field");
 }
+
+const OVERBUILD_CHILD: &str = "RUNE_POPUP_LIST_OVERBUILD_CHILD";
+
+/// Runs in a child process, whose stderr carries Rune's debug perf warnings.
+#[test]
+fn child_opens_a_long_list() {
+    if std::env::var_os(OVERBUILD_CHILD).is_none() { return; }
+    let mut rt = runtime(420);
+    rt.key(KeyEvent { key: Key::Up, mods: Mods::default() });
+    rt.frame(0.0);
+    assert_eq!(rt.state().active, Some(419));
+}
+
+#[test]
+fn a_long_list_builds_only_the_rows_it_mounts() {
+    let out = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["child_opens_a_long_list", "--exact", "--nocapture"])
+        .env(OVERBUILD_CHILD, "1")
+        .env_remove("RUNE_PERF_WARN")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "the child ran: {stderr}");
+    assert!(!stderr.contains("virtualized list"), "the list built rows it doesn't mount: {stderr}");
+}

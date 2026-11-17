@@ -1,5 +1,5 @@
 use super::*;
-use crate::el::ElFlags;
+use crate::el::{ElFlags, Reveal};
 
 pub(super) fn collect_virtual_inputs(el: &El, parent: &str, index: usize, inert: bool, inputs: &mut HashMap<String, Box<InputSpec>>) {
     // Most offscreen rows hold no focused field; find that out before building any paths.
@@ -484,6 +484,15 @@ impl Measurement<'_> {
         // Dev's order: the rows kept from the last commit go before any builder runs, so a row
         // holding a resource doesn't keep it through building its replacement.
         v.selection.stored.clear();
+        let selected = match &el.cold.focus.reveal {
+            Reveal::Off => None,
+            Reveal::Selected => Some(el.children.iter().find(|c| c.cold.focus.selected).and_then(|c| c.key.clone())),
+            Reveal::Row(key) => Some(key.clone()),
+        };
+        if let Some(selected) = selected && self.pass.reveals() && selected != v.selected_row {
+            v.reveal_selected = selected.clone();
+            v.selected_row = selected;
+        }
         if let Some(rows) = source {
             let quiet: Vec<bool> = v.range.clone().map(|i| v.mounts_quietly(i, self.commits)).collect();
             let key_warnings = &mut *self.key_warnings;
@@ -532,13 +541,6 @@ impl Measurement<'_> {
             }).collect();
             v.selection.pins.set_source(selectable::virtual_selection::Source::Rebuild(rows));
         } else {
-            if self.pass.reveals() && el.cold.focus.reveal_selected {
-                let selected = el.children.iter().find(|c| c.cold.focus.selected).and_then(|c| c.key.clone());
-                if selected != v.selected_row {
-                    v.reveal_selected = selected.clone();
-                    v.selected_row = selected;
-                }
-            }
             #[cfg(debug_assertions)]
             crate::tooling::perf_warn::overbuilt(path, el.cold.virtual_source, el.children.len(), v.range.len());
             let pinned: Vec<usize> = v.selection.pins.rows().iter()
