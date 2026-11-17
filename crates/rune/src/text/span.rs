@@ -329,6 +329,7 @@ pub struct TextHighlight {
     pub(crate) fg: Option<Color>,
     pub(crate) ring: Option<(Color, f32)>,
     pub(crate) pad: f32,
+    pub(crate) radius: f32,
     pub(crate) key: Option<String>,
 }
 
@@ -342,6 +343,7 @@ impl TextHighlight {
             fg: None,
             ring: None,
             pad: 1.5,
+            radius: 4.0,
             key: None,
         }
     }
@@ -358,6 +360,12 @@ impl TextHighlight {
     /// Horizontal padding around each line's background, in points (`1.5` by default).
     pub fn pad(mut self, pad: f32) -> Self {
         self.pad = pad;
+        self
+    }
+    /// Corner radius of each line's background, in points (`4` by default); `0` paints square
+    /// blocks, as CSS's `::highlight()` does.
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
         self
     }
     /// Optional key for [`Tx::scroll_into_view`](crate::Tx::scroll_into_view),

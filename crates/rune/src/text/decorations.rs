@@ -204,8 +204,8 @@ impl TextSystem {
         if highlights.is_empty() {
             return;
         }
-        let radius = 4.0 * scale;
         for h in highlights {
+            let radius = h.radius * scale;
             let (a, b) = ((h.start as usize).min(len), (h.end as usize).min(len));
             if a >= b || (h.bg.a <= 0.0 && h.ring.is_none()) {
                 continue;

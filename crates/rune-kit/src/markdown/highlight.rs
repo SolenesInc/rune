@@ -16,6 +16,8 @@ pub struct Highlight {
     pub(crate) ring: Option<(Color, f32)>,
     pub(crate) key: Option<String>,
     pub(crate) strike: bool,
+    pub(crate) pad: Option<f32>,
+    pub(crate) radius: Option<f32>,
 }
 
 impl Highlight {
@@ -56,6 +58,16 @@ impl Highlight {
         self.ring = (width > 0.0 && width.is_finite()).then_some((color, width));
         self
     }
+    /// Overrides how far the background reaches past the words on each side, in points.
+    pub fn pad(mut self, pad: f32) -> Self {
+        self.pad = Some(pad);
+        self
+    }
+    /// Overrides the background's corner radius, in points; `0` paints square blocks.
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = Some(radius);
+        self
+    }
     /// Draws a line through the highlighted words, in their colour, as a deletion shows.
     pub fn strike(mut self) -> Self {
         self.strike = true;
@@ -72,8 +84,9 @@ impl Highlight {
 
 impl std::hash::Hash for Highlight {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let Highlight { current, bg, fg, ring, key, strike } = self;
-        (current, bg, fg, ring.map(|(c, w)| (c, if w == 0.0 { 0 } else { w.to_bits() })), key, strike).hash(state);
+        let Highlight { current, bg, fg, ring, key, strike, pad, radius } = self;
+        let bits = |v: f32| if v == 0.0 { 0 } else { v.to_bits() };
+        (current, bg, fg, ring.map(|(c, w)| (c, bits(w))), key, strike, pad.map(bits), radius.map(bits)).hash(state);
     }
 }
 

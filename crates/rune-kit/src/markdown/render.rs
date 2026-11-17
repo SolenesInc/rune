@@ -362,6 +362,12 @@ impl Renderer {
         if let Some((rc, rw)) = ring {
             th = th.ring(rc, rw);
         }
+        if let Some(pad) = hl.pad {
+            th = th.pad(pad);
+        }
+        if let Some(radius) = hl.radius {
+            th = th.radius(radius);
+        }
         th
     }
 
