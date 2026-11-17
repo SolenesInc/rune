@@ -108,3 +108,29 @@ fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
     assert!(!rt.state().open);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 }
+
+fn standard_menu_with_its_own_raised_look(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.raised = crate::Raised { border_alpha: 1.0, menu_radius: 8.0, menu_inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
+    k.c.surface_menu = k.c.bg_base;
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze").standard().anchor("row.actions").item(MenuItem::new("For an hour")).open(true).build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_raised_look_and_menu_fill() {
+    let mut rt = Runtime::new((), standard_menu_with_its_own_raised_look, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let element = |key: &str| rt.elements().iter().find(|e| e.key.as_deref() == Some(key)).cloned().unwrap_or_else(|| panic!("no {key}"));
+    let (frame, row) = (element("snooze-menu"), element("snooze-item0"));
+    let neutral = Kit::neutral(true);
+    assert_eq!((frame.radius, frame.fill), (8.0, neutral.c.bg_base));
+    assert_eq!(row.radius, 5.0);
+    let (menu, item) = (frame.rect, row.rect);
+    let line = neutral.ty.text_small_medium.line_height;
+    assert_eq!(item[0] - menu[0], 5.0, "{menu:?} {item:?}");
+    assert_eq!(item[1] - menu[1], 5.0, "{menu:?} {item:?}");
+    assert_eq!(item[3], line + 12.0, "{item:?}");
+}

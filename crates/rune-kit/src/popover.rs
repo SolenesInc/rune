@@ -42,14 +42,14 @@ pub(crate) fn fit(content: El, anchor: &str, side: Side, align: Align, gap: f32)
     }
 }
 
-/// The popover surface style: raised fill, half-strength border, `radius` corners and the
+/// The popover surface style: raised fill, the kit's raised edge, `radius` corners and the
 /// medium shadow.
 ///
 /// ```ignore
 /// let surface = popover::raised(&kit, col().padding(8.0).child(body), kit.radius.md);
 /// ```
 pub fn raised(k: &Kit, el: El, radius: f32) -> El {
-    shadows(k, el.radius(radius).fill(k.c.surface_raised).border(1.0, k.alpha(k.c.std_border, 0.5)), &k.elevation.md)
+    shadows(k, el.radius(radius).fill(k.c.surface_raised).border(1.0, k.alpha(k.c.std_border, k.raised.border_alpha)), &k.elevation.md)
 }
 
 /// A list's rows in a scroll viewport that shrinks with the fitted surface from [`anchored`],

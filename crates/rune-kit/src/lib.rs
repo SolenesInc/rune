@@ -99,6 +99,7 @@ pub use kit::Kit;
 pub use kit::Motion;
 pub use kit::Palette;
 pub use kit::Radius;
+pub use kit::Raised;
 pub use kit::StateColors;
 pub use kit::Type;
 pub use list::List;
