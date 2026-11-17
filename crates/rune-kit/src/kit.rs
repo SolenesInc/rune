@@ -49,6 +49,8 @@ pub struct Palette {
     pub text_inverse: Color,
     pub text_contrast: Color,
     pub text_accent: Color,
+    /// Ink on a `bg_accent` fill, such as an accent badge's label.
+    pub text_on_accent: Color,
 
     pub icon_base: Color,
     pub icon_muted: Color,

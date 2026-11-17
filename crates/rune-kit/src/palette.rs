@@ -176,6 +176,7 @@ impl Kit {
             text_inverse: bg,
             text_contrast: bg,
             text_accent: accent,
+            text_on_accent: bg,
             icon_base: fg,
             icon_muted: muted,
             icon_faint: faint,

@@ -148,6 +148,7 @@ fn build(dark: bool) -> Kit {
         text_inverse: v("text-text-inverse"),
         text_contrast: v("text-text-contrast"),
         text_accent: v("text-text-accent"),
+        text_on_accent: v("text-text-contrast"),
         icon_base: v("icon-icon-base"),
         icon_muted: v("icon-icon-muted"),
         icon_faint: v("icon-icon-faint"),

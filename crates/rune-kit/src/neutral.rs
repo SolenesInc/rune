@@ -48,6 +48,7 @@ impl Kit {
             text_inverse: t.card,
             text_contrast: t.card,
             text_accent: accent,
+            text_on_accent: t.card,
             icon_base: t.text,
             icon_muted: t.text_secondary,
             icon_faint: t.text_secondary.alpha(0.7),
