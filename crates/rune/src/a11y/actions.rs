@@ -151,7 +151,12 @@ impl RuntimeCore {
                 crate::edit::EditOutcome::default()
             }),
             A11yAct::ScrollIntoView => {
+                let viewports: Vec<String> = self.nodes.iter().position(|n| n.path == path).into_iter()
+                    .flat_map(|i| std::iter::successors(self.viewport_of(i), |&v| self.viewport_of(v)))
+                    .map(|v| self.nodes[v].path.clone())
+                    .collect();
                 tx.scroll_into_view(path);
+                for viewport in viewports { tx.scroll_into_view(viewport); }
                 true
             }
             A11yAct::Scroll { x, y, pages } => {

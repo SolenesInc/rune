@@ -420,3 +420,34 @@ fn help_describes_unless_it_repeats_the_name_and_rows_point_at_their_active_desc
     let (_, bad) = whole.nodes.iter().find(|(_, n)| n.author_id() == Some("bad")).unwrap();
     assert_eq!(bad.invalid(), Some(accesskit::Invalid::True));
 }
+
+fn nested(_: &(), _: &mut Cx<()>) -> El {
+    let inner = col()
+        .key("inner")
+        .h(60.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().h(200.0))
+        .child(text("Deep").key("deep").h(20.0));
+    col()
+        .key("outer")
+        .h(200.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().h(600.0))
+        .child(inner)
+}
+
+#[test]
+fn scroll_into_view_reveals_through_every_scroll_view_around_the_element() {
+    let mut rt = Runtime::new((), nested, (300.0, 200.0), Env::new(true, 1.0));
+    for _ in 0..4 { rt.frame(0.0); }
+    let shown = |rt: &Runtime<()>| {
+        let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("deep")).unwrap();
+        e.visible[3]
+    };
+    assert_eq!(shown(&rt), 0.0, "the row starts out of view");
+
+    assert!(rt.accessibility_action("deep", Ak::ScrollIntoView, None));
+    for _ in 0..4 { rt.frame(0.0); }
+
+    assert_eq!(shown(&rt), 20.0, "the whole row shows in the window");
+}
