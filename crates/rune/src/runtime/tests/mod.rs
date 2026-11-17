@@ -24,6 +24,7 @@ mod press_outside;
 mod press_within;
 mod picture_scale;
 mod pointer_drag;
+mod modal_autofocus;
 mod modal_press_through;
 mod pointer_hit;
 mod press_moving;
