@@ -494,26 +494,26 @@ impl RuntimeCore {
             let routed = matches!(&action, Action::Key { .. } | Action::KeyUp(_) | Action::Physical(..) | Action::Ime(_) | Action::FinishIme | Action::Paste(..) | Action::Files(_));
             // So is a playground an earlier handler opened or moved.
             if routed { self.latch_playground(&mut tx); }
-            if (ran || self.dirty || !tx.scroll_to.is_empty()) && routed {
-                if ran || self.dirty {
-                    self.capture_flights(&mut tx);
-                    if self.settle { tx.settle(); }
-                    self.settled |= tx.commit.lands();
-                    #[cfg(debug_assertions)]
-                    if ran_other || self.dirty || ran_layout { self.live_check = None; }
-                    self.capture_keeps(&mut tx);
-                    tx.unprompted = self.motion_needs_cause && why & CommitWhy::INPUT == 0 && !tx.asked_motion;
-                    self.commit_for(&tx, std::mem::take(&mut why) | CommitWhy::ROUTE | if self.dirty { CommitWhy::DIRTY } else { 0 });
-                    #[cfg(debug_assertions)]
-                    { let check = self.live_check.take(); self.compare_live_check(check); ran_other = false; }
-                    self.apply_keeps();
-                    ran = false;
-                }
-                if !tx.scroll_to.is_empty() {
-                    self.drop_scroll_holds();
-                    for r in std::mem::take(&mut tx.scroll_to) {
-                        self.reveal_row(&r, tx.commit.snaps());
-                    }
+            // A focus change or a press on a field reaches fields' state through the tree, so
+            // it too waits for a field an earlier handler ended to leave it.
+            if (ran || self.dirty) && (routed || reaches_fields(&action)) {
+                self.capture_flights(&mut tx);
+                if self.settle { tx.settle(); }
+                self.settled |= tx.commit.lands();
+                #[cfg(debug_assertions)]
+                if ran_other || self.dirty || ran_layout { self.live_check = None; }
+                self.capture_keeps(&mut tx);
+                tx.unprompted = self.motion_needs_cause && why & CommitWhy::INPUT == 0 && !tx.asked_motion;
+                self.commit_for(&tx, std::mem::take(&mut why) | CommitWhy::ROUTE | if self.dirty { CommitWhy::DIRTY } else { 0 });
+                #[cfg(debug_assertions)]
+                { let check = self.live_check.take(); self.compare_live_check(check); ran_other = false; }
+                self.apply_keeps();
+                ran = false;
+            }
+            if routed && !tx.scroll_to.is_empty() {
+                self.drop_scroll_holds();
+                for r in std::mem::take(&mut tx.scroll_to) {
+                    self.reveal_row(&r, tx.commit.snaps());
                 }
             }
             // A selection an earlier handler asked for is what this key copies.

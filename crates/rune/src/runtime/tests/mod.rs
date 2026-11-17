@@ -41,6 +41,7 @@ mod selection_phase;
 mod selection_phase_virtual;
 mod shimmer;
 mod springs;
+mod stale_field;
 mod stream_overflow;
 mod stream_pace;
 mod text_glide;
