@@ -270,6 +270,9 @@ mod aspect_fit_tests;
 #[path = "runtime/anchor_fit_tests.rs"]
 mod anchor_fit_tests;
 #[cfg(test)]
+#[path = "runtime/anchor_over_tests.rs"]
+mod anchor_over_tests;
+#[cfg(test)]
 #[path = "drop_tests.rs"]
 mod drop_tests;
 #[cfg(test)]

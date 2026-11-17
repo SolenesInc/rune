@@ -2,7 +2,7 @@
 //! the app's; its focus lifecycle is Rune's modal stack (`runtime/input/modal_focus.rs`), as
 //! Desktop's dialog stack has it (`ui/src/context/dialog-machine.ts`): the top dialog holds the
 //! trap, opens on its content and hands focus back to where it was before it opened.
-use rune::{El, TextStyle, Tx, col, el, row, text};
+use rune::{Color, El, TextStyle, Tx, col, el, row, text};
 use crate::{ControlSize, IconButton, IconButtonVariant, Kit, shadows};
 
 pub struct Dialog {
@@ -15,6 +15,7 @@ pub struct Dialog {
     width: f32,
     fit: bool,
     max_height: Option<f32>,
+    backdrop: Option<(Color, f32)>,
     header: Vec<El>,
     lead: Option<El>,
     close: Option<Box<dyn FnOnce(El) -> El>>,
@@ -23,7 +24,7 @@ pub struct Dialog {
 impl Dialog {
     pub fn new(key: impl Into<String>, title: impl Into<String>) -> Self {
         Self { key: key.into(), title: title.into(), description: None, body: Vec::new(), open: false,
-            outside: true, width: 480.0, fit: false, max_height: None, header: Vec::new(), lead: None, close: None, button: None }
+            outside: true, width: 480.0, fit: false, max_height: None, backdrop: None, header: Vec::new(), lead: None, close: None, button: None }
     }
     pub fn open(mut self, open: bool) -> Self { self.open = open; self }
     pub fn description(mut self, description: impl Into<String>) -> Self { self.description = Some(description.into()); self }
@@ -37,6 +38,10 @@ impl Dialog {
     /// Fills the window's height up to `points`, for a dialog that holds a whole surface, such as
     /// settings; the body takes what the header leaves and scrolls on its own if it needs to.
     pub fn max_height(mut self, points: f32) -> Self { self.max_height = Some(points); self }
+    /// Lays `fill` over the window behind the dialog in place of the kit's scrim, over that
+    /// window blurred by `blur` points first (CSS `backdrop-filter: blur()`; 0 for none), for an
+    /// app whose dialogs dim the window differently from one another.
+    pub fn backdrop(mut self, fill: Color, blur: f32) -> Self { self.backdrop = Some((fill, blur)); self }
     /// Puts `e` in the header between the title and the close button, such as a search field.
     pub fn header(mut self, e: El) -> Self { self.header.push(e); self }
     /// App content drawn in place of the title and description, such as a kicker above the
@@ -86,8 +91,9 @@ impl Dialog {
             .child(body)
             .token_motion(k.motion.overlay), &k.elevation.overlay);
         let panel = close(panel).modal_click_outside(self.outside);
+        let (fill, blur) = self.backdrop.unwrap_or((k.c.scrim, 0.0));
         layer.push(el().key(format!("{}-scrim", self.key)).absolute(0.0, 0.0).w_full().h_full()
-            .fill(k.c.scrim).token_motion(k.motion.overlay).a11y_hidden());
+            .backdrop_blur(blur).fill(fill).token_motion(k.motion.overlay).a11y_hidden());
         layer.push(el().key(format!("{}-layer", self.key)).absolute(0.0, 0.0).w_full().h_full().padding(16.0).center().child(panel));
     }
 }

@@ -30,6 +30,8 @@ pub struct ElementInfo {
     /// Additive blur culling margin in logical points, including scaled ancestor sigmas.
     /// Three times this value bounds filter support; it is not the equivalent Gaussian sigma.
     pub blur: f32,
+    /// How much it blurs what is drawn behind it ([`El::backdrop_blur`](crate::El::backdrop_blur)).
+    pub backdrop_blur: f32,
     pub radius: f32,
     pub fill: Color,
     pub text_color: Option<Color>,
@@ -322,6 +324,7 @@ impl RuntimeCore {
                     opacity: flight.map_or_else(|| self.inh_scratch.get(i).map_or(p.opacity, |h| h.opacity), |f| f.target_alpha),
                     scale: if flight.is_some() { 1.0 } else { self.inh_scratch.get(i).map_or(p.transform.scale.x, |h| h.scale) },
                     blur: if flight.is_some() { 0.0 } else { self.inh_scratch.get(i).map_or(p.blur, |h| h.blur) },
+                    backdrop_blur: n.vis.backdrop_blur,
                     radius: p.radius.0[0],
                     fill: self.color(n.id, P_FILL, n.vis.fill),
                     text_color: paint_tracks::text_color(n)
@@ -366,7 +369,7 @@ impl RuntimeCore {
                 focusable: false, focused: false, focus_visible: false, inert: true, exiting: false,
                 key: Some(path.clone()), path, role: "text", label: None, text: None,
                 rect: [r.x, r.y, r.w, r.h], target: [t.x, t.y, t.w, t.h],
-                opacity: f.source_alpha, scale: 1.0, blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None, strikes: Vec::new(),
+                opacity: f.source_alpha, scale: 1.0, blur: 0.0, backdrop_blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None, strikes: Vec::new(),
                 hover: 0.0, press: 0.0, moving: true, parent: None,
                 visible: [r.x.max(c[0]), r.y.max(c[1]), (r.edges()[2].min(c[2]) - r.x.max(c[0])).max(0.0),
                     (r.edges()[3].min(c[3]) - r.y.max(c[1])).max(0.0)],

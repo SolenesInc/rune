@@ -26,7 +26,12 @@ pub(crate) fn anchor_position(a: &Anchor, t: [f32; 4], size: (f32, f32), vp: (f3
         Align::Center => (lo + hi - len) * 0.5,
         Align::End => hi - len,
     };
+    let rounded = |(x, y): (f32, f32)| if a.round { ((x + 0.5).floor(), (y + 0.5).floor()) } else { (x, y) };
     let (mut x, mut y) = match a.side {
+        Side::Over => {
+            let centered = |lo: f32, hi: f32, len: f32, room: f32| ((lo + hi - len) * 0.5).clamp(margin, (room - len - margin).max(margin));
+            return rounded((centered(t[0], t[2], w, vp.0), centered(t[1], t[3], h, vp.1)));
+        }
         Side::Top => (along(t[0], t[2], w), t[1] - h - a.gap),
         Side::Bottom => (along(t[0], t[2], w), t[3] + a.gap),
         Side::Left => (t[0] - w - a.gap, along(t[1], t[3], h)),
@@ -52,11 +57,8 @@ pub(crate) fn anchor_position(a: &Anchor, t: [f32; 4], size: (f32, f32), vp: (f3
     // Along the main axis only keep the start edge inside; a long list may run off the far end
     // (`El::anchored_fit` bounds it instead).
     if vertical { y = y.max(margin) } else { x = x.max(margin) }
-    if a.round {
-        // `Math.round`: halves go up.
-        return ((x + 0.5).floor(), (y + 0.5).floor());
-    }
-    (x, y)
+    // `Math.round` when asked: halves go up.
+    rounded((x, y))
 }
 
 /// The longest an `anchored_fit` overlay `len` long may be next to `t`, or `None` when it fits
@@ -64,6 +66,7 @@ pub(crate) fn anchor_position(a: &Anchor, t: [f32; 4], size: (f32, f32), vp: (f3
 /// tie), a little short of it so [`anchor_position`] puts the bounded overlay on that side.
 fn fit_bound(a: &Anchor, t: [f32; 4], len: f32, vp: (f32, f32)) -> Option<f32> {
     let (before, after) = match a.side {
+        Side::Over => return None,
         Side::Top | Side::Bottom => (t[1] - a.gap - MARGIN, vp.1 - MARGIN - (t[3] + a.gap)),
         Side::Left | Side::Right => (t[0] - a.gap - MARGIN, vp.0 - MARGIN - (t[2] + a.gap)),
     };
@@ -227,6 +230,7 @@ fn attach_point(a: &Anchor, t: [f32; 4], d: [f32; 4]) -> [f32; 2] {
     };
     let facing = |lo: f32, hi: f32, t_lo: f32, t_hi: f32| if lo + hi > t_lo + t_hi { lo } else { hi };
     match a.side {
+        Side::Over => [(d[0] + d[2]) * 0.5, (d[1] + d[3]) * 0.5],
         Side::Top | Side::Bottom => [along(d[0], d[2]), facing(d[1], d[3], t[1], t[3])],
         Side::Left | Side::Right => [facing(d[0], d[2], t[0], t[2]), along(d[1], d[3])],
     }

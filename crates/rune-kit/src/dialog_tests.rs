@@ -94,3 +94,27 @@ fn a_lead_takes_the_place_of_the_title_and_the_title_still_names_the_dialog() {
     let (lead, close) = (rect(&rt, "lead"), rect(&rt, "close"));
     assert!(lead[0] + lead[2] <= close[0], "the lead sits before the close button: {lead:?} {close:?}");
 }
+
+fn backed(s: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    let mut layer = Vec::new();
+    Dialog::new("plain", "Plain").open(s.open).on_close(|_: &mut S| {}).build(&k, &mut layer);
+    Dialog::new("whats-new", "What's new")
+        .open(s.open)
+        .backdrop(rune::Color::BLACK.alpha(0.7), 4.0)
+        .on_close(|_: &mut S| {})
+        .build(&k, &mut layer);
+    root(rune::el().w_full().h_full(), layer)
+}
+
+#[test]
+fn a_dialog_draws_its_own_backdrop_in_place_of_the_kits_scrim() {
+    let mut rt = Runtime::new(S { open: true, ..S::default() }, backed, (1200.0, 900.0), Env::new(true, 1.0));
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+    let scrim = |key: &str| rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap_or_else(|| panic!("no {key}"));
+    let (plain, own) = (scrim("plain-scrim"), scrim("whats-new-scrim"));
+    assert_eq!((plain.fill, plain.backdrop_blur), (Kit::neutral(true).c.scrim, 0.0));
+    assert_eq!((own.fill, own.backdrop_blur), (rune::Color::BLACK.alpha(0.7), 4.0));
+}

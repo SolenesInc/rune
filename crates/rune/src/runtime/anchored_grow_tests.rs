@@ -141,6 +141,7 @@ fn the_edge_facing_the_anchor_holds_while_the_box_springs_away_from_it() {
         Side::Bottom => (r[1], 360.0),
         Side::Left => (r[0] + r[2], 240.0),
         Side::Right => (r[0], 560.0),
+        Side::Over => unreachable!("only the four sides are tried"),
     };
     for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
         let vertical = matches!(side, Side::Top | Side::Bottom);
