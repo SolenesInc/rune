@@ -75,6 +75,8 @@ pub struct MarkdownStyle {
     pub(super) code_margin: [f32; 2],
     /// A wide table's scroll bar thumb, at rest and under the pointer (`None`: no bar).
     pub(super) table_bar: Option<[Color; 2]>,
+    /// A wide code block's scroll bar (`None`: no bar).
+    pub(super) code_bar: Option<crate::ScrollBarStyle>,
     /// The text column's width, when the app knows it (see [`MarkdownStyle::text_width`]).
     pub(super) text_width: Option<f32>,
     /// The widest a top-level prose block runs (see [`MarkdownStyle::prose_measure`]).
@@ -264,6 +266,7 @@ impl MarkdownStyle {
             table_margin: [12.0, 16.0],
             code_margin: [12.0, 24.0],
             table_bar: None,
+            code_bar: None,
             text_width: None,
             prose_measure: None,
             wide_fade: 12.0,
@@ -625,6 +628,13 @@ impl MarkdownStyle {
         self.prose_measure = (points.is_finite() && points > 0.0).then_some(points);
         self
     }
+    /// A code block that scrolls sideways ([`Markdown::scroll_wide`]) gets a scroll bar in
+    /// `style` over its bottom edge, in its padding: a web page's `pre { overflow-x: auto }`
+    /// under the system's overlay scroller. None by default.
+    pub fn code_scroll_bar(mut self, style: crate::ScrollBarStyle) -> Self {
+        self.code_bar = Some(style);
+        self
+    }
     /// How far the sides of a code block that scrolls sideways ([`Markdown::scroll_wide`]) fade
     /// out, in points: 12 by default, 0 for a hard edge as a web page's `overflow: auto` clips.
     pub fn wide_fade(mut self, points: f32) -> Self {
@@ -824,6 +834,7 @@ impl std::hash::Hash for MarkdownStyle {
             table_margin,
             code_margin,
             table_bar,
+            code_bar,
             text_width,
             prose_measure,
             wide_fade,
@@ -865,6 +876,7 @@ impl std::hash::Hash for MarkdownStyle {
         (table_outline, table_rule, table_head_fill, table_head_text, table_head_rule, table_head_weight.map(f32_bits), table_tabular, table_font).hash(state);
         ([f32_bits(table_pad[0]), f32_bits(table_pad[1])], table_flush_left, table_head_pad.map(|p| p.map(f32_bits)), table_full_width, table_margin.map(f32_bits), code_margin.map(f32_bits)).hash(state);
         table_frame.map(|TableFrame { fill, ring, pad }| (fill, ring, f32_bits(pad))).hash(state);
+        code_bar.map(|bar| format!("{bar:?}")).hash(state);
         (table_bar, text_width.map(f32_bits), prose_measure.map(f32_bits), f32_bits(wide_fade), link_icon.map(|l| l.map(f32_bits))).hash(state);
         match table_body {
             None => 0u8.hash(state),

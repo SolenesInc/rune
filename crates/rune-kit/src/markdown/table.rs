@@ -370,7 +370,7 @@ impl Renderer {
         let viewport = col().key("scroll").w_full().scroll_x().clip_rounded(6.0).child(rows);
         let Some([thumb, hover]) = self.s.table_bar.filter(|_| over) else { return decor.child(viewport) };
         let bar = crate::ScrollBarStyle::native(thumb, hover).horizontal();
-        decor.child(crate::ScrollBar::scroll_bar_styled(viewport, bar).pb(bar.strip()))
+        decor.child(self.wide_bar(bar, viewport).pb(bar.strip()))
     }
 
     #[allow(clippy::too_many_arguments)]

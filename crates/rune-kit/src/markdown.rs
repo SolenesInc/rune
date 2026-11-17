@@ -296,6 +296,7 @@ pub struct Markdown {
     on_image: Option<image::ImagePress>,
     missing_image: Option<image::MissingFrame>,
     text_links: Option<TextLinks>,
+    id: String,
 }
 
 #[cfg(test)]
@@ -308,7 +309,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, missing_image: None, text_links: None }
+            diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, missing_image: None, text_links: None, id: String::new() }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -474,6 +475,14 @@ impl Markdown {
         self.scroll_wide = on;
         self
     }
+    /// Names this document apart from the others in its window, so each of its sideways scroll
+    /// bars ([`MarkdownStyle::table_scroll_bar`], [`MarkdownStyle::code_scroll_bar`]) follows and
+    /// drags its own viewport. Two documents without names share the bar of their first wide
+    /// table or code block, and so on down.
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = id.into();
+        self
+    }
 
     /// Draws `f(card, frame)` in place of each diagram's card, so an app can put its own
     /// controls on it (a button that opens it larger) or key it. Fences that draw as their
@@ -593,6 +602,7 @@ impl Markdown {
                 self.selectable,
                 self.scroll_wide,
                 self.tentative,
+                &self.id,
             ));
             return rune::memo::cached(h, || self.render_uncached(style));
         }
@@ -624,6 +634,7 @@ impl Markdown {
         let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_highlight: self.on_highlight, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
             on_task: self.on_task, tasks_read_only: self.tasks_read_only, details: self.details, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
+            id: self.id, next_wide: Cell::new(0),
             current_block_key: RefCell::new("b0".into()),
             #[cfg(feature = "mermaid")]
             diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, missing_image: self.missing_image, flow: Cell::default() };

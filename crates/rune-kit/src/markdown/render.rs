@@ -31,6 +31,9 @@ pub(super) struct Renderer {
     pub(super) tasks: Rc<[Option<(bool, usize)>]>,
     /// The next of `tasks`, advanced at each list item in document order.
     pub(super) next_task: Cell<usize>,
+    /// `Markdown::id`, and the next sideways scroll bar's number under it, in document order.
+    pub(super) id: String,
+    pub(super) next_wide: Cell<usize>,
     pub(super) current_block_key: RefCell<Rc<str>>,
     /// `Markdown::diagram_frame`.
     #[cfg(feature = "mermaid")]
@@ -558,9 +561,20 @@ impl Renderer {
             // padding so lines run to the frame's edge.
             let viewport = col().key("scroll").w_full().scroll_x();
             let viewport = if s.wide_fade > 0.0 { viewport.scroll_edge_fade(s.wide_fade) } else { viewport };
-            return frame.child(viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body))));
+            let viewport = viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body)));
+            return frame.child(match s.code_bar {
+                Some(bar) => self.wide_bar(bar.horizontal().inside(), viewport),
+                None => viewport,
+            });
         }
         frame.px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body.w_full()))
+    }
+
+    /// `viewport`, scrolling sideways, with a scroll bar in `style` that is its own in the window.
+    pub(super) fn wide_bar(&self, style: crate::ScrollBarStyle, viewport: El) -> El {
+        let n = self.next_wide.get();
+        self.next_wide.set(n + 1);
+        crate::scroll_bar::wrap_in(style, &format!("{}wide-{n}", self.id), viewport)
     }
 
     /// Colour-only spans, so highlighting never moves a glyph: a block streaming in draws its

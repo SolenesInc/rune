@@ -959,3 +959,31 @@ fn an_image_shows_the_system_zoom_in_cursor() {
     rt.frame(1.0 / 60.0);
     assert_eq!(rt.cursor(), rune::Cursor::ZoomIn, "the system's own magnifier, at a system cursor's size");
 }
+
+#[test]
+fn each_wide_code_block_scrolls_under_its_own_bar_and_one_that_fits_shows_none() {
+    fn two_docs(src: &String, _: &mut Cx<String>) -> El {
+        let k = Kit::neutral(true);
+        let style = MarkdownStyle::from_kit(&k).code_scroll_bar(rune_kit::ScrollBarStyle::from_kit(&k).always());
+        let doc = |id: &str| Markdown::new(src.clone()).scroll_wide(true).id(id).style(style.clone()).build(&k);
+        col().w_full().child(doc("a")).child(doc("b"))
+    }
+    let line = format!("let wide = [{}];", (0..60).map(|i| i.to_string()).collect::<Vec<_>>().join(", "));
+    let src = format!("```rust\n{line}\n```\n\n```rust\nshort();\n```\n");
+    let mut rt = Runtime::new(src, two_docs, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.frame(1.0 / 60.0);
+    let thumbs = |rt: &Runtime<String>| rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("thumb")).map(|e| e.rect).collect::<Vec<_>>();
+    let at_rest = thumbs(&rt);
+    assert_eq!(at_rest.len(), 4, "a bar on each code block of both documents: {at_rest:?}");
+    let [a_wide, a_short, b_wide, b_short] = at_rest[..] else { unreachable!() };
+    assert!(a_wide[2] > 0.0 && b_wide[2] > 0.0, "a block wider than the column shows its thumb: {at_rest:?}");
+    assert_eq!((a_short[2], b_short[2]), (0.0, 0.0), "a block that fits shows none");
+    let code = rt.elements().into_iter().find(|e| e.text.as_deref().is_some_and(|t| t.starts_with("let wide"))).expect("code").rect;
+    rt.wheel_xy(240.0, code[1] + 4.0, -200.0, 0.0);
+    rt.frame(1.0 / 60.0);
+    rt.frame(1.0 / 60.0);
+    let scrolled = thumbs(&rt);
+    assert!(scrolled[0][0] > a_wide[0], "the scrolled block's thumb travels: {a_wide:?} -> {:?}", scrolled[0]);
+    assert_eq!(scrolled[2], b_wide, "the other document's block keeps its own thumb at its start");
+}
