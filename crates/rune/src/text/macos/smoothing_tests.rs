@@ -554,3 +554,21 @@ fn rasterize_cost() {
     }
 }
 
+
+/// A glyph from `smoothed_glyph` is dilated by its ink: light ink takes more coverage than dark,
+/// and dark ink more than the outline undilated.
+#[test]
+fn a_smoothed_glyph_grows_with_its_inks_luminance() {
+    let font = FontRef::from_index(INTER, 0).unwrap();
+    let glyph = font.charmap().map('l');
+    let mut cx = ScaleContext::new();
+    let mut ink = |c: &str| {
+        let (mask, _) = smoothed_glyph(&mut cx, font, &[], glyph, 28.0, 0.0, crate::color::hex(c).unwrap()).unwrap();
+        mask.iter().map(|&v| u32::from(v)).sum::<u32>()
+    };
+    let (dark, light) = (ink("#000000"), ink("#ffffff"));
+    let path = design_outline(&mut cx, font, &[], glyph, 28.0).unwrap();
+    let bare = mask(&prepare_outline(&path, ApplePipeline::UNSMOOTHED, 28.0, 0.0, [0.0, 0.0], None)).0;
+    let bare: u32 = bare.iter().map(|&v| u32::from(v)).sum();
+    assert!(bare < dark && dark < light, "undilated {bare}, dark {dark}, light {light}");
+}

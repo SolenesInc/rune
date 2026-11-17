@@ -215,6 +215,17 @@ pub(crate) fn design_outline(cx: &mut ScaleContext, font: FontRef<'_>, coords: &
     }).collect())
 }
 
+/// A glyph's coverage as Rune's own text draws it with font smoothing on, the recipe above
+/// with the dilation `ink` and `ppem` choose, for a renderer that keeps its own glyph atlas,
+/// such as a terminal's, so its text weighs what Rune's does. `phase_x` is the pen's fraction
+/// of a device pixel, and the placement follows swash's convention (`top` is rows above the
+/// baseline).
+pub fn smoothed_glyph(cx: &mut ScaleContext, font: FontRef<'_>, coords: &[i16], glyph: u16, ppem: f32, phase_x: f32, ink: Color) -> Option<(Vec<u8>, Placement)> {
+    let mut smoothing = Smoothing { pipeline: ApplePipeline::SMOOTHED, ..Smoothing::default() };
+    let radius = radius_for_bucket(ppem as f64, color_bucket(ink));
+    smoothing.mask(cx, &Job { font, key: (0, 0, 0), coords, glyph, ppem, phase_x, shift_y: 0.0, radius, skew: 0 })
+}
+
 /// Steps 2–5 of the recipe, each stage as `pipeline` selects: fractional origin first, then
 /// dilation by `radius`, the autohinter (with the same radius, 0 undilated) when `metrics` is
 /// given and the vertical phase is zero, and CoreGraphics' flattening into lines.
