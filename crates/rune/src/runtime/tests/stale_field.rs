@@ -61,3 +61,41 @@ fn a_focus_change_after_an_earlier_press_closed_a_field_does_not_reach_its_state
     assert!(rt.state().menu, "the later press still lands");
     assert!(rt.focus.path().is_some_and(|p| rt.node(p).is_some_and(|n| n.key.as_deref() == Some("menu"))));
 }
+
+fn close_by_update(rt: &mut Runtime<S>) { rt.update(|s, _| s.field = None); }
+
+#[test]
+fn a_press_on_a_field_an_update_closed_before_the_frame_reaches_no_field() {
+    let mut rt = rt();
+    close_by_update(&mut rt);
+    click(&mut rt, FIELD, PointerButton::Primary);
+    rt.frame(1.0);
+    assert!(rt.state().field.is_none());
+}
+
+#[test]
+fn a_press_queued_before_an_update_closed_its_field_reaches_no_field() {
+    let mut rt = rt();
+    click(&mut rt, FIELD, PointerButton::Primary);
+    close_by_update(&mut rt);
+    rt.frame(1.0);
+    assert!(rt.state().field.is_none());
+}
+
+#[test]
+fn a_field_menu_asked_after_an_update_closed_the_field_opens_on_no_field() {
+    let mut rt = rt();
+    close_by_update(&mut rt);
+    click(&mut rt, FIELD, PointerButton::Secondary);
+    rt.frame(1.0);
+    assert!(rt.state().field.is_none());
+}
+
+#[test]
+fn a_focus_change_after_an_update_closed_a_field_does_not_reach_its_state() {
+    let mut rt = rt();
+    close_by_update(&mut rt);
+    click(&mut rt, MENU, PointerButton::Primary);
+    rt.frame(1.0);
+    assert!(rt.state().menu, "the press still lands");
+}
