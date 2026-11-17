@@ -213,7 +213,7 @@ impl TextArea {
         let (pad_x, pad_y) = self.padding;
         let inset = 2.0 * pad_y;
         let least = self.least_height(style.line_px());
-        let stylesheet_min_height = self.stylesheet_min_height();
+        let min_height_or_default = self.min_height_or_default();
         let red = self.invalid && !disabled && k.invalid_text;
         let ink = if red { c.danger.fg } else { c.text_base };
         let hint = if red { c.danger.fg } else { self.placeholder_ink.unwrap_or(c.text_faint) };
@@ -248,7 +248,7 @@ impl TextArea {
             })
         } else if let Some(h) = self.max_height {
             let max_inner = (h - inset).max(line);
-            let min_inner = (self.rows as f32 * line).max(stylesheet_min_height - inset).min(max_inner);
+            let min_inner = (self.rows as f32 * line).max(min_height_or_default - inset).min(max_inner);
             let viewport = col()
                 .key("scroll")
                 .w_full()
@@ -287,13 +287,13 @@ impl TextArea {
         match (self.grow, self.max_height) {
             (Some((min_rows, _)), _) => (min_rows as f32 * line + inset).max(self.min_height.unwrap_or(0.0)),
             (None, Some(h)) => {
-                (self.rows as f32 * line).max(self.stylesheet_min_height() - inset).min((h - inset).max(line)) + inset
+                (self.rows as f32 * line).max(self.min_height_or_default() - inset).min((h - inset).max(line)) + inset
             }
-            (None, None) => (self.rows as f32 * line + inset).max(self.stylesheet_min_height()),
+            (None, None) => (self.rows as f32 * line + inset).max(self.min_height_or_default()),
         }
     }
 
-    fn stylesheet_min_height(&self) -> f32 {
+    fn min_height_or_default(&self) -> f32 {
         self.min_height.unwrap_or(TEXTAREA_MIN_HEIGHT)
     }
 }
