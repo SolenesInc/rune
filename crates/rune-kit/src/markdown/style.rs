@@ -16,8 +16,9 @@ pub struct MarkdownStyle {
     pub(super) list_font: Option<TextStyle>,
     /// List markers' colour (`None`: [`MarkdownStyle::muted`]).
     pub(super) list_marker: Option<Color>,
-    /// Level 4+ headings' colour (`None`: [`MarkdownStyle::muted`]).
-    pub(super) deep_heading: Option<Color>,
+    /// Each heading level's colour, levels 1 to 3 and then 4 and deeper (`None`: the text
+    /// colour for levels 1 to 3, [`MarkdownStyle::muted`] deeper).
+    pub(super) heading_text: [Option<Color>; 4],
     pub(super) accent: Color,
     pub(super) link_underline: Color,
     pub(super) code_bg: Color,
@@ -181,7 +182,7 @@ impl MarkdownStyle {
             muted: c.text_muted,
             list_font: None,
             list_marker: None,
-            deep_heading: None,
+            heading_text: [None; 4],
             accent: c.text_accent,
             link_underline: k.alpha(c.text_accent, 0.4),
             code_bg: k.alpha(c.text_base, 0.08),
@@ -304,9 +305,14 @@ impl MarkdownStyle {
         self.list_marker = Some(c);
         self
     }
-    /// Level 4 and deeper headings.
-    pub fn deep_heading(mut self, c: Color) -> Self {
-        self.deep_heading = Some(c);
+    /// Level 4 and deeper headings: [`Self::heading_text`] at level 4.
+    pub fn deep_heading(self, c: Color) -> Self {
+        self.heading_text(4, c)
+    }
+    /// The headings of `level` (1 to 4, where 4 is every deeper level too), as a page that
+    /// colours `h1`, `h2` and `h3` apart draws them.
+    pub fn heading_text(mut self, level: u8, c: Color) -> Self {
+        self.heading_text[usize::from(level.clamp(1, 4)) - 1] = Some(c);
         self
     }
     /// Link text; the underline is the same colour at 40% unless set with [`Self::link_underline`].
@@ -615,7 +621,7 @@ impl std::hash::Hash for MarkdownStyle {
             muted,
             list_font,
             list_marker,
-            deep_heading,
+            heading_text,
             accent,
             link_underline,
             code_bg,
@@ -681,7 +687,7 @@ impl std::hash::Hash for MarkdownStyle {
             task,
             diagram,
         } = *self;
-        (text, muted, list_marker, deep_heading, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
+        (text, muted, list_marker, heading_text, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
         (body, list_font, headings, code_block, (code_text, plain_code_text), shell, link_hover, list_outside, list_nested.map(|n| n.map(f32_bits)), table_align).hash(state);
         (f32_bits(quote.width), f32_bits(quote.pad), quote.text, alerts).hash(state);
         [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]

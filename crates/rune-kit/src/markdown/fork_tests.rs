@@ -443,3 +443,34 @@ fn an_app_draws_an_image_with_no_picture_in_its_own_words() {
     assert!(texts.iter().any(|t| t == "[missing image:  at plain.png]"), "an image without alt text comes too: {texts:?}");
     assert!(!texts.iter().any(|t| t == "A chart"), "the default glyph and alt text are replaced: {texts:?}");
 }
+
+#[test]
+fn each_heading_level_takes_its_own_colour() {
+    fn styled(src: &String, _: &mut Cx<String>) -> El {
+        let style = MarkdownStyle::from_kit(&Kit::neutral(true))
+            .heading_text(2, rune::oklch(0.8, 0.0, 0.0))
+            .heading_text(3, rune::oklch(0.7, 0.0, 0.0));
+        col().w_full().child(Markdown::new(src.clone()).render(&style))
+    }
+    let mut rt = Runtime::new("# One\n\n## Two\n\n### Three\n\nBody.\n".to_owned(), styled, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let ink = |t: &str| elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}")).text_color;
+    assert_eq!(ink("Two"), Some(rune::oklch(0.8, 0.0, 0.0)));
+    assert_eq!(ink("Three"), Some(rune::oklch(0.7, 0.0, 0.0)));
+    assert_eq!(ink("One"), ink("Body."), "a level left alone keeps the text colour");
+}
+
+#[test]
+fn an_alerts_bar_runs_the_whole_height_of_its_box() {
+    let rt = laid_out("> [!IMPORTANT]\n> One line changes behavior.\n");
+    let elements = rt.elements();
+    let alert = elements.iter().find(|e| e.role == "note").expect("the alert");
+    let title = elements.iter().find(|e| e.text.as_deref() == Some("Important")).expect("the title");
+    let bar = elements
+        .iter()
+        .find(|e| e.rect[2] == 3.0 && e.fill == title.text_color.expect("the title's colour"))
+        .expect("the bar");
+    assert_eq!((bar.rect[1], bar.rect[3]), (alert.rect[1], alert.rect[3]), "the bar spans the padding too");
+    assert!(title.rect[1] >= alert.rect[1] + 8.0, "the title sits inside the padding");
+}

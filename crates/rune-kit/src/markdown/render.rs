@@ -678,7 +678,11 @@ impl Renderer {
         };
         match b {
             Block::Para(inl) => self.para(inl, inl_map, if self.flow.get().lists > 0 { s.list_font.unwrap_or(s.body) } else { s.body }, self.flow.get().ink.unwrap_or(s.text)),
-            Block::Heading(l, inl) => self.para(inl, inl_map, s.headings[(*l as usize).clamp(1, 4) - 1], if *l >= 4 { s.deep_heading.unwrap_or(s.muted) } else { s.text }).role("heading").level(u32::from(*l)),
+            Block::Heading(l, inl) => {
+                let level = (*l as usize).clamp(1, 4) - 1;
+                let ink = s.heading_text[level].unwrap_or(if level == 3 { s.muted } else { s.text });
+                self.para(inl, inl_map, s.headings[level], ink).role("heading").level(u32::from(*l))
+            }
             Block::Code(code) => {
                 let n = self.next_source.get();
                 self.next_source.set(n + 1);
@@ -817,9 +821,8 @@ impl Renderer {
                         .role("note")
                         .label(alert.title())
                         .w_full()
-                        .py(8.0)
                         .child(el().w(3.0).h_full().fill(ink))
-                        .child(col().grow(1.0).shrink().pl(q.pad).child(title).child(drawn)),
+                        .child(col().grow(1.0).shrink().py(8.0).pl(q.pad).child(title).child(drawn)),
                     bidi::blocks_dir(inner),
                 );
                 match &self.quote_frame {
