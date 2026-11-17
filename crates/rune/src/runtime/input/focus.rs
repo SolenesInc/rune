@@ -69,7 +69,26 @@ fn sync_input_focus(input: &mut crate::el::InputSpec, states: crate::states::Sta
     changed
 }
 
+/// A handler's `Tx::blur` and `Tx::focus`. The commit applies both to the tree the handler's
+/// state builds: a field the handler ended is gone from it, so its edit accessor never runs.
+#[derive(Default)]
+pub(super) struct FocusRequest {
+    pub(super) blur: bool,
+    /// `Tx::focus`: the key to focus, and whether its ring shows.
+    pub(super) to: Option<(String, bool, crate::el::FocusAsk)>,
+}
+
 impl RuntimeCore {
+    fn blur_in(&mut self, nodes: &mut Vec<Node>) -> bool {
+        std::mem::swap(&mut self.nodes, nodes);
+        self.nodes_replaced();
+        let changed = self.set_focus(None, self.focus.keyboard());
+        std::mem::swap(&mut self.nodes, nodes);
+        self.nodes_replaced();
+        // An explicit blur is not the temporary pointer-down blur of a scrim.
+        self.focus.step(focus_machine::FocusEvent::Settled);
+        changed
+    }
     pub(super) fn active_modal(&self) -> Option<usize> {
         self.modal_scope.as_ref().map(|m| m.index)
     }
@@ -318,7 +337,8 @@ impl RuntimeCore {
         changed
     }
     pub(super) fn sync_requested_focus(&mut self, nodes: &mut Vec<Node>) -> bool {
-        let asked = self.focus_request.take();
+        let FocusRequest { blur, to: asked } = std::mem::take(&mut self.focus_request);
+        let blurred = blur && self.blur_in(nodes);
         for old in &self.nodes {
             if let Some(input) = &old.input
                 && input.edit.focused
@@ -410,7 +430,7 @@ impl RuntimeCore {
         self.focus_returned = matches!(&asked, Some((p, _, crate::el::FocusAsk::Return)) if next.as_deref() == Some(p.as_str()));
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
-        let changed = self.set_focus(next, keyboard);
+        let changed = self.set_focus(next, keyboard) | blurred;
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
         if self.input_click.dragging_path().is_some_and(|p| !nodes.iter().any(|n| n.path == p && !n.inert && n.input.is_some())) {

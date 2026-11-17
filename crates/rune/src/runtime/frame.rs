@@ -206,14 +206,14 @@ impl RuntimeCore {
         if let Some(rewind) = tx.rewind.take() { self.rewind = rewind; }
         if std::mem::take(&mut tx.blur) {
             if self.focus.path().is_some() {
-                self.set_focus(None, self.focus.keyboard());
+                self.focus_request.blur = true;
                 self.dirty = true;
+            } else {
+                self.focus.step(focus_machine::FocusEvent::Settled);
             }
-            // An explicit blur is not the temporary pointer-down blur of a scrim.
-            self.focus.step(focus_machine::FocusEvent::Settled);
         }
         if let Some(request) = tx.focus_to.take() {
-            self.focus_request = Some(request);
+            self.focus_request.to = Some(request);
             self.dirty = true;
         }
         if let Some(title) = tx.title.take() { self.window_title.set(title); }
