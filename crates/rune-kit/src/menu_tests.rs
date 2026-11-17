@@ -134,3 +134,35 @@ fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_standard_menu_and_men
     assert_eq!(item[1] - menu[1], 5.0, "{menu:?} {item:?}");
     assert_eq!(item[3], line + 12.0, "{item:?}");
 }
+
+fn standard_menu_with_quiet_choices(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted });
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze")
+        .standard()
+        .anchor("row.actions")
+        .item(MenuItem::new("For an hour").detail("11:00"))
+        .note("esc cancel")
+        .open(true)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_standard_menu_draws_its_labels_details_and_note_in_the_kit_s_menu_text() {
+    let mut rt = Runtime::new((), standard_menu_with_quiet_choices, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let text_of = |said: &str| elements.iter().find(|e| e.text.as_deref() == Some(said)).cloned().unwrap_or_else(|| panic!("no text {said}"));
+    let neutral = Kit::neutral(true);
+    assert_eq!(text_of("For an hour").text_color, Some(neutral.c.text_muted));
+    let detail = text_of("11:00");
+    assert_eq!((detail.text_color, detail.opacity), (Some(neutral.c.text_faint), 0.75));
+    assert_eq!(text_of("esc cancel").text_color, Some(neutral.c.text_muted));
+    let row = elements.iter().find(|e| e.key.as_deref() == Some("snooze-item0")).expect("the item");
+    assert_eq!(row.label.as_deref(), Some("For an hour"));
+    let (detail_right, row_right) = (detail.rect[0] + detail.rect[2], row.rect[0] + row.rect[2]);
+    assert!(row_right - detail_right <= 9.0, "the detail ends the row: {:?} {:?}", detail.rect, row.rect);
+}

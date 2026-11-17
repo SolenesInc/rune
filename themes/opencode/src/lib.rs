@@ -231,6 +231,7 @@ fn build(dark: bool) -> Kit {
         ty,
         radius: Radius { xs: 2.0, sm: 4.0, md: 6.0, lg: 8.0, xl: 10.0 },
         standard_menu: StandardMenu::OPENCODE,
+        standard_menu_label: None,
         // The web's 85–170 ms ease-outs, as critically damped springs of similar feel.
         motion: Motion {
             control: rune::Spring::new(0.2, 0.0),

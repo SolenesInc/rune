@@ -29,6 +29,8 @@ pub enum MenuEntry {
     Item(Box<MenuItem>),
     Separator,
     Label(String),
+    /// A line of quiet text under the items, such as the keys that drive the menu.
+    Note(String),
 }
 
 impl MenuEntry {
@@ -44,6 +46,7 @@ pub struct MenuItem {
     lead: Option<El>,
     shortcut: Option<String>,
     badge: Option<String>,
+    detail: Option<String>,
     description: Option<String>,
     danger: bool,
     /// Checkbox and radio items: whether the indicator shows.
@@ -62,6 +65,7 @@ impl MenuItem {
             lead: None,
             shortcut: None,
             badge: None,
+            detail: None,
             description: None,
             danger: false,
             checked: None,
@@ -95,6 +99,12 @@ impl MenuItem {
         self
     }
     /// A faint second line under the label, such as what a choice does. The item grows to fit it.
+    /// Quiet text at the row's end that completes its label, such as when a choice ends:
+    /// plainer than a [`MenuItem::badge`], so the labels still scan as the list.
+    pub fn detail(mut self, d: impl Into<String>) -> Self {
+        self.detail = Some(d.into());
+        self
+    }
     pub fn description(mut self, d: impl Into<String>) -> Self {
         self.description = Some(d.into());
         self
@@ -140,7 +150,8 @@ impl MenuItem {
         let highlighted = self.state == State::Hover || self.sub.as_ref().is_some_and(|s| s.1);
         let hover = if standard { c.surface_raised_hover } else { c.hover };
         let (font, ink) = if standard {
-            (k.ty.text_small_medium, if disabled { c.text_weak } else { c.text_strong })
+            let label = k.standard_menu_label.unwrap_or(crate::MenuLabel { font: k.ty.text_small_medium, ink: c.text_strong });
+            (label.font, if disabled { c.text_weak } else { label.ink })
         } else {
             (k.ty.ui_compact, c.text_base)
         };
@@ -185,10 +196,9 @@ impl MenuItem {
         if let Some(s) = &self.shortcut {
             e = e.shortcut_hint(s.clone());
         }
-        match (&self.description, &self.badge) {
-            (Some(d), Some(b)) => e = e.description(format!("{d}, {b}")),
-            (Some(d), None) | (None, Some(d)) => e = e.description(d.clone()),
-            (None, None) => {}
+        let said: Vec<&str> = [&self.description, &self.badge, &self.detail].into_iter().flatten().map(String::as_str).collect();
+        if !said.is_empty() {
+            e = e.description(said.join(", "));
         }
         if let Some((_, open)) = &self.sub {
             e = e.expanded(*open);
@@ -208,6 +218,9 @@ impl MenuItem {
         if let Some(s) = self.shortcut {
             let st = TextStyle { line_height: 11.0, ..k.ty.small_medium };
             e = e.child(text(s).key("shortcut").font(st).color(c.text_faint).a11y_hidden());
+        }
+        if let Some(d) = self.detail {
+            e = e.child(text(d).key("detail").font(k.ty.text_xsmall).color(c.text_faint).opacity(0.75).a11y_hidden());
         }
         if let Some(b) = self.badge {
             e = e.child(
@@ -319,6 +332,11 @@ impl Menu {
         self.entries.push(MenuEntry::Separator);
         self
     }
+    /// A line of quiet text under the items, set off by a rule: the keys that drive the menu.
+    pub fn note(mut self, n: impl Into<String>) -> Self {
+        self.entries.push(MenuEntry::Note(n.into()));
+        self
+    }
     pub fn group_label(mut self, l: impl Into<String>) -> Self {
         self.entries.push(MenuEntry::Label(l.into()));
         self
@@ -390,6 +408,20 @@ impl Menu {
                 MenuEntry::Separator => {
                     let (m, color) = if standard { (4.0, c.border_weak) } else { (2.0, c.border_muted) };
                     el().key(format!("sep{i}")).h(1.0).mt(m).mb(m).ml(-m).mr(-m).fill(color).a11y_hidden()
+                }
+                MenuEntry::Note(n) => {
+                    let (m, color) = if standard { (4.0, c.border_weak) } else { (2.0, c.border_muted) };
+                    let pad = if standard { k.standard_menu.row_padding.0 } else { 12.0 };
+                    row()
+                        .key(format!("note{i}"))
+                        .mt(m)
+                        .ml(-m)
+                        .mr(-m)
+                        .px(pad + m)
+                        .pt(6.0)
+                        .pb(6.0)
+                        .border_sides([1.0, 0.0, 0.0, 0.0], color)
+                        .child(text(n).font(k.ty.text_xsmall).color(c.text_muted))
                 }
                 MenuEntry::Label(l) => {
                     let e = row().key(format!("label{i}")).center_y();

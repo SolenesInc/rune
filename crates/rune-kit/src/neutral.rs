@@ -131,6 +131,7 @@ impl Kit {
             },
             radius: Radius { xs: 2.0, sm: 4.0, md: 6.0, lg: 8.0, xl: 10.0 },
             standard_menu: StandardMenu::OPENCODE,
+            standard_menu_label: None,
             motion: Motion {
                 control: tok::motion::SNAPPY,
                 overlay: tok::motion::SNAPPY,

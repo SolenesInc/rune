@@ -231,6 +231,14 @@ pub struct StandardMenu {
     pub row_radius: f32,
 }
 
+/// How a standard menu draws its items' labels: an app whose menus list choices in a quieter
+/// face than the kit's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MenuLabel {
+    pub font: TextStyle,
+    pub ink: Color,
+}
+
 impl StandardMenu {
     /// `@opencode/ui`'s: a half-strength edge, 6 point corners and 4 point rows.
     pub const OPENCODE: StandardMenu =
@@ -257,6 +265,9 @@ pub struct Kit {
     pub ty: Type,
     pub radius: Radius,
     pub standard_menu: StandardMenu,
+    /// The text of a standard menu's items. None draws `ty.text_small_medium` in
+    /// `c.text_strong`.
+    pub standard_menu_label: Option<MenuLabel>,
     pub motion: Motion,
     /// The surface translucent colours are solved over when the window blends in linear light
     /// (`App::srgb_blend(false)`), so they look as they would blended in sRGB. None leaves
