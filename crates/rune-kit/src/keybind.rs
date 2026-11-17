@@ -36,6 +36,9 @@ impl Keybind {
         let label = self.keys.join(" ");
         row().role("group").label(label).gap(2.0).center_y().children(self.keys.into_iter().enumerate().map(
             |(i, key)| {
+                if let Some(draw) = k.keycap {
+                    return draw(k, keycap(key)).key(format!("key{i}")).a11y_hidden();
+                }
                 row()
                     .key(format!("key{i}"))
                     .min_w(14.0)
@@ -56,3 +59,7 @@ fn keycap(key: String) -> String {
     // Only when it maps back: Turkish "ı" would draw as "I", another key.
     if key.chars().count() == 1 && upper.to_lowercase() == key { upper } else { key }
 }
+
+#[cfg(test)]
+#[path = "keybind_tests.rs"]
+mod tests;
