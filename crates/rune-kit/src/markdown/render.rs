@@ -338,6 +338,7 @@ impl Renderer {
                     sp.underline = no_line;
                     if in_link.is_none_or(|l| l.bg.is_none()) {
                         sp = sp.bg(s.code_bg, s.inline_code_pad);
+                        sp.bg_pad_y = s.inline_code_pad_y;
                     }
                 }
                 Style::CodePad => {

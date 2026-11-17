@@ -292,7 +292,7 @@ impl RuntimeCore {
     /// `shared`: the `hover_group_shared` keys the pointer is over.
     fn hover_flip(&self, i: usize, captured: Option<&str>, alone: Option<usize>, shared: &[Rc<str>]) -> Option<Flip> {
         let n = &self.nodes[i];
-        if !(n.vis.hover().a > 0.0 || n.vis_flags.hover_group()) || self.is_exiting(n.id) { return None; }
+        if !(n.vis.hovers() || n.vis_flags.hover_group()) || self.is_exiting(n.id) { return None; }
         let inside = self.pointer.is_some_and(|(x, y)| self.node_contains(i, x, y))
             || n.vis.hover_share.as_ref().is_some_and(|k| shared.contains(k))
             || (n.vis_flags.hover_group() && self.keyboard_within(i));
@@ -331,7 +331,7 @@ impl RuntimeCore {
         for i in 0..self.nodes.len() {
             let n = &self.nodes[i];
             let press_scale = n.handlers.get().and_then(|h| h.press_scale);
-            if n.vis.hover().a <= 0.0 && !n.vis_flags.hover_group() && n.vis.press().a <= 0.0 && press_scale.is_none() { continue; }
+            if !n.vis.hovers() && !n.vis_flags.hover_group() && n.vis.press().a <= 0.0 && press_scale.is_none() { continue; }
             if self.is_exiting(n.id) { continue; }
             match self.hover_flip(i, captured, alone, &shared) {
                 Some(f) if f.changed => flips.push(f),

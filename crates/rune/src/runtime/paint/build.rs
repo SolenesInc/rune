@@ -74,7 +74,7 @@ impl RuntimeCore {
             let i = self.layer_paint_order.get(index).copied().unwrap_or(index);
             let n = &self.nodes[i];
             let inherited_group = n.parent.map_or(0.0, |p| self.inh_scratch[p].group);
-            self.inh_scratch[i].group = if n.vis.hover().a > 0.0 || n.vis_flags.hover_group() {
+            self.inh_scratch[i].group = if n.vis.hovers() || n.vis_flags.hover_group() {
                 self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
             } else { inherited_group };
             let Some(parent) = n.parent.filter(|&p| self.nodes[p].vis_flags.blend() == crate::render::Blend::PlusLighter) else { continue };
@@ -271,7 +271,7 @@ impl RuntimeCore {
             let mut hit_own = own * self.group_factor(n, 1.0);
             own *= self.group_factor(n, pinh.group);
             let base_opacity = (own * pinh.opacity).clamp(0.0, 1.0);
-            let hover_owner = n.vis.hover().a > 0.0 || n.vis_flags.hover_group();
+            let hover_owner = n.vis.hovers() || n.vis_flags.hover_group();
             let group = if hover_owner {
                 self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
             } else {
@@ -879,7 +879,11 @@ impl RuntimeCore {
                 let layered = n.vis.gradient.is_some() || n.vis.radial.is_some() || n.vis.surface.is_some();
                 let fill = if layered { base } else { over(overlay, base) }.map(|c| c * o);
                 let bw = pixel_snap::line_width(n.vis.border_width() * s) * sc;
-                let border = if bw > 0.0 { premul(self.color(n.id, P_BORDER, n.vis.border()), o, srgb) } else { [0.0; 4] };
+                let border_c = self.color(n.id, P_BORDER, n.vis.border());
+                let border_c = if !focus_flat && n.vis.hover_border().a > 0.0 {
+                    border_c.mix(n.vis.hover_border(), self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0))
+                } else { border_c };
+                let border = if bw > 0.0 { premul(border_c, o, srgb) } else { [0.0; 4] };
                 // A gradient border draws as KIND_GRADIENT with a width: `border` top, `uv` bottom.
                 // After a switch back to `border`, it stays a gradient until both stops meet.
                 let store = self.scene.store();

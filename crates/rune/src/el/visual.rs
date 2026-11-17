@@ -179,6 +179,7 @@ impl Empty for VisualCold {
 pub(crate) struct VisualBox {
     pub(crate) border: Color,
     pub(crate) hover: Color,
+    pub(crate) hover_border: Color,
     pub(crate) press: Color,
     /// Per-corner radii `[tl, tr, br, bl]`, read when `Visual::radius` is NaN.
     pub(crate) corners: [f32; 4],
@@ -189,6 +190,7 @@ impl Empty for VisualBox {
     const EMPTY: &'static Self = &VisualBox {
         border: Color::TRANSPARENT,
         hover: Color::TRANSPARENT,
+        hover_border: Color::TRANSPARENT,
         press: Color::TRANSPARENT,
         corners: [0.0; 4],
         border_width: 0.0,
@@ -250,6 +252,17 @@ impl Visual {
     }
 
     #[inline]
+    pub(crate) fn hover_border(&self) -> Color {
+        self.box_paint.hover_border
+    }
+
+    /// Whether the box changes its look under the pointer, so it owns a hover track.
+    #[inline]
+    pub(crate) fn hovers(&self) -> bool {
+        self.box_paint.hover.a > 0.0 || self.box_paint.hover_border.a > 0.0
+    }
+
+    #[inline]
     pub(crate) fn press(&self) -> Color {
         self.box_paint.press
     }
@@ -259,6 +272,14 @@ impl Visual {
     pub(crate) fn set_hover(&mut self, c: Color) {
         if c != Color::TRANSPARENT || !self.box_paint.is_empty() {
             self.box_paint_mut().hover = c;
+        }
+    }
+
+    /// Sets the hover border colour, allocating `box_paint` only for one that isn't the default.
+    #[inline]
+    pub(crate) fn set_hover_border(&mut self, c: Color) {
+        if c != Color::TRANSPARENT || !self.box_paint.is_empty() {
+            self.box_paint_mut().hover_border = c;
         }
     }
 

@@ -622,3 +622,21 @@ fn an_outside_marker_stands_the_gap_away_from_its_text() {
     let far = bullet_end(&styled(src, |s| s.list_markers_outside(true).list_marker_gap(12.0)));
     assert_eq!(near - far, 8.0, "the marker moves left by what the gap grows");
 }
+
+#[test]
+fn an_inline_code_chip_pads_the_fonts_ascent_and_descent_by_its_vertical_pad() {
+    let chip_bg = rune::oklch(0.5, 0.2, 140.0);
+    let chip = |pad: Option<f32>| {
+        let rt = styled("Some `code` here.\n", |s| {
+            let s = s.inline_code_bg(chip_bg);
+            match pad { Some(p) => s.inline_code_pad_y(p), None => s }
+        });
+        let fill = chip_bg.premul(1.0);
+        rt.instances.iter().find(|i| i.params[1] == rune::render::KIND_RECT && i.fill == fill).expect("the code chip").rect
+    };
+    let (balanced, bare, padded) = (chip(None), chip(Some(0.0)), chip(Some(2.0)));
+    assert_ne!(bare, balanced, "a vertical pad leaves the cap height for the font's ascent and descent");
+    let grown = padded[3] - bare[3];
+    assert!((3.0..=5.0).contains(&grown), "two points above and below: {bare:?} {padded:?}");
+    assert!((padded[1] - (bare[1] - 2.0)).abs() <= 1.0, "half the room is above: {bare:?} {padded:?}");
+}

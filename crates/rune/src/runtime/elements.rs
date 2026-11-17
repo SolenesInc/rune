@@ -173,7 +173,7 @@ impl RuntimeCore {
                 && v.fill.a == 0.0 && (v.border_width() == 0.0 || v.border().a == 0.0 && v.border_bottom.is_none_or(|c| c.a == 0.0))
                 && v.shadows.is_empty() && v.surface.is_none() && v.icon.is_none() && v.gradient.is_none() && v.radial.is_none()
                 && v.outline.is_none() && v.shape.is_none() && v.pixels.is_none() && v.effect.is_none()
-                && v.hover().a == 0.0 && v.press().a == 0.0
+                && !v.hovers() && v.press().a == 0.0
         }).map(|(_, n)| n.path.as_str()).collect()
     }
 
@@ -256,7 +256,7 @@ impl RuntimeCore {
                 if let Some(gi) = up(Some(i)).find(|&j| self.nodes[j].vis.group_opacity.is_some()) {
                     let group = up(self.nodes[gi].parent)
                         .map(|pi| &self.nodes[pi])
-                        .find(|g| g.vis.hover().a > 0.0 || g.vis_flags.hover_group());
+                        .find(|g| g.vis.hovers() || g.vis_flags.hover_group());
                     if group.and_then(|g| g.hover_motion()).is_some_and(|(e, x)| [e, x].iter().any(|a| matches!(a.curve, rune_motion::Curve::Instant))) {
                         live_intent |= 4 | 16;
                     }

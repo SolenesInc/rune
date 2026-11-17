@@ -107,6 +107,9 @@ pub struct MarkdownStyle {
     pub(super) list_marker_gap: Option<f32>,
     /// Inline code's size in points, whatever text it sits in (`None`: `inline_code_scale` of it).
     pub(super) inline_code_size: Option<f32>,
+    /// Inline code chip's room above and below the mono font's ascent and descent (`None`: the
+    /// chip balances on the cap height).
+    pub(super) inline_code_pad_y: Option<f32>,
     /// Table body cells' text (`None`: the body text colour).
     pub(super) table_text: Option<Color>,
 }
@@ -324,6 +327,7 @@ impl MarkdownStyle {
             list_tabular: false,
             list_marker_gap: None,
             inline_code_size: None,
+            inline_code_pad_y: None,
             table_text: None,
         }
     }
@@ -590,6 +594,13 @@ impl MarkdownStyle {
         self.inline_code_pad = pad;
         self
     }
+    /// Room in points above and below inline code inside its chip, as CSS `code { padding }`
+    /// sets it: the chip then runs from the mono font's ascent to its descent and this much
+    /// further. Without it the chip balances on the cap height.
+    pub fn inline_code_pad_y(mut self, pad: f32) -> Self {
+        self.inline_code_pad_y = (pad.is_finite() && pad >= 0.0).then_some(pad);
+        self
+    }
     pub fn strong_weight(mut self, w: f32) -> Self {
         self.strong_weight = w;
         self
@@ -827,6 +838,7 @@ impl std::hash::Hash for MarkdownStyle {
             list_tabular,
             list_marker_gap,
             inline_code_size,
+            inline_code_pad_y,
             table_text,
         } = *self;
         (text, muted, list_marker, heading_text, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
@@ -834,7 +846,7 @@ impl std::hash::Hash for MarkdownStyle {
         (f32_bits(quote.width), f32_bits(quote.pad), quote.text, quote.italic, alerts).hash(state);
         let Margins { para, headings: heading_margins, list, quote: quote_margin, rule: rule_margin, collapse_under_heading } = margins;
         (f32_bits(line), f32_bits(para), heading_margins.map(|m| m.map(f32_bits)), [list, quote_margin, rule_margin].map(|m| m.map(f32_bits)), collapse_under_heading).hash(state);
-        (list_tabular, list_marker_gap.map(f32_bits), inline_code_size.map(f32_bits), table_text).hash(state);
+        (list_tabular, list_marker_gap.map(f32_bits), inline_code_size.map(f32_bits), inline_code_pad_y.map(f32_bits), table_text).hash(state);
         [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]
             .map(f32_bits)
             .hash(state);

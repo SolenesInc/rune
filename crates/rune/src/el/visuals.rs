@@ -331,6 +331,14 @@ impl El {
         self.vis.set_hover(c);
         self
     }
+    /// The border's colour while hovered, as CSS `:hover { border-color }` sets it: the border
+    /// [`El::border`] draws turns to `c` on the hover track, fading as [`El::hover`]'s overlay
+    /// does. It needs a border to recolour, and works with or without a hover fill.
+    #[inline]
+    pub fn hover_border(mut self, c: Color) -> Self {
+        self.vis.set_hover_border(c);
+        self
+    }
     /// Overlay drawn over the fill while pressed.
     #[inline]
     pub fn press(mut self, c: Color) -> Self {
