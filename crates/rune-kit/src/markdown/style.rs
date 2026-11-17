@@ -103,6 +103,8 @@ pub struct MarkdownStyle {
     pub(super) margins: Margins,
     /// Whether ordered lists' numbers set figures at one width.
     pub(super) list_tabular: bool,
+    /// The room between an outside marker and its item's text (`None`: a space's width).
+    pub(super) list_marker_gap: Option<f32>,
     /// Inline code's size in points, whatever text it sits in (`None`: `inline_code_scale` of it).
     pub(super) inline_code_size: Option<f32>,
     /// Table body cells' text (`None`: the body text colour).
@@ -320,6 +322,7 @@ impl MarkdownStyle {
                 collapse_under_heading: false,
             },
             list_tabular: false,
+            list_marker_gap: None,
             inline_code_size: None,
             table_text: None,
         }
@@ -532,6 +535,12 @@ impl MarkdownStyle {
     /// `font-variant-numeric: tabular-nums` (off by default).
     pub fn list_tabular_figures(mut self, on: bool) -> Self {
         self.list_tabular = on;
+        self
+    }
+    /// The room between a [`Self::list_markers_outside`] marker and its item's text, as a
+    /// browser leaves it (a space's width by default).
+    pub fn list_marker_gap(mut self, points: f32) -> Self {
+        self.list_marker_gap = Some(super::table::pts(points));
         self
     }
     /// Inline code at `points`, whatever the size of the text around it, as a page that sets
@@ -816,6 +825,7 @@ impl std::hash::Hash for MarkdownStyle {
             line,
             margins,
             list_tabular,
+            list_marker_gap,
             inline_code_size,
             table_text,
         } = *self;
@@ -824,7 +834,7 @@ impl std::hash::Hash for MarkdownStyle {
         (f32_bits(quote.width), f32_bits(quote.pad), quote.text, quote.italic, alerts).hash(state);
         let Margins { para, headings: heading_margins, list, quote: quote_margin, rule: rule_margin, collapse_under_heading } = margins;
         (f32_bits(line), f32_bits(para), heading_margins.map(|m| m.map(f32_bits)), [list, quote_margin, rule_margin].map(|m| m.map(f32_bits)), collapse_under_heading).hash(state);
-        (list_tabular, inline_code_size.map(f32_bits), table_text).hash(state);
+        (list_tabular, list_marker_gap.map(f32_bits), inline_code_size.map(f32_bits), table_text).hash(state);
         [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]
             .map(f32_bits)
             .hash(state);

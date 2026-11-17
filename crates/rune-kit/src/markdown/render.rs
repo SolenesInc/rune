@@ -750,7 +750,11 @@ impl Renderer {
                     _ => s.list_indent,
                 };
                 // Outside markers end a space's width before the text, as a browser sets "1. ".
-                let space = if s.list_outside { rune::text::measure("x x", &[], s.body, None).0 - rune::text::measure("xx", &[], s.body, None).0 } else { 0.0 };
+                let space = match s.list_marker_gap {
+                    _ if !s.list_outside => 0.0,
+                    Some(gap) => gap,
+                    None => rune::text::measure("x x", &[], s.body, None).0 - rune::text::measure("xx", &[], s.body, None).0,
+                };
                 let mut c = col().role("list").w_full();
                 let n = items.len();
                 // Between items, their 8 collapsed with the margins passing out of the blocks

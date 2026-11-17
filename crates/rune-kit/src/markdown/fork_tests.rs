@@ -605,3 +605,20 @@ fn ordered_list_numbers_can_set_figures_at_one_width() {
     let proportional = styled(src, |s| s.list_markers_outside(true));
     assert_ne!(marks(&tabular), marks(&proportional), "the numbers set at another width");
 }
+
+#[test]
+fn an_outside_marker_stands_the_gap_away_from_its_text() {
+    let src = "- one\n";
+    let bullet_end = |rt: &Runtime<Styled>| {
+        let column = shown(&rt.elements(), "•").rect;
+        rt.instances.iter()
+            .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+            .map(|i| i.rect)
+            .filter(|r| r[0] >= column[0] && r[0] + r[2] <= column[0] + column[2] && r[1] >= column[1] && r[1] <= column[1] + column[3])
+            .map(|r| r[0] + r[2])
+            .fold(0.0f32, f32::max)
+    };
+    let near = bullet_end(&styled(src, |s| s.list_markers_outside(true).list_marker_gap(4.0)));
+    let far = bullet_end(&styled(src, |s| s.list_markers_outside(true).list_marker_gap(12.0)));
+    assert_eq!(near - far, 8.0, "the marker moves left by what the gap grows");
+}
