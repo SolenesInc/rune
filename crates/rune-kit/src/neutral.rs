@@ -3,7 +3,7 @@
 
 use rune::{Color, Shadow, TextStyle, oklch, oklcha, tok};
 
-use crate::kit::{Elevation, Kit, Motion, Palette, Radius, Raised, StateColors, Type};
+use crate::kit::{Elevation, Kit, Motion, Palette, Radius, StandardMenu, StateColors, Type};
 
 fn ring(c: Color) -> Shadow {
     Shadow { spread: 0.5, color: c, ..Shadow::default() }
@@ -130,7 +130,7 @@ impl Kit {
                 mono: TextStyle::new(12.0, 400.0).mono().lh(18.0),
             },
             radius: Radius { xs: 2.0, sm: 4.0, md: 6.0, lg: 8.0, xl: 10.0 },
-            raised: Raised::STANDARD,
+            standard_menu: StandardMenu::OPENCODE,
             motion: Motion {
                 control: tok::motion::SNAPPY,
                 overlay: tok::motion::SNAPPY,

@@ -109,9 +109,9 @@ fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 }
 
-fn standard_menu_with_its_own_raised_look(_: &(), _: &mut Cx<()>) -> El {
+fn standard_menu_with_its_own_look(_: &(), _: &mut Cx<()>) -> El {
     let mut k = Kit::neutral(true);
-    k.raised = crate::Raised { border_alpha: 1.0, menu_radius: 8.0, menu_inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
+    k.standard_menu = crate::StandardMenu { edge_alpha: 1.0, radius: 8.0, inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
     k.c.surface_menu = k.c.bg_base;
     let mut layer = Vec::new();
     let menu = Menu::new("snooze").standard().anchor("row.actions").item(MenuItem::new("For an hour")).open(true).build(&k, &mut layer);
@@ -120,8 +120,8 @@ fn standard_menu_with_its_own_raised_look(_: &(), _: &mut Cx<()>) -> El {
 }
 
 #[test]
-fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_raised_look_and_menu_fill() {
-    let mut rt = Runtime::new((), standard_menu_with_its_own_raised_look, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_standard_menu_and_menu_fill() {
+    let mut rt = Runtime::new((), standard_menu_with_its_own_look, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
     rt.frame(0.0);
     let element = |key: &str| rt.elements().iter().find(|e| e.key.as_deref() == Some(key)).cloned().unwrap_or_else(|| panic!("no {key}"));
     let (frame, row) = (element("snooze-menu"), element("snooze-item0"));
