@@ -69,3 +69,28 @@ fn a_tall_dialog_fills_the_window_up_to_its_height_and_carries_header_content() 
     let (search, close) = (rect(&short, "search"), rect(&short, "close"));
     assert!(search[0] + search[2] <= close[0], "the search sits before the close button: {search:?} {close:?}");
 }
+
+fn led(_: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    let mut layer = Vec::new();
+    Dialog::new("crew", "Manage crew")
+        .description("Crew")
+        .open(true)
+        .lead(rune::text("CREW · Manage crew").key("kicker"))
+        .on_close(|_: &mut S| {})
+        .build(&k, &mut layer);
+    root(rune::el().w_full().h_full(), layer)
+}
+
+#[test]
+fn a_lead_takes_the_place_of_the_title_and_the_title_still_names_the_dialog() {
+    let mut rt = Runtime::new(S { open: true, ..S::default() }, led, (1200.0, 900.0), Env::new(true, 1.0));
+    rt.frame(1.0 / 60.0);
+    let elements = rt.elements();
+    let dialog = elements.iter().find(|e| e.key.as_deref() == Some("crew-dialog")).expect("the dialog");
+    assert_eq!(dialog.label.as_deref(), Some("Manage crew"));
+    assert!(elements.iter().any(|e| e.key.as_deref() == Some("kicker")), "the lead shows");
+    assert!(!elements.iter().any(|e| e.text.as_deref() == Some("Manage crew")), "the kit's title is not drawn");
+    let (lead, close) = (rect(&rt, "lead"), rect(&rt, "close"));
+    assert!(lead[0] + lead[2] <= close[0], "the lead sits before the close button: {lead:?} {close:?}");
+}

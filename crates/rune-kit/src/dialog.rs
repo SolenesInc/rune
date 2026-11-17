@@ -16,13 +16,14 @@ pub struct Dialog {
     fit: bool,
     max_height: Option<f32>,
     header: Vec<El>,
+    lead: Option<El>,
     close: Option<Box<dyn FnOnce(El) -> El>>,
     button: Option<Box<dyn FnOnce(El) -> El>>,
 }
 impl Dialog {
     pub fn new(key: impl Into<String>, title: impl Into<String>) -> Self {
         Self { key: key.into(), title: title.into(), description: None, body: Vec::new(), open: false,
-            outside: true, width: 480.0, fit: false, max_height: None, header: Vec::new(), close: None, button: None }
+            outside: true, width: 480.0, fit: false, max_height: None, header: Vec::new(), lead: None, close: None, button: None }
     }
     pub fn open(mut self, open: bool) -> Self { self.open = open; self }
     pub fn description(mut self, description: impl Into<String>) -> Self { self.description = Some(description.into()); self }
@@ -38,6 +39,9 @@ impl Dialog {
     pub fn max_height(mut self, points: f32) -> Self { self.max_height = Some(points); self }
     /// Puts `e` in the header between the title and the close button, such as a search field.
     pub fn header(mut self, e: El) -> Self { self.header.push(e); self }
+    /// App content drawn in place of the title and description, such as a kicker above the
+    /// title in the app's own type; the title and description still name the dialog.
+    pub fn lead(mut self, e: El) -> Self { self.lead = Some(e); self }
     pub fn on_close<S: 'static>(mut self, f: impl Fn(&mut S) + Clone + 'static) -> Self {
         let button = f.clone();
         self.button = Some(Box::new(move |e| e.on_press(button)));
@@ -65,6 +69,9 @@ impl Dialog {
                 else { k.ty.ui_medium.lh(16.0) }).color(k.c.text_base));
         if let Some(description) = self.description.clone() {
             title = title.child(text(description).font(k.ty.ui.lh(20.0)).color(k.c.text_muted));
+        }
+        if let Some(lead) = self.lead {
+            title = col().key("lead").grow(1.0).child(lead);
         }
         let body = col().key("body").w_full().children(self.body);
         let (panel, body) = match (self.max_height, self.fit) {
