@@ -209,9 +209,9 @@ impl Select {
                 item = item.description(d);
             }
             if self.highlighted.as_deref() == Some(o.as_str()) {
-                item = item.fill(c.hover);
+                item = item.fill(c.surface_raised_hover);
             } else {
-                item = item.focus_highlight(c.hover);
+                item = item.focus_highlight(c.surface_raised_hover);
             }
             if let Some(f) = &self.choose {
                 item = f(o)(item);

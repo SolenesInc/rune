@@ -242,7 +242,7 @@ impl<S: 'static> PopupList<S> {
             items: self.items,
             active,
             row_radius: self.row_radius,
-            hover: k.c.hover,
+            hover: k.c.surface_raised_hover,
             text_base: k.c.text_base,
             text_weak: k.c.text_weak,
             font: k.ty.ui_compact,
