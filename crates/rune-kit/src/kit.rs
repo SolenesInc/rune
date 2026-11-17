@@ -217,26 +217,24 @@ impl std::hash::Hash for Radius {
     }
 }
 
-/// How the kit draws a raised surface, [`crate::popover::raised`] and a standard
-/// [`crate::Menu`]'s frame, and a standard menu's rows. The surface fills with `c.surface_raised`.
+/// How a standard [`crate::Menu`] is framed and its rows laid out. It fills with
+/// `c.surface_menu`.
 #[derive(Clone, Copy, Debug)]
-pub struct Raised {
+pub struct StandardMenu {
     /// The edge: `c.std_border` at this opacity.
-    pub border_alpha: f32,
-    /// A standard menu's corners.
-    pub menu_radius: f32,
-    /// Between a standard menu's edge and its rows.
-    pub menu_inset: f32,
-    /// A standard menu row's padding, across and down.
+    pub edge_alpha: f32,
+    pub radius: f32,
+    /// Between the menu's edge and its rows.
+    pub inset: f32,
+    /// A row's padding, across and down.
     pub row_padding: (f32, f32),
-    /// A standard menu row's corners.
     pub row_radius: f32,
 }
 
-impl Raised {
-    /// `@opencode/ui`'s: a half-strength edge, 6 point menus and 4 point rows.
-    pub const STANDARD: Raised =
-        Raised { border_alpha: 0.5, menu_radius: 6.0, menu_inset: 4.0, row_padding: (8.0, 4.0), row_radius: 4.0 };
+impl StandardMenu {
+    /// `@opencode/ui`'s: a half-strength edge, 6 point corners and 4 point rows.
+    pub const OPENCODE: StandardMenu =
+        StandardMenu { edge_alpha: 0.5, radius: 6.0, inset: 4.0, row_padding: (8.0, 4.0), row_radius: 4.0 };
 }
 
 /// Motion tokens. Hover/press overlays use the runtime's own snappy track.
@@ -258,7 +256,7 @@ pub struct Kit {
     pub glyph: Glyphs,
     pub ty: Type,
     pub radius: Radius,
-    pub raised: Raised,
+    pub standard_menu: StandardMenu,
     pub motion: Motion,
     /// The surface translucent colours are solved over when the window blends in linear light
     /// (`App::srgb_blend(false)`), so they look as they would blended in sRGB. None leaves
