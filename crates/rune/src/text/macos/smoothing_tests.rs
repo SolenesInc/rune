@@ -563,7 +563,7 @@ fn a_smoothed_glyph_grows_with_its_inks_luminance() {
     let glyph = font.charmap().map('l');
     let mut cx = ScaleContext::new();
     let mut ink = |c: &str| {
-        let (mask, _) = smoothed_glyph(&mut cx, font, &[], glyph, 28.0, 0.0, crate::color::hex(c).unwrap()).unwrap();
+        let (mask, _) = smoothed_glyph(&mut cx, font, &[], glyph, 28.0, 0.0, SmoothingInk::of(crate::color::hex(c).unwrap())).unwrap();
         mask.iter().map(|&v| u32::from(v)).sum::<u32>()
     };
     let (dark, light) = (ink("#000000"), ink("#ffffff"));

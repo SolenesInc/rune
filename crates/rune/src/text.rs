@@ -63,7 +63,7 @@ mod hairline;
 pub(crate) mod icon;
 mod layout_cache;
 mod macos;
-pub use macos::smoothing::{ApplePipeline, smoothed_glyph};
+pub use macos::smoothing::{ApplePipeline, SmoothingInk, smoothed_glyph};
 mod measure;
 pub(crate) mod outline;
 pub use outline::Outline;
