@@ -83,8 +83,7 @@ struct Track {
     /// transparent` on a Chromium thumb): the thumb is sized and placed on the track with it, and
     /// drawn without it.
     border: f32,
-    /// Overlaid and faded at rest whatever the system preference.
-    overlay: bool,
+    shown: Shown,
     /// The strip sits beside the viewport, in room the caller leaves for it, rather than over
     /// its edge.
     gutter: bool,
@@ -116,7 +115,7 @@ const KIT_TRACK: Track = Track {
     inset: INSET,
     min_thumb: MIN_THUMB,
     border: 0.0,
-    overlay: false,
+    shown: Shown::System,
     gutter: false,
     x: false,
     area_reveals: false,
@@ -140,7 +139,7 @@ const SCROLL_VIEW_TRACK: Track = Track {
     inset: 8.0,
     min_thumb: 32.0,
     border: 0.0,
-    overlay: true,
+    shown: Shown::Overlay,
     gutter: false,
     x: false,
     area_reveals: true,
@@ -166,7 +165,7 @@ const NATIVE_TRACK: Track = Track {
     inset: 4.0,
     min_thumb: 32.0,
     border: 2.0,
-    overlay: true,
+    shown: Shown::Overlay,
     gutter: true,
     x: false,
     area_reveals: true,
@@ -195,7 +194,28 @@ const MENU_SCROLL_TRACK: Track = Track {
     ..SCROLL_VIEW_TRACK
 };
 
+/// When the bar shows while its content overflows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Shown {
+    /// As the system "Show scroll bars" preference says.
+    System,
+    /// Overlaid and faded at rest whatever the system preference.
+    Overlay,
+    /// Always, whatever the system preference, as WebKit draws a page's styled
+    /// `::-webkit-scrollbar`.
+    Always,
+}
+
 impl Track {
+    /// Whether the bar overlays and fades at rest, under the system preference.
+    fn overlay(&self) -> bool {
+        match self.shown {
+            Shown::System => rune::system_scroll_bars().is_overlay(rune::system_scroller_overlay()),
+            Shown::Overlay => true,
+            Shown::Always => false,
+        }
+    }
+
     /// The index of the axis the thumb runs along in a point or size: 0 sideways, 1 down.
     fn along(&self) -> usize {
         usize::from(!self.x)
@@ -246,6 +266,14 @@ impl ScrollBarStyle {
     /// content [`Self::strip`] of end padding while it overflows.
     pub fn inside(mut self) -> Self {
         self.track.gutter = false;
+        self
+    }
+
+    /// Shows the bar whenever its content overflows, whatever the system "Show scroll bars"
+    /// preference, as WebKit draws a page's styled `::-webkit-scrollbar` in place of the
+    /// system's overlay scroller.
+    pub fn always(mut self) -> Self {
+        self.track.shown = Shown::Always;
         self
     }
 
@@ -771,7 +799,7 @@ pub fn scroll_bar(k: &Kit, area: &str, key: &str, viewport: El) -> El {
 }
 
 fn attach(style: ScrollBarStyle, area: &str, key: &str, outer: El, viewport: El) -> El {
-    let overlay = style.track.overlay || rune::system_scroll_bars().is_overlay(rune::system_scroller_overlay());
+    let overlay = style.track.overlay();
     let jumps = rune::system_scroller_jumps();
     let bar = kept(area);
     bar.restyle(style);
