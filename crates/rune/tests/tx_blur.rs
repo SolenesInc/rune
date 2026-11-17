@@ -58,3 +58,43 @@ fn an_update_blurs_and_asks_for_a_frame() {
     assert!(!focused(&rt));
     assert!(!rt.update_if(|_, tx| { tx.blur(); false }), "with nothing focused it's nothing");
 }
+
+#[derive(Default)]
+struct Naming {
+    name: Option<TextEdit>,
+    named: Vec<String>,
+}
+
+fn naming_view(s: &Naming, _: &mut Cx<Naming>) -> El {
+    col().size(200.0, 100.0).children(s.name.as_ref().map(|name| {
+        text_input(name, TextStyle::new(14.0, 400.0)).key("name").w(150.0)
+            .on_edit(|s: &mut Naming| s.name.as_mut().expect("the name field shows only while naming"))
+            .on_submit(|s: &mut Naming, tx| {
+                let name = s.name.take().expect("submitted from the field");
+                s.named.push(name.text.as_str().to_owned());
+                tx.blur();
+            })
+    }))
+}
+
+#[test]
+fn a_handler_that_ends_a_field_and_blurs_never_reaches_its_edit() {
+    let mut name = TextEdit::new("draft");
+    name.focused = true;
+    let mut rt = Runtime::new(Naming { name: Some(name), named: Vec::new() }, naming_view, (200.0, 100.0), Env::default());
+    rt.frame(0.0);
+    rt.key(KeyEvent { key: Key::Enter, mods: Mods::default() });
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state().named, ["draft"]);
+    assert!(rt.elements().iter().all(|e| !e.focused), "nothing has focus");
+    rt.update(|s, _| {
+        let mut name = TextEdit::new("");
+        name.focused = true;
+        s.name = Some(name);
+    });
+    rt.frame(2.0 / 60.0);
+    assert!(rt.elements().iter().any(|e| e.key.as_deref() == Some("name") && e.focused), "naming again");
+    rt.update(|s, tx| { s.name = None; tx.blur(); });
+    rt.frame(3.0 / 60.0);
+    assert!(rt.elements().iter().all(|e| !e.focused), "an update that ends the field and blurs drops focus");
+}

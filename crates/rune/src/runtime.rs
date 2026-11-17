@@ -623,8 +623,8 @@ pub struct RuntimeCore {
     /// Focus when the running commit began, before a new view's focus request applied: what a
     /// modal that opens in this commit returns focus to.
     focus_before_commit: Option<String>,
-    /// `Tx::focus`: the key the next commit focuses, and whether its ring shows.
-    focus_request: Option<(String, bool, crate::el::FocusAsk)>,
+    /// `Tx::blur` and `Tx::focus`, which the next commit applies to the tree its state builds.
+    focus_request: focus::FocusRequest,
     /// This commit's focus is a `Tx::return_focus` hand-back, which a modal opening in it
     /// doesn't take as where focus was.
     focus_returned: bool,
@@ -972,7 +972,7 @@ impl RuntimeCore {
             tab_visits_controls: false,
             modal_focus: modal_focus::ModalFocus::Closed,
             focus_before_commit: None,
-            focus_request: None,
+            focus_request: focus::FocusRequest::default(),
             focus_returned: false,
             unmounted_focused: Vec::new(),
             modal_scope: None,
