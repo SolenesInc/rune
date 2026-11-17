@@ -5,24 +5,31 @@ use rune::{El, TextEdit, TextStyle, Tx, col, el, icon, text_input};
 use crate::text_input::{EditActs, kit_rich_style, name_field, rich_forwarders, shell};
 use crate::{Kit, State};
 
-/// A multi-line field (`Textarea`): 80 points tall at least, 13/1.35 type, 8 points of padding.
+/// A multi-line field (`Textarea`): 80 points tall at least, 13/1.35 type, 8 points of padding,
+/// each of which the app may set.
 /// Return breaks the line, as in a `<textarea>`; Cmd/Ctrl+Return calls [`TextArea::on_submit`].
 pub struct TextArea {
     edit: TextEdit,
     key: String,
     label: Option<String>,
     placeholder: String,
+    placeholder_ink: Option<rune::Color>,
     width: Option<f32>,
     rows: usize,
     grow: Option<(usize, usize)>,
     max_height: Option<f32>,
-    min_height: f32,
+    min_height: Option<f32>,
+    font: Option<TextStyle>,
+    padding: (f32, f32),
     invalid: bool,
     state: State,
     edits: EditActs,
     resizable: bool,
     resize: Option<ResizeDrag>,
 }
+
+/// A `<textarea>`'s `min-height` in the kit's stylesheet.
+const TEXTAREA_MIN_HEIGHT: f32 = 80.0;
 
 /// The grip's drag, given the height the field shows now, when known, and its least height.
 type ResizeDrag = Box<dyn FnOnce(El, Option<f32>, f32) -> El>;
@@ -80,11 +87,14 @@ impl TextArea {
             edit: edit.clone(),
             label: None,
             placeholder: String::new(),
+            placeholder_ink: None,
             width: Some(280.0),
             rows: 3,
             grow: None,
             max_height: None,
-            min_height: 0.0,
+            min_height: None,
+            font: None,
+            padding: (8.0, 8.0),
             invalid: false,
             state: State::Rest,
             edits: EditActs::default(),
@@ -94,6 +104,11 @@ impl TextArea {
     }
     pub fn placeholder(mut self, p: impl Into<String>) -> Self {
         self.placeholder = p.into();
+        self
+    }
+    /// The placeholder's ink, the palette's `text_faint` unless set; an invalid field's stays red.
+    pub fn placeholder_ink(mut self, ink: rune::Color) -> Self {
+        self.placeholder_ink = Some(ink);
         self
     }
     /// A grip in the bottom-right corner drags the field taller or back to its least height
@@ -131,10 +146,21 @@ impl TextArea {
         self.max_height = Some(h);
         self
     }
-    /// The box's least height in points (`min-height`), where its rows ask for less. A
-    /// [`TextArea::resizable`] drag stops there too.
+    /// The box's least height in points (`min-height`), where its rows ask for less: 80 unless
+    /// set, and none for an [`TextArea::auto_grow`] area. A [`TextArea::resizable`] drag stops
+    /// there too.
     pub fn min_height(mut self, h: f32) -> Self {
-        self.min_height = h;
+        self.min_height = Some(h);
+        self
+    }
+    /// The text's type, 13/1.35 of the kit's UI face unless set; rows are its lines.
+    pub fn font(mut self, style: TextStyle) -> Self {
+        self.font = Some(style);
+        self
+    }
+    /// The space between the box's edge and its text: `x` on the sides, `y` above and below.
+    pub fn padding(mut self, x: f32, y: f32) -> Self {
+        self.padding = (x, y);
         self
     }
     pub fn animate_edit_layout(mut self) -> Self {
@@ -183,11 +209,14 @@ impl TextArea {
     pub fn build(self, k: &Kit) -> El {
         let c = &k.c;
         let disabled = self.state == State::Disabled;
-        let style = TextStyle { line_height: (13.0f32 * 1.35 * 2.0).round() / 2.0, ..k.ty.ui };
+        let style = self.font.unwrap_or(TextStyle { line_height: (13.0f32 * 1.35 * 2.0).round() / 2.0, ..k.ty.ui });
+        let (pad_x, pad_y) = self.padding;
+        let inset = 2.0 * pad_y;
         let least = self.least_height(style.line_px());
+        let stylesheet_min_height = self.stylesheet_min_height();
         let red = self.invalid && !disabled && k.invalid_text;
         let ink = if red { c.danger.fg } else { c.text_base };
-        let hint = if red { c.danger.fg } else { c.text_faint };
+        let hint = if red { c.danger.fg } else { self.placeholder_ink.unwrap_or(c.text_faint) };
         let field = text_input(&self.edit, style)
             .key(self.key.clone())
             .w_full()
@@ -199,7 +228,7 @@ impl TextArea {
         let field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled);
         let field = self.edits.apply(field, disabled);
         let line = style.line_px();
-        let mut e = col().role("textbox").padding(8.0);
+        let mut e = col().role("textbox").px(pad_x).py(pad_y);
         let dragged = self.edit.dragged_height().filter(|_| self.resizable);
         e = if let Some(h) = dragged {
             let viewport = col()
@@ -218,8 +247,8 @@ impl TextArea {
                 None => viewport,
             })
         } else if let Some(h) = self.max_height {
-            let max_inner = (h - 16.0).max(line);
-            let min_inner = (self.rows as f32 * line).max(80.0 - 16.0).min(max_inner);
+            let max_inner = (h - inset).max(line);
+            let min_inner = (self.rows as f32 * line).max(stylesheet_min_height - inset).min(max_inner);
             let viewport = col()
                 .key("scroll")
                 .w_full()
@@ -228,18 +257,15 @@ impl TextArea {
                 .max_h(max_inner)
                 .scroll(rune::ScrollSpec { stick_bottom: false })
                 .child(field.animate_edit_layout());
-            e.min_h(min_inner + 16.0).child(viewport)
+            e.min_h(min_inner + inset).child(viewport)
         } else {
-            // A <textarea rows=3>: rows of its line height plus padding, at least 80.
-            e.min_h((self.rows as f32 * line + 16.0).max(80.0)).child(field)
+            e.child(field)
         };
         e = match self.width {
             Some(w) => e.w(w),
             None => e.w_full(),
         };
-        if self.min_height > 0.0 {
-            e = e.min_h(least);
-        }
+        e = e.min_h(least);
         if let (true, false, Some(drag)) = (self.resizable, disabled, self.resize) {
             let box_key = format!("{}-resizable", self.key);
             let shown = if dragged.is_none() { rune::memo::layout_size(&box_key).map(|[_, h]| h) } else { None };
@@ -257,11 +283,17 @@ impl TextArea {
 
     /// The box's least height: what it shows with no text, which a drag never goes below.
     fn least_height(&self, line: f32) -> f32 {
-        let rows = match (self.grow, self.max_height) {
-            (Some((min_rows, _)), _) => min_rows as f32 * line + 16.0,
-            (None, Some(h)) => (self.rows as f32 * line).max(80.0 - 16.0).min((h - 16.0).max(line)) + 16.0,
-            (None, None) => (self.rows as f32 * line + 16.0).max(80.0),
-        };
-        rows.max(self.min_height)
+        let inset = 2.0 * self.padding.1;
+        match (self.grow, self.max_height) {
+            (Some((min_rows, _)), _) => (min_rows as f32 * line + inset).max(self.min_height.unwrap_or(0.0)),
+            (None, Some(h)) => {
+                (self.rows as f32 * line).max(self.stylesheet_min_height() - inset).min((h - inset).max(line)) + inset
+            }
+            (None, None) => (self.rows as f32 * line + inset).max(self.stylesheet_min_height()),
+        }
+    }
+
+    fn stylesheet_min_height(&self) -> f32 {
+        self.min_height.unwrap_or(TEXTAREA_MIN_HEIGHT)
     }
 }

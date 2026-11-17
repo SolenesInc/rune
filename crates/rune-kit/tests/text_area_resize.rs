@@ -72,3 +72,33 @@ fn a_min_height_raises_the_box_and_the_least_a_drag_reaches() {
     drag_grip(&mut rt, -60.0);
     assert_eq!(height(&rt), 120.0);
 }
+
+fn styled(s: &TextEdit, _: &mut Cx<TextEdit>) -> El {
+    let k = Kit::neutral(true);
+    let area = TextArea::new(s)
+        .key("notes")
+        .font(rune::TextStyle { line_height: 18.0, ..rune::TextStyle::new(13.0, 400.0) })
+        .padding(10.0, 8.0)
+        .min_height(0.0)
+        .resizable()
+        .on_edit(|s: &mut TextEdit| s)
+        .build(&k);
+    col().padding(20.0).child(area)
+}
+
+#[test]
+fn an_area_set_to_its_own_type_padding_and_min_height_is_its_rows_tall_and_drags_back_to_them() {
+    let mut rt = Runtime::new(TextEdit::default(), styled, (600.0, 600.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.frame(1.0 / 60.0);
+    let three_rows = 3.0 * 18.0 + 2.0 * 8.0;
+    assert_eq!(height(&rt), three_rows);
+    let boxed = rt.presented("notes-resizable").expect("the resizable box").0;
+    let editor = rt.presented("notes").expect("the editor").0;
+    assert_eq!((editor[0] - boxed[0], editor[1] - boxed[1]), (10.0, 8.0));
+
+    drag_grip(&mut rt, 40.0);
+    assert_eq!(height(&rt), three_rows + 40.0);
+    drag_grip(&mut rt, -400.0);
+    assert_eq!(height(&rt), three_rows, "a drag stops at the rows the type and padding make");
+}
