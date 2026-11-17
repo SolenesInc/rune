@@ -141,6 +141,11 @@ pub(super) fn live_only_handler(action: &Action) -> Option<&'static str> {
     })
 }
 
+/// Actions that set focus or edit a field, which reach every mounted field's state.
+pub(super) fn reaches_fields(action: &Action) -> bool {
+    matches!(action, Action::Focus(..) | Action::FocusControl(_) | Action::HoverFocus(_) | Action::Blur | Action::Dismiss(_) | Action::FieldMenu(..) | Action::A11y(..))
+}
+
 #[cfg(debug_assertions)]
 pub(super) fn action_path(action: &Action) -> Option<&str> {
     match action {
