@@ -485,12 +485,13 @@ impl<S: 'static> Host<S> {
 /// first, and the input or changes the inspection made build after it, as a hidden window's
 /// queued keys are (`hidden_input`). A covered window builds no view until it shows again, so
 /// without this an inspection would read the view from before it was covered. Returns whether
-/// the window needs a frame to show it: one that only read a built view asks for none.
+/// the window needs a frame to show it: a wheel moves its scroll view at once and asks for one
+/// too, and one that only read a built view asks for none.
 pub(super) fn inspect<S>(rt: &mut Runtime<S>, f: crate::app::Inspection<S>) -> bool {
     let behind = rt.stale();
     if behind { rt.hidden_timer_frame(); }
     f(rt);
-    let changed = rt.has_pending_input() || rt.stale();
+    let changed = rt.has_pending_input() || rt.stale() || rt.scrolling();
     if changed { rt.hidden_timer_frame(); }
     behind || changed
 }

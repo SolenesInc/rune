@@ -782,6 +782,30 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
 }
 
+/// A wheel an inspection feeds moves the scroll view at once, without queueing input or
+/// changing state, and asks the window for a frame that lays the rows out where it scrolled
+/// them. A tool that scrolls an element into view waits for that frame.
+#[test]
+fn an_inspection_s_wheel_asks_for_a_frame_to_show_the_rows_it_scrolled() {
+    use crate::{App, AppSpec, ScrollSpec, col, el};
+    fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        col().key("list").w(100.0).h(100.0).scroll(ScrollSpec { stick_bottom: false })
+            .children((0..10).map(|i| el().key(format!("row-{i}")).w(100.0).h(40.0)))
+    }
+    let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (100.0, 100.0), crate::Env::default());
+    rt.frame(0.0);
+    handle.inspect(|rt| rt.wheel(50.0, 50.0, -120.0));
+    handle.inspect(|_| {});
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the wheel asks for a frame");
+    rt.frame(1.0 / 60.0);
+    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read after that frame asks for none");
+    let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row-3")).expect("row 3 is laid out");
+    assert_eq!(row.rect[1], 0.0, "the frame laid row 3 out at the top, where the wheel scrolled it");
+}
+
 /// A selection drag that an inspection feeds over the text the pointer already rests on changes
 /// only the selection: no state, no queued action. It still asks the window for a frame, and the
 /// release reaches `on_selection_change`. Repeating the same drag selects what is already
