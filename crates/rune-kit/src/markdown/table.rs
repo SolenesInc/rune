@@ -48,7 +48,7 @@ fn font_key(f: TextStyle) -> (u32, u32, u32, u32, String) {
 
 /// `features` with tabular figures on, interned so the result is `'static` like a
 /// [`TextStyle`]'s features (a style has few distinct feature lists).
-fn with_tnum(features: &'static str) -> &'static str {
+pub(super) fn with_tnum(features: &'static str) -> &'static str {
     if features.is_empty() {
         return "'tnum' 1";
     }
@@ -287,10 +287,10 @@ impl Renderer {
         }
         let widths = fixed.as_ref().map(|(w, _)| w.as_slice());
         let head = self.table_row(&t.head, None, head_maps, t, &cols, widths, self.head_font(), s.table_head_text, self.head_pad(), "columnheader").key("th");
-        let rule = |key: String| el().key(key).w_full().h(0.5).fill(s.table_rule).a11y_hidden();
+        let rule = |key: String| el().key(key).w_full().h(s.line).fill(s.table_rule).a11y_hidden();
         let row_at = |i: usize, cells: &[Inline]| {
             let rmap = row_maps.get(i).map_or(&[][..], Vec::as_slice);
-            self.table_row(cells, Some(i), rmap, t, &cols, widths, self.body_font(), s.text, s.table_pad, "cell").key(format!("r{i}"))
+            self.table_row(cells, Some(i), rmap, t, &cols, widths, self.body_font(), s.table_text.unwrap_or(s.text), s.table_pad, "cell").key(format!("r{i}"))
         };
         if let Some(body) = &s.table_body {
             // The frame doesn't clip, so the card's shadow shows past it; the header row and
@@ -315,7 +315,7 @@ impl Renderer {
                     // `tbody tr:not(:last-child) td { border-bottom: 0.5px }`: a border that
                     // takes a whole device pixel of the row, as Chromium lays it out.
                     let row = row_at(i, cells);
-                    rows = rows.child(if i + 1 < t.rows.len() { row.border_sides([0.0, 0.0, 0.5, 0.0], s.table_rule).border_layout() } else { row });
+                    rows = rows.child(if i + 1 < t.rows.len() { row.border_sides([0.0, 0.0, s.line, 0.0], s.table_rule).border_layout() } else { row });
                 }
                 let card = col().key("tb").w_full().radius(body.radius).fill(body.fill);
                 frame = frame.child(body.shadows.iter().fold(card, |c, sh| c.box_shadow(*sh)).child(rows));
@@ -446,7 +446,7 @@ impl Renderer {
             font_key(head),
             font_key(body),
             cap.to_bits(),
-            self.s.inline_code_scale.to_bits(),
+            (self.s.inline_code_scale.to_bits(), self.s.inline_code_size.map(f32::to_bits)),
             (self.s.inline_code_weight.to_bits(), self.s.inline_code_pad.to_bits()),
             self.s.table_pad.map(f32::to_bits),
             self.head_pad().map(f32::to_bits),

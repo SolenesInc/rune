@@ -98,6 +98,29 @@ pub struct MarkdownStyle {
     pub(super) highlight_current_ring: Option<(Color, f32)>,
     pub(super) task: TaskPaint,
     pub(crate) diagram: DiagramPaint,
+    /// The width of rules, table rules and code blocks' outlines.
+    pub(super) line: f32,
+    pub(super) margins: Margins,
+    /// Whether ordered lists' numbers set figures at one width.
+    pub(super) list_tabular: bool,
+    /// Inline code's size in points, whatever text it sits in (`None`: `inline_code_scale` of it).
+    pub(super) inline_code_size: Option<f32>,
+    /// Table body cells' text (`None`: the body text colour).
+    pub(super) table_text: Option<Color>,
+}
+
+/// The space above and below blocks (see [`MarkdownStyle::heading_margin`] and its siblings).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Margins {
+    pub(super) para: f32,
+    /// Levels 1 to 3, then 4 and deeper.
+    pub(super) headings: [[f32; 2]; 4],
+    pub(super) list: [f32; 2],
+    pub(super) quote: [f32; 2],
+    pub(super) rule: [f32; 2],
+    /// Whether the gap under a heading is its bottom margin collapsed with the next block's
+    /// top, as CSS's, rather than its bottom margin alone.
+    pub(super) collapse_under_heading: bool,
 }
 
 /// Colours, icon and motion of a GFM task list checkbox (matching [`crate::Checkbox`]).
@@ -118,6 +141,12 @@ pub(super) struct TaskPaint {
     pub(super) size: f32,
     pub(super) left: f32,
     pub(super) top: Option<f32>,
+    /// The outline's width, and the room from the box to the item's text (`None`: the rest of
+    /// the marker column).
+    pub(super) ring: f32,
+    pub(super) gap: Option<f32>,
+    /// A checked item's text colour, struck through (`None`: drawn as an open item's).
+    pub(super) done: Option<Color>,
 }
 
 /// A block quote's rule and text (see [`MarkdownStyle::quote`]).
@@ -126,6 +155,7 @@ pub(super) struct QuoteLook {
     pub(super) width: f32,
     pub(super) pad: f32,
     pub(super) text: Option<Color>,
+    pub(super) italic: bool,
 }
 
 /// Shell fences' frame and text (see [`MarkdownStyle::shell_code`]).
@@ -189,7 +219,7 @@ impl MarkdownStyle {
             code_block_fill: c.layer_01,
             code_block_border: c.border_muted,
             quote_rule: c.layer_03,
-            quote: QuoteLook { width: 2.0, pad: 12.0, text: None },
+            quote: QuoteLook { width: 2.0, pad: 12.0, text: None, italic: false },
             alerts: alert_colors(k.dark),
             rule: c.border_base,
             body,
@@ -259,6 +289,9 @@ impl MarkdownStyle {
                 size: 16.0,
                 left: 8.0,
                 top: None,
+                ring: 1.0,
+                gap: None,
+                done: None,
             },
             diagram: DiagramPaint {
                 text: c.text_base,
@@ -277,6 +310,18 @@ impl MarkdownStyle {
                 hover: k.alpha(c.text_base, 0.9),
                 hover_neighbours: false,
             },
+            line: 0.5,
+            margins: Margins {
+                para: 12.0,
+                headings: [[28.0, 12.0], [24.0, 10.0], [20.0, 8.0], [20.0, 8.0]],
+                list: [8.0, 12.0],
+                quote: [16.0, 16.0],
+                rule: [32.0, 32.0],
+                collapse_under_heading: false,
+            },
+            list_tabular: false,
+            inline_code_size: None,
+            table_text: None,
         }
     }
     /// Rune's neutral light or dark look ([`Kit::neutral`]'s tokens), for apps without a kit.
@@ -365,7 +410,13 @@ impl MarkdownStyle {
     /// the text's colour (2, 12 and the body text colour by default).
     pub fn quote(mut self, rule: Color, width: f32, pad: f32, text: Color) -> Self {
         self.quote_rule = rule;
-        self.quote = QuoteLook { width: width.max(0.0), pad: pad.max(0.0), text: Some(text) };
+        self.quote = QuoteLook { width: width.max(0.0), pad: pad.max(0.0), text: Some(text), ..self.quote };
+        self
+    }
+    /// Whether a block quote's text is italic, as CSS's `blockquote { font-style: italic }` (off
+    /// by default).
+    pub fn quote_italic(mut self, on: bool) -> Self {
+        self.quote.italic = on;
         self
     }
     /// The colour of a link under the pointer, underlined in it (the link colour by default).
@@ -415,8 +466,84 @@ impl MarkdownStyle {
         (t.fill_on, t.border_on, t.mark, t.fill_off, t.border_off) = (fill_on, fill_on, mark, fill_off, border_off);
         self
     }
+    /// A checked task checkbox: its fill, outline and mark, for a box that stays a ring with a
+    /// check in it rather than filling ([`Self::task_checkbox`] gives the outline the fill).
+    pub fn task_checked(mut self, fill: Color, border: Color, mark: Color) -> Self {
+        (self.task.fill_on, self.task.border_on, self.task.mark) = (fill, border, mark);
+        self
+    }
+    /// Task checkboxes' outline width (1 by default) and the room from the box to the item's
+    /// text (by default the rest of the list's marker column, so the text lines up with other
+    /// items').
+    pub fn task_ring(mut self, width: f32, gap: f32) -> Self {
+        (self.task.ring, self.task.gap) = (width.max(0.0), Some(gap.max(0.0)));
+        self
+    }
+    /// A checked task's text in `text`, struck through, as a page that dims finished tasks
+    /// draws it. Lists inside the item keep their own look.
+    pub fn task_done(mut self, text: Color) -> Self {
+        self.task.done = Some(text);
+        self
+    }
     pub fn rule(mut self, c: Color) -> Self {
         self.rule = c;
+        self
+    }
+    /// The width of rules, table rules and code blocks' outlines: 0.5, a hairline, by default; 1
+    /// for a web page's `1px` borders.
+    pub fn lines(mut self, width: f32) -> Self {
+        self.line = super::table::pts(width);
+        self
+    }
+    /// The space below a paragraph (12 by default; none above).
+    pub fn paragraph_margin(mut self, bottom: f32) -> Self {
+        self.margins.para = super::table::pts(bottom);
+        self
+    }
+    /// The space above and below a heading of `level` (1 to 4, where 4 is every deeper level
+    /// too): 28 and 12, 24 and 10, then 20 and 8 by default.
+    pub fn heading_margin(mut self, level: u8, top: f32, bottom: f32) -> Self {
+        self.margins.headings[usize::from(level.clamp(1, 4)) - 1] = [super::table::pts(top), super::table::pts(bottom)];
+        self
+    }
+    /// The space above and below a list (8 and 12 by default).
+    pub fn list_margin(mut self, top: f32, bottom: f32) -> Self {
+        self.margins.list = [super::table::pts(top), super::table::pts(bottom)];
+        self
+    }
+    /// The space above and below a block quote or an alert (16 and 16 by default).
+    pub fn quote_margin(mut self, top: f32, bottom: f32) -> Self {
+        self.margins.quote = [super::table::pts(top), super::table::pts(bottom)];
+        self
+    }
+    /// The space above and below a rule (32 and 32 by default).
+    pub fn rule_margin(mut self, top: f32, bottom: f32) -> Self {
+        self.margins.rule = [super::table::pts(top), super::table::pts(bottom)];
+        self
+    }
+    /// Whether the gap under a heading collapses its bottom margin with the next block's top,
+    /// the larger winning, as a page without `h2 + * { margin-top: 0 }` spaces it. Off by
+    /// default: the heading's bottom margin alone sets the gap.
+    pub fn heading_margins_collapse(mut self, on: bool) -> Self {
+        self.margins.collapse_under_heading = on;
+        self
+    }
+    /// Whether ordered lists' numbers set figures at one width (OpenType `tnum`), as CSS's
+    /// `font-variant-numeric: tabular-nums` (off by default).
+    pub fn list_tabular_figures(mut self, on: bool) -> Self {
+        self.list_tabular = on;
+        self
+    }
+    /// Inline code at `points`, whatever the size of the text around it, as a page that sets
+    /// `code { font-size }` in `rem` (by default [`Self::inline_code_font`]'s multiple of it).
+    pub fn inline_code_size(mut self, points: f32) -> Self {
+        self.inline_code_size = (points.is_finite() && points > 0.0).then_some(points);
+        self
+    }
+    /// Table body cells' text colour (the body text colour by default), as a page that sets
+    /// `td { color }` apart from `p`.
+    pub fn table_text(mut self, c: Color) -> Self {
+        self.table_text = Some(c);
         self
     }
     /// Paragraphs, list items and list markers.
@@ -686,10 +813,18 @@ impl std::hash::Hash for MarkdownStyle {
             highlight_current_ring,
             task,
             diagram,
+            line,
+            margins,
+            list_tabular,
+            inline_code_size,
+            table_text,
         } = *self;
         (text, muted, list_marker, heading_text, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
         (body, list_font, headings, code_block, (code_text, plain_code_text), shell, link_hover, list_outside, list_nested.map(|n| n.map(f32_bits)), table_align).hash(state);
-        (f32_bits(quote.width), f32_bits(quote.pad), quote.text, alerts).hash(state);
+        (f32_bits(quote.width), f32_bits(quote.pad), quote.text, quote.italic, alerts).hash(state);
+        let Margins { para, headings: heading_margins, list, quote: quote_margin, rule: rule_margin, collapse_under_heading } = margins;
+        (f32_bits(line), f32_bits(para), heading_margins.map(|m| m.map(f32_bits)), [list, quote_margin, rule_margin].map(|m| m.map(f32_bits)), collapse_under_heading).hash(state);
+        (list_tabular, inline_code_size.map(f32_bits), table_text).hash(state);
         [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]
             .map(f32_bits)
             .hash(state);
@@ -717,9 +852,9 @@ impl std::hash::Hash for MarkdownStyle {
             highlight_current_ring.map(|(c, w)| (c, f32_bits(w))),
         )
             .hash(state);
-        let TaskPaint { fill_on, border_on, border_off, fill_off, hover, focus_ring, mark, check, radius, motion, size, left, top } = task;
+        let TaskPaint { fill_on, border_on, border_off, fill_off, hover, focus_ring, mark, check, radius, motion, size, left, top, ring, gap, done } = task;
         (fill_on, border_on, border_off, fill_off, hover, focus_ring, mark, check as *const Icon as usize, f32_bits(radius), f32_bits(motion.duration), f32_bits(motion.bounce)).hash(state);
-        (f32_bits(size), f32_bits(left), top.map(f32_bits)).hash(state);
+        (f32_bits(size), f32_bits(left), top.map(f32_bits), f32_bits(ring), gap.map(f32_bits), done).hash(state);
         let DiagramPaint {
             text,
             muted,

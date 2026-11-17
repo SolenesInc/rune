@@ -474,3 +474,134 @@ fn an_alerts_bar_runs_the_whole_height_of_its_box() {
     assert_eq!((bar.rect[1], bar.rect[3]), (alert.rect[1], alert.rect[3]), "the bar spans the padding too");
     assert!(title.rect[1] >= alert.rect[1] + 8.0, "the title sits inside the padding");
 }
+
+struct Styled {
+    src: String,
+    style: MarkdownStyle,
+}
+
+fn styled_view(s: &Styled, _: &mut Cx<Styled>) -> El {
+    col().w_full().child(Markdown::new(s.src.clone()).render(&s.style))
+}
+
+fn styled(src: &str, style: impl FnOnce(MarkdownStyle) -> MarkdownStyle) -> Runtime<Styled> {
+    let state = Styled { src: src.to_owned(), style: style(MarkdownStyle::from_kit(&Kit::neutral(true))) };
+    let mut rt = Runtime::new(state, styled_view, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt
+}
+
+fn shown<'a>(elements: &'a [rune::ElementInfo], t: &str) -> &'a rune::ElementInfo {
+    elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}"))
+}
+
+#[test]
+fn a_finished_task_draws_dimmed_and_struck_through_and_its_nested_list_does_not() {
+    let done = rune::oklch(0.6, 0.0, 0.0);
+    let src = "- [x] Finished\n  - inside\n- [ ] Open\n";
+    let rt = styled(src, |s| s.task_done(done));
+    let elements = rt.elements();
+    assert_eq!(shown(&elements, "Finished").text_color, Some(done));
+    assert_eq!(shown(&elements, "Finished").strikes, [[0, "Finished".len() as u32]]);
+    assert!(shown(&elements, "inside").strikes.is_empty(), "a list inside the item keeps its own look");
+    assert!(shown(&elements, "Open").strikes.is_empty());
+    assert_ne!(shown(&elements, "Open").text_color, Some(done));
+    let plain = styled(src, |s| s);
+    assert!(shown(&plain.elements(), "Finished").strikes.is_empty(), "by default a finished task reads as an open one");
+}
+
+#[test]
+fn a_task_checkbox_keeps_its_ring_checked_and_its_text_the_gap_away() {
+    let (ring, mark) = (rune::oklch(0.7, 0.15, 145.0), rune::oklch(0.7, 0.15, 145.0));
+    let rt = styled("- [x] Finished\n- [ ] Open\n", |s| s.task_checked(Color::TRANSPARENT, ring, mark).task_ring(2.0, 11.0));
+    let elements = rt.elements();
+    let boxes: Vec<_> = elements.iter().filter(|e| e.key.as_deref() == Some("control")).collect();
+    assert_eq!(boxes.len(), 2);
+    assert_eq!(boxes[0].fill, Color::TRANSPARENT, "a checked box stays a ring");
+    let marks: Vec<_> = elements.iter().filter(|e| e.key.as_deref() == Some("mark")).collect();
+    assert_eq!(marks[0].text_color, Some(mark));
+    let text = shown(&elements, "Finished");
+    assert_eq!(text.rect[0], boxes[0].rect[0] + boxes[0].rect[2] + 11.0);
+}
+
+#[test]
+fn rules_table_rules_and_code_outlines_take_the_line_width() {
+    let src = "Above.\n\n---\n\n| a |\n|---|\n| b |\n| c |\n";
+    let thick = styled(src, |s| s.lines(1.0));
+    let hairline = styled(src, |s| s);
+    let heights = |rt: &Runtime<Styled>| -> Vec<f32> {
+        let mut h: Vec<f32> = rt.elements().iter().filter(|e| e.rect[3] > 0.0 && e.rect[3] <= 1.0 && e.rect[2] > 100.0).map(|e| e.rect[3]).collect();
+        h.sort_by(f32::total_cmp);
+        h
+    };
+    assert!(!heights(&thick).is_empty() && heights(&thick).iter().all(|&h| h == 1.0), "{:?}", heights(&thick));
+    assert!(heights(&hairline).iter().all(|&h| h == 0.5), "{:?}", heights(&hairline));
+}
+
+#[test]
+fn blocks_space_by_the_margins_the_style_gives_them() {
+    let src = "# Title\n\nText.\n\n### Code\n\n```\nlet x = 1;\n```\n\n- item\n\n---\n\nAfter.\n";
+    let rt = styled(src, |s| {
+        s.heading_margin(1, 21.0, 14.0)
+            .heading_margin(3, 21.0, 7.0)
+            .paragraph_margin(14.0)
+            .code_margin(17.5, 17.5)
+            .list_margin(5.25, 5.25)
+            .rule_margin(28.0, 28.0)
+            .heading_margins_collapse(true)
+    });
+    let elements = rt.elements();
+    let top = |t: &str| shown(&elements, t).rect[1];
+    let bottom = |t: &str| shown(&elements, t).rect[1] + shown(&elements, t).rect[3];
+    assert_eq!(top("Text.") - bottom("Title"), 14.0);
+    assert_eq!(top("Code") - bottom("Text."), 21.0);
+    let code = elements.iter().find(|e| e.role == "code").expect("the code block");
+    assert_eq!(code.rect[1] - bottom("Code"), 17.5, "a heading's bottom margin collapses with the code's top");
+    let rule = elements.iter().find(|e| e.rect[3] == 0.5 && e.rect[1] > bottom("item")).expect("the rule");
+    assert_eq!(rule.rect[1] - bottom("item"), 28.0);
+    assert_eq!(top("After.") - (rule.rect[1] + rule.rect[3]), 28.0);
+
+    let default = styled(src, |s| s);
+    let elements = default.elements();
+    let code = elements.iter().find(|e| e.role == "code").expect("the code block");
+    let heading = shown(&elements, "Code");
+    assert_eq!(code.rect[1] - (heading.rect[1] + heading.rect[3]), 8.0, "by default a heading's bottom margin alone sets the gap");
+}
+
+#[test]
+fn a_quote_can_be_italic_and_its_words_lean() {
+    let src = "> Every word of this quote.\n";
+    let upright = styled(src, |s| s);
+    let italic = styled(src, |s| s.quote_italic(true));
+    let width = |rt: &Runtime<Styled>| shown(&rt.elements(), "Every word of this quote.").rect[2];
+    let ink = |rt: &Runtime<Styled>| rt.instances.iter().filter(|i| i.params[1] == rune::render::KIND_GLYPH).map(|i| (i.rect, i.params)).collect::<Vec<_>>();
+    assert!(width(&upright) != width(&italic) || ink(&upright).iter().zip(ink(&italic)).any(|(a, b)| *a != b), "italic draws other glyphs");
+}
+
+#[test]
+fn inline_code_keeps_its_size_whatever_text_it_sits_in() {
+    let src = "Some `code` here.\n\n- an `item`\n";
+    let rt = styled(src, |s| s.list_font(TextStyle { size: 11.0, line_height: 16.0, ..Kit::neutral(true).ty.body }).inline_code_size(12.0));
+    let scaled = styled(src, |s| s.list_font(TextStyle { size: 11.0, line_height: 16.0, ..Kit::neutral(true).ty.body }));
+    let width = |rt: &Runtime<Styled>| {
+        let e = rt.elements().into_iter().find(|e| e.text.as_deref().is_some_and(|t| t.contains("item"))).expect("the item");
+        let xs: Vec<f32> = rt.instances.iter()
+            .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+            .filter(|i| i.rect[1] >= e.rect[1] && i.rect[1] + i.rect[3] <= e.rect[1] + e.rect[3])
+            .map(|i| i.rect[0] + i.rect[2])
+            .collect();
+        xs.into_iter().fold(0.0f32, f32::max)
+    };
+    assert!(width(&rt) > width(&scaled), "the list's inline code grows to its own size");
+}
+
+#[test]
+fn ordered_list_numbers_can_set_figures_at_one_width() {
+    let src = "1. one\n2. two\n";
+    let marks = |rt: &Runtime<Styled>| -> Vec<[f32; 4]> {
+        rt.instances.iter().filter(|i| i.params[1] == rune::render::KIND_GLYPH).map(|i| i.rect).filter(|r| r[0] < 30.0).collect()
+    };
+    let tabular = styled(src, |s| s.list_markers_outside(true).list_tabular_figures(true));
+    let proportional = styled(src, |s| s.list_markers_outside(true));
+    assert_ne!(marks(&tabular), marks(&proportional), "the numbers set at another width");
+}

@@ -68,6 +68,10 @@ pub(super) struct Flow {
     /// The marker a copy puts before the paragraph that opens a list item, its indent, and the
     /// newlines before it: two to set a top-level list apart from the block before it.
     pub(super) lead: Option<(u8, Lead, u8)>,
+    /// Whether their text is italic, as a quote's may be.
+    pub(super) italic: bool,
+    /// Whether their text is struck through, as a finished task's may be.
+    pub(super) struck: bool,
 }
 
 /// A list item's marker as copying writes it.
@@ -152,15 +156,16 @@ fn block_key(i: usize, keys: &[String], used: &mut Vec<String>) -> String {
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
 pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
     match b {
-        Block::Para(_) => (0.0, 12.0),
-        Block::Heading(1, _) => (28.0, 12.0),
-        Block::Heading(2, _) => (24.0, 10.0),
-        Block::Heading(..) => (20.0, 8.0),
+        Block::Para(_) => (0.0, s.margins.para),
+        Block::Heading(level, _) => {
+            let [top, bottom] = s.margins.headings[usize::from((*level).clamp(1, 4)) - 1];
+            (top, bottom)
+        }
         Block::Code { .. } | Block::Diff(_) | Block::Mermaid(_) => (s.code_margin[0], s.code_margin[1]),
-        Block::List { .. } => (8.0, 12.0),
-        Block::Quote(_) | Block::Alert(..) => (16.0, 16.0),
+        Block::List { .. } => (s.margins.list[0], s.margins.list[1]),
+        Block::Quote(_) | Block::Alert(..) => (s.margins.quote[0], s.margins.quote[1]),
         Block::FrontMatter(_) => (0.0, 16.0),
-        Block::Rule => (32.0, 32.0),
+        Block::Rule => (s.margins.rule[0], s.margins.rule[1]),
         Block::Table(_) => (s.table_margin[0], s.table_margin[1]),
         Block::Image { .. } => (24.0, 24.0),
         Block::Details { .. } => (0.0, 12.0),
@@ -322,14 +327,14 @@ impl Renderer {
                 Style::Code if self.code_link_color(a, b, inl).is_some() => {
                     sp.mono = true;
                     sp.weight = Some(s.inline_code_weight);
-                    sp.size = Some(base * s.inline_code_scale);
+                    sp.size = Some(s.inline_code_size.unwrap_or(base * s.inline_code_scale));
                     sp.color = self.code_link_color(a, b, inl);
                 }
                 Style::Code => {
                     let link_base = in_link.and_then(|l| l.size).unwrap_or(base);
                     sp.mono = true;
                     sp.weight = Some(s.inline_code_weight);
-                    sp.size = Some(link_base * s.inline_code_scale);
+                    sp.size = Some(s.inline_code_size.unwrap_or(link_base * s.inline_code_scale));
                     sp.underline = no_line;
                     if in_link.is_none_or(|l| l.bg.is_none()) {
                         sp = sp.bg(s.code_bg, s.inline_code_pad);
@@ -443,7 +448,10 @@ impl Renderer {
     pub(super) fn para(&self, inl: &Inline, map: Option<&SpanMap>, style: TextStyle, color: Color) -> El {
         // Lines keep their own 22.4 points, as a page's do, so a long list doesn't drift a
         // point per item.
+        let flow = self.flow.get();
+        let style = TextStyle { italic: style.italic || flow.italic, ..style };
         let e = self.with_reveal(rich(inl.text.clone(), self.spans(inl, style)).font(style).color(color).exact_lines()).w_full();
+        let e = if flow.struck { e.strike(0, inl.text.len(), None) } else { e };
         let e = bidi::directed(bidi::isolated(e, inl), bidi::inline_dir(inl));
         // A copy puts a blank line around a paragraph, one newline around a list item's first
         // with its marker before it.
@@ -486,7 +494,7 @@ impl Renderer {
                 // An image keeps its own 24 under a heading: the page zeroes the top margin of
                 // the paragraph holding it, not the image's, which collapses through.
                 Block::Heading(..) | Block::Rule | Block::Image { .. } => mt.max(prev_mb),
-                _ if after_heading => prev_mb,
+                _ if after_heading && !self.s.margins.collapse_under_heading => prev_mb,
                 _ => mt.max(prev_mb),
             };
             if top_level {
@@ -526,7 +534,7 @@ impl Renderer {
         let body = self.wire_presses(self.with_reveal(tabbed(code, spans, highlights, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2), any);
         // `.highlights`' `border: 0.5px` takes its device pixel each side, inside which the padding sits.
         // Code reads left to right in any document, as `markdown.css` isolates it.
-        let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(0.5, border).border_layout();
+        let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(s.line, border).border_layout();
         if self.scroll_wide {
             // The text sizes to its longest line inside the viewport, which scrolls under the
             // padding so lines run to the frame's edge.
@@ -554,7 +562,7 @@ impl Renderer {
     pub(super) fn diff(&self, src: &str, map: Option<&SpanMap>) -> El {
         let s = &self.s;
         let all_marks = self.marks_for(src, map);
-        let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(6.0).fill(s.code_block_fill).border(0.5, s.code_block_border).border_layout();
+        let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(6.0).fill(s.code_block_fill).border(s.line, s.code_block_border).border_layout();
         let mut line_start = 0usize;
         let last = src.split('\n').count() - 1;
         for (n, line) in src.split('\n').enumerate() {
@@ -640,12 +648,12 @@ impl Renderer {
             .key("control")
             .size(t.size, t.size)
             .ml(t.left)
-            .mr((indent - t.left - t.size).max(0.0))
+            .mr(t.gap.unwrap_or(indent - t.left - t.size).max(0.0))
             .mt(t.top.unwrap_or(((self.s.body.line_height - t.size) * 0.5).max(0.0)))
             .center()
             .radius(t.radius)
             .fill(fill)
-            .border(1.0, border)
+            .border(t.ring, border)
             .token_motion(t.motion)
             .focus_ring(1.0, 0.0, t.focus_ring)
             .child(icon(t.check, t.size * 0.625).key("mark").color(t.mark).opacity(if checked { 1.0 } else { 0.0 }))
@@ -664,12 +672,23 @@ impl Renderer {
             .focusable(interactive)
             .w_full()
             .child(control)
-            .child(self.blocks_in(item, item_maps, &[], false, true).grow(1.0).shrink());
+            .child(self.done_item(checked, || self.blocks_in(item, item_maps, &[], false, true)).grow(1.0).shrink());
         if let Some(on_task) = self.on_task.as_ref().filter(|_| !self.tasks_read_only) {
             let block_key = self.current_block_key.borrow().clone();
             r = on_task(r.cursor(Cursor::Pointer), block_key, item_idx, !checked);
         }
         r
+    }
+
+    /// A task item's blocks, drawn by `draw`: a checked one's in the style's done colour and
+    /// struck through, when the style sets one.
+    fn done_item(&self, checked: bool, draw: impl FnOnce() -> El) -> El {
+        let Some(done) = self.s.task.done.filter(|_| checked) else { return draw() };
+        let flow = self.flow.get();
+        self.flow.set(Flow { ink: Some(done), struck: true, ..flow });
+        let drawn = draw();
+        self.flow.set(flow);
+        drawn
     }
 
     pub(super) fn block(&self, b: &Block, map: &BlockMap) -> El {
@@ -752,7 +771,7 @@ impl Renderer {
                         (None, Some(n)) => Lead::Number(n + k as u64),
                         (None, None) => Lead::Bullet,
                     };
-                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), ..flow });
+                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), struck: false, ..flow });
                     if let Some((checked, marker_offset)) = task {
                         c = c.child(self.task_item((k, n), indent, item, imap, marker_offset, checked).mt(gap(k)));
                         continue;
@@ -761,7 +780,9 @@ impl Renderer {
                         Some(n) => format!("{}.", n + k as u64),
                         None => "•".into(),
                     };
-                    let marker = text(marker).font(s.list_font.unwrap_or(s.body)).color(s.list_marker.unwrap_or(s.muted)).exact_lines().w(indent);
+                    let font = s.list_font.unwrap_or(s.body);
+                    let font = if s.list_tabular && start.is_some() { TextStyle { features: super::table::with_tnum(font.features), ..font } } else { font };
+                    let marker = text(marker).font(font).color(s.list_marker.unwrap_or(s.muted)).exact_lines().w(indent);
                     let marker = if s.list_outside { marker.align(Align::End).pr(space) } else { marker.align(Align::Center) };
                     // The item's place in the list says what its marker shows.
                     c = c.child(
@@ -788,7 +809,7 @@ impl Renderer {
                 let q = s.quote;
                 let flow = self.flow.get();
                 let first_task = self.next_task.get();
-                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, ..flow });
+                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, italic: flow.italic || q.italic, ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
                 // The rule stands on the side the quote starts on.
@@ -862,7 +883,7 @@ impl Renderer {
             // A clear rule is spacing only (`hr { border: none; height: 0 }`).
             Block::Image { src, alt, title } => self.image(src, alt, title),
             Block::Rule if s.rule.a <= 0.0 => el().w_full().h(0.0),
-            Block::Rule => el().w_full().h(0.5).fill(s.rule),
+            Block::Rule => el().w_full().h(s.line).fill(s.rule),
         }
     }
 }
