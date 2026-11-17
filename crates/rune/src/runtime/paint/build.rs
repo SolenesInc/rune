@@ -74,9 +74,7 @@ impl RuntimeCore {
             let i = self.layer_paint_order.get(index).copied().unwrap_or(index);
             let n = &self.nodes[i];
             let inherited_group = n.parent.map_or(0.0, |p| self.inh_scratch[p].group);
-            self.inh_scratch[i].group = if n.vis.hovers() || n.vis_flags.hover_group() {
-                self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
-            } else { inherited_group };
+            self.inh_scratch[i].group = self.group_level(i).unwrap_or(inherited_group);
             let Some(parent) = n.parent.filter(|&p| self.nodes[p].vis_flags.blend() == crate::render::Blend::PlusLighter) else { continue };
             let Some(p) = self.scene.presented(n.id) else { continue };
             let mut opacity = p.opacity * n.vis.layer_opacity;
@@ -271,12 +269,9 @@ impl RuntimeCore {
             let mut hit_own = own * self.group_factor(n, 1.0);
             own *= self.group_factor(n, pinh.group);
             let base_opacity = (own * pinh.opacity).clamp(0.0, 1.0);
-            let hover_owner = n.vis.hovers() || n.vis_flags.hover_group();
-            let group = if hover_owner {
-                self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
-            } else {
-                pinh.group
-            };
+            let own_group = self.group_level(i);
+            let hover_owner = own_group.is_some();
+            let group = own_group.unwrap_or(pinh.group);
             // Loops and reveals run on the node's clock (`El::time_scale`).
             let track = self.loops.get(&n.id);
             let lnow = if track.is_some() { self.scene.store().node_time(n.id) } else { self.t };

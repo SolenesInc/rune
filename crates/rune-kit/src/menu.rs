@@ -149,11 +149,12 @@ impl MenuItem {
         let disabled = self.state == State::Disabled;
         let highlighted = self.state == State::Hover || self.sub.as_ref().is_some_and(|s| s.1);
         let hover = if standard { c.surface_raised_hover } else { c.hover };
-        let (font, ink) = if standard {
-            let label = k.standard_menu_label.unwrap_or(crate::MenuLabel { font: k.ty.text_small_medium, ink: c.text_strong });
-            (label.font, if disabled { c.text_weak } else { label.ink })
+        let (font, ink, focused_ink) = if standard {
+            let strong = c.text_strong;
+            let label = k.standard_menu_label.unwrap_or(crate::MenuLabel { font: k.ty.text_small_medium, ink: strong, focused_ink: strong });
+            (label.font, if disabled { c.text_weak } else { label.ink }, label.focused_ink)
         } else {
-            (k.ty.ui_compact, c.text_base)
+            (k.ty.ui_compact, c.text_base, c.text_base)
         };
         let danger = self.danger && !disabled;
         let ink = if danger { c.danger.fg } else { ink };
@@ -171,7 +172,10 @@ impl MenuItem {
                 c.icon_base
             }));
         }
-        let label = text(self.label.clone()).key("label").font(font).color(ink).truncate();
+        let mut label = text(self.label.clone()).key("label").font(font).color(ink).truncate();
+        if !danger && !disabled {
+            label = label.group_color(focused_ink);
+        }
         content = match &self.description {
             Some(d) => {
                 let (font, ink) = if standard { (k.ty.text_xsmall, c.text_weak) } else { (k.ty.small, c.text_faint) };

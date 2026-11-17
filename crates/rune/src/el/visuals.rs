@@ -546,7 +546,8 @@ impl El {
         self.vis.cold_mut().group_opacity = Some([rest, hovered]);
         self
     }
-    /// Text or icon colour while the nearest ancestor group is hovered.
+    /// Text or icon colour while the nearest ancestor group is hovered, or, in a
+    /// [`Self::focus_highlight`] row, while the row is highlighted.
     pub fn group_color(mut self, c: Color) -> Self {
         self.vis.cold_mut().group_color = Some(c);
         self

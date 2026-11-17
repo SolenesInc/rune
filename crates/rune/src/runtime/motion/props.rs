@@ -122,6 +122,20 @@ impl RuntimeCore {
         }
     }
 
+    /// How lit node `i` shows as a hover group, 0 to 1, or None when it is no group: a
+    /// `focus_highlight` row by its highlight, so its `group_*` children follow keys and pointer
+    /// alike, as a menu row's label does; any other hoverable element by its hover.
+    pub(super) fn group_level(&self, i: usize) -> Option<f32> {
+        let n = &self.nodes[i];
+        if n.focus.highlight.is_some() {
+            Some(if self.highlight_visible(i) { 1.0 } else { 0.0 })
+        } else if n.vis.hovers() || n.vis_flags.hover_group() {
+            Some(self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0))
+        } else {
+            None
+        }
+    }
+
     /// The opacity factor `El::group_opacity` gives node `n` under a hover group at `group`.
     /// A dropped one fading to full shows at full under the hover.
     pub(super) fn group_factor(&self, n: &Node, group: f32) -> f32 {
