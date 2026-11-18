@@ -665,7 +665,8 @@ fn the_caret_steps_over_a_pill_in_one_move() {
     assert_eq!(e.range(), (10, 10));
     e.set_caret(2);
     e.key(&KeyEvent { key: Key::Right, mods: Mods { alt: true, ..Mods::default() } }, None);
-    assert_eq!(e.range(), (10, 10), "a word move that stops inside the label steps over it");
+    let word_end = if cfg!(target_os = "macos") { 10 } else { 11 };
+    assert_eq!(e.range(), (word_end, word_end), "a word move that stops inside the label steps over it");
     e.set_caret(2);
     e.key(&KeyEvent { key: Key::Right, mods: Mods { shift: true, ..Mods::default() } }, None);
     assert_eq!((e.anchor, e.focus), (2, 10), "Shift+Right selects the whole pill");

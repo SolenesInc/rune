@@ -1,0 +1,40 @@
+name: fork tests
+
+# SolenesInc/rune only (FORK.md). Runs the whole suite on Linux and macOS, the platforms attn
+# runs on, for each push to `main` and on request. Linux draws through Mesa's software Vulkan
+# (lavapipe); its colour emoji font lets the emoji tests run there.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-tests-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    env:
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_PROFILE_TEST_STRIP: debuginfo
+    steps:
+      - uses: actions/checkout@v5
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y mesa-vulkan-drivers libxkbcommon-dev libwayland-dev libfontconfig-dev fonts-noto-color-emoji
+      - if: runner.os == 'macOS'
+        run: brew install lld
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: scripts/test.sh -p rune -p rune-mermaid -p rune-kit --features rune-kit/markdown,rune-kit/mermaid --no-fail-fast

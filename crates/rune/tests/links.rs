@@ -186,7 +186,9 @@ fn link_boxes_match_drawn_glyphs_beside_emoji_and_in_centred_lines() {
 
     // Each link's recoloured glyphs, drawn while hovered, sit inside its hit box, and each
     // glyph's centre takes the pointer.
-    for (key, glyph_count) in [("user:kit", 4), ("party", 4), ("long", 13)] {
+    // Without a colour emoji font, 🎉 draws as one more glyph in the link's ink.
+    let colour_emoji = !drawn(&rt, link_ink()).1.is_empty();
+    for (key, glyph_count) in [("user:kit", 4), ("party", if colour_emoji { 4 } else { 5 }), ("long", 13)] {
         let link = find(&rt, key);
         // Where a script aims: the centre of the link's first line box. The centre of a wrapped
         // link's union can sit on the edge between its lines, which hits neither.

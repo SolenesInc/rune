@@ -79,3 +79,27 @@ fn a_caret_that_moves_within_its_element_moves_the_input_method_and_paints_nothi
     assert_eq!(rt.stats.paints, painted, "moving the caret paints nothing");
     assert_eq!(rt.ime_area, Some([x + 32.0, y + 32.0, 1.0, 16.0]), "the input method follows the caret");
 }
+
+#[test]
+fn a_fling_from_rest_moves_the_content_on_the_next_frame() {
+    fn strip(_: &(), _: &mut Cx<()>) -> El {
+        col().key("strip").size(200.0, 100.0).scroll_x()
+            .child((0..10).fold(crate::el::row(), |r, i| r.child(el().key(format!("tile{i}")).size(100.0, 100.0))))
+    }
+    let x_of = |rt: &Runtime<()>, key: &str| rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap().rect[0];
+    let y_of = |rt: &Runtime<()>, key: &str| rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap().rect[1];
+
+    let mut rt = Runtime::new((), list, (200.0, 100.0), Env::new(true, 1.0));
+    at_rest(&mut rt);
+    let y = y_of(&rt, "row1");
+    rt.fling(100.0, 50.0, -2000.0);
+    rt.frame(1.0 / 60.0);
+    assert!(y_of(&rt, "row1") < y, "a vertical fling moves the list");
+
+    let mut rt = Runtime::new((), strip, (200.0, 100.0), Env::new(true, 1.0));
+    at_rest(&mut rt);
+    let x = x_of(&rt, "tile1");
+    rt.fling_xy(100.0, 50.0, -2000.0, 0.0);
+    rt.frame(1.0 / 60.0);
+    assert!(x_of(&rt, "tile1") < x, "a horizontal fling moves the strip");
+}
