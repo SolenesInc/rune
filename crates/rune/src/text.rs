@@ -316,7 +316,7 @@ impl TextSystem {
             slot_system_mono: names_system_mono(families.0) || names_system_mono(families.1),
             scripts: 0,
             font_files: LoadedFiles::new(),
-            fallbacks: system_fonts::Fallbacks::new(list, cjk),
+            fallbacks: system_fonts::Fallbacks::new(list, registered, cjk),
             installed: Default::default(),
             atlas: Atlas::new(),
             color_glyphs: GlyphMap::default(),

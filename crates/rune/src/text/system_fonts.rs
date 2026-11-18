@@ -129,16 +129,23 @@ pub(super) const CJK_FONT_FILES: [&str; 30] = [
 /// Makes text in scripts the app's fonts don't cover render instead of drawing tofu: the
 /// families the app registered beyond its sans and mono (`AppSpec::fonts`), already in memory.
 /// The system's CJK fonts follow them the first time a text has CJK (`register_system_cjk`).
+/// fontique asks the Han fallbacks for every script, so these also draw text whose families
+/// are missing.
 pub(super) fn register_cjk_fallbacks(collection: &mut Collection, registered: &[FamilyId], families: (&str, &str)) -> Vec<FamilyId> {
+    let fallbacks = own_fallbacks(collection, registered, families);
+    if !fallbacks.is_empty() {
+        super::language::register(collection, &fallbacks);
+    }
+    fallbacks
+}
+
+fn own_fallbacks(collection: &mut Collection, registered: &[FamilyId], families: (&str, &str)) -> Vec<FamilyId> {
     let primary = [collection.family_id(families.0), collection.family_id(families.1)];
     let mut fallbacks: Vec<FamilyId> = Vec::new();
     for id in registered {
         if !primary.contains(&Some(*id)) && !fallbacks.contains(id) {
             fallbacks.push(*id);
         }
-    }
-    if !fallbacks.is_empty() {
-        super::language::register(collection, &fallbacks);
     }
     fallbacks
 }
@@ -175,11 +182,26 @@ pub(super) struct Fallbacks {
     symbols: bool,
     /// Every CJK fallback family, the app's then the system's in the order they loaded.
     cjk_families: Vec<FamilyId>,
+    /// The families the app registered, in order, whichever the slots name.
+    registered: Vec<FamilyId>,
 }
 
 impl Fallbacks {
-    pub(super) fn new(own: &[&'static [u8]], cjk_families: Vec<FamilyId>) -> Self {
-        Fallbacks { own: own.to_vec(), cjk_families, ..Default::default() }
+    pub(super) fn new(own: &[&'static [u8]], registered: Vec<FamilyId>, cjk_families: Vec<FamilyId>) -> Self {
+        Fallbacks { own: own.to_vec(), registered, cjk_families, ..Default::default() }
+    }
+}
+
+impl TextSystem {
+    /// Registers the fallbacks a launch in the slots' families would: the app's families the
+    /// slots don't name, then the system's CJK fonts loaded so far.
+    pub(super) fn register_own_fallbacks(&mut self) {
+        let collection = &mut self.font_cx.collection;
+        let fallbacks = &mut self.fallbacks;
+        let own = own_fallbacks(collection, &fallbacks.registered, (&self.families.0, &self.families.1));
+        let system = fallbacks.cjk_families.iter().copied().filter(|id| !fallbacks.registered.contains(id));
+        fallbacks.cjk_families = own.into_iter().chain(system).collect();
+        super::language::register(collection, &fallbacks.cjk_families);
     }
 }
 
