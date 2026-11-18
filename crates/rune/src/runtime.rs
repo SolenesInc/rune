@@ -322,6 +322,8 @@ use text_layout::*;
 #[path = "runtime/commit/flatten.rs"]
 mod flatten;
 use flatten::*;
+#[path = "runtime/commit/scroll_room.rs"]
+mod scroll_room;
 #[path = "runtime/commit/memo_reuse.rs"]
 pub(crate) mod memo_reuse;
 #[path = "runtime/commit/measure.rs"]

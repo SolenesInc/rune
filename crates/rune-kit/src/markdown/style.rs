@@ -629,8 +629,11 @@ impl MarkdownStyle {
         self
     }
     /// A code block that scrolls sideways ([`Markdown::scroll_wide`]) gets a scroll bar in
-    /// `style` over its bottom edge, in its padding: a web page's `pre { overflow-x: auto }`
-    /// under the system's overlay scroller. None by default.
+    /// `style` along its bottom edge, as a web page's `pre { overflow-x: auto }` does: an overlay
+    /// bar draws over the block's bottom padding, and a classic one (the system showing classic
+    /// bars, or an [`ScrollBarStyle::always`](crate::ScrollBarStyle::always) bar) adds its strip
+    /// under the padding while the code overflows ([`ScrollBarStyle::room`](crate::ScrollBarStyle::room)).
+    /// None by default.
     pub fn code_scroll_bar(mut self, style: crate::ScrollBarStyle) -> Self {
         self.code_bar = Some(style);
         self

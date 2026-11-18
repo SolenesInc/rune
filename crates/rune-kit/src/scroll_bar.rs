@@ -89,6 +89,14 @@ struct Track {
     gutter: bool,
     /// Along the viewport's bottom edge, for a viewport that scrolls sideways.
     x: bool,
+    /// The viewport keeps the strip clear while its content overflows and the bar isn't an
+    /// overlay ([`rune::El::scroll_room`]), and the bar draws there.
+    room: bool,
+    /// A vertical and a horizontal bar on one viewport ([`ScrollBarStyle::both_ways`]).
+    both: bool,
+    /// How much shorter the track runs while the other axis overflows: the other bar's strip,
+    /// for one of two bars on a viewport that scrolls both ways.
+    corner: f32,
     /// The pointer anywhere over the area shows an overlay bar, not only near its edge; only
     /// over the thumb does it take the hover colour.
     area_reveals: bool,
@@ -118,6 +126,9 @@ const KIT_TRACK: Track = Track {
     shown: Shown::System,
     gutter: false,
     x: false,
+    room: false,
+    both: false,
+    corner: 0.0,
     area_reveals: false,
     targeted: false,
     scroll_only: false,
@@ -142,6 +153,9 @@ const SCROLL_VIEW_TRACK: Track = Track {
     shown: Shown::Overlay,
     gutter: false,
     x: false,
+    room: false,
+    both: false,
+    corner: 0.0,
     area_reveals: true,
     targeted: false,
     scroll_only: false,
@@ -168,6 +182,9 @@ const NATIVE_TRACK: Track = Track {
     shown: Shown::Overlay,
     gutter: true,
     x: false,
+    room: false,
+    both: false,
+    corner: 0.0,
     area_reveals: true,
     targeted: false,
     scroll_only: false,
@@ -221,6 +238,12 @@ impl Track {
         usize::from(!self.x)
     }
 
+    /// Whether the viewport keeps room for the bar: a [`ScrollBarStyle::room`] bar that is no
+    /// overlay.
+    fn takes_room(&self) -> bool {
+        self.room && !self.overlay()
+    }
+
     /// The drawn part of a thumb at `top`, `len` long on the track: less its clear border.
     fn pill(&self, (top, len): (f32, f32)) -> (f32, f32) {
         (top + self.border, (len - 2.0 * self.border).max(0.0))
@@ -243,7 +266,7 @@ impl ScrollBarStyle {
 
     /// `@opencode/ui`'s `scrollbar.css`, the scroll bar of every plain `overflow: auto` box in
     /// OpenCode: an 8 point strip beside the viewport (leave the room for it: the bar draws
-    /// there, or over the viewport's edge with [`Self::inside`]), its track 4 points in from the
+    /// there, or in room the viewport keeps with [`Self::room`]), its track 4 points in from the
     /// ends and a 4 point `thumb` pill sized and placed as Chromium's thumb with its 2 point clear
     /// border, shown only while the pointer is over the area, and `thumb_hover` while the pointer
     /// is over the thumb or drags it. It shows and hides at once. Pass `border_muted` and
@@ -260,20 +283,31 @@ impl ScrollBarStyle {
         Self { thumb, thumb_hover, width: 4.0, hover_width: 4.0, track: MENU_SCROLL_TRACK }
     }
 
-    /// A [`Self::native`] bar over the viewport's own end edge, in room its content leaves there,
-    /// rather than beside it: a plain `overflow-y: auto` box (a sidebar's list) whose styled
-    /// scroll bar takes its 8 point gutter from the box while the content overflows. Give the
-    /// content [`Self::strip`] of end padding while it overflows.
-    pub fn inside(mut self) -> Self {
-        self.track.gutter = false;
-        self
-    }
-
     /// Shows the bar whenever its content overflows, whatever the system "Show scroll bars"
     /// preference, as WebKit draws a page's styled `::-webkit-scrollbar` in place of the
     /// system's overlay scroller.
     pub fn always(mut self) -> Self {
         self.track.shown = Shown::Always;
+        self
+    }
+
+    /// The bar draws in a strip the viewport keeps clear for it while its content overflows,
+    /// whenever the bar isn't an overlay: as a browser's classic scroll bar, or a page's styled
+    /// `::-webkit-scrollbar`, takes its width from an `overflow: auto` box ([`El::scroll_room`]).
+    /// An [`Self::always`] bar takes it whenever the content overflows; one that follows the
+    /// system takes it while the system shows classic bars, and overlays the content's edge while
+    /// it overlays them.
+    pub fn room(mut self) -> Self {
+        self.track.gutter = false;
+        self.track.room = true;
+        self
+    }
+
+    /// A vertical bar and a horizontal one on a viewport that scrolls both ways
+    /// ([`El::scroll_xy`]), each in this look. While both show, each track stops short of the
+    /// other's strip, as a browser leaves the corner between them.
+    pub fn both_ways(mut self) -> Self {
+        self.track.both = true;
         self
     }
 
@@ -497,7 +531,8 @@ fn offset_along(at: ScrollPos, track: f32, top: f32, min: f32, a: usize, px: f32
 /// The track's length for a viewport at `at`, and whether a bar shows on it at all.
 fn track_len(at: ScrollPos, t: &Track) -> (f32, bool) {
     let a = t.along();
-    let len = at.viewport[a] - t.top - 2.0 * t.inset;
+    let corner = if at.max[1 - a] > 0.5 { t.corner } else { 0.0 };
+    let len = at.viewport[a] - t.top - 2.0 * t.inset - corner;
     (len, at.max[a] > 0.5 && len >= t.min_thumb)
 }
 
@@ -807,26 +842,38 @@ pub fn scroll_bar(k: &Kit, area: &str, key: &str, viewport: El) -> El {
 }
 
 fn attach(style: ScrollBarStyle, area: &str, key: &str, outer: El, viewport: El) -> El {
-    let overlay = style.track.overlay();
-    let jumps = rune::system_scroller_jumps();
-    let bar = kept(area);
-    bar.restyle(style);
+    let viewport = if style.track.takes_room() { viewport.scroll_room(style.strip()) } else { viewport };
+    let bars: Vec<(ScrollBarStyle, Rc<Bar>, &str)> = if style.track.both {
+        let corner = style.strip();
+        let mut down = style;
+        down.track.corner = corner;
+        let mut across = style.horizontal();
+        across.track.corner = corner;
+        vec![(down, kept(area), "scroll-bar"), (across, kept(&format!("{area}-x")), "scroll-bar-x")]
+    } else {
+        vec![(style, kept(area), "scroll-bar")]
+    };
     let target = format!("{area}/{key}");
-    let (watch, moved, left, drag) = (bar.clone(), bar.clone(), bar.clone(), bar.clone());
-    outer
+    let jumps = rune::system_scroller_jumps();
+    let followed: Rc<[(Rc<Bar>, bool)]> = bars.iter().map(|(style, bar, _)| (bar.clone(), style.track.overlay())).collect();
+    let (moved, left) = (followed.clone(), followed.clone());
+    let mut outer = outer
         .on_pointer_move_any(move |p, tx| {
             tx.live_only();
-            moved.pointer(p);
+            moved.iter().for_each(|(bar, _)| bar.pointer(p));
         })
         .on_hover_change_any(move |inside, tx| {
             tx.live_only();
             if !inside {
-                left.point(None);
+                left.iter().for_each(|(bar, _)| bar.point(None));
             }
         })
-        .child(viewport.chain_scroll_offset(move |at| watch.follow(at, overlay)))
-        .child(
-            el().key("scroll-bar")
+        .child(viewport.chain_scroll_offset(move |at| followed.iter().for_each(|(bar, overlay)| bar.follow(at, *overlay))));
+    for (style, bar, name) in bars {
+        bar.restyle(style);
+        let (drag, target) = (bar.clone(), target.clone());
+        outer = outer.child(
+            el().key(name)
                 .absolute(0.0, 0.0)
                 .live_rect(&bar.track)
                 .live_opacity(bar.opacity.smooth(style.track.enter).rest(style.track.leave))
@@ -842,7 +889,9 @@ fn attach(style: ScrollBarStyle, area: &str, key: &str, outer: El, viewport: El)
                             .live_fill(bar.fill.smooth(style.track.tint)),
                     ),
                 ),
-        )
+        );
+    }
+    outer
 }
 
 #[cfg(test)]

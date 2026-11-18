@@ -33,6 +33,10 @@ pub(crate) struct NodeCold {
     pub(super) scroll: Option<ScrollSpec>,
     pub(super) scroll_axes: crate::el::ScrollAxes,
     pub(super) scroll_edges: crate::el::ScrollEdges,
+    /// Whether the viewport keeps its `El::scroll_room` at its end edge, for a vertical
+    /// overflow, and at its bottom, for a sideways one: the last layout's decision, which the
+    /// next commit's style starts from.
+    pub(super) room_taken: [bool; 2],
     /// `El::sticky_top`, `El::sticky_bottom` and `El::stuck_shadow`.
     pub(super) sticky: Option<Box<crate::el::Sticky>>,
     pub(super) growth: Option<Box<GrowthSpec>>,
@@ -69,7 +73,8 @@ impl crate::cold::Empty for NodeCold {
         above: None,
         scroll: None,
         scroll_axes: crate::el::ScrollAxes::Y,
-        scroll_edges: crate::el::ScrollEdges { fade: 0.0, fade_style: crate::el::FadeStyle::SMOOTH, margin: 0.0, anchor: false },
+        scroll_edges: crate::el::ScrollEdges { fade: 0.0, fade_style: crate::el::FadeStyle::SMOOTH, margin: 0.0, anchor: false, room: 0.0 },
+        room_taken: [false; 2],
         sticky: None,
         growth: None,
         glide: None,

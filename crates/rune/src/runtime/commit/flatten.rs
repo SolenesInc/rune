@@ -491,6 +491,8 @@ fn flatten_owned(
     } else {
         None
     };
+    let room_taken = scroll_room::room_taken_before(memo_ctx, id, cold.scroll_edges.room);
+    scroll_room::pad_room(&mut style, cold.scroll_edges.room, room_taken, 1.0);
     let time_scale = cold.time_scale;
     let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
@@ -512,6 +514,7 @@ fn flatten_owned(
             scroll: c.scroll,
             scroll_axes: c.scroll_axes,
             scroll_edges: c.scroll_edges,
+            room_taken,
             sticky: c.sticky,
             growth: c.growth,
             glide: c.glide,
@@ -692,6 +695,10 @@ fn flatten_ref(
     } else {
         None
     };
+    let room_taken = scroll_room::room_taken_before(memo_ctx, id, c.scroll_edges.room);
+    if room_taken != [false; 2] {
+        scroll_room::pad_room(style.to_mut(), c.scroll_edges.room, room_taken, 1.0);
+    }
     let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
     } else {
@@ -714,6 +721,7 @@ fn flatten_ref(
             scroll: c.scroll,
             scroll_axes: c.scroll_axes,
             scroll_edges: c.scroll_edges,
+            room_taken,
             sticky: c.sticky.clone(),
             growth: c.growth.clone(),
             glide: c.glide,

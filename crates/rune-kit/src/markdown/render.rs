@@ -563,7 +563,7 @@ impl Renderer {
             let viewport = if s.wide_fade > 0.0 { viewport.scroll_edge_fade(s.wide_fade) } else { viewport };
             let viewport = viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body)));
             return frame.child(match s.code_bar {
-                Some(bar) => self.wide_bar(bar.horizontal().inside(), viewport),
+                Some(bar) => self.wide_bar(bar.horizontal().room(), viewport),
                 None => viewport,
             });
         }

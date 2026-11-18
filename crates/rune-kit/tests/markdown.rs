@@ -987,3 +987,29 @@ fn each_wide_code_block_scrolls_under_its_own_bar_and_one_that_fits_shows_none()
     assert!(scrolled[0][0] > a_wide[0], "the scrolled block's thumb travels: {a_wide:?} -> {:?}", scrolled[0]);
     assert_eq!(scrolled[2], b_wide, "the other document's block keeps its own thumb at its start");
 }
+
+#[test]
+fn a_wide_code_block_adds_a_classic_bars_strip_under_its_padding_and_an_overlay_bar_draws_over_it() {
+    fn doc(src: &String, _: &mut Cx<String>) -> El {
+        let k = Kit::neutral(true);
+        let style = MarkdownStyle::from_kit(&k).code_scroll_bar(rune_kit::ScrollBarStyle::from_kit(&k));
+        col().w_full().child(Markdown::new(src.clone()).scroll_wide(true).style(style).build(&k))
+    }
+    let line = format!("let wide = [{}];", (0..60).map(|i| i.to_string()).collect::<Vec<_>>().join(", "));
+    let src = format!("```rust\n{line}\n```\n\n```rust\nshort();\n```\n");
+    let heights = |bars: rune::ScrollBars| {
+        let mut rt = Runtime::new(src.clone(), doc, (480.0, 800.0), Env::new(true, 1.0));
+        rt.set_system_scroll_bars(bars);
+        rt.set_system_scroller_overlay(bars != rune::ScrollBars::Always);
+        rt.frame(0.0);
+        rt.frame(1.0 / 60.0);
+        let blocks: Vec<f32> = rt.elements().into_iter().filter(|e| e.role == "code").map(|e| e.rect[3]).collect();
+        let [wide, short] = blocks[..] else { panic!("two code blocks: {blocks:?}") };
+        let strip = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("scroll-bar") && e.rect[3] > 0.0).map(|e| e.rect[3]);
+        (wide - short, strip)
+    };
+    let (classic, strip) = heights(rune::ScrollBars::Always);
+    assert_eq!(Some(classic), strip, "under classic bars the wide block grows by its bar's strip");
+    let (overlay, _) = heights(rune::ScrollBars::WhenScrolling);
+    assert_eq!(overlay, 0.0, "an overlay bar draws over the block's padding, which keeps its height");
+}

@@ -160,7 +160,8 @@ impl RuntimeCore {
             let n = &self.nodes[c];
             f64::from(n.target[1] - view[1]) + self.stack_extent(c).unwrap_or(f64::from(n.target[3] - n.target[1]))
         }).reduce(f64::max).unwrap_or(0.0);
-        content_h - f64::from(view[3] - view[1])
+        let [_, bottom] = scroll_room::room_sides(self.nodes[i].scroll_edges.room, self.nodes[i].room_taken);
+        content_h - f64::from(view[3] - view[1] - bottom)
     }
 
     pub(super) fn step_scroll(&mut self, dt: f32) -> bool {
