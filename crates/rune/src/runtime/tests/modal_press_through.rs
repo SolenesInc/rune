@@ -107,3 +107,50 @@ fn the_wheel_beside_a_modal_scrolls_nothing_by_default() {
     let rt = wheel_beside_the_modal(false);
     assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(0.0));
 }
+
+struct Wheeled { open: bool, closes: bool }
+
+/// A tall page in a scroll viewport, with a press-through modal open over its top left.
+fn wheeled(s: &Wheeled, _: &mut Cx<Wheeled>) -> El {
+    let page = col().key("page").size(200.0, 200.0).scroll(ScrollSpec { stick_bottom: false })
+        .child(el().size(200.0, 1000.0));
+    let modal = s.open.then(|| {
+        el().key("modal").absolute(0.0, 0.0).size(40.0, 40.0).focusable(true)
+            .modal(true, |s: &mut Wheeled| s.open = false)
+            .modal_press_through(true)
+            .modal_wheel_closes(s.closes)
+    });
+    el().size(200.0, 200.0).child(page).children(modal)
+}
+
+fn wheel_at(closes: bool, at: (f32, f32), wheel: impl Fn(&mut Runtime<Wheeled>, f32, f32)) -> Runtime<Wheeled> {
+    let mut rt = Runtime::new(Wheeled { open: true, closes }, wheeled, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.pointer_move(at.0, at.1);
+    wheel(&mut rt, at.0, at.1);
+    rt.frame(DT);
+    rt
+}
+
+#[test]
+fn the_wheel_beside_a_modal_that_closes_on_it_closes_it_and_scrolls_what_is_under_it() {
+    for (path, rt) in [
+        ("wheel", wheel_at(true, (150.0, 150.0), |rt, x, y| rt.wheel(x, y, -60.0))),
+        ("wheel_xy", wheel_at(true, (150.0, 150.0), |rt, x, y| rt.wheel_xy(x, y, 0.0, -60.0))),
+    ] {
+        assert!(!rt.state().open, "{path}: the wheel asked the modal to close");
+        assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(60.0), "{path}: the page scrolled");
+    }
+}
+
+#[test]
+fn the_wheel_inside_a_modal_that_closes_on_it_leaves_it_open() {
+    let rt = wheel_at(true, (20.0, 20.0), |rt, x, y| rt.wheel(x, y, -60.0));
+    assert!(rt.state().open);
+}
+
+#[test]
+fn the_wheel_beside_a_modal_leaves_it_open_by_default() {
+    let rt = wheel_at(false, (150.0, 150.0), |rt, x, y| rt.wheel(x, y, -60.0));
+    assert!(rt.state().open);
+}
