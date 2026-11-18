@@ -204,6 +204,11 @@ impl TextArea {
         self.edits.change(f);
         self
     }
+    /// Focus left the field ([`El::on_blur`]).
+    pub fn on_blur<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.edits.blur(f);
+        self
+    }
     rich_forwarders!();
 
     pub fn build(self, k: &Kit) -> El {
