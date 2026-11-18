@@ -789,6 +789,14 @@ pub(crate) fn wrap(style: ScrollBarStyle, viewport: El, site: &'static Location<
     attach(style, &area, &key, outer, viewport)
 }
 
+/// [`ScrollBar::scroll_bar_styled`] in a column keyed `area`, for viewports that share a key
+/// (each wide table's or code block's `scroll`): the bar keeps its state, and drags its own
+/// viewport, by `area`, so each needs one of its own in the window.
+pub(crate) fn wrap_in(style: ScrollBarStyle, area: &str, viewport: El) -> El {
+    let (_, key, outer, viewport) = viewport.wrap_scroll_area(("", 0, 0));
+    attach(style, area, &key, outer.key(area), viewport)
+}
+
 /// `scroll_bar(&k, "rows-area", "scroll", viewport)`: `viewport`, a vertical scroll viewport
 /// ([`El::scroll`]) with key `key`, in a column keyed `area` with a scroll bar over its right
 /// edge. Size the column as the viewport would be sized, and let the viewport fill it
