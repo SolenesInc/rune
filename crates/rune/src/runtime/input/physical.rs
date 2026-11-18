@@ -211,6 +211,14 @@ impl RuntimeCore {
         merge(&mut self.pending, tx);
         changed
     }
+    /// Runs the `on_blur` of the focused element a rebuild removed.
+    pub(super) fn blur_unmounted(&mut self, blur: crate::el::PressFn) -> bool {
+        let mut tx = self.transaction();
+        blur(self.app.states(), &mut tx);
+        self.latch_requests(&mut tx);
+        merge(&mut self.pending, tx);
+        true
+    }
     /// Runs the focused element's `on_blur`; whether it had one.
     fn blur_focused(&mut self, tx: &mut Tx) -> bool {
         let Some(handler) = self.focus.path().and_then(|p| self.node(p)).and_then(|n| n.focus.blur.clone()) else { return false };

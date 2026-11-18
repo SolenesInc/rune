@@ -337,6 +337,10 @@ impl RuntimeCore {
         changed
     }
     pub(super) fn sync_requested_focus(&mut self, nodes: &mut Vec<Node>) -> bool {
+        let unmounted = self.focus.path()
+            .filter(|p| !nodes.iter().any(|n| n.path == *p))
+            .and_then(|p| self.nodes.iter().position(|n| n.path == p))
+            .and_then(|at| self.nodes[at].focus.blur.clone().map(|blur| (at, blur)));
         let FocusRequest { blur, to: asked } = std::mem::take(&mut self.focus_request);
         let blurred = blur && self.blur_in(nodes);
         for old in &self.nodes {
@@ -444,7 +448,13 @@ impl RuntimeCore {
                 && !nodes.iter().any(|n| n.input.as_ref().is_some_and(|i| i.edit.matches_history(w)))
                 && !self.virtual_inputs.values().any(|i| i.edit.matches_history(w))
         });
-        changed
+        let remounted = |at: usize| self.nodes[at].input.as_ref().is_some_and(|old| {
+            nodes.iter().any(|n| self.focus.is(&n.path) && n.input.as_ref().is_some_and(|i| i.edit.same_model(&old.edit)))
+        });
+        match unmounted {
+            Some((at, blur)) if !remounted(at) => self.blur_unmounted(blur) | changed,
+            _ => changed,
+        }
     }
     /// Where focus goes when the element holding it leaves the tree or can't hold it anymore (a
     /// deleted row, a closed tab, a decided prompt, a pane closed under it) and nothing else

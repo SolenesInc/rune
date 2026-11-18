@@ -5,19 +5,20 @@ struct Form {
     edit: crate::TextEdit,
     polls: Vec<Option<String>>,
     blurs: usize,
+    gone: bool,
 }
 
 fn view(s: &Form, _: &mut Cx<Form>) -> El {
     col()
         .size(300.0, 200.0)
         .child(el().key("heading").size(200.0, 30.0))
-        .child(
+        .children((!s.gone).then(|| {
             crate::text_input(&s.edit, crate::TextStyle::new(14.0, 400.0))
                 .key("field")
                 .size(200.0, 40.0)
                 .on_edit(|s: &mut Form| &mut s.edit)
-                .on_blur(|s: &mut Form, _| s.blurs += 1),
-        )
+                .on_blur(|s: &mut Form, _| s.blurs += 1)
+        }))
         .child(el().key("next").size(200.0, 30.0).focusable(true))
 }
 
@@ -78,4 +79,17 @@ fn tab_and_the_window_losing_focus_each_blur_the_focused_field() {
     rt.window_focus(false);
     rt.frame(0.0);
     assert_eq!(rt.state().blurs, 2, "the window going inactive blurs it, as a page's input");
+}
+
+#[test]
+fn a_focused_field_a_rebuild_removes_runs_its_on_blur_once() {
+    let mut rt = form();
+    click(&mut rt, "field");
+    rt.frame(0.0);
+    assert_eq!(focused(&rt), Some("field"));
+    rt.update(|s, _| s.gone = true);
+    rt.frame(0.0);
+    rt.frame(0.0);
+    assert_ne!(focused(&rt), Some("field"));
+    assert_eq!(rt.state().blurs, 1);
 }
