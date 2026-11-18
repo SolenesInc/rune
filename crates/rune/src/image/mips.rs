@@ -34,8 +34,10 @@ impl<'a> MipSteps<'a> {
             || bytes.len() != width as usize * height as usize * 4
         { return Err(ImageError("RGBA image dimensions or byte length are invalid".into())); }
         let mut steps = MipSteps { source: bytes, size: [width, height], fill, mips: Vec::new(), next: Vec::new(), row: 0 };
-        // Mip 1 filters the source, so a mip 0 that mip 1 replaces is never built.
-        let top = if steps.fills((width / 2).max(1), (height / 2).max(1)) { Vec::new() } else { premultiplied(bytes) };
+        // Mip 1 filters the source, so a mip 0 that mip 1 replaces is never built. A 1×1 image
+        // has no mip 1.
+        let replaced = (width, height) != (1, 1) && steps.fills((width / 2).max(1), (height / 2).max(1));
+        let top = if replaced { Vec::new() } else { premultiplied(bytes) };
         steps.mips.push(Mip { width, height, pixels: top });
         Ok(steps)
     }

@@ -58,3 +58,13 @@ fn a_file_asked_for_larger_decodes_again_and_a_small_image_keeps_every_level() {
     assert_eq!(icon.decoded().unwrap().unwrap().mips.len(), 6, "smaller than asked, it keeps every level");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_one_pixel_image_asked_for_one_pixel_keeps_its_pixel_and_draws() {
+    let cache = ImageCache::new(Arc::new(|| {}));
+    let dot = cache.load_mime(png(1, 1), "image/png", 0.5, 2.0);
+    assert_eq!(dot.wait(), Ok([1, 1]));
+    assert_eq!(dot.decoded().unwrap().unwrap().mips[0].pixels.len(), 4);
+    let mut atlas = crate::image::pixels::ImageAtlas::default();
+    assert!(atlas.place(dot.pixels(), [1.0, 1.0]).is_some());
+}
