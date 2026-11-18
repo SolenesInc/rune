@@ -33,6 +33,7 @@ impl RuntimeCore {
             keyed: n.key.is_some(),
             has_text: text.is_some_and(|t| !t.source_text().trim().is_empty() || t.redacted),
             image: n.vis.pixels.is_some() || n.vis.surface.is_some(),
+            drawn_text: n.a11y.more.as_deref().is_some_and(|m| m.drawn_text.is_some()),
         };
         // A control the keyboard reaches is always in the tree, whatever its role says.
         roles::map(n.role, &cx).or_else(|| (input.is_some() || self.can_focus(i)).then_some(Role::Group))
@@ -54,7 +55,7 @@ impl RuntimeCore {
         n.a11y.disabled.hash(&mut h);
         n.a11y.live.hash(&mut h);
         if let Some(m) = n.a11y.more.as_deref() {
-            (&m.description, &m.value, &m.set, &m.shortcut, m.invalid, m.read_only, m.sorted, m.busy).hash(&mut h);
+            (&m.description, &m.value, &m.set, &m.shortcut, m.invalid, m.read_only, m.sorted, m.busy, &m.drawn_text).hash(&mut h);
             [m.labelled_by.as_deref(), m.described_by.as_deref()].map(|k| k.and_then(|k| self.a11y_keyed(i, k)).map(|j| self.a11y_words(j))).hash(&mut h);
             if let Some(r) = m.range { [r.value, r.min, r.max, r.step.unwrap_or(f64::NAN)].map(f64::to_bits).hash(&mut h); }
             self.a11y_active_descendant(i).map(|j| self.nodes[j].id.0).hash(&mut h);
@@ -169,6 +170,7 @@ impl RuntimeCore {
             if m.busy { node.set_busy(); }
         }
         if let Some(v) = more.and_then(|m| m.value.as_deref()) { node.set_value(v); }
+        if let Some(d) = more.and_then(|m| m.drawn_text.as_ref()) { node.set_value(d.text.as_str()); }
         if let Some(r) = more.and_then(|m| m.range) {
             node.set_numeric_value(r.value);
             node.set_min_numeric_value(r.min);

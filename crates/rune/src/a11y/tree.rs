@@ -21,6 +21,8 @@ const ANNOUNCER: AkId = AkId(3);
 /// Bits under an element's id for the nodes it owns: its text's lines and links.
 const SUB: u32 = 16;
 const LINK_BASE: u64 = 0x8000;
+/// The lines an element can own before their ids run into its links'.
+pub(crate) const LINES_MAX: usize = LINK_BASE as usize - 1;
 
 pub(crate) fn element_id(id: NodeId) -> AkId { AkId(id.0 << SUB) }
 pub(crate) fn line_id(id: NodeId, line: usize) -> AkId { AkId((id.0 << SUB) | (1 + line as u64).min(LINK_BASE - 1)) }
