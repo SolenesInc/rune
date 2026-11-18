@@ -61,7 +61,9 @@ static ALLOCATOR: procwatch::alloc::Counting = procwatch::alloc::Counting::syste
 ```
 
 Use `procwatch::alloc::Counting::new(inner)` to wrap an allocator the binary
-already has. Pass `rune_perf::take_allocated_bytes()` with each report from the
+already has. A binary that records only on some runs installs
+`Counting::dormant(std::alloc::System)` and calls `ALLOCATOR.start()` before it
+starts the recorder, so other runs pay one relaxed load per allocation. Pass `rune_perf::take_allocated_bytes()` with each report from the
 UI thread. It returns the bytes this thread requested since its previous call:
 `None` without the counting allocator, and `None` on a thread's first call, which
 only sets the baseline. There is no per-thread enable. Traffic includes
