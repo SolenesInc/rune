@@ -42,6 +42,7 @@ pub(crate) struct Handlers {
     pub on_far_from_bottom: Option<(f32, Option<std::rc::Rc<str>>, AtBottomFn)>,
     pub on_visible_rows: Option<VisibleRowsFn>,
     pub on_layout: Option<LayoutTxFn>,
+    pub on_measure: Option<LayoutFn>,
     pub on_screen_layout: Option<LayoutFn>,
     pub on_drawn_layout: Option<LayoutTxFn>,
     /// `El::on_visible`: the element came on screen (`true`) or left it.
@@ -128,6 +129,7 @@ impl Empty for Handlers {
         on_far_from_bottom: None,
         on_visible_rows: None,
         on_layout: None,
+        on_measure: None,
         on_screen_layout: None,
         on_drawn_layout: None,
         on_visible: None,

@@ -144,6 +144,7 @@ impl RuntimeCore {
         self.focus_before_commit = self.focus.owned();
         // Settle layout reads first so a field that mounts once a rect is known is in `nodes`.
         measured = self.settle_layout_reads(measured, tx);
+        measured = self.settle_measures(measured, tx);
         if self.sync_requested_focus(&mut measured.nodes) {
             self.discard_measured(measured);
             measured = self.measure(tx);

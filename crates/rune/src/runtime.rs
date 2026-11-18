@@ -328,6 +328,8 @@ mod scroll_room;
 pub(crate) mod memo_reuse;
 #[path = "runtime/commit/measure.rs"]
 mod measure;
+#[path = "runtime/commit/on_measure.rs"]
+mod on_measure;
 #[path = "runtime/commit/apply.rs"]
 mod apply;
 #[path = "runtime/commit/apply_scratch.rs"]
@@ -675,6 +677,9 @@ pub struct RuntimeCore {
     layout_seen: layout_read::LayoutSeen,
     /// Rect last sent to each element's `El::on_layout`.
     layout_fired: HashMap<NodeId, [f32; 4]>,
+    /// Rect last sent to each element's `El::on_measure`, by path: a commit's passes run it
+    /// before their nodes have the ids the scene gives them.
+    measure_fired: HashMap<String, [f32; 4]>,
     /// Rect last sent to each element's `El::on_screen_layout`.
     screen_fired: HashMap<NodeId, [f32; 4]>,
     /// (Drawn rect, laid-out rect) last sent to each element's `El::on_drawn_layout`.
@@ -1002,6 +1007,7 @@ impl RuntimeCore {
             caret_watch: false,
             layout_seen: Default::default(),
             layout_fired: HashMap::default(),
+            measure_fired: HashMap::default(),
             screen_fired: HashMap::default(),
             drawn_fired: HashMap::default(),
             visible_fired: HashMap::default(),

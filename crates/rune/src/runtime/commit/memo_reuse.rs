@@ -352,6 +352,7 @@ fn same_handlers(
         on_far_from_bottom,
         on_visible_rows,
         on_layout,
+        on_measure,
         on_screen_layout,
         on_drawn_layout,
         on_visible,
@@ -402,6 +403,7 @@ fn same_handlers(
         }
         && opt_rc_eq(&a.on_visible_rows, on_visible_rows)
         && opt_rc_eq(&a.on_layout, on_layout)
+        && opt_rc_eq(&a.on_measure, on_measure)
         && opt_rc_eq(&a.on_screen_layout, on_screen_layout)
         && opt_rc_eq(&a.on_drawn_layout, on_drawn_layout)
         && opt_rc_eq(&a.on_visible, on_visible)

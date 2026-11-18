@@ -36,7 +36,7 @@ mod selection_rects;
 pub(crate) use selection_rects::{SELECTION, SelectedRange, boxes_moved};
 
 /// Extra measurements one commit may take while a read moves.
-const PASSES: usize = 2;
+pub(super) const PASSES: usize = 2;
 /// Commits in a row that layout feedback alone may cause.
 const ECHOES: u32 = 4;
 
@@ -328,7 +328,7 @@ impl RuntimeCore {
 
     /// [`Self::laid_out`], or when not `scrolled`, where it would be with every viewport
     /// scrolled to its origin, which only a commit moves.
-    fn placed(&self, nodes: &[Node], i: usize, scrolled: bool) -> [f32; 4] {
+    pub(super) fn placed(&self, nodes: &[Node], i: usize, scrolled: bool) -> [f32; 4] {
         let unscrolled;
         let scrolls = if scrolled { &self.scrolls } else { unscrolled = HashMap::default(); &unscrolled };
         let t = nodes[i].target;

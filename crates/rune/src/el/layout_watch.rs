@@ -56,6 +56,19 @@ impl El {
         { self.handlers.sites.layout = Some(std::panic::Location::caller()); }
         self
     }
+    /// Called with this element's laid-out rect `[x, y, w, h]` in window points, unscrolled (as
+    /// [`Cx::layout`](crate::Cx::layout) reads it), inside the commit that laid it out and
+    /// before that commit paints: once after its first layout, then when a commit moves or
+    /// resizes it by more than half a point. What the handler changes runs the view again in
+    /// the same commit, as React's `useLayoutEffect` re-renders before the browser paints, so a
+    /// view that hides what does not fit, measured from a layout that showed it, never draws a
+    /// frame of the overflow. A commit runs the view again at most twice for these; a rect the
+    /// last pass moved reaches the handler at the next commit. Scrolling, which commits
+    /// nothing, does not call it: use [`El::on_layout`] for a rect that follows a scroll.
+    pub fn on_measure<S: 'static>(mut self, f: impl Fn(&mut S, [f32; 4]) + 'static) -> Self {
+        self.handlers.on_measure = Some(Rc::new(move |s, r| f(downcast::<S>(s), r)));
+        self
+    }
     /// [`El::on_layout`] in global screen points: `[x, y, w, h]` from the top-left of the
     /// primary display, y down. That's the space of an overlay's
     /// [`OverlayPlacement::Rect`](crate::OverlayPlacement) on

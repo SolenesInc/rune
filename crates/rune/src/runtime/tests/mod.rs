@@ -15,6 +15,7 @@ mod id_pruning;
 mod input_clipboard;
 mod layout_hover;
 mod layout_reads;
+mod measure_before_paint;
 mod layout_rows;
 mod loop_sleep;
 mod matched_scroll;
