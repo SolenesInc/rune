@@ -439,7 +439,9 @@ policy changes are applied in the same mutation phase.
   growing row and the word-fade duration. `.reveal(word_fade)` fades appended words in, staggered from
   20 ms down to 5.5 ms as a backlog builds.
 - **Settling** (`Tx::settle()`): no animation, every track lands, and removed nodes unmount at once.
-  Opening a session lands at the bottom on its first frame with nothing animating in.
+  Opening a session lands at the bottom on its first frame with nothing animating in. A
+  `stick_bottom` viewport lands at its end only when it follows it or glides there; one a hand or
+  an app moved off its end keeps its place.
 - **Turn actions**: a transcript view can reserve a stable tail and crossfades Working into the
   Desktop copy icon over .34 s, without removing and re-adding the tail's height. `Tx::copy(text)`
   requests a shell clipboard write. Requests follow handler order; headless runs never write the

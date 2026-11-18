@@ -691,7 +691,7 @@ impl RuntimeCore {
                     e.slack = scroll_bottom::Slack::landed(self.viewport);
                     e.x = AxisScroll::default();
                 }
-                if tx.commit.lands() && sp.stick_bottom {
+                if e.follows_after(tx.commit.lands(), sp.stick_bottom) {
                     e.pin();
                 }
                 // A window resize, a settle or an instant change lands the slack: the rows go

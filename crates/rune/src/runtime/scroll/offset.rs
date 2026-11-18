@@ -246,6 +246,13 @@ impl ScrollState {
     /// The viewport was concealed: nothing moved it, whatever a hand did before.
     pub(super) fn still(&mut self) { let _ = mode::step(&mut self.mode, mode::Event::Still); }
 
+    /// Whether a commit that `lands` leaves this viewport, `stick`ing to its bottom, following
+    /// it: one already following, or one gliding to it. One a hand or an app moved off its end
+    /// stays where it is.
+    pub(super) fn follows_after(&self, lands: bool, stick: bool) -> bool {
+        self.pinned() || (lands && stick && matches!(self.mode, ScrollMode::Glide { to: GlideTo::Bottom, .. }))
+    }
+
     /// Follow the bottom from here (a pinned viewport keeps how its end last stepped).
     pub(super) fn pin(&mut self) { let _ = mode::step(&mut self.mode, mode::Event::Pin); }
 

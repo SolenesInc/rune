@@ -519,7 +519,7 @@ mod tests {
 
     /// A scroll to the bottom asked for while the window is covered (or hidden) waits for the
     /// frame that uncovers it, which settles: that frame shows the bottom, with no glide after.
-    /// (Settling already pins a sticky viewport; this one isn't.)
+    /// (Settling lands a sticky viewport already on its way to the end; this one isn't sticky.)
     #[test]
     fn a_scroll_asked_while_covered_lands_when_it_uncovers() {
         let mut rt = chat(Chat { rows: 40, loose: true, ..Default::default() });
@@ -538,6 +538,30 @@ mod tests {
         rt.frame(1.0 / 120.0);
         assert!(bottom_gap(&rt).abs() < 0.05, "the uncovering frame shows the bottom: {}", bottom_gap(&rt));
         assert!(!rt.animating, "with no glide left to play");
+    }
+
+    /// Settling (a window shown again) leaves a sticky viewport the hand scrolled away from
+    /// where it is, and lands one gliding back to its end at the end.
+    #[test]
+    fn settling_keeps_a_reader_off_the_end_and_lands_a_glide_to_it() {
+        let mut rt = chat(Chat { rows: 40, ..Default::default() });
+        for _ in 0..5 {
+            rt.wheel(100.0, 100.0, 300.0);
+            rt.frame(1.0 / 120.0);
+        }
+        for _ in 0..60 { rt.frame(1.0 / 120.0); }
+        let read = bottom_gap(&rt);
+        assert!(read < -1000.0, "reading far up: {read}");
+        rt.settle_all();
+        rt.frame(0.0);
+        assert_eq!(bottom_gap(&rt), read, "the settled frame keeps the reader's place");
+        press(&mut rt, "jump");
+        rt.frame(1.0 / 120.0);
+        assert!(bottom_gap(&rt) < -1.0 && rt.animating, "gliding back: {}", bottom_gap(&rt));
+        rt.settle_all();
+        rt.frame(0.0);
+        assert!(bottom_gap(&rt).abs() < 0.05, "the settled frame lands the glide at the end: {}", bottom_gap(&rt));
+        assert!(!rt.animating);
     }
 
     #[test]
