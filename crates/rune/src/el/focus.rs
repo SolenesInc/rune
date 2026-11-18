@@ -94,6 +94,7 @@ pub(crate) struct ModalSpec {
     pub dismiss: PressFn,
     pub outside: bool,
     pub press_through: bool,
+    pub wheel_closes: bool,
 }
 
 impl El {
@@ -294,14 +295,14 @@ impl El {
     }
     /// Trap focus and make the background inert while mounted. Escape requests dismissal.
     pub fn modal<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
             dismiss: Rc::new(move |s, _| dismiss(downcast::<S>(s))) });
         self
     }
     /// [`El::modal`] whose dismissal gets the change's [`Tx`]: a dialog that closes at once
     /// (`tx.instant()`), say.
     pub fn modal_tx<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
             dismiss: Rc::new(move |s, tx| dismiss(downcast::<S>(s), tx)) });
         self
     }
@@ -315,6 +316,13 @@ impl El {
     /// default, when the press only closes the modal.
     pub fn modal_press_through(mut self, enabled: bool) -> Self {
         if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.press_through = enabled; }
+        self
+    }
+    /// A wheel or trackpad scroll outside where the modal is drawn asks it to close, as a
+    /// press outside does; with [`El::modal_press_through`] the scroll still moves what is
+    /// under it. Off by default, when the wheel leaves the modal open.
+    pub fn modal_wheel_closes(mut self, enabled: bool) -> Self {
+        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.wheel_closes = enabled; }
         self
     }
 }

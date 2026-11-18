@@ -198,6 +198,15 @@ impl RuntimeCore {
         }
     }
 
+    /// Asks the open modal to close when the wheel turns at (x, y) outside where it is drawn
+    /// and it closes on that (`El::modal_wheel_closes`).
+    pub(super) fn wheel_outside_modal(&mut self, x: f32, y: f32) {
+        let Some(i) = self.active_modal() else { return };
+        if !self.nodes[i].handlers.modal.as_ref().is_some_and(|m| m.wheel_closes) { return; }
+        let inside = self.drawn.get(i).is_some_and(|&[left, top, w, h]| x >= left && x < left + w && y >= top && y < top + h);
+        if !inside { self.queue.push(Action::Dismiss(self.nodes[i].path.clone())); }
+    }
+
     /// Queues `on_press_within` for each element holding the topmost hit at (x, y), innermost
     /// first, up to a node the pointer may not reach. A primary press on an element that keeps
     /// its press from them (`El::keeps_press_from_within`) queues none.
@@ -530,6 +539,7 @@ impl RuntimeCore {
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();
+        self.wheel_outside_modal(x, y);
         let Some(id) = self.scroll_toward(x, y, dy) else { return };
         let stick = self.node_index.get(&id).and_then(|&i| self.nodes[i].scroll).is_some_and(|s| s.stick_bottom);
         if let Some(st) = self.scrolls.get_mut(&id) {
