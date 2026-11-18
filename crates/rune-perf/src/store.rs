@@ -38,7 +38,7 @@ pub(crate) fn run(config: Config, rx: Receiver<Sample>, start: Instant, health: 
             Err(RecvTimeoutError::Disconnected) => {
                 writer.check();
                 writer.flush();
-                if writer.wrote { writer.snapshot(); }
+                if writer.wrote || writer.stats.recorded() { writer.snapshot(); }
                 break;
             }
             Err(RecvTimeoutError::Timeout) => writer.flush(),
@@ -49,9 +49,9 @@ pub(crate) fn run(config: Config, rx: Receiver<Sample>, start: Instant, health: 
 
 fn acquire(lock: &File, health: &Health) -> io::Result<bool> {
     loop {
-        if health.stop.load(Relaxed) { return Ok(false); }
         match lock.try_lock() {
             Ok(()) => return Ok(true),
+            Err(TryLockError::WouldBlock) if health.stop.load(Relaxed) => return Ok(false),
             Err(TryLockError::WouldBlock) => std::thread::park_timeout(Duration::from_millis(100)),
             Err(TryLockError::Error(e)) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(TryLockError::Error(e)) => return Err(e),
@@ -75,7 +75,7 @@ struct Writer<'a> {
     lines: Vec<Value>,
     found: Vec<(String, Value)>,
     due: Option<Instant>,
-    /// Anything was written this run, so the shutdown snapshot goes out too.
+    /// Anything was written this run, so the shutdown snapshot goes out even with no frame.
     wrote: bool,
 }
 
@@ -160,7 +160,8 @@ impl<'a> Writer<'a> {
         }
     }
 
-    /// `perf.json`: beside each flush with incidents, and at shutdown when this run wrote anything.
+    /// `perf.json`: beside each flush with incidents, and at shutdown when this run recorded a frame
+    /// or wrote anything.
     fn write_snapshot(&mut self) {
         let now = self.start.elapsed().as_millis() as u64;
         let memory = procwatch::usage();
