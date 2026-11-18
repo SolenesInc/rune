@@ -335,3 +335,16 @@ fn a_long_list_builds_only_the_rows_it_mounts() {
     assert!(out.status.success(), "the child ran: {stderr}");
     assert!(!stderr.contains("virtualized list"), "the list built rows it doesn't mount: {stderr}");
 }
+
+#[test]
+fn the_popup_body_is_no_unnamed_button_to_a_screen_reader() {
+    let rt = runtime(3);
+    fn role_of(node: &serde_json::Value, key: &str) -> Option<String> {
+        if node["key"] == key {
+            return node["role"].as_str().map(str::to_owned);
+        }
+        node["children"].as_array()?.iter().find_map(|c| role_of(c, key))
+    }
+    let role = role_of(&rt.accessibility_json(), "commands-content");
+    assert_ne!(role.as_deref(), Some("button"), "the popup's body reads as a button");
+}

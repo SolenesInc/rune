@@ -309,7 +309,7 @@ impl<S: 'static> PopupList<S> {
             .preserve_focus_on_press(true)
             .w(width)
             .padding(padding)
-            .on_press(|_: &mut S| {})
+            .on_background_press(|_: &mut S| {})
             .child(list);
         if instant {
             content = content.instant_changes();
