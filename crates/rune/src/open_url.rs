@@ -11,6 +11,7 @@
 use crate::RuntimeCore;
 
 pub(crate) mod incoming;
+pub(crate) mod instance;
 
 const MAX_LEN: usize = 8192;
 
