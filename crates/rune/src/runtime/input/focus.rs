@@ -69,6 +69,25 @@ fn sync_input_focus(input: &mut crate::el::InputSpec, states: crate::states::Sta
     changed
 }
 
+/// Pushes focus on `path` into every field's editor and mirrors each editor back.
+fn sync_inputs_to(
+    nodes: &mut [Node],
+    virtual_inputs: &mut HashMap<String, Box<crate::el::InputSpec>>,
+    app: &mut dyn app_side::AppSide,
+    path: Option<&str>,
+) -> bool {
+    let mut changed = false;
+    for n in nodes {
+        if let Some(input) = &mut n.input {
+            changed |= sync_input_focus(input, app.states(), path == Some(n.path.as_str()));
+        }
+    }
+    for (p, input) in virtual_inputs {
+        changed |= sync_input_focus(input, app.states(), path == Some(p.as_str()));
+    }
+    changed
+}
+
 /// A handler's `Tx::blur` and `Tx::focus`. The commit applies both to the tree the handler's
 /// state builds: a field the handler ended is gone from it, so its edit accessor never runs.
 #[derive(Default)]
@@ -308,14 +327,7 @@ impl RuntimeCore {
             self.clear_text_selection();
         }
         let mut changed = moved && self.physical_focus_lost();
-        for n in &mut self.nodes {
-            if let Some(input) = &mut n.input {
-                changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(n.path.as_str()));
-            }
-        }
-        for (p, input) in &mut self.virtual_inputs {
-            changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(p.as_str()));
-        }
+        changed |= sync_inputs_to(&mut self.nodes, &mut self.virtual_inputs, self.app.as_mut(), path.as_deref());
         for effect in self.focus.step(focus_machine::FocusEvent::Set { path, keyboard }) {
             match effect {
                 focus_machine::FocusEffect::Moved => {
@@ -335,6 +347,13 @@ impl RuntimeCore {
             changed |= self.update_interaction(None);
         }
         changed
+    }
+    /// Mirrors the runtime's focus into `nodes`, measured again after `sync_requested_focus`
+    /// synced the ones before them: a reused `memo` holds each field as it was built, before
+    /// focus moved.
+    pub(super) fn sync_measured_inputs(&mut self, nodes: &mut [Node]) {
+        let path = self.focus.path().map(str::to_owned);
+        sync_inputs_to(nodes, &mut self.virtual_inputs, self.app.as_mut(), path.as_deref());
     }
     pub(super) fn sync_requested_focus(&mut self, nodes: &mut Vec<Node>) -> bool {
         let unmounted = self.focus.path()

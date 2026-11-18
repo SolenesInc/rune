@@ -1156,6 +1156,23 @@ mod tests {
     }
 
     #[test]
+    fn a_field_tx_focus_focuses_in_a_memo_keyed_on_something_else_draws_its_caret() {
+        use crate::{TextEdit, TextStyle, text_input};
+        fn view(s: &TextEdit, _: &mut Cx<TextEdit>) -> El {
+            col().size(200.0, 100.0).child(memo("form", 0, || {
+                col().child(text_input(s, TextStyle::new(14.0, 400.0)).key("field").size(200.0, 40.0).on_edit(|s: &mut TextEdit| s))
+            }))
+        }
+        let mut rt = Runtime::new(TextEdit::new(""), view, (200.0, 100.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.update(|_, tx| tx.focus("field", false));
+        rt.frame(0.0);
+        let field = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("field")).expect("the field shows");
+        assert!(field.focused && rt.state().focused, "the field took focus");
+        assert!(field.caret.is_some(), "the focused field draws its caret");
+    }
+
+    #[test]
     fn a_memoized_field_redraws_its_caret_and_composition() {
         use crate::{Ime, Key, KeyEvent, TextEdit, TextStyle, text_input};
         fn view(s: &TextEdit, _: &mut Cx<TextEdit>) -> El {

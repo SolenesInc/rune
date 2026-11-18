@@ -149,11 +149,13 @@ impl RuntimeCore {
             self.discard_measured(measured);
             measured = self.measure(tx);
             measured = self.settle_layout_reads(measured, tx);
+            self.sync_measured_inputs(&mut measured.nodes);
         }
         if measured.caret_read && self.caret_moved(Some(&measured.nodes)) {
             self.discard_measured(measured);
             measured = self.measure(tx);
             measured = self.settle_layout_reads(measured, tx);
+            self.sync_measured_inputs(&mut measured.nodes);
         }
         self.apply(measured, tx);
         self.scene.keep_flights(false);
