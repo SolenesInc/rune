@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 #[test]
 fn fetched_pixels_land_as_mips_and_oversized_or_short_ones_fail_naming_the_url() {
-    let decoded = land("a.webp", Fetched::Rgba(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]), 1).unwrap();
+    let decoded = land("a.webp", Fetched::Rgba(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]), 0).unwrap();
     assert_eq!((decoded.mips[0].width, decoded.mips[0].height), (2, 1));
     assert_eq!(decoded.mips.len(), 2);
     let side = MAX_SIDE + 1;

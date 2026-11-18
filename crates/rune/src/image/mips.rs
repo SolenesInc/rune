@@ -3,16 +3,25 @@
 use super::{Decoded, ImageError, Mip};
 
 pub(super) fn mip_chain(width: u32, height: u32, bytes: &[u8]) -> Result<Decoded, ImageError> {
-    let mut steps = MipSteps::new(width, height, bytes)?;
+    mip_chain_filling(width, height, bytes, 0)
+}
+
+/// The mip chain from the smallest level that still fills a `fill`×`fill` square on both axes
+/// down to 1×1, so a picture drawn small holds no more pixels than it can show. A `fill` of 0,
+/// or one the image is smaller than, keeps every level.
+pub(super) fn mip_chain_filling(width: u32, height: u32, bytes: &[u8], fill: u32) -> Result<Decoded, ImageError> {
+    let mut steps = MipSteps::new(width, height, bytes, fill)?;
     while !steps.step(usize::MAX) {}
     Ok(steps.finish())
 }
 
 /// A mip chain under construction: mip 0 at once, then the smaller levels a slice of rows
-/// at a time.
+/// at a time, dropping each level once a smaller one fills `fill`.
 pub(super) struct MipSteps<'a> {
     /// The straight-alpha source, which mip 1 filters.
     source: &'a [u8],
+    size: [u32; 2],
+    fill: u32,
     mips: Vec<Mip>,
     /// The level being built, and the row it continues from.
     next: Vec<u8>,
@@ -20,19 +29,19 @@ pub(super) struct MipSteps<'a> {
 }
 
 impl<'a> MipSteps<'a> {
-    pub(super) fn new(width: u32, height: u32, bytes: &'a [u8]) -> Result<Self, ImageError> {
+    pub(super) fn new(width: u32, height: u32, bytes: &'a [u8], fill: u32) -> Result<Self, ImageError> {
         if width == 0 || height == 0 || width > 8192 || height > 8192
             || bytes.len() != width as usize * height as usize * 4
         { return Err(ImageError("RGBA image dimensions or byte length are invalid".into())); }
-        let srgb = &*SRGB;
-        // Mip 0 is the source with RGB premultiplied in linear light; an opaque pixel is unchanged.
-        let mut top = bytes.to_vec();
-        for p in top.as_chunks_mut::<4>().0 {
-            if p[3] == 255 { continue; }
-            let a = p[3] as f32 / 255.0;
-            for c in 0..3 { p[c] = srgb.encode(srgb.decode[p[c] as usize] * a, p[3]); }
-        }
-        Ok(MipSteps { source: bytes, mips: vec![Mip { width, height, pixels: top }], next: Vec::new(), row: 0 })
+        let mut steps = MipSteps { source: bytes, size: [width, height], fill, mips: Vec::new(), next: Vec::new(), row: 0 };
+        // Mip 1 filters the source, so a mip 0 that mip 1 replaces is never built.
+        let top = if steps.fills((width / 2).max(1), (height / 2).max(1)) { Vec::new() } else { premultiplied(bytes) };
+        steps.mips.push(Mip { width, height, pixels: top });
+        Ok(steps)
+    }
+
+    fn fills(&self, width: u32, height: u32) -> bool {
+        self.fill > 0 && width >= self.fill && height >= self.fill
     }
 
     /// Build at most about `budget` more pixels (whole rows, at least one); true once the
@@ -50,7 +59,7 @@ impl<'a> MipSteps<'a> {
             let range = self.row..self.row + rows;
             // Mip 1 filters the straight source, so a translucent edge is premultiplied once,
             // not quantized first. Each later mip filters the bytes of the one above it.
-            if self.mips.len() == 1 {
+            if [w, h] == self.size {
                 downsample_rows(w, h, self.source, range, &mut self.next, |p| {
                     let a = p[3] as f32 / 255.0;
                     [srgb.decode[p[0] as usize] * a, srgb.decode[p[1] as usize] * a, srgb.decode[p[2] as usize] * a, a]
@@ -63,13 +72,26 @@ impl<'a> MipSteps<'a> {
             self.row += rows;
             budget = budget.saturating_sub(rows as usize * nw as usize);
             if self.row == nh {
+                if self.fills(nw, nh) { self.mips.clear(); }
                 self.mips.push(Mip { width: nw, height: nh, pixels: std::mem::take(&mut self.next) });
                 self.row = 0;
             }
         }
     }
 
-    pub(super) fn finish(self) -> Decoded { Decoded { mips: self.mips, motion: None } }
+    pub(super) fn finish(self) -> Decoded { Decoded { size: self.size, mips: self.mips, motion: None } }
+}
+
+/// Straight-alpha sRGB RGBA with RGB premultiplied in linear light; an opaque pixel is unchanged.
+fn premultiplied(bytes: &[u8]) -> Vec<u8> {
+    let srgb = &*SRGB;
+    let mut top = bytes.to_vec();
+    for p in top.as_chunks_mut::<4>().0 {
+        if p[3] == 255 { continue; }
+        let a = p[3] as f32 / 255.0;
+        for c in 0..3 { p[c] = srgb.encode(srgb.decode[p[c] as usize] * a, p[3]); }
+    }
+    top
 }
 
 /// Rows `rows` of `w`×`h` RGBA8 `src` halved by area, appended to `out`, summing `linear`

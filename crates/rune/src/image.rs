@@ -23,6 +23,8 @@ pub(crate) struct Mip {
     pub pixels: Vec<u8>,
 }
 pub(crate) struct Decoded {
+    /// The image's own size in pixels, which `mips` may start below.
+    pub size: [u32; 2],
     /// The image, or an animation's first frame.
     pub mips: Vec<Mip>,
     /// An animation's other frames and timing.
@@ -53,9 +55,9 @@ impl Image {
     /// any clone of it lives (an element drawing it), the cache hands back this image.
     pub fn pixels(&self) -> &crate::Pixels { &self.1 }
     pub fn id(&self) -> ImageId { self.0.id }
+    /// The image's own size in pixels, however small the size it was asked for kept it.
     pub fn size(&self) -> Option<[u32; 2]> {
-        let mip = self.decoded()?.ok()?.mips.first()?;
-        Some([mip.width, mip.height])
+        Some(self.decoded()?.ok()?.size)
     }
     pub fn is_ready(&self) -> bool { self.0.decoded.get().is_some() }
     pub fn error(&self) -> Option<&ImageError> { self.0.decoded.get()?.as_ref().err() }
@@ -66,8 +68,7 @@ impl Image {
         let decoded = self.0.decoded.get().expect("Image::wait cannot block on web; use is_ready and the cache waker");
         #[cfg(not(target_arch = "wasm32"))]
         let decoded = self.0.decoded.wait();
-        let mip = &decoded.as_ref()?.mips[0];
-        Ok([mip.width, mip.height])
+        Ok(decoded.as_ref()?.size)
     }
     pub(crate) fn decoded(&self) -> Option<Result<&Decoded, &ImageError>> {
         self.0.decoded.get().map(|r| r.as_ref().map(Arc::as_ref))
@@ -82,7 +83,8 @@ impl Image {
 }
 
 enum Input {
-    Encoded(Arc<[u8]>),
+    /// Bytes, and the square in pixels a raster image keeps mips to fill (0 keeps them all).
+    Encoded(Arc<[u8]>, u32),
     Rgba(u32, u32, Arc<[u8]>),
     Icon(std::path::PathBuf, u32),
     Svg(Arc<[u8]>, u32),
@@ -98,7 +100,7 @@ enum Input {
 impl Input {
     fn decode(self) -> Result<Decoded, ImageError> {
         match self {
-            Input::Encoded(bytes) => decode(&bytes),
+            Input::Encoded(bytes, px) => decode(&bytes, px),
             Input::Rgba(w, h, bytes) => mip_chain(w, h, &bytes),
             Input::Svg(bytes, px) => svg_rgba(&bytes, px).and_then(|(w, h, bytes)| mip_chain(w, h, &bytes)),
             #[cfg(not(target_arch = "wasm32"))]
@@ -109,7 +111,7 @@ impl Input {
                 if has_svg_extension(&path) || is_svg(&bytes) {
                     svg_rgba(&bytes, px).and_then(|(w, h, bytes)| mip_chain(w, h, &bytes))
                 } else {
-                    decode(&bytes)
+                    decode(&bytes, px)
                 }
             }
             #[cfg(not(target_arch = "wasm32"))]
@@ -186,7 +188,7 @@ impl ImageCache {
         hash.update(b"rune-encoded\0");
         hash.update(&bytes);
         let id = *hash.finalize().as_bytes();
-        self.request(id, Input::Encoded(bytes))
+        self.request(id, Input::Encoded(bytes, 0))
     }
 
     /// SVG or SVGZ bytes rasterized to fit `size_pt` points square at `scale` device pixels per
@@ -203,21 +205,32 @@ impl ImageCache {
         self.request(*hash.finalize().as_bytes(), Input::Svg(bytes, px))
     }
 
-    /// Bytes with a MIME type, as from a data URL or a `Content-Type` header: `image/svg+xml`
-    /// rasterizes like [`ImageCache::svg`], anything else decodes like [`ImageCache::load`].
+    /// Bytes with a MIME type, as from a data URL or a `Content-Type` header, for an image that
+    /// draws within `size_pt` points square at `scale`: `image/svg+xml` rasterizes like
+    /// [`ImageCache::svg`]; anything else decodes like [`ImageCache::load`] and keeps only the
+    /// mips that fill that square, so a large photo drawn small holds a small picture.
+    /// [`Image::size`] is still the image's own. Handles are shared by content, size and scale.
     pub fn load_mime(&self, bytes: impl Into<Arc<[u8]>>, mime: &str, size_pt: f32, scale: f32) -> Image {
         let essence = mime.split(';').next().unwrap_or("").trim();
-        if essence.eq_ignore_ascii_case("image/svg+xml") { self.svg(bytes, size_pt, scale) } else { self.load(bytes) }
+        if essence.eq_ignore_ascii_case("image/svg+xml") { return self.svg(bytes, size_pt, scale); }
+        let bytes = bytes.into();
+        let px = draw_pixels(size_pt, scale);
+        let mut hash = blake3::Hasher::new();
+        hash.update(b"rune-encoded-at\0");
+        hash.update(&px.to_le_bytes());
+        hash.update(&bytes);
+        self.request(*hash.finalize().as_bytes(), Input::Encoded(bytes, px))
     }
 
-    /// An image file, read and decoded on the worker. `.svg` and `.svgz` files (or SVG content)
-    /// rasterize like [`ImageCache::svg`]; other formats decode like [`ImageCache::load`], ignoring
-    /// the size. Handles are shared by path, size and scale, so an edited file needs a new handle
+    /// An image file that draws within `size_pt` points square at `scale`, read and decoded on the
+    /// worker. `.svg` and `.svgz` files (or SVG content) rasterize like [`ImageCache::svg`]; other
+    /// formats decode like [`ImageCache::load`] and keep only the mips that fill that square, as
+    /// [`ImageCache::load_mime`] does. Handles are shared by path, size and scale, so an edited file needs a new handle
     /// once the old ones drop. On web the path is a URL relative to the page, fetched as
     /// [`ImageCache::url`] does, so `cache.file("assets/logo.webp", ..)` works in both builds.
     pub fn file(&self, path: impl AsRef<std::path::Path>, size_pt: f32, scale: f32) -> Image {
         let path = path.as_ref().to_path_buf();
-        let px = icon_pixels(size_pt, scale);
+        let px = draw_pixels(size_pt, scale);
         let mut hash = blake3::Hasher::new();
         hash.update(b"rune-file\0");
         hash.update(path.as_os_str().as_encoded_bytes());
@@ -301,10 +314,10 @@ impl ImageCache {
                         if !wanted(&weak) { return; }
                         match fetched { Ok(fetched) => from_url::land_in_slices(&url, fetched, px).await, Err(e) => Err(e) }
                     }
-                    Input::Encoded(bytes) if browser_decodes(&bytes) => {
+                    Input::Encoded(bytes, px) if browser_decodes(&bytes) => {
                         let decoded = from_url::decode_in_browser(&bytes).await;
                         if !wanted(&weak) { return; }
-                        match decoded { Ok(fetched) => from_url::land_in_slices("image", fetched, 0).await, Err(e) => Err(e) }
+                        match decoded { Ok(fetched) => from_url::land_in_slices("image", fetched, px).await, Err(e) => Err(e) }
                     }
                     input => input.decode(),
                 };
@@ -329,8 +342,13 @@ fn browser_decodes(bytes: &[u8]) -> bool {
 fn wanted(state: &std::sync::Weak<State>) -> bool { state.strong_count() > 0 }
 
 fn icon_pixels(size_pt: f32, scale: f32) -> u32 {
+    draw_pixels(size_pt, scale).min(1024)
+}
+
+/// The device pixels `size_pt` points span at `scale`, up to the largest side an image may have.
+fn draw_pixels(size_pt: f32, scale: f32) -> u32 {
     let px = (size_pt * scale).ceil();
-    if px.is_finite() { px.clamp(1.0, 1024.0) as u32 } else { 1 }
+    if px.is_finite() { px.clamp(1.0, 8192.0) as u32 } else { 1 }
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -379,14 +397,14 @@ fn linux_icon(path: &std::path::Path, px: u32) -> Result<(u32, u32, Vec<u8>), Im
 }
 
 /// An SVG scaled to fit `px` square, keeping its aspect ratio, as straight-alpha sRGB RGBA8.
-/// `px == 0` rasterizes at twice the drawing's own size, at most 4096 pixels per side.
+/// `px == 0` rasterizes at twice the drawing's own size; either way at most 4096 pixels a side.
 #[cfg(feature = "svg")]
 pub(crate) fn svg_rgba(bytes: &[u8], px: u32) -> Result<(u32, u32, Vec<u8>), ImageError> {
     use resvg::{tiny_skia, usvg};
     if bytes.len() > 32 << 20 { return Err(ImageError("SVG is too large".into())); }
     let tree = usvg::Tree::from_data(bytes, &usvg::Options::default()).map_err(|e| ImageError(format!("SVG: {e}")))?;
     let size = tree.size();
-    let px = if px == 0 { (size.width().max(size.height()) * 2.0).ceil().clamp(1.0, 4096.0) as u32 } else { px };
+    let px = if px == 0 { (size.width().max(size.height()) * 2.0).ceil().clamp(1.0, 4096.0) as u32 } else { px.min(4096) };
     let k = px as f32 / size.width().max(size.height());
     let (w, h) = (((size.width() * k).round() as u32).clamp(1, px), ((size.height() * k).round() as u32).clamp(1, px));
     let mut pixmap = tiny_skia::Pixmap::new(w, h).ok_or_else(|| ImageError("empty SVG".into()))?;
@@ -549,14 +567,16 @@ unsafe fn macos_bitmap(
     }
 }
 
-fn decode(bytes: &[u8]) -> Result<Decoded, ImageError> {
+/// `bytes` decoded, a raster still keeping the mips that fill a `px` square (0 keeps them all).
+/// An animation keeps every frame whole.
+fn decode(bytes: &[u8], px: u32) -> Result<Decoded, ImageError> {
     if is_svg(bytes) {
         let (w, h, rgba) = svg_rgba(bytes, 0)?;
         return mip_chain(w, h, &rgba);
     }
     if avif::is_avif(bytes) {
         let (w, h, rgba) = avif::rgba(bytes)?;
-        return mip_chain(w, h, &rgba);
+        return mip_chain_filling(w, h, &rgba, px);
     }
     let bytes = if bytes.starts_with(b"icns") { icns_png(bytes)? } else { bytes };
     if let Some(animation) = animated::decode(bytes) { return animation; }
@@ -578,7 +598,7 @@ fn decode(bytes: &[u8]) -> Result<Decoded, ImageError> {
     let mut image = image::DynamicImage::from_decoder(decoder).map_err(error)?;
     image.apply_orientation(orientation);
     let image = image.into_rgba8();
-    mip_chain(image.width(), image.height(), image.as_raw())
+    mip_chain_filling(image.width(), image.height(), image.as_raw(), px)
 }
 
 fn icns_png(bytes: &[u8]) -> Result<&[u8], ImageError> {
@@ -610,7 +630,7 @@ mod avif;
 mod from_url;
 mod mips;
 pub(crate) mod pixels;
-use mips::mip_chain;
+use mips::{mip_chain, mip_chain_filling};
 #[cfg(test)]
 use mips::byte;
 #[cfg(not(target_arch = "wasm32"))]
@@ -618,6 +638,8 @@ pub(crate) use from_url::font_file;
 
 #[cfg(test)]
 mod mip_tests;
+#[cfg(test)]
+mod fill_tests;
 
 #[cfg(test)]
 mod tests {
@@ -719,7 +741,7 @@ mod tests {
             source.write_to(&mut encoded, format).unwrap();
             let bytes = encoded.into_inner();
             assert_eq!(browser_decodes(&bytes), format == image::ImageFormat::Jpeg, "web decodes JPEG in the browser, PNG itself");
-            let d = decode(&bytes).unwrap();
+            let d = decode(&bytes, 0).unwrap();
             assert_eq!((d.mips[0].width, d.mips[0].height), (8, 4));
             assert_eq!((d.mips.last().unwrap().width, d.mips.last().unwrap().height), (1, 1));
             if format == image::ImageFormat::Png {
@@ -729,9 +751,9 @@ mod tests {
                 icns.extend_from_slice(&((bytes.len() + 8) as u32).to_be_bytes());
                 icns.extend_from_slice(&bytes);
                 assert!(!browser_decodes(&icns));
-                assert_eq!(decode(&icns).unwrap().mips[0].pixels, d.mips[0].pixels);
+                assert_eq!(decode(&icns, 0).unwrap().mips[0].pixels, d.mips[0].pixels);
                 icns[12..16].copy_from_slice(&0u32.to_be_bytes());
-                assert!(decode(&icns).is_err());
+                assert!(decode(&icns, 0).is_err());
             }
         }
         assert!(mip_chain(0, 1, &[]).is_err());
@@ -760,9 +782,9 @@ mod tests {
         rotated.extend_from_slice(&app1);
         rotated.extend_from_slice(&jpeg[2..]);
 
-        let plain = decode(&jpeg).unwrap();
+        let plain = decode(&jpeg, 0).unwrap();
         assert_eq!((plain.mips[0].width, plain.mips[0].height), (16, 8));
-        let upright = decode(&rotated).unwrap();
+        let upright = decode(&rotated, 0).unwrap();
         let top = &upright.mips[0];
         assert_eq!((top.width, top.height), (8, 16), "turned a quarter");
         let at = |x: u32, y: u32| &top.pixels[((y * top.width + x) * 4) as usize..][..3];

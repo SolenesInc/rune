@@ -2,7 +2,7 @@
 //! own codecs (`createImageBitmap`, so WebP and AVIF too) off the main thread, and the straight
 //! RGBA lands through the same mip path as `ImageCache::rgba`. On native a URL without a scheme
 //! is a path and a `file:` URL names one; both load like `ImageCache::file`.
-use super::{Decoded, Image, ImageCache, ImageError, Input, icon_pixels, mip_chain, svg_rgba};
+use super::{Decoded, Image, ImageCache, ImageError, Input, draw_pixels, mip_chain, mip_chain_filling, svg_rgba};
 
 /// The largest side a fetched image may have, as for decoded files: 8192 pixels, so at most
 /// 256 MiB of decoded RGBA before mips.
@@ -10,9 +10,9 @@ use super::{Decoded, Image, ImageCache, ImageError, Input, icon_pixels, mip_chai
 pub(super) const MAX_SIDE: u32 = 8192;
 
 impl ImageCache {
-    /// The image at `url`, shared by URL, size and scale like [`ImageCache::file`] (SVG
-    /// rasterizes to fit `size_pt` at `scale`; other formats ignore both). Pending until it
-    /// arrives, then the cache's waker redraws.
+    /// The image at `url`, drawn within `size_pt` points square at `scale`, shared by URL, size
+    /// and scale like [`ImageCache::file`]: SVG rasterizes to fit that square, and other formats
+    /// keep only the mips that fill it. Pending until it arrives, then the cache's waker redraws.
     ///
     /// On web the browser fetches `url`, relative to the page, and decodes it off the main
     /// thread: PNG, JPEG, GIF's first frame, WebP and AVIF, whatever the browser reads, turned
@@ -22,7 +22,7 @@ impl ImageCache {
     /// client, a path or `file:` URL loads like [`ImageCache::file`] and other URLs fail; fetch
     /// those bytes yourself and call [`ImageCache::load`].
     pub fn url(&self, url: &str, size_pt: f32, scale: f32) -> Image {
-        let px = icon_pixels(size_pt, scale);
+        let px = draw_pixels(size_pt, scale);
         let mut hash = blake3::Hasher::new();
         hash.update(b"rune-url\0");
         hash.update(url.as_bytes());
@@ -67,7 +67,7 @@ pub(super) enum Fetched {
 #[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn land(url: &str, fetched: Fetched, px: u32) -> Result<Decoded, ImageError> {
     match fetched {
-        Fetched::Rgba(w, h, bytes) => mip_chain(w, h, &bytes),
+        Fetched::Rgba(w, h, bytes) => mip_chain_filling(w, h, &bytes, px),
         Fetched::Svg(bytes) => svg_rgba(&bytes, px).and_then(|(w, h, bytes)| mip_chain(w, h, &bytes)),
     }
     .map_err(|e| ImageError(format!("{url}: {e}")))
@@ -84,7 +84,7 @@ pub(super) async fn land_in_slices(url: &str, fetched: Fetched, px: u32) -> Resu
         Fetched::Rgba(w, h, bytes) => (w, h, bytes),
         Fetched::Svg(bytes) => svg_rgba(&bytes, px).map_err(named)?,
     };
-    let mut steps = super::mips::MipSteps::new(w, h, &bytes).map_err(named)?;
+    let mut steps = super::mips::MipSteps::new(w, h, &bytes, px).map_err(named)?;
     while !steps.step(SLICE) {
         let _ = wasm_bindgen_futures::JsFuture::from(crate::platform::web::platform::next_task()).await;
     }

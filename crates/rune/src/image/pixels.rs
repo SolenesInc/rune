@@ -103,8 +103,7 @@ impl Pixels {
     pub(crate) fn set_mips(&self, mips: Arc<crate::image::Decoded>) {
         {
             let mut frame = self.frame.lock().unwrap();
-            frame.width = mips.mips[0].width;
-            frame.height = mips.mips[0].height;
+            [frame.width, frame.height] = mips.size;
             frame.rgba.clear();
             frame.mips = Some(mips);
             frame.generation += 1;

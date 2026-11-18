@@ -1838,7 +1838,10 @@ let photo = cache.url("https://example.com/p.avif", 96.0, scale); // web: the br
 ```
 
 `cache.file` treats `.svg` and `.svgz` paths (or SVG content) as vectors and decodes other
-files like `load`. On web, `cache.file` and `cache.url` fetch the URL (relative to the page) and
+files like `load`, keeping only the mips that fill the square it was asked for, so a 5K
+screenshot shown as a 132 pt thumbnail holds about a megabyte instead of 80; `load_mime` and
+`url` do the same, and `Image::size` stays the image's own. Ask again with a larger size when
+it draws larger: that is a separate entry, decoded anew. `load` keeps every level. On web, `cache.file` and `cache.url` fetch the URL (relative to the page) and
 let the browser decode it off the main thread, so WebP and AVIF work there; SVG still rasterizes
 through resvg. On native `cache.url` takes a path or `file:` URL only: Rune has no HTTP client,
 so fetch remote bytes yourself and call `load`. `cache.load` recognises SVG by its content and rasterizes it at twice its
