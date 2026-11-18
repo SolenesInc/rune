@@ -483,16 +483,17 @@ impl RuntimeCore {
     }
 
     /// Whether window point (`x`, `y`), in points, is inside the drawn, clipped and turned box
-    /// of the element keyed `key`, whatever is drawn above it and whether or not it has handlers.
-    /// False when there is no such element, it is exiting or fully transparent. Same geometry
-    /// as [`Runtime::element_at`].
+    /// of the element `key` names, as [`Tx::scroll_into_view`](crate::Tx::scroll_into_view)
+    /// does (a key, a key path or a full path), whatever is drawn above it and whether or not it
+    /// has handlers. False when there is no such element, it is exiting or fully transparent.
+    /// Same geometry as [`Runtime::element_at`].
     pub fn contains(&self, key: &str, x: f32, y: f32) -> bool {
         self.contains_with(key, x, y, Pick::default())
     }
 
     /// [`Runtime::contains`] with options, as [`Runtime::element_at_with`].
     pub fn contains_with(&self, key: &str, x: f32, y: f32, pick: Pick) -> bool {
-        self.nodes.iter().position(|n| crate::flight::selects(key, &n.path, n.key.as_deref())).is_some_and(|i| self.pickable(i, x, y, pick))
+        self.nodes.iter().position(|n| n.path == key || crate::flight::selects(key, &n.path, n.key.as_deref())).is_some_and(|i| self.pickable(i, x, y, pick))
     }
 
     fn pickable(&self, i: usize, x: f32, y: f32, pick: Pick) -> bool {

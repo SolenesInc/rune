@@ -5,7 +5,7 @@
 use accesskit::{Action as Ak, ActionData, ActionRequest, ScrollUnit};
 
 use super::*;
-use super::a11y_tree::{ROOT, split_id, sub_link};
+use super::a11y_tree::{ROOT, element_id, link_id, split_id, sub_link};
 
 /// An action request resolved against the tree it named, run at the next frame.
 #[derive(Debug)]
@@ -121,6 +121,21 @@ impl RuntimeCore {
     pub fn accessibility_action(&mut self, key: &str, action: accesskit::Action, data: Option<ActionData>) -> bool {
         let tree = self.accessibility_tree();
         let Some(target_node) = tree.nodes.iter().find(|(_, n)| n.author_id() == Some(key)).map(|(id, _)| *id) else { return false };
+        self.a11y_action(&ActionRequest { action, target_tree: accesskit::TreeId::ROOT, target_node, data })
+    }
+
+    /// [`Self::accessibility_action`] for the element at `path`, keyed or not, as
+    /// [`Self::elements`] and [`Self::accessible_elements`] list it.
+    pub fn accessibility_action_at(&mut self, path: &str, action: accesskit::Action, data: Option<ActionData>) -> bool {
+        let (node, link) = match path.split_once("#link-") {
+            Some((text, k)) => match k.parse() {
+                Ok(k) => (text, Some(k)),
+                Err(_) => return false,
+            },
+            None => (path, None),
+        };
+        let Some(id) = self.nodes.iter().find(|n| n.path == node).map(|n| n.id) else { return false };
+        let target_node = link.map_or(element_id(id), |k| link_id(id, k));
         self.a11y_action(&ActionRequest { action, target_tree: accesskit::TreeId::ROOT, target_node, data })
     }
 
