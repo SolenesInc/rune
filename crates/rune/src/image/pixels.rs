@@ -100,15 +100,14 @@ impl Pixels {
         self.source.notify();
     }
 
-    pub(crate) fn set_mips(&self, mips: Arc<crate::image::Decoded>) {
-        {
-            let mut frame = self.frame.lock().unwrap();
-            [frame.width, frame.height] = mips.size;
-            frame.rgba.clear();
-            frame.mips = Some(mips);
-            frame.generation += 1;
-        }
-        self.source.notify();
+    /// Takes a decoded image's mips without waking anyone; the image wakes its windows once it
+    /// reports ready.
+    pub(crate) fn hold_mips(&self, mips: Arc<crate::image::Decoded>) {
+        let mut frame = self.frame.lock().unwrap();
+        [frame.width, frame.height] = mips.size;
+        frame.rgba.clear();
+        frame.mips = Some(mips);
+        frame.generation += 1;
     }
 
     pub fn size(&self) -> (u32, u32) {

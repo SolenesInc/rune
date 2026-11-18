@@ -73,12 +73,14 @@ impl Image {
     pub(crate) fn decoded(&self) -> Option<Result<&Decoded, &ImageError>> {
         self.0.decoded.get().map(|r| r.as_ref().map(Arc::as_ref))
     }
-    // The handle is ready before its pixels wake any window, so a woken frame sees its size.
+    // The pixels hold the mips before the handle is ready, so a draw after `wait` finds them,
+    // and the handle is ready before the pixels wake any window, so a woken frame sees its size.
     fn finish(&self, decoded: Result<Decoded, ImageError>) {
         let decoded = decoded.map(Arc::new);
         let mips = decoded.as_ref().ok().cloned();
+        if let Some(mips) = &mips { self.0.pixels.hold_mips(mips.clone()); }
         let _ = self.0.decoded.set(decoded);
-        if let Some(mips) = mips { self.0.pixels.set_mips(mips); }
+        if mips.is_some() { self.0.pixels.source.notify(); }
     }
 }
 
