@@ -10,6 +10,8 @@ use crate::text::TextFlow;
 
 /// Text longer than this gets no per-character runs (a reader still gets its whole value).
 const RUN_MAX_BYTES: usize = 64 * 1024;
+/// Drawn text with this many lines or more gets no runs: past it, line ids run into links'.
+const DRAWN_LINES_MAX: usize = super::a11y_tree::LINES_MAX;
 
 /// One laid-out line: its bytes in the drawn text and each character's place in points.
 pub(crate) struct Line {
@@ -82,6 +84,43 @@ fn piece_lines(p: crate::text::Piece<'_>, content: &str, s: f32, origin: [f32; 2
     }
 }
 
+/// An element's own drawn text as one run per line, without geometry, and its caret or
+/// selection in them: the drawn rows are the app's, so only the characters are known.
+fn drawn_runs(id: NodeId, drawn: &crate::el::DrawnText, out: &mut Vec<(AkId, AkNode)>) {
+    use unicode_segmentation::UnicodeSegmentation;
+    let me = out.len() - 1;
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for piece in drawn.text.split_inclusive('\n') {
+        let mut l = Line { range: start..start + piece.len(), rect: [0.0; 4], lengths: Vec::new(), positions: Vec::new(), widths: Vec::new(), word_starts: Vec::new() };
+        let mut in_word = false;
+        for g in piece.graphemes(true) {
+            let word = g.chars().next().is_some_and(char::is_alphanumeric);
+            if word && !in_word && l.lengths.len() < 256 { l.word_starts.push(l.lengths.len() as u8); }
+            in_word = word;
+            l.lengths.push(g.len().min(255) as u8);
+        }
+        start += piece.len();
+        lines.push(l);
+    }
+    if drawn.text.is_empty() || drawn.text.ends_with('\n') {
+        lines.push(Line { range: start..start, rect: [0.0; 4], lengths: Vec::new(), positions: Vec::new(), widths: Vec::new(), word_starts: Vec::new() });
+    }
+    if lines.len() >= DRAWN_LINES_MAX { return; }
+    for (k, l) in lines.iter().enumerate() {
+        let mut run = AkNode::new(Role::TextRun);
+        run.set_value(drawn.text.get(l.range.clone()).unwrap_or(""));
+        run.set_character_lengths(l.lengths.clone());
+        run.set_word_starts(l.word_starts.clone());
+        out[me].1.push_child(line_id(id, k));
+        out.push((line_id(id, k), run));
+    }
+    let at = |byte: usize| position(&lines, byte.min(drawn.text.len())).map(|(k, c)| TextPosition { node: line_id(id, k), character_index: c });
+    if let (Some(anchor), Some(focus)) = (at(drawn.anchor), at(drawn.focus)) {
+        out[me].1.set_text_selection(TextSelection { anchor, focus });
+    }
+}
+
 /// The line and character index of drawn byte `byte`.
 fn position(lines: &[Line], byte: usize) -> Option<(usize, usize)> {
     let last = lines.len().checked_sub(1)?;
@@ -106,6 +145,10 @@ impl RuntimeCore {
     /// links of any text, pushed after it as its children.
     pub(super) fn a11y_text_nodes(&self, i: usize, w: &a11y_tree::Walk, out: &mut Vec<(AkId, AkNode)>) {
         let n = &self.nodes[i];
+        if let Some(drawn) = n.a11y.more.as_deref().and_then(|m| m.drawn_text.as_ref()) {
+            drawn_runs(n.id, drawn, out);
+            return;
+        }
         let Some(spec) = n.text.as_deref() else { return };
         let me = out.len() - 1;
         let runs = n.input.is_some() || (spec.selectable && !n.is_secure());
@@ -136,7 +179,7 @@ impl RuntimeCore {
             }) else { continue };
             let role = crate::a11y::roles::map(l.role, &crate::a11y::roles::RoleCtx {
                 pressable: true, focusable: true, input: false, multiline: false, secure: false, scrolls: false, modal: false,
-                default_button: false, labelled: true, keyed: true, has_text: true, image: false,
+                default_button: false, labelled: true, keyed: true, has_text: true, image: false, drawn_text: false,
             }).unwrap_or(Role::Link);
             let mut link = AkNode::new(role);
             let words = spec.source_slice(l.start, l.end).unwrap_or("");

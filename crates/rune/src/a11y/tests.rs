@@ -558,3 +558,40 @@ fn an_element_that_holds_keys_is_the_focus_while_nothing_has_keyboard_focus() {
     rt.frame(0.0);
     assert_eq!(focus(&mut rt), None, "the window itself, once nothing holds keys");
 }
+
+#[test]
+fn an_editor_that_draws_its_own_text_is_a_text_area_with_lines_and_a_caret() {
+    struct Doc { text: String, caret: usize }
+    let mut rt = Runtime::new(Doc { text: "# Plan\nship it\n".into(), caret: 2 }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret)
+            .child(text(s.text.lines().next().unwrap_or("")).key("row")))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let editor = |rt: &Runtime<Doc>| {
+        let tree = rt.accessibility_tree();
+        let (_, n) = tree.nodes.iter().find(|(_, n)| n.author_id() == Some("editor")).expect("the editor is in the tree").clone();
+        let runs: Vec<(accesskit::NodeId, String, usize, Vec<u8>)> = n.children().iter().filter_map(|c| tree.nodes.iter().find(|(id, _)| id == c))
+            .filter(|(_, r)| r.role() == Role::TextRun)
+            .map(|(id, r)| (*id, r.value().unwrap_or("").to_owned(), r.character_lengths().len(), r.word_starts().to_vec())).collect();
+        (n, runs)
+    };
+    let (node, runs) = editor(&rt);
+    assert_eq!(node.role(), Role::MultilineTextInput);
+    assert_eq!(node.label(), Some("Note"));
+    assert_eq!(node.value(), Some("# Plan\nship it\n"));
+    assert_eq!(runs.iter().map(|r| (r.1.as_str(), r.2)).collect::<Vec<_>>(), [("# Plan\n", 7), ("ship it\n", 8), ("", 0)]);
+    assert_eq!(runs[1].3, [0, 5], "words start at each letter after a non-letter");
+    let at = |sel: &accesskit::TextSelection| (sel.focus.node, sel.focus.character_index);
+    assert_eq!(at(node.text_selection().expect("a caret")), (runs[0].0, 2));
+
+    rt.update(|s, _| s.caret = 12);
+    rt.frame(0.0);
+    let (node, runs) = editor(&rt);
+    assert_eq!(at(node.text_selection().unwrap()), (runs[1].0, 5), "the caret moved to the second line");
+
+    rt.update(|s, _| { s.text.push('x'); s.caret = s.text.len(); });
+    rt.frame(0.0);
+    let (node, runs) = editor(&rt);
+    assert_eq!(node.value(), Some("# Plan\nship it\nx"), "typing reaches the value");
+    assert_eq!(at(node.text_selection().unwrap()), (runs[2].0, 1));
+}
