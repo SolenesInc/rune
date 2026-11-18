@@ -57,6 +57,8 @@ pub(crate) struct A11yMore {
     pub described_by: Option<String>,
     /// `El::busy`.
     pub busy: bool,
+    /// `El::holds_keys`.
+    pub holds_keys: bool,
 }
 
 /// Accessibility state beyond role and label (`El::level`, `El::expanded`, `El::secure`, and
@@ -113,6 +115,14 @@ impl El {
     /// [`El::help`] tooltip describes the element; `description("")` turns that off.
     pub fn description(mut self, text: impl Into<String>) -> Self {
         self.cold_mut().a11y.more().description = Some(text.into());
+        self
+    }
+    /// Keys reach this element through the app rather than through keyboard focus, as a
+    /// terminal or a document the window's key handler drives: while no element has keyboard
+    /// focus, assistive technology treats the first such element in the tree as focused, so
+    /// a screen reader names it and follows its [`El::active_descendant`].
+    pub fn holds_keys(mut self, holds: bool) -> Self {
+        if holds { self.cold_mut().a11y.more().holds_keys = true; }
         self
     }
     /// The element whose content is active while this one keeps keyboard focus (ARIA

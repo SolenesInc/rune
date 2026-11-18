@@ -523,3 +523,38 @@ fn contains_names_an_unkeyed_element_by_its_path() {
     assert!(rt.contains(&spacer.path, 10.0, 10.0));
     assert!(!rt.contains(&spacer.path, 10.0, 250.0), "outside the window's clip");
 }
+
+#[test]
+fn an_element_that_holds_keys_is_the_focus_while_nothing_has_keyboard_focus() {
+    struct S { doc: bool, field: TextEdit }
+    let mut rt = Runtime::new(S { doc: true, field: TextEdit::new("") }, |s: &S, _: &mut Cx<S>| {
+        col()
+            .child(col().key("doc").role("document").label("Plan").holds_keys(s.doc).active_descendant("p2")
+                .child(text("One").key("p1"))
+                .child(text("Two").key("p2")))
+            .child(text_input(&s.field, crate::tok::type_::BODY).key("field").label("Find").on_edit(|s: &mut S| &mut s.field))
+    }, (400.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let focus = |rt: &mut Runtime<S>| {
+        let id = rt.a11y_update().expect("the focus moved").focus;
+        let tree = rt.accessibility_tree();
+        tree.nodes.iter().find(|(n, _)| *n == id).and_then(|(_, n)| n.author_id().map(str::to_owned))
+    };
+    let tree = rt.accessibility_json();
+    assert!(states(find(&tree, "doc").unwrap()).contains(&"focused"), "{tree}");
+    assert_eq!(find(&tree, "doc").unwrap()["activeDescendant"], "p2");
+    rt.a11y_activate("Window");
+    assert_eq!(focus(&mut rt).as_deref(), Some("doc"));
+
+    rt.update(|s, _| s.field.focused = true);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt).as_deref(), Some("field"), "keyboard focus comes first");
+
+    rt.update(|s, _| s.field.focused = false);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt).as_deref(), Some("doc"));
+
+    rt.update(|s, _| s.doc = false);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt), None, "the window itself, once nothing holds keys");
+}

@@ -242,7 +242,7 @@ impl RuntimeCore {
 
     /// The node holding keyboard focus, when it is in the sent tree.
     fn a11y_focus_now(&self) -> AkId {
-        let Some(i) = self.focused_index() else { return ROOT };
+        let Some(i) = self.focused_index().or_else(|| self.a11y_key_holder()) else { return ROOT };
         let n = &self.nodes[i];
         let id = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
             .map_or(element_id(n.id), |k| link_id(n.id, k));
@@ -315,6 +315,7 @@ impl RuntimeCore {
         let mut scrollers = Vec::new();
         let mut focus = ROOT;
         let focused = self.focused_index();
+        let mut holder = None;
         let content = self.a11y_content_prints();
         // Behind an open modal the tree holds only the modal and what contains it.
         let mut holds_modal = Vec::new();
@@ -353,6 +354,7 @@ impl RuntimeCore {
                     focus = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
                         .map_or(id, |k| link_id(n.id, k));
                 }
+                if holder.is_none() && n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) { holder = Some(id); }
                 slots.push(Slot { id, element: Some(i), walk: w, role, print, set_size: None });
                 w.slot = slots.len() - 1;
             }
@@ -370,7 +372,18 @@ impl RuntimeCore {
         for (k, s) in slots.iter_mut().enumerate() {
             s.print = mix(mix(s.print, kid_prints[k]), s.set_size.map_or(0, |n| n as u64 + 1));
         }
+        if focused.is_none() && let Some(holder) = holder { focus = holder; }
         Found { slots, kids, focus, scrollers }
+    }
+
+    /// The first element in the tree that [`El::holds_keys`], which assistive technology
+    /// treats as focused while no element has keyboard focus.
+    fn a11y_key_holder(&self) -> Option<usize> {
+        let sent = self.a11y.as_ref()?;
+        (0..self.nodes.len()).find(|&i| {
+            let n = &self.nodes[i];
+            n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) && sent.sent.contains_key(&element_id(n.id).0)
+        })
     }
 
     /// The nodes of `found` whose `changed` flag is set, built, with their lines and links:
