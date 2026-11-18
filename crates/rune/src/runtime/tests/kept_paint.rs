@@ -10,7 +10,7 @@ fn list(_: &(), _: &mut Cx<()>) -> El {
 }
 
 /// Lands everything, then takes the quiet frame that paints what the last one did.
-fn at_rest(rt: &mut Runtime<()>) {
+fn at_rest<S: 'static>(rt: &mut Runtime<S>) {
     rt.settle_all();
     while rt.frame(1.0 / 60.0) {}
     rt.frame(1.0 / 60.0);
@@ -59,4 +59,23 @@ fn a_wheel_that_dismisses_a_tooltip_and_scrolls_nothing_paints_it_away() {
     assert!(rt.help_tooltip().is_none(), "the wheel dismissed the tooltip");
     assert_eq!(rt.stats.paints, painted + 1, "dismissing it paints");
     assert!(rt.instances.len() < drawn, "the tooltip is no longer drawn");
+}
+
+#[test]
+fn a_caret_that_moves_within_its_element_moves_the_input_method_and_paints_nothing() {
+    use crate::Live;
+    fn editor(caret: &Live<[f32; 4]>, _: &mut Cx<Live<[f32; 4]>>) -> El {
+        col().size(200.0, 100.0)
+            .child(text("an editor the app draws").key("text"))
+            .child(el().key("cells").size(160.0, 80.0).ime_cursor_at(caret))
+    }
+    let caret = Live::new([8.0, 0.0, 1.0, 16.0]);
+    let mut rt = Runtime::new(caret.clone(), editor, (200.0, 100.0), Env::new(true, 2.0));
+    at_rest(&mut rt);
+    let painted = rt.stats.paints;
+    let [x, y, ..] = rt.ime_area.expect("the caret has the input method");
+    caret.set([40.0, 32.0, 1.0, 16.0]);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.stats.paints, painted, "moving the caret paints nothing");
+    assert_eq!(rt.ime_area, Some([x + 32.0, y + 32.0, 1.0, 16.0]), "the input method follows the caret");
 }

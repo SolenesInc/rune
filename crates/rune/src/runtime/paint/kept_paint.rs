@@ -35,7 +35,8 @@ fn same(a: &[Instance], b: &[Instance]) -> bool {
     bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b)
 }
 
-pub(super) fn check(kept: &[Instance], painted: &[Instance], animating: bool) {
+pub(super) fn check(kept: &[Instance], painted: &[Instance], animating: bool, ime: (Option<[f32; 4]>, Option<[f32; 4]>)) {
+    assert_eq!(ime.0, ime.1, "rune: a frame kept its paint, but placed the input method's area apart from where painting it does");
     if same(kept, painted) && !animating { return; }
     let first = kept.iter().zip(painted).position(|(a, b)| bytemuck::bytes_of(a) != bytemuck::bytes_of(b));
     panic!(

@@ -660,12 +660,16 @@ impl RuntimeCore {
         let instant_scroll = tx.commit.snaps() || self.settled;
         let animating = if keeps_paint && !self.last_paint.checked {
             self.step_clock(dt);
+            self.place_ime_anchor();
             false
         } else {
-            let kept = keeps_paint.then(|| self.instances.clone());
+            let kept = keeps_paint.then(|| {
+                self.place_ime_anchor();
+                (self.instances.clone(), self.ime_area)
+            });
             if !keeps_paint { self.stats.paints += 1; }
             let animating = self.step_motion(dt, instant_scroll);
-            if let Some(kept) = kept { kept_paint::check(&kept, &self.instances, animating); }
+            if let Some((kept, ime)) = kept { kept_paint::check(&kept, &self.instances, animating, (ime, self.ime_area)); }
             animating
         } || live_animating;
         self.stats.shaped = self.text.shaped - shaped0;

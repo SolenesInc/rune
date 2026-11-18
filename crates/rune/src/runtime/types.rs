@@ -147,6 +147,8 @@ pub(crate) struct Node {
     pub(super) selection_group: bool,
     pub(super) window_drag: crate::el::WindowDrag,
     pub(super) ime_cursor: bool,
+    /// `El::ime_cursor_at`.
+    pub(super) ime_at: Option<crate::live::Live<[f32; 4]>>,
     /// `El::ime_option_as_alt`.
     pub(super) ime_option_as_alt: bool,
     /// Placeholder left in `self.nodes` after `try_reuse_memo` moves a node into the new pass.
@@ -216,6 +218,7 @@ impl Node {
             selection_group: false,
             window_drag: crate::el::WindowDrag::None,
             ime_cursor: false,
+            ime_at: None,
             ime_option_as_alt: false,
             moved_stub: true,
         }

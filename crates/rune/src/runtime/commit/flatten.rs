@@ -447,6 +447,7 @@ fn flatten_owned(
     let pin = crate::el::Pin::of(&el);
     let El { handlers, key, mut style, mut vis, vis_flags, mut text, children, memo, mut cold, scale: static_scale, .. } = el;
     let option_as_alt = cold.option_as_alt;
+    let ime_at = cold.ime_at.clone();
     let focus = cold.focus.clone();
     // Only a text field's element has to own its cold fields here; a memo placeholder shares them.
     let mut input = if cold.input.is_some() { cold.get_mut_if_some().and_then(|c| c.input.take()) } else { None };
@@ -567,6 +568,7 @@ fn flatten_owned(
         selection_group: flags.has(ElFlags::SELECTION_GROUP),
         window_drag: flags.window_drag(),
         ime_cursor: flags.has(ElFlags::IME_CURSOR),
+        ime_at,
         ime_option_as_alt: option_as_alt,
         moved_stub: false,
     });
@@ -774,6 +776,7 @@ fn flatten_ref(
         selection_group: flags.has(ElFlags::SELECTION_GROUP),
         window_drag: flags.window_drag(),
         ime_cursor: flags.has(ElFlags::IME_CURSOR),
+        ime_at: el.cold.ime_at.clone(),
         ime_option_as_alt: el.cold.option_as_alt,
         moved_stub: false,
     });

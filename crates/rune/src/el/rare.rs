@@ -28,6 +28,8 @@ pub(crate) struct ElCold {
     pub(crate) animated_changes: bool,
     /// `El::ime_option_as_alt`.
     pub(crate) option_as_alt: bool,
+    /// `El::ime_cursor_at`.
+    pub(crate) ime_at: Option<crate::live::Live<[f32; 4]>>,
     pub(crate) transition: Option<Box<Transition>>,
     pub(crate) matched: Option<Rc<str>>,
     pub(crate) scroll: Option<ScrollSpec>,
@@ -74,6 +76,7 @@ impl Empty for ElCold {
         lead: None,
         animated_changes: false,
         option_as_alt: false,
+        ime_at: None,
         transition: None,
         matched: None,
         scroll: None,

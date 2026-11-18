@@ -628,6 +628,15 @@ impl El {
         self.flags.set(ElFlags::IME_CURSOR, true);
         self
     }
+    /// [`Self::ime_cursor`] for a caret that moves within this element without the view running:
+    /// `at` is the caret's rect, [x, y, width, height] in this element's points. The element
+    /// stays put and draws nothing for the caret, so moving it never paints the window again: a
+    /// frame that keeps its paint places the candidate window at `at`'s latest value.
+    pub fn ime_cursor_at(mut self, at: &crate::live::Live<[f32; 4]>) -> Self {
+        self.flags.set(ElFlags::IME_CURSOR, true);
+        self.cold_mut().ime_at = Some(at.clone());
+        self
+    }
     /// With [`Self::ime_cursor`]: on macOS, while this caret has the input method, Option is the
     /// Alt key. A key pressed with it arrives as the key it's on with `mods.alt` (`Tx::key_base`
     /// its character) instead of the character the layout makes with Option, and the input method

@@ -671,6 +671,9 @@ pub struct RuntimeCore {
     pub ime_area: Option<[f32; 4]>,
     /// The `El::ime_cursor` that has the input method asks for Option as Alt (`El::ime_option_as_alt`).
     pub(crate) ime_option_as_alt: bool,
+    /// The `El::ime_cursor_at` element that has the input method: its drawn rect in device
+    /// pixels and the caret within it, which a frame that keeps its paint places again.
+    ime_anchor: Option<([f32; 4], crate::live::Live<[f32; 4]>)>,
     /// The focused field's caret (path, window rect) the next view sees through `Cx::caret`.
     caret: Option<(String, [f32; 4])>,
     /// The last view read the caret, so it re-runs when the caret moves.
@@ -1007,6 +1010,7 @@ impl RuntimeCore {
             file_drag: Default::default(),
             ime_area: None,
             ime_option_as_alt: false,
+            ime_anchor: None,
             caret: None,
             caret_watch: false,
             layout_seen: Default::default(),
