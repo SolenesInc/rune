@@ -85,7 +85,8 @@ impl RuntimeCore {
             self.dissolve_scratch[parent] |= opacity > 0.001 && opacity < 1.0;
         }
 
-        let paint_state_hash = self.prepare_cache_layers(&sel_ranges, &mark_ranges);
+        let paint_state_hash = self.paint_state_hash(&sel_ranges, &mark_ranges);
+        self.prepare_cache_layers();
 
         self.place_growth_rows();
 

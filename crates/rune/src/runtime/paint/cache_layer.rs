@@ -119,53 +119,58 @@ impl NodeCache {
 }
 
 impl RuntimeCore {
-    pub(super) fn prepare_cache_layers(&mut self, sel_ranges: &[(usize, usize, usize)], mark_ranges: &[(usize, usize, usize)]) -> u64 {
-        let (s, n_nodes) = (self.env.scale, self.nodes.len());
+    /// Everything outside commits that paints the window: hover, focus and its rings, text
+    /// settings, scale, the selection, marks and every scroll offset.
+    pub(super) fn paint_state_hash(&self, sel_ranges: &[(usize, usize, usize)], mark_ranges: &[(usize, usize, usize)]) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let s = self.env.scale;
+        let mut h = rune_motion::Fx::default();
+        self.hovered.hash(&mut h);
+        self.hover_within.hash(&mut h);
+        self.focus.path().hash(&mut h);
+        self.focus.keyboard().hash(&mut h);
+        self.focus.hovered().hash(&mut h);
+        self.defaults.force_focus_rings.hash(&mut h);
+        if let Some(ring) = self.defaults.focus_ring {
+            let c = ring.color;
+            [ring.width, ring.offset, c.r, c.g, c.b, c.a].map(f32::to_bits).hash(&mut h);
+        }
+        (self.srgb_blend, self.text.smoothing, self.text.families(), crate::text::icon::swap_id()).hash(&mut h);
+        h.write_u32(s.to_bits());
+        sel_ranges.hash(&mut h);
+        // A selection's colours follow the window's focus (`El::selection_style`).
+        if !sel_ranges.is_empty() {
+            self.window_focused.hash(&mut h);
+        }
+        mark_ranges.hash(&mut h);
+        let mut scroll_mix = 0u64;
+        for (&id, st) in &self.scrolls {
+            let mut sh = rune_motion::Fx::default();
+            sh.write_u64(id.0);
+            sh.write_u64(st.offset.to_bits());
+            sh.write_u64(st.x.offset.to_bits());
+            sh.write_u32(st.held as u32);
+            sh.write_u32(st.slack.height().to_bits());
+            scroll_mix = scroll_mix.wrapping_add(sh.finish());
+        }
+        for (path, &off) in &self.input_scroll {
+            let mut sh = rune_motion::Fx::default();
+            path.hash(&mut sh);
+            sh.write_u32(off.to_bits());
+            scroll_mix = scroll_mix.wrapping_add(sh.finish());
+        }
+        h.write_u64(scroll_mix);
+        h.finish()
+    }
+
+    pub(super) fn prepare_cache_layers(&mut self) {
+        let n_nodes = self.nodes.len();
         self.cache_live_scratch.clear();
         self.cache_check_scratch.clear();
         self.cache_paint_scratch.clear();
         self.cache_inside_scratch.clear();
-        let mut paint_state_hash = 0u64;
         if self.has_cache {
             use std::hash::{Hash, Hasher};
-            let mut h = rune_motion::Fx::default();
-            self.hovered.hash(&mut h);
-            self.hover_within.hash(&mut h);
-            self.focus.path().hash(&mut h);
-            self.focus.keyboard().hash(&mut h);
-            self.focus.hovered().hash(&mut h);
-            self.defaults.force_focus_rings.hash(&mut h);
-            if let Some(ring) = self.defaults.focus_ring {
-                let c = ring.color;
-                [ring.width, ring.offset, c.r, c.g, c.b, c.a].map(f32::to_bits).hash(&mut h);
-            }
-            (self.srgb_blend, self.text.smoothing, self.text.families(), crate::text::icon::swap_id()).hash(&mut h);
-            h.write_u32(s.to_bits());
-            sel_ranges.hash(&mut h);
-            // A selection's colours follow the window's focus (`El::selection_style`).
-            if !sel_ranges.is_empty() {
-                self.window_focused.hash(&mut h);
-            }
-            mark_ranges.hash(&mut h);
-            let mut scroll_mix = 0u64;
-            for (&id, st) in &self.scrolls {
-                let mut sh = rune_motion::Fx::default();
-                sh.write_u64(id.0);
-                sh.write_u64(st.offset.to_bits());
-                sh.write_u64(st.x.offset.to_bits());
-                sh.write_u32(st.held as u32);
-                sh.write_u32(st.slack.height().to_bits());
-                scroll_mix = scroll_mix.wrapping_add(sh.finish());
-            }
-            for (path, &off) in &self.input_scroll {
-                let mut sh = rune_motion::Fx::default();
-                path.hash(&mut sh);
-                sh.write_u32(off.to_bits());
-                scroll_mix = scroll_mix.wrapping_add(sh.finish());
-            }
-            h.write_u64(scroll_mix);
-            paint_state_hash = h.finish();
-
             self.cache_live_scratch.resize(n_nodes, false);
             self.cache_check_scratch.resize(n_nodes, false);
             self.cache_paint_scratch.resize(n_nodes, 0);
@@ -223,7 +228,6 @@ impl RuntimeCore {
                 }
             }
         }
-        paint_state_hash
     }
 
     pub(super) fn close_cached_layer(
