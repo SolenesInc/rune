@@ -178,8 +178,9 @@ impl RuntimeCore {
             None => false,
         };
         let ran = self.dispatch_mods(tx, &mut live) || ran;
-        tx.live_only = ran && live == Some(true);
-        ran
+        let blurred = matches!(event, PhysicalInput::FocusLost) && self.blur_focused(tx);
+        tx.live_only = ran && !blurred && live == Some(true);
+        ran || blurred
     }
     /// `App::on_modifiers`, when the held modifiers changed since it last heard them.
     fn dispatch_mods(&mut self, tx: &mut Tx, live: &mut Option<bool>) -> bool {
@@ -201,14 +202,30 @@ impl RuntimeCore {
         merge(tx, one);
         consumed
     }
-    /// Focus moving off an element inside the window: its handler hears `FocusLost`, and
-    /// modifier keys stay held.
+    /// Focus moving off an element inside the window: its handler hears `FocusLost`, its
+    /// `on_blur` runs, and modifier keys stay held.
     pub(super) fn physical_focus_lost(&mut self) -> bool {
         let mut tx = self.transaction();
-        let changed = self.offer_physical(&PhysicalInput::FocusLost, &mut tx, &mut None);
+        let changed = self.offer_physical(&PhysicalInput::FocusLost, &mut tx, &mut None) | self.blur_focused(&mut tx);
         self.latch_requests(&mut tx);
         merge(&mut self.pending, tx);
         changed
+    }
+    /// Runs the `on_blur` of the focused element a rebuild removed.
+    pub(super) fn blur_unmounted(&mut self, blur: crate::el::PressFn) -> bool {
+        let mut tx = self.transaction();
+        blur(self.app.states(), &mut tx);
+        self.latch_requests(&mut tx);
+        merge(&mut self.pending, tx);
+        true
+    }
+    /// Runs the focused element's `on_blur`; whether it had one.
+    fn blur_focused(&mut self, tx: &mut Tx) -> bool {
+        let Some(handler) = self.focus.path().and_then(|p| self.node(p)).and_then(|n| n.focus.blur.clone()) else { return false };
+        let mut one = self.transaction();
+        handler(self.app.states(), &mut one);
+        merge(tx, one);
+        true
     }
 }
 

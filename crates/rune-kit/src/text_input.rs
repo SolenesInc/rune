@@ -97,6 +97,9 @@ impl EditActs {
     pub(crate) fn change<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_input_change(f)));
     }
+    pub(crate) fn blur<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
+        self.handlers.push(Box::new(move |e: El| e.on_blur(f)));
+    }
     pub(crate) fn visual(&mut self, f: impl FnOnce(El) -> El + 'static) {
         self.visual.push(Box::new(f));
     }
@@ -313,6 +316,11 @@ impl TextInput {
     }
     pub fn on_submit<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
         self.edits.submit(f);
+        self
+    }
+    /// Focus left the field ([`El::on_blur`]).
+    pub fn on_blur<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.edits.blur(f);
         self
     }
     /// The trailing copy or clear button's press.

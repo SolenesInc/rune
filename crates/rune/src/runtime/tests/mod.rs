@@ -7,6 +7,7 @@ mod context_menu_key;
 mod draw_on;
 mod event_markers;
 mod find_key;
+mod focus_blur;
 mod fold_glide;
 mod glyph_replay;
 mod group_opacity;

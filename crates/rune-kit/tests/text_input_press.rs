@@ -701,3 +701,24 @@ fn secure_text_area_replaces_pristine_secret_on_first_edit() {
     rt.frame(0.0);
     assert_eq!(rt.state().text, "replacement-line-1\nreplacement-line-2\nreplacement-line-3");
 }
+
+#[test]
+fn a_press_beside_a_text_input_runs_its_on_blur_once() {
+    struct Form { edit: TextEdit, blurs: usize }
+    fn view(s: &Form, _: &mut Cx<Form>) -> El {
+        col().size(400.0, 200.0)
+            .child(TextInput::new(&s.edit).key("field").on_edit(|s: &mut Form| &mut s.edit)
+                .on_blur(|s: &mut Form, _| s.blurs += 1).build(&Kit::neutral(true)))
+            .child(text("beside").key("beside"))
+    }
+    let mut rt = Runtime::new(Form { edit: TextEdit::new("text"), blurs: 0 }, view, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    for key in ["field", "beside"] {
+        let (x, y) = rt.find(key).unwrap();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+    }
+    assert!(!rt.state().edit.focused);
+    assert_eq!(rt.state().blurs, 1);
+}
