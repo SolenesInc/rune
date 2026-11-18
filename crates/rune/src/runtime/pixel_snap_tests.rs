@@ -316,6 +316,21 @@ fn a_still_zoomed_canvas_draws_on_whole_pixels() {
     }
 }
 
+/// A settle lands a zoomed canvas on the grid at once: the correction that eases in over
+/// `SETTLE` once it holds still is drawn in full, and frames that move no time rest.
+#[test]
+fn a_settle_lands_a_zoom_on_whole_pixels_with_no_time_passing() {
+    let mut rt = Runtime::new((1.2, true), canvas, (160.0, 120.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+    rt.update(|st, _| st.0 = 1.37);
+    rt.settle_all();
+    rt.frame(0.0);
+    let rests = (0..3).any(|_| !rt.animating || { rt.frame(0.0); false });
+    assert!(rests, "the settled canvas still eases onto the grid");
+    let e = edges(&fills(&rt));
+    assert!(e.iter().all(|&v| whole(v)), "{e:?}");
+}
+
 #[test]
 fn a_zoom_draws_exact_while_it_moves_and_eases_onto_the_grid() {
     let mut snapped = Runtime::new((1.2, true), canvas, (160.0, 120.0), Env::new(true, 2.0));

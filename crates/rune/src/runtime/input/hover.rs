@@ -328,6 +328,7 @@ impl RuntimeCore {
         let captured = self.press.path().or(self.secondary.path());
         let alone = self.hovered_alone();
         let shared = self.shared_hovered();
+        let lands = self.settled;
         for i in 0..self.nodes.len() {
             let n = &self.nodes[i];
             let press_scale = n.handlers.get().and_then(|h| h.press_scale);
@@ -335,6 +336,9 @@ impl RuntimeCore {
             if self.is_exiting(n.id) { continue; }
             match self.hover_flip(i, captured, alone, &shared) {
                 Some(f) if f.changed => flips.push(f),
+                Some(f) if lands && self.scene.store().is_animating(f.id, P_HOVER) => {
+                    self.scene.set(f.id, P_HOVER, f.on as u8 as f32);
+                }
                 // Default hover animations inherit velocity and have no completion token.
                 // An unchanged target preserves its trajectory in the store already; avoid
                 // dirtying the scene node for that no-op. Custom animations may carry an
@@ -379,7 +383,7 @@ impl RuntimeCore {
         for f in flips.drain(..) {
             if held && !f.now { continue; }
             if paint_tracks::ready_from_rest(&mut self.scene, f.id, P_HOVER, 0.0, f.on as u8 as f32) {
-                if unseen.get_or_insert_with(|| self.drew_nothing()).get(f.i).copied().unwrap_or(false) {
+                if lands || unseen.get_or_insert_with(|| self.drew_nothing()).get(f.i).copied().unwrap_or(false) {
                     self.scene.set(f.id, P_HOVER, f.on as u8 as f32);
                 } else {
                     self.scene.animate(f.id, P_HOVER, f.on as u8 as f32, f.anim);
