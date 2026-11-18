@@ -14,7 +14,7 @@ A Rust GPU UI framework (wgpu, winit) for apps that feel like SwiftUI on iOS at 
 - `scripts/test.sh -p rune -p rune-mermaid -p rune-kit --features rune-kit/markdown,rune-kit/mermaid`. Run tests through `scripts/test.sh`, which passes its arguments to `cargo test`. Compiling `rune`'s lib tests peaks at about 3.6 GB; keep it there by writing runtime methods in `impl RuntimeCore` (below).
 - `cargo check --workspace --all-targets`
 - Tests run in debug. `--release` is incremental, for looking at an app. Benchmarks use `--profile perf`; the runtime bench scripts refuse other builds.
-- CI: the `fork tests` workflow (`.github/workflows/fork-tests.yml`) runs the whole suite on Linux and macOS for each push to `main` and on request. Upstream's own workflows (`macos-tests.yml`, `site.yml`, `www.yml`) are disabled in this repository.
+- CI: on each push to `main` and on request, the `fork tests` workflow (`.github/workflows/fork-tests.yml`) runs the whole suite on Linux and macOS, and the `file size` workflow (`.github/workflows/file-size.yml`) runs `scripts/file-size.sh`. These are the repository's only workflows.
 
 ## Changes
 
