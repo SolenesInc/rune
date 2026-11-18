@@ -526,6 +526,8 @@ pub enum TitlebarAction {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameStats {
     pub commits: u64,
+    /// Frames that painted the window anew; a frame that keeps the last paint adds none.
+    pub paints: u64,
     pub layout_nodes: usize,
     pub glyphs: usize,
     pub shaped: u32,

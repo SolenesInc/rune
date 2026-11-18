@@ -397,6 +397,7 @@ impl RuntimeCore {
     pub(super) fn frame_step(&mut self, elapsed: f64, catch_up: f64, dt: f64) -> bool {
         // Each queued action runs with its own input's arrival time; nothing else has one.
         let _input = crate::input::time::scope(None);
+        let rested = self.rested();
         self.interaction_frame_begins();
         let mut live_woke = self.take_live_wake();
         // Another window may have switched the font families since this one's last frame.
@@ -448,7 +449,7 @@ impl RuntimeCore {
         self.fire_press_repeat();
         // Marks are paint's (`paint::content`), and this frame paints: a pause that ends or words
         // the checker brought back show without the view running again.
-        let (wake, _marked) = crate::spell::pause::tick(&mut self.spell_watch, self.clock);
+        let (wake, marked) = crate::spell::pause::tick(&mut self.spell_watch, self.clock);
         if let Some(at) = wake { self.schedule_wakes([std::time::Duration::from_secs_f64((at - self.clock).max(0.0))]); }
         if self.app.has(app_side::Hook::Poll) && !polled {
             let mut one = self.transaction();
@@ -479,6 +480,7 @@ impl RuntimeCore {
         let ended: Vec<_> = self.drag_ends.borrow_mut().drain(..).collect();
         let queue = order_drag_ends(std::mem::take(&mut self.queue), ended, &mut self.drags_open);
         let queue = self.hold_files(queue, ran || self.dirty);
+        let acted = !queue.is_empty();
         // Something besides a checked live-only event wants this frame's commit, so a change
         // it makes isn't the live-only handler's.
         #[cfg(debug_assertions)]
@@ -639,20 +641,33 @@ impl RuntimeCore {
         // What the commit or a `Tx::select_text` changed is heard next frame.
         let changes = self.selection_changes();
         self.queue.extend(changes);
-        self.update_interaction(None);
+        let unchanged = rested && due == 0 && !polled && !ran && !acted && !marked && catch_up <= 0.0 && !self.settle
+            && scroll_to.is_empty() && !destination && !follow && self.queue.is_empty()
+            && self.paints_as_before();
+        if !unchanged || kept_paint::checked() { self.update_interaction(None); }
         #[cfg(test)]
         if let Some(publish) = tests::MID_FRAME.with(|hook| hook.borrow_mut().take()) { publish(); }
         // Poll and input can publish after the initial wake read without committing. Sample
         // those values now, but retain the wake: a picture may still need next frame's layout.
         let live_pending = live_woke || self.live_pending();
         let live_animating = self.latch_live(live_pending);
+        let keeps_paint = unchanged && !live_pending && !live_animating;
         if let Some(trace) = tx.trace.take() {
             for event in trace.events { self.trace_event(event); }
             for (name, kind, value) in trace.channels { self.trace_channel(name, kind, value); }
         }
         let dt = if self.fit_frame_holds() { 0.0 } else { dt };
         let instant_scroll = tx.commit.snaps() || self.settled;
-        let animating = self.step_motion(dt, instant_scroll) || live_animating;
+        let animating = if keeps_paint && !kept_paint::checked() {
+            self.step_clock(dt);
+            false
+        } else {
+            let kept = keeps_paint.then(|| self.instances.clone());
+            if !keeps_paint { self.stats.paints += 1; }
+            let animating = self.step_motion(dt, instant_scroll);
+            if let Some(kept) = kept { kept_paint::check(&kept, &self.instances, animating); }
+            animating
+        } || live_animating;
         self.stats.shaped = self.text.shaped - shaped0;
         let filling = self.virtual_filling();
         if live_animating { self.anim_sources |= AnimSource::LIVE; }
@@ -691,13 +706,43 @@ impl RuntimeCore {
         self.step_scroll(step as f32);
     }
 
-    pub(super) fn step_motion(&mut self, dt: f64, instant_scroll: bool) -> bool {
+    /// The last frame came to rest on a paint that repeated the one before it: nothing moves,
+    /// and no delayed start, tooltip or held hover waits for a frame.
+    fn rested(&self) -> bool {
+        self.last_paint.repeated && !self.animating && self.loop_wake.is_none() && !self.dirty && !self.relayout
+            && !self.tooltip_unsettled() && !self.hover_hold.held()
+    }
+
+    /// Nothing the last paint was built from changed: no commit, no state outside commits that
+    /// paints (`paint_state_hash`), nothing hover follows (the pointer and what it holds), and
+    /// not the page's scroll.
+    fn paints_as_before(&self) -> bool {
+        self.last_paint.inputs == Some(self.paint_inputs())
+    }
+
+    fn paint_inputs(&self) -> (u64, u64) {
+        use std::hash::{Hash, Hasher};
+        let mut h = rune_motion::Fx::default();
+        h.write_u64(self.paint_state_hash(&self.selection_ranges(), &self.mark_ranges()));
+        self.pointer.map(|(x, y)| (x.to_bits(), y.to_bits())).hash(&mut h);
+        (self.press.path(), self.press.inside(), self.secondary.path(), self.hover_paused).hash(&mut h);
+        self.page.map(|p| [p.scroll, p.top, p.band, p.view].map(f32::to_bits)).hash(&mut h);
+        (self.commit_gen, h.finish())
+    }
+
+    /// Moves animation time on by `dt`; returns the step in animation time.
+    fn step_clock(&mut self, dt: f64) -> f64 {
         self.loops_stepped();
         let step = dt * self.time_scale as f64;
         self.slack_dt = std::mem::take(&mut self.caught_up) + step as f32;
         self.last_dt = step;
         self.t += step;
         self.scene.set_time(self.t);
+        step
+    }
+
+    pub(super) fn step_motion(&mut self, dt: f64, instant_scroll: bool) -> bool {
+        let step = self.step_clock(dt);
         if self.scene.tracing() {
             for node in &self.nodes {
                 self.scene.trace_name(node.id, node.trace_name);
@@ -789,6 +834,8 @@ impl RuntimeCore {
             self.marks.resize(self.instances.len(), 0);
         }
         self.anim_sources = sources;
+        let inputs = self.paint_inputs();
+        self.last_paint.follow(inputs, &self.instances);
         animating
     }
 

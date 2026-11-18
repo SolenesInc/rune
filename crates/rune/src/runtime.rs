@@ -84,6 +84,8 @@ mod drag_out_host;
 mod exit_mask;
 #[path = "runtime/paint/raster_check.rs"]
 mod raster_check;
+#[path = "runtime/paint/kept_paint.rs"]
+mod kept_paint;
 #[path = "runtime/font_families.rs"]
 mod font_families;
 #[path = "runtime/key_index.rs"]
@@ -766,6 +768,8 @@ pub struct RuntimeCore {
     pub animating: bool,
     /// Why the last frame was animating, as [`AnimSource`] bits, for traces.
     pub(crate) anim_sources: u16,
+    /// The last paint and what it was built from: a frame at rest that changes nothing keeps it.
+    pub(crate) last_paint: kept_paint::LastPaint,
     /// Why this frame committed, as [`commit_why::CommitWhy`] bits, until the frame log takes them.
     pub(crate) commit_why: u16,
     /// Each node's place in the paint order, kept by the frame build while `Some` (the motion
@@ -1052,6 +1056,7 @@ impl RuntimeCore {
             motion_needs_cause: false,
             animating: false,
             anim_sources: 0,
+            last_paint: Default::default(),
             commit_why: 0,
             paint_rank: None,
             icon_aprons: Vec::new(),
