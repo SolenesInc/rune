@@ -75,6 +75,8 @@ pub(crate) fn add(phase: Phase, ms: f64) {
 }
 
 fn slow_ms() -> f64 {
+    #[cfg(test)]
+    if let Some(ms) = tests::SLOW_MS.get() { return ms; }
     static MS: OnceLock<f64> = OnceLock::new();
     *MS.get_or_init(|| std::env::var("RUNE_PERF_SLOW_MS").ok().and_then(|v| v.trim().parse().ok()).filter(|ms: &f64| *ms > 0.0).unwrap_or(SLOW_MS))
 }

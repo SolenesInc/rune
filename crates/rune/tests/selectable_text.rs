@@ -149,19 +149,21 @@ fn copy_select_all_and_the_context_menu() {
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some(CMD));
     wait(&mut rt);
 
-    // A right-click outside the selection selects the word there and offers Copy.
+    // A right-click outside the selection offers Copy. On macOS it selects the word there first,
+    // as AppKit text does; elsewhere the selection stays, as in Chromium.
+    let selected = if cfg!(target_os = "macos") { "first" } else { CMD };
     let p = glyphs(&rt, "para");
     rt.pointer_move(p[1].0, p[1].1);
     rt.secondary_down(p[1].0, p[1].1);
     rt.secondary_up(p[1].0, p[1].1);
     tick(&mut rt);
-    assert_eq!(rt.selected_text().as_deref(), Some("first"));
+    assert_eq!(rt.selected_text().as_deref(), Some(selected));
     let copy = rt.popup_menu().and_then(|m| m.find("copy")).expect("a Copy menu");
     assert!(copy.title() == "Copy" && copy.is_enabled());
     rt.resolve_popup(Some("copy")).unwrap();
     tick(&mut rt);
-    assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("first"));
-    assert_eq!(rt.selected_text().as_deref(), Some("first"), "picking Copy keeps the selection");
+    assert_eq!(clipboard.text().as_deref().map(String::as_str), Some(selected));
+    assert_eq!(rt.selected_text().as_deref(), Some(selected), "picking Copy keeps the selection");
 }
 
 #[test]

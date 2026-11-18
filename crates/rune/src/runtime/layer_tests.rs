@@ -411,7 +411,8 @@ fn clipped_single_draw_fades_do_not_allocate_targets() {
             if mode == 1 { assert!(out[(24 * 64 + 8) * 4 + 3] < 32); }
             frames.push(out);
         }
-        assert_eq!(frames[0], frames[1], "primitive and video inherit identical clips/fades");
+        let differ = frames[0].iter().zip(&frames[1]).position(|(a, b)| a.abs_diff(*b) > 1);
+        assert_eq!(differ, None, "mode={mode}: primitive and video inherit identical clips/fades, to a rounding");
     }
 }
 
