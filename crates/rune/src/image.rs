@@ -85,8 +85,8 @@ impl Image {
 }
 
 enum Input {
-    /// Bytes, and the square in pixels a raster image keeps mips to fill (0 keeps them all).
-    Encoded(Arc<[u8]>, u32),
+    /// Bytes, and what a raster image's smallest kept mip must cover.
+    Encoded(Arc<[u8]>, Fill),
     Rgba(u32, u32, Arc<[u8]>),
     Icon(std::path::PathBuf, u32),
     Svg(Arc<[u8]>, u32),
@@ -102,7 +102,7 @@ enum Input {
 impl Input {
     fn decode(self) -> Result<Decoded, ImageError> {
         match self {
-            Input::Encoded(bytes, px) => decode(&bytes, px),
+            Input::Encoded(bytes, fill) => decode(&bytes, fill),
             Input::Rgba(w, h, bytes) => mip_chain(w, h, &bytes),
             Input::Svg(bytes, px) => svg_rgba(&bytes, px).and_then(|(w, h, bytes)| mip_chain(w, h, &bytes)),
             #[cfg(not(target_arch = "wasm32"))]
@@ -113,7 +113,7 @@ impl Input {
                 if has_svg_extension(&path) || is_svg(&bytes) {
                     svg_rgba(&bytes, px).and_then(|(w, h, bytes)| mip_chain(w, h, &bytes))
                 } else {
-                    decode(&bytes, px)
+                    decode(&bytes, Fill::square(px))
                 }
             }
             #[cfg(not(target_arch = "wasm32"))]
@@ -190,7 +190,7 @@ impl ImageCache {
         hash.update(b"rune-encoded\0");
         hash.update(&bytes);
         let id = *hash.finalize().as_bytes();
-        self.request(id, Input::Encoded(bytes, 0))
+        self.request(id, Input::Encoded(bytes, Fill::ALL))
     }
 
     /// SVG or SVGZ bytes rasterized to fit `size_pt` points square at `scale` device pixels per
@@ -215,13 +215,26 @@ impl ImageCache {
     pub fn load_mime(&self, bytes: impl Into<Arc<[u8]>>, mime: &str, size_pt: f32, scale: f32) -> Image {
         let essence = mime.split(';').next().unwrap_or("").trim();
         if essence.eq_ignore_ascii_case("image/svg+xml") { return self.svg(bytes, size_pt, scale); }
-        let bytes = bytes.into();
-        let px = draw_pixels(size_pt, scale);
+        self.encoded_filling(bytes.into(), Fill::square(draw_pixels(size_pt, scale)))
+    }
+
+    /// Encoded bytes, as [`ImageCache::load`] takes, for an image that draws at most `width_pt`
+    /// points wide at `scale` and as tall as its aspect ratio makes it, as a document's images
+    /// draw: a raster keeps only the mips at least that many pixels across, so a 5K screenshot
+    /// in a 760 point column at 2× holds its 2560 pixel level down. An SVG rasterizes as `load`
+    /// rasterizes it. [`Image::size`] is still the image's own. Handles are shared by content,
+    /// width and scale.
+    pub fn load_across(&self, bytes: impl Into<Arc<[u8]>>, width_pt: f32, scale: f32) -> Image {
+        self.encoded_filling(bytes.into(), Fill::across(draw_pixels(width_pt, scale)))
+    }
+
+    fn encoded_filling(&self, bytes: Arc<[u8]>, fill: Fill) -> Image {
         let mut hash = blake3::Hasher::new();
-        hash.update(b"rune-encoded-at\0");
-        hash.update(&px.to_le_bytes());
+        hash.update(b"rune-encoded-filling\0");
+        hash.update(&fill.0[0].to_le_bytes());
+        hash.update(&fill.0[1].to_le_bytes());
         hash.update(&bytes);
-        self.request(*hash.finalize().as_bytes(), Input::Encoded(bytes, px))
+        self.request(*hash.finalize().as_bytes(), Input::Encoded(bytes, fill))
     }
 
     /// An image file that draws within `size_pt` points square at `scale`, read and decoded on the
@@ -314,12 +327,12 @@ impl ImageCache {
                         if !wanted(&weak) { return; }
                         let fetched = from_url::fetch(&url).await;
                         if !wanted(&weak) { return; }
-                        match fetched { Ok(fetched) => from_url::land_in_slices(&url, fetched, px).await, Err(e) => Err(e) }
+                        match fetched { Ok(fetched) => from_url::land_in_slices(&url, fetched, Fill::square(px)).await, Err(e) => Err(e) }
                     }
-                    Input::Encoded(bytes, px) if browser_decodes(&bytes) => {
+                    Input::Encoded(bytes, fill) if browser_decodes(&bytes) => {
                         let decoded = from_url::decode_in_browser(&bytes).await;
                         if !wanted(&weak) { return; }
-                        match decoded { Ok(fetched) => from_url::land_in_slices("image", fetched, px).await, Err(e) => Err(e) }
+                        match decoded { Ok(fetched) => from_url::land_in_slices("image", fetched, fill).await, Err(e) => Err(e) }
                     }
                     input => input.decode(),
                 };
@@ -569,16 +582,16 @@ unsafe fn macos_bitmap(
     }
 }
 
-/// `bytes` decoded, a raster still keeping the mips that fill a `px` square (0 keeps them all).
-/// An animation keeps every frame whole.
-fn decode(bytes: &[u8], px: u32) -> Result<Decoded, ImageError> {
+/// `bytes` decoded, a raster keeping only the mips that cover `fill`. An animation keeps every
+/// frame whole.
+fn decode(bytes: &[u8], fill: Fill) -> Result<Decoded, ImageError> {
     if is_svg(bytes) {
         let (w, h, rgba) = svg_rgba(bytes, 0)?;
         return mip_chain(w, h, &rgba);
     }
     if avif::is_avif(bytes) {
         let (w, h, rgba) = avif::rgba(bytes)?;
-        return mip_chain_filling(w, h, &rgba, px);
+        return mip_chain_filling(w, h, &rgba, fill);
     }
     let bytes = if bytes.starts_with(b"icns") { icns_png(bytes)? } else { bytes };
     if let Some(animation) = animated::decode(bytes) { return animation; }
@@ -600,7 +613,7 @@ fn decode(bytes: &[u8], px: u32) -> Result<Decoded, ImageError> {
     let mut image = image::DynamicImage::from_decoder(decoder).map_err(error)?;
     image.apply_orientation(orientation);
     let image = image.into_rgba8();
-    mip_chain_filling(image.width(), image.height(), image.as_raw(), px)
+    mip_chain_filling(image.width(), image.height(), image.as_raw(), fill)
 }
 
 fn icns_png(bytes: &[u8]) -> Result<&[u8], ImageError> {
@@ -632,7 +645,7 @@ mod avif;
 mod from_url;
 mod mips;
 pub(crate) mod pixels;
-use mips::{mip_chain, mip_chain_filling};
+use mips::{Fill, mip_chain, mip_chain_filling};
 #[cfg(test)]
 use mips::byte;
 #[cfg(not(target_arch = "wasm32"))]
@@ -743,7 +756,7 @@ mod tests {
             source.write_to(&mut encoded, format).unwrap();
             let bytes = encoded.into_inner();
             assert_eq!(browser_decodes(&bytes), format == image::ImageFormat::Jpeg, "web decodes JPEG in the browser, PNG itself");
-            let d = decode(&bytes, 0).unwrap();
+            let d = decode(&bytes, Fill::ALL).unwrap();
             assert_eq!((d.mips[0].width, d.mips[0].height), (8, 4));
             assert_eq!((d.mips.last().unwrap().width, d.mips.last().unwrap().height), (1, 1));
             if format == image::ImageFormat::Png {
@@ -753,9 +766,9 @@ mod tests {
                 icns.extend_from_slice(&((bytes.len() + 8) as u32).to_be_bytes());
                 icns.extend_from_slice(&bytes);
                 assert!(!browser_decodes(&icns));
-                assert_eq!(decode(&icns, 0).unwrap().mips[0].pixels, d.mips[0].pixels);
+                assert_eq!(decode(&icns, Fill::ALL).unwrap().mips[0].pixels, d.mips[0].pixels);
                 icns[12..16].copy_from_slice(&0u32.to_be_bytes());
-                assert!(decode(&icns, 0).is_err());
+                assert!(decode(&icns, Fill::ALL).is_err());
             }
         }
         assert!(mip_chain(0, 1, &[]).is_err());
@@ -784,9 +797,9 @@ mod tests {
         rotated.extend_from_slice(&app1);
         rotated.extend_from_slice(&jpeg[2..]);
 
-        let plain = decode(&jpeg, 0).unwrap();
+        let plain = decode(&jpeg, Fill::ALL).unwrap();
         assert_eq!((plain.mips[0].width, plain.mips[0].height), (16, 8));
-        let upright = decode(&rotated, 0).unwrap();
+        let upright = decode(&rotated, Fill::ALL).unwrap();
         let top = &upright.mips[0];
         assert_eq!((top.width, top.height), (8, 16), "turned a quarter");
         let at = |x: u32, y: u32| &top.pixels[((y * top.width + x) * 4) as usize..][..3];
