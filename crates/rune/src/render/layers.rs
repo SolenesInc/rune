@@ -29,6 +29,9 @@ mod cache_tests;
 #[path = "layer_filter_tests.rs"]
 mod filter_tests;
 #[cfg(test)]
+#[path = "layer_reuse_tests.rs"]
+mod reuse_tests;
+#[cfg(test)]
 #[path = "../runtime/rounded_clip_tests.rs"]
 mod rounded_clip_tests;
 #[cfg(test)]
@@ -63,6 +66,10 @@ pub(super) struct Layers {
     bindings: u64,
     cache_budget: u64,
     frame_stamp: u64,
+    /// Bumped whenever a texture a layer samples changes its pixels in place: atlas rows, pages.
+    pub(super) pixels: u64,
+    /// Per plan entry: whether its target must be drawn this frame.
+    stale: Vec<bool>,
     /// Test-only: the most bytes of live targets and their blur scratches a frame has held at once.
     #[cfg(test)]
     peak: u64,
@@ -86,6 +93,7 @@ impl Layers {
     /// Keeps `t` for a later layer of its size, within `SPARE_BYTES`; the least recently used go.
     fn park(&mut self, mut t: Target) {
         t.cache = None;
+        t.drawn = None;
         self.spare.push(t);
         let mut bytes: u64 = self.spare.iter().map(Renderer::target_bytes).sum();
         while bytes > SPARE_BYTES {
@@ -132,6 +140,8 @@ impl Default for Layers {
             bindings: 0,
             cache_budget: DEFAULT_CACHE_BUDGET,
             frame_stamp: 0,
+            pixels: 0,
+            stale: Vec::new(),
             #[cfg(test)]
             peak: 0,
             #[cfg(test)]
@@ -171,6 +181,10 @@ pub(super) struct Target {
     content_size: [f32; 2],
     /// The `Layers::bindings` generation the base bind group was made against.
     binding: u64,
+    /// What the layer last asked the texture to hold; none when nothing can say.
+    drawn: Option<Drawn>,
+    /// Whether a pass has drawn `drawn` into the texture since it was asked for.
+    painted: std::cell::Cell<bool>,
     /// Test-only: the outline texture's height the base bind group was made against.
     #[cfg(test)]
     outline_rows: u32,
@@ -200,6 +214,15 @@ fn rebind_target(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, globals:
     t.binding = generation;
     #[cfg(test)]
     { t.outline_rows = outlines.map_or(0, wgpu::Texture::height); }
+}
+
+/// What a layer's pass read: the instances it drew, its place, and every texture generation its
+/// pixels depend on. A target whose `Drawn` equals this frame's already holds the frame's pixels.
+struct Drawn {
+    instances: Vec<Instance>,
+    rect: [f32; 4],
+    blur: f32,
+    textures: (u64, u64, u64, u64),
 }
 
 /// Resource/pass counters for diagnostics. The ordinary path creates no layer resources.
@@ -256,7 +279,8 @@ impl Renderer {
             let Some(t) = t else { continue };
             stats.targets += 1;
             stats.bytes += Self::target_bytes(t);
-            if matches!(self.layers.planner.dispositions.get(index), Some(Disposition::Render { .. })) {
+            if matches!(self.layers.planner.dispositions.get(index), Some(Disposition::Render { .. }))
+                && self.layers.stale.get(index).copied().unwrap_or(true) {
                 stats.extra_passes += 1 + t.blur.as_ref().map_or(0, layer_blur::Scratch::passes);
             }
         }
@@ -421,7 +445,7 @@ impl Renderer {
             let pools = Pools { slots: &layers.targets, retained: &layers.retained, spare: &layers.spare };
             layers.planner.decide(&layers.plan, &pools, layers.cache_budget, isolate, max_dim);
             self.commit(device);
-            self.paint_layers(device, &staging);
+            self.paint_layers(device, &staging, instances);
         }
         // A frame whose layers fell gives back what a burst grew the plan's scratch to; a frame
         // that keeps its layers, or stays empty, leaves it alone.
@@ -463,7 +487,7 @@ impl Renderer {
             match self.layers.planner.moves[i] {
                 Move::Park(slot) => {
                     // The plan's `Drop`s trim the spares; nothing trims here.
-                    if let Some(mut t) = self.layers.targets[slot].take() { t.cache = None; self.layers.spare.push(t); }
+                    if let Some(mut t) = self.layers.targets[slot].take() { t.cache = None; t.drawn = None; self.layers.spare.push(t); }
                 }
                 Move::Set { slot, from } => {
                     let mut t = match from {
@@ -473,11 +497,12 @@ impl Renderer {
                     // A target parked before the atlas or outline texture changed binds it now,
                     // once; a spare no layer takes again never makes a bind group at all.
                     self.rebind_if_stale(device, &mut t);
+                    t.drawn = None;
                     self.layers.targets[slot] = Some(t);
                 }
                 Move::Create { slot, size } => self.layers.targets[slot] = Some(self.make_target(device, size)),
                 Move::Unblur(slot) => {
-                    if let Some(t) = self.layers.targets[slot].as_mut() { t.blur = None; }
+                    if let Some(t) = self.layers.targets[slot].as_mut() && t.blur.take().is_some() { t.drawn = None; }
                 }
                 Move::Drop(Kept::Retained(at)) => { self.layers.retained.swap_remove(at); }
                 Move::Drop(Kept::Spare(at)) => { self.layers.spare.swap_remove(at); }
@@ -507,15 +532,17 @@ impl Renderer {
         Target { texture, view, projection,
             identity: self.layers.allocations, composite_parent: None,
             quad: Self::instance_buffer(device, 1), base, composite, images: Vec::new(), glyphs: Vec::new(), image_generation: u64::MAX, blur: None,
-            cache: None, last_used: 0, content_size: [0.0; 2], binding: self.layers.bindings,
+            cache: None, last_used: 0, content_size: [0.0; 2], binding: self.layers.bindings, drawn: None, painted: std::cell::Cell::new(false),
             #[cfg(test)]
             outline_rows: self.uber.outlines().map_or(0, wgpu::Texture::height) }
     }
 
     /// Draws what each layer's disposition says: its target's descriptor, its blur, and the quad
     /// that composites it.
-    fn paint_layers(&mut self, device: &wgpu::Device, staging: &rune_staging::Staging) {
+    fn paint_layers(&mut self, device: &wgpu::Device, staging: &rune_staging::Staging, instances: &[Instance]) {
         let stamp = self.layers.frame_stamp;
+        self.layers.stale.clear();
+        self.layers.stale.resize(self.layers.plan.len(), true);
         for index in 0..self.layers.plan.len() {
             let l = self.layers.plan[index];
             match self.layers.planner.dispositions[index] {
@@ -547,11 +574,31 @@ impl Renderer {
                         if t.blur.is_none() {
                             t.blur = Some(pipeline.scratch(device, &t.texture));
                             self.layers.allocations += 1;
+                            t.drawn = None;
                         }
                         if t.blur.as_mut().unwrap().prepare(device, pipeline, staging,
                             [rect[2], rect[3]], l.blur, l.blend == Blend::PlusLighter) {
                             self.layers.allocations += 1;
+                            t.drawn = None;
                         }
+                    }
+                    let range = l.begin as usize..l.end as usize + 1;
+                    let live = self.springs.is_some()
+                        || instances[range.clone()].iter().any(|i| i.params[1] == KIND_EFFECT || i.params[1] == KIND_BACKDROP_BLUR)
+                        || self.surfaces.as_ref().is_some_and(|s| (0..s.len()).any(|n| range.contains(&(s.before_instance(n) as usize))));
+                    let textures = (self.layers.pixels, self.layers.bindings, self.layers.image_generation, staging.lost());
+                    let same = !live && t.painted.get() && t.drawn.as_ref().is_some_and(|d| d.rect == rect && d.blur == l.blur
+                        && d.textures == textures
+                        && bytemuck::cast_slice::<Instance, u8>(&d.instances) == bytemuck::cast_slice::<Instance, u8>(&instances[range.clone()]));
+                    self.layers.stale[index] = !same;
+                    if live {
+                        t.drawn = None;
+                    } else if !same {
+                        t.painted.set(false);
+                        let mut kept = t.drawn.take().map(|d| d.instances).unwrap_or_default();
+                        kept.clear();
+                        kept.extend_from_slice(&instances[range]);
+                        t.drawn = Some(Drawn { instances: kept, rect, blur: l.blur, textures });
                     }
                     staging.write_buffer(&t.projection, 0, bytemuck::cast_slice(&rect));
                     let mut quad = Instance::begin_layer(rect, l.clip, LayerSpec {
@@ -727,8 +774,9 @@ impl Renderer {
         let mut first = true;
         for (index, l) in self.layers.plan.iter().enumerate().rev() {
             let disposition = self.layers.planner.dispositions.get(index).copied().unwrap_or(Disposition::Skip);
-            if !matches!(disposition, Disposition::Render { .. }) { continue; }
+            if !matches!(disposition, Disposition::Render { .. }) || !self.layers.stale.get(index).copied().unwrap_or(true) { continue; }
             let Some(target) = &self.layers.targets[index] else { continue };
+            target.painted.set(true);
             let rect = disposition.rect();
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("isolated group"),
