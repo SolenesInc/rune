@@ -77,6 +77,9 @@ pub struct ElementInfo {
     /// where scrolling put it this frame, in points: down for a stuck header, up for a stuck
     /// footer, right for a stuck left element, 0 when it isn't stuck. `rect` already includes it.
     pub stuck: f32,
+    /// For an element that draws pixels ([`El::pixels`](crate::El::pixels)), the size of the
+    /// sharpest level they hold ([`Pixels::sharpest`](crate::Pixels::sharpest)).
+    pub picture: Option<(u32, u32)>,
 }
 
 /// An element [`Runtime::element_at`] found.
@@ -352,6 +355,7 @@ impl RuntimeCore {
                     expanded: n.a11y.expanded,
                     item_selected: n.focus.selected,
                     stuck: self.stuck.get(i).copied().unwrap_or(0.0),
+                    picture: n.vis.pixels.as_ref().and_then(crate::pixels::Pixels::sharpest),
                     virtual_extent: self.virtuals.contains_key(&n.path) && n.vis.fill.a == 0.0
                         && n.vis.border_width() == 0.0 && n.vis.shadows.is_empty() && n.text.is_none() && n.vis.icon.is_none(),
                 })
@@ -374,7 +378,7 @@ impl RuntimeCore {
                 visible: [r.x.max(c[0]), r.y.max(c[1]), (r.edges()[2].min(c[2]) - r.x.max(c[0])).max(0.0),
                     (r.edges()[3].min(c[3]) - r.y.max(c[1])).max(0.0)],
                 revealing: true, in_growing_row: false, scrolling: false, scrolled: [0.0; 2], virtual_extent: false, live_intent: 0, caret: None, drag_out: false,
-                help: None, selected: None, level: None, expanded: None, item_selected: false, stuck: 0.0,
+                help: None, selected: None, level: None, expanded: None, item_selected: false, stuck: 0.0, picture: None,
             });
         }
         self.link_elements(&mut elements);

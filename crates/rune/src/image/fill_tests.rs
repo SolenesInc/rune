@@ -68,3 +68,21 @@ fn a_one_pixel_image_asked_for_one_pixel_keeps_its_pixel_and_draws() {
     let mut atlas = crate::image::pixels::ImageAtlas::default();
     assert!(atlas.place(dot.pixels(), [1.0, 1.0]).is_some());
 }
+
+#[test]
+fn a_wide_image_asked_across_keeps_the_level_as_wide_as_it_draws_not_as_tall() {
+    let cache = ImageCache::new(Arc::new(|| {}));
+    let bytes = png(5120, 2880);
+    let screenshot = cache.load_across(bytes.clone(), 760.0, 2.0);
+    let square = cache.load_mime(bytes, "image/png", 760.0, 2.0);
+    assert_eq!((screenshot.wait(), square.wait()), (Ok([5120, 2880]), Ok([5120, 2880])));
+    assert_eq!(top(&screenshot), [2560, 1440], "the smallest level at least 1520 pixels across");
+    assert_eq!(top(&square), [5120, 2880], "a 1520 pixel square needs the whole height");
+    assert!(held(&screenshot) < 2560 * 1440 * 4 * 2, "{} bytes held", held(&screenshot));
+    assert_eq!(screenshot.pixels().sharpest(), Some((2560, 1440)));
+    assert_eq!(square.pixels().sharpest(), Some((5120, 2880)));
+
+    let tall = cache.load_across(png(1000, 4000), 200.0, 2.0);
+    assert_eq!(tall.wait(), Ok([1000, 4000]));
+    assert_eq!(top(&tall), [500, 2000], "a tall image is kept by its width too");
+}

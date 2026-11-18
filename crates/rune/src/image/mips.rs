@@ -3,25 +3,45 @@
 use super::{Decoded, ImageError, Mip};
 
 pub(super) fn mip_chain(width: u32, height: u32, bytes: &[u8]) -> Result<Decoded, ImageError> {
-    mip_chain_filling(width, height, bytes, 0)
+    mip_chain_filling(width, height, bytes, Fill::ALL)
 }
 
-/// The mip chain from the smallest level that still fills a `fill`×`fill` square on both axes
-/// down to 1×1, so a picture drawn small holds no more pixels than it can show. A `fill` of 0,
-/// or one the image is smaller than, keeps every level.
-pub(super) fn mip_chain_filling(width: u32, height: u32, bytes: &[u8], fill: u32) -> Result<Decoded, ImageError> {
+/// The pixels a picture's smallest kept level must cover, `[width, height]`; 0 asks nothing of
+/// that axis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Fill(pub(super) [u32; 2]);
+
+impl Fill {
+    /// Every level, down from the image's own size.
+    pub(super) const ALL: Fill = Fill([0, 0]);
+
+    /// A `px` square, as a thumbnail that covers its box.
+    pub(super) fn square(px: u32) -> Fill { Fill([px, px]) }
+
+    /// `px` across, as an image that draws at most that wide and as tall as its aspect makes it.
+    pub(super) fn across(px: u32) -> Fill { Fill([px, 0]) }
+
+    fn by(self, width: u32, height: u32) -> bool {
+        self != Fill::ALL && width >= self.0[0] && height >= self.0[1]
+    }
+}
+
+/// The mip chain from the smallest level that still covers `fill` down to 1×1, so a picture
+/// drawn small holds no more pixels than it can show. [`Fill::ALL`], or a fill the image is
+/// smaller than, keeps every level.
+pub(super) fn mip_chain_filling(width: u32, height: u32, bytes: &[u8], fill: Fill) -> Result<Decoded, ImageError> {
     let mut steps = MipSteps::new(width, height, bytes, fill)?;
     while !steps.step(usize::MAX) {}
     Ok(steps.finish())
 }
 
 /// A mip chain under construction: mip 0 at once, then the smaller levels a slice of rows
-/// at a time, dropping each level once a smaller one fills `fill`.
+/// at a time, dropping each level once a smaller one covers `fill`.
 pub(super) struct MipSteps<'a> {
     /// The straight-alpha source, which mip 1 filters.
     source: &'a [u8],
     size: [u32; 2],
-    fill: u32,
+    fill: Fill,
     mips: Vec<Mip>,
     /// The level being built, and the row it continues from.
     next: Vec<u8>,
@@ -29,7 +49,7 @@ pub(super) struct MipSteps<'a> {
 }
 
 impl<'a> MipSteps<'a> {
-    pub(super) fn new(width: u32, height: u32, bytes: &'a [u8], fill: u32) -> Result<Self, ImageError> {
+    pub(super) fn new(width: u32, height: u32, bytes: &'a [u8], fill: Fill) -> Result<Self, ImageError> {
         if width == 0 || height == 0 || width > 8192 || height > 8192
             || bytes.len() != width as usize * height as usize * 4
         { return Err(ImageError("RGBA image dimensions or byte length are invalid".into())); }
@@ -43,7 +63,7 @@ impl<'a> MipSteps<'a> {
     }
 
     fn fills(&self, width: u32, height: u32) -> bool {
-        self.fill > 0 && width >= self.fill && height >= self.fill
+        self.fill.by(width, height)
     }
 
     /// Build at most about `budget` more pixels (whole rows, at least one); true once the

@@ -340,6 +340,7 @@ impl RuntimeCore {
                 let words = (!spec.redacted).then(|| spec.source_slice(l.start, l.end).map(str::to_owned)).flatten();
                 elements.push(ElementInfo {
                     stuck: 0.0,
+                    picture: None,
                     path: format!("{}#link-{k}", n.path),
                     key: Some(l.id.clone()),
                     role: l.role,
@@ -465,6 +466,7 @@ impl RuntimeCore {
                 let words = spec.source_slice(h.start, h.end).map(str::to_owned);
                 elements.push(ElementInfo {
                     stuck: 0.0,
+                    picture: None,
                     path: format!("{}#mark-{k}", n.path),
                     key: h.key.clone(),
                     role: "mark",
