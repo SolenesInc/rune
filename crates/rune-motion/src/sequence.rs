@@ -17,12 +17,15 @@ impl Beat {
     pub const fn easing(mut self, easing: Easing) -> Self { self.easing = easing; self }
 }
 
-/// A one-shot sequence. Starts at zero, holds its final pose, and has no app callbacks.
-/// Static slices keep specs Copy, like Cycle; use a new element key to replay.
+/// A sequence of poses. Starts at zero and has no app callbacks. A one-shot sequence holds its
+/// final pose; use a new element key to replay it. A [`Sequence::repeat`] one plays again from
+/// its first pose each time it ends, as CSS `animation-iteration-count: infinite`.
+/// Static slices keep specs Copy, like Cycle.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sequence {
     frames: &'static [Beat],
     pub(crate) delay: f64,
+    pub(crate) repeats: bool,
 }
 
 impl Sequence {
@@ -30,7 +33,12 @@ impl Sequence {
         assert!(frames.len() >= 2 && frames[0].at == 0.0, "keyframes need at least two poses, starting at zero");
         assert!(frames.windows(2).all(|p| p[1].at.is_finite() && p[1].at > p[0].at), "keyframe times must increase");
         assert!(frames.iter().all(|p| p.opacity.is_finite() && p.scale.is_finite() && p.scale >= 0.0), "invalid keyframe pose");
-        Self { frames, delay: 0.0 }
+        Self { frames, delay: 0.0, repeats: false }
+    }
+    /// Play the poses over and over. Reduced motion holds the first pose; when the element
+    /// stops looping, the pose cools back to rest (full opacity, scale 1).
+    pub fn repeat(mut self) -> Self {
+        self.repeats = true; self
     }
     pub fn delay(mut self, seconds: f64) -> Self {
         assert!(seconds.is_finite() && seconds >= 0.0);

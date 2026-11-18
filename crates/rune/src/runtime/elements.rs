@@ -305,7 +305,7 @@ impl RuntimeCore {
                     trace_name: n.trace_name,
                     trace_namespace: n.trace_namespace,
                     loop_phase: self.loops.get(&n.id).map(|l| {
-                        if self.reduced_motion && !matches!(n.looping.as_ref().map(|s| s.kind), Some(rune_motion::LoopKind::Sequence(_))) { 0.0 }
+                        if self.reduced_motion && !l.finite() { 0.0 }
                         else { l.phase(self.scene.store().node_time(n.id)) }
                     }),
                     focusable: self.can_focus(i),
