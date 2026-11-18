@@ -114,9 +114,10 @@ pub(crate) enum WakeEvent {
     Position(usize, (i32, i32)), Level(usize, bool),
     Place(usize, crate::windows::PlaceRequest),
     Frame(usize, crate::window::frame::FrameRequest),
-    /// The app was reopened (macOS: its Dock icon clicked); for `Windows`, not one host.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    Reopen,
+    /// The app was reopened (macOS: its Dock icon clicked; Linux: launched again, with the
+    /// launch's activation token); for `Windows`, not one host.
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+    Reopen(Option<String>),
     /// An assistive client asked something of a surface's accessibility tree (`crate::a11y`):
     /// the host answers at the end of the turn this wakes.
     #[cfg_attr(not(feature = "accessibility"), allow(dead_code))]
@@ -159,7 +160,7 @@ pub(crate) trait AnyHost {
     /// when that wake arrives.
     fn apply_pending(&mut self, _event_loop: &ActiveEventLoop) {}
     /// Shows, restores and activates it as the default reopen.
-    fn reopen(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn reopen(&mut self, _event_loop: &ActiveEventLoop, _token: Option<String>) {}
 }
 
 /// Builds every host, attaching its shortcut and menu guards, before any resumes: a window's
@@ -308,7 +309,14 @@ impl ApplicationHandler<WakeEvent> for Windows {
         #[cfg(target_os = "macos")]
         {
             let proxy = self.proxy.clone();
-            crate::platform::reopen::install(move || proxy.send_event(WakeEvent::Reopen).is_ok());
+            crate::platform::reopen::install(move || proxy.send_event(WakeEvent::Reopen(None)).is_ok());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let proxy = std::sync::Mutex::new(self.proxy.clone());
+            crate::open_url::instance::on_launch(move |token| {
+                let _ = proxy.lock().unwrap_or_else(|e| e.into_inner()).send_event(WakeEvent::Reopen(token));
+            });
         }
         crate::quit::install();
         crate::open_url::incoming::settle();
@@ -321,8 +329,8 @@ impl ApplicationHandler<WakeEvent> for Windows {
             WakeEvent::DisplayTick(i) | WakeEvent::App(i) | WakeEvent::Live(i) | WakeEvent::Window(i, _) | WakeEvent::Focus(i)
                 | WakeEvent::Position(i, _) | WakeEvent::Level(i, _) | WakeEvent::Place(i, _) | WakeEvent::Frame(i, _)
                 | WakeEvent::A11y(i) => *i,
-            WakeEvent::Reopen => {
-                self.reopen(event_loop);
+            WakeEvent::Reopen(token) => {
+                self.reopen(event_loop, token.clone());
                 self.cleanup(event_loop);
                 return;
             }

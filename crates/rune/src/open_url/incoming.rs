@@ -15,8 +15,11 @@
 //! passed through as the system gave it; it comes from outside the app, so the hook must parse
 //! and validate it.
 //!
-//! Links that arrive before the loop starts are kept too. iOS (winit owns the scene delegate) is
-//! a follow-up, and Linux never calls the hook.
+//! Linux hands a link to a new process as a launch argument (`Exec=… %u`): the links among the
+//! first process's arguments are kept as the launching link is on macOS, and `single_instance`
+//! sends a later launch's links here from the first process's socket (`instance`). Links that
+//! arrive before the loop starts are kept too. iOS (winit owns the scene delegate) is a
+//! follow-up.
 // The web build runs no native window, so nothing here is reached there.
 #![cfg_attr(target_arch = "wasm32", allow(dead_code))]
 use std::sync::{Arc, Mutex};
@@ -77,6 +80,14 @@ impl Inbox {
         };
     }
 
+    /// The links the app was launched with, ahead of any that arrived since.
+    #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
+    pub(crate) fn launched(&self, urls: Vec<String>) {
+        if urls.is_empty() { return; }
+        let mut state = self.state.lock().unwrap();
+        if let Funnel::Unprepared { kept } | Funnel::Launch { kept } = &mut state.funnel { kept.splice(0..0, urls); }
+    }
+
     /// Sends links to `app`'s hook while the returned guard lives, after the links kept so far,
     /// if the app has the hook. Installs the handler if `prepare` didn't.
     pub(crate) fn listen<S: 'static>(&'static self, app: &App<S>, glue: &dyn Glue) -> Option<Listening> {
@@ -124,7 +135,7 @@ impl Inbox {
     }
 
     /// A link arrived: to the first listener, kept before one exists, else dropped.
-    #[cfg_attr(not(any(test, target_os = "macos")), allow(dead_code))]
+    #[cfg_attr(not(any(test, target_os = "macos", target_os = "linux")), allow(dead_code))]
     pub(crate) fn receive(&self, url: String) {
         let sink = {
             let mut state = self.state.lock().unwrap();
@@ -172,11 +183,13 @@ impl Glue for Native {
 /// Before the event loop starts (see the module docs).
 pub(crate) fn prepare() {
     INBOX.prepare(&Native);
+    #[cfg(target_os = "linux")]
+    INBOX.launched(super::instance::launch_links());
 }
 
-/// A link from a later launch of the app (Windows, `single_instance`), or the Dock menu's jump
+/// A link from a later launch of the app (Linux, `single_instance`), or the Dock menu's jump
 /// list entry (macOS, `native_menu`).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn receive(url: String) { INBOX.receive(url); }
 
 /// For a starting window: its app's links, while the guard lives.
@@ -188,7 +201,16 @@ pub(crate) fn settle() { INBOX.settle(&Native); }
 #[cfg(target_os = "macos")]
 use mac as platform;
 
-#[cfg(not(target_os = "macos"))]
+/// Linux: links come in launch arguments and down `single_instance`'s socket, so there is no
+/// handler to install, and nothing else can have taken it.
+#[cfg(target_os = "linux")]
+mod platform {
+    pub(super) fn handled_elsewhere() -> bool { false }
+    pub(super) fn install() -> bool { true }
+    pub(super) fn remove() {}
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod platform {
     pub(super) fn handled_elsewhere() -> bool { false }
     pub(super) fn install() -> bool { false }
