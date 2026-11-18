@@ -62,6 +62,12 @@ pub enum Key {
     /// German layout's Q): it inserts, and `Chord::matches_tx` still finds "ctrl+alt+q".
     /// [`KeyEvent::is_command`] matches either form.
     Command(char),
+    /// A dead key: the accent a layout holds for the next character, such as ´ for Option-E
+    /// on a US Mac. Shortcuts match it by its key, so a binding on Option-E fires
+    /// (`Chord::matches_tx`); text fields ignore it. Where a field or an editor takes the input
+    /// method, the press reaches handlers first, and the accent starts a composition only when
+    /// none takes it.
+    Dead(char),
     /// A function key, F1 through F24. Text fields ignore it; apps can bind it.
     Function(u8),
     /// The Menu (Application) key. Unclaimed, it opens the focused element's context menu, as

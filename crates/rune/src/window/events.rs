@@ -375,7 +375,10 @@ impl<S: 'static> Host<S> {
             }
             WindowEvent::Ime(ime) => {
                 match ime {
-                    WIme::Preedit(s, cur) => rt.ime(Ime::Preedit(s, cur)),
+                    WIme::Preedit(s, cur) => match crate::platform::ime::dead_key_press() {
+                        Some((key, mods, base)) => rt.dead_key(key, mods, base, Ime::Preedit(s, cur)),
+                        None => rt.ime(Ime::Preedit(s, cur)),
+                    },
                     WIme::Commit(s) => rt.ime(Ime::Commit(s)),
                     WIme::Enabled => rt.ime(Ime::Enabled),
                     WIme::Disabled => rt.ime(Ime::Disabled),

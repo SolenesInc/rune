@@ -399,7 +399,7 @@ fn key_named(name: &str) -> Option<ChordKey> {
 /// The one character `key` types, lowercased.
 fn typed(key: &Key) -> Option<char> {
     match key {
-        Key::Command(c) => Some(lower(*c)),
+        Key::Command(c) | Key::Dead(c) => Some(lower(*c)),
         Key::Text(t) => {
             let mut chars = t.chars();
             match (chars.next(), chars.next()) { (Some(c), None) => Some(lower(c)), _ => None }

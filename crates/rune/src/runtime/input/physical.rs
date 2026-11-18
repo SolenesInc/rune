@@ -9,11 +9,11 @@ pub(super) struct Fallback { key: KeyEvent, base: Option<char>, unhandled: Optio
 /// opens the window menu.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone)]
-pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>) }
+pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>), Compose(crate::Ime) }
 
 impl std::fmt::Debug for Unhandled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu" })
+        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu", Self::Compose(_) => "Compose" })
     }
 }
 
@@ -161,13 +161,16 @@ impl RuntimeCore {
                 } else {
                     let mut one = Tx { physical_key: code, key_base: base, ..self.transaction() };
                     let ran = self.route_key(&key, repeat, &mut one);
+                    // A dead key a handler took leaves no accent in the input method.
+                    if ran && matches!(unhandled, Some(Unhandled::Compose(_))) { self.ime_reset = true; }
                     // A held key repeats a menu item, as AppKit's own equivalents do, but closes once.
                     let unhandled = unhandled.filter(|u| !ran && (!repeat || matches!(u, Unhandled::Menu(_))));
-                    let fell = unhandled.is_some();
+                    let mut fell = unhandled.is_some();
                     match unhandled {
                         Some(Unhandled::Close) => one.close_window(),
                         Some(Unhandled::Minimize) => one.minimize(),
                         Some(Unhandled::Menu(run)) => run(),
+                        Some(Unhandled::Compose(preedit)) => fell = self.run_ime(preedit, &mut one),
                         None => {}
                     }
                     fold_live(&mut live, ran || fell, &one);

@@ -148,6 +148,7 @@ fn key_label(ev: &KeyEvent) -> (String, bool) {
         Key::Escape => "⎋".into(),
         Key::Tab => "⇥".into(),
         Key::Function(n) => format!("F{n}"),
+        Key::Dead(c) => title(&c.to_string()),
         Key::ContextMenu => "≣".into(),
         // Its own flag is already in `mods`.
         Key::Modifier { modifier: crate::Modifier::Fn, .. } => "fn".into(),

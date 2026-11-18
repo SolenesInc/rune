@@ -55,7 +55,8 @@ impl RuntimeCore {
         if self.focus_key(ev, shown, one) { return true; }
         let input_handles = match &ev.key {
             crate::edit::Key::Function(_) | crate::edit::Key::ContextMenu | crate::edit::Key::Tab | crate::edit::Key::PageUp | crate::edit::Key::PageDown
-            | crate::edit::Key::Insert | crate::edit::Key::PrintScreen | crate::edit::Key::ScrollLock | crate::edit::Key::Pause => false,
+            | crate::edit::Key::Insert | crate::edit::Key::PrintScreen | crate::edit::Key::ScrollLock | crate::edit::Key::Pause
+            | crate::edit::Key::Dead(_) => false,
             crate::edit::Key::Command(_) => match ev.edit_command() {
                 Some('a' | 'c' | 'x' | 'z') => true,
                 Some('y') => !cfg!(target_os = "macos"),
@@ -277,6 +278,17 @@ impl RuntimeCore {
 
     pub fn ime(&mut self, ev: Ime) {
         self.queue.push(Action::Ime(ev));
+    }
+
+    /// A dead key that opened a composition (`preedit`, its accent) while the input method was
+    /// on, as an Option dead key does on macOS: the press goes to handlers as `Key::Dead`
+    /// first, and the composition goes on only when none takes it. A dead key inside an open
+    /// composition stays the input method's.
+    pub(crate) fn dead_key(&mut self, key: crate::PhysicalKeyCode, mods: crate::Mods, base: Option<char>, preedit: Ime) {
+        let accent = match &preedit { Ime::Preedit(s, _) => s.chars().next(), _ => None };
+        let Some(accent) = accent.filter(|_| !self.composing()) else { return self.ime(preedit) };
+        self.physical_then(crate::PhysicalInput::Key { key, mods, pressed: true, repeat: false },
+            Some(KeyEvent { key: crate::Key::Dead(accent), mods }), base, Some(Unhandled::Compose(preedit)));
     }
 
     /// The window went inactive mid-composition: what the composition shows becomes text, in

@@ -61,6 +61,7 @@ pub(crate) fn map_key(key: &WKey, m: ModifiersState) -> Option<KeyEvent> {
             Key::Command(c.chars().next()?.to_ascii_lowercase())
         }
         WKey::Character(c) => Key::Text(c.to_string()),
+        WKey::Dead(Some(accent)) => Key::Dead(*accent),
         _ => return None,
     };
     Some(KeyEvent { key, mods })
