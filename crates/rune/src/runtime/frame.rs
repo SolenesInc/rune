@@ -644,7 +644,7 @@ impl RuntimeCore {
         let unchanged = rested && due == 0 && !polled && !ran && !acted && !marked && catch_up <= 0.0 && !self.settle
             && scroll_to.is_empty() && !destination && !follow && self.queue.is_empty()
             && self.paints_as_before();
-        if !unchanged || kept_paint::checked() { self.update_interaction(None); }
+        if !unchanged || self.last_paint.checked { self.update_interaction(None); }
         #[cfg(test)]
         if let Some(publish) = tests::MID_FRAME.with(|hook| hook.borrow_mut().take()) { publish(); }
         // Poll and input can publish after the initial wake read without committing. Sample
@@ -658,7 +658,7 @@ impl RuntimeCore {
         }
         let dt = if self.fit_frame_holds() { 0.0 } else { dt };
         let instant_scroll = tx.commit.snaps() || self.settled;
-        let animating = if keeps_paint && !kept_paint::checked() {
+        let animating = if keeps_paint && !self.last_paint.checked {
             self.step_clock(dt);
             false
         } else {
@@ -729,6 +729,12 @@ impl RuntimeCore {
         self.page.map(|p| [p.scroll, p.top, p.band, p.view].map(f32::to_bits)).hash(&mut h);
         self.help_tooltip().map(|(text, rect)| (text, rect.map(f32::to_bits))).hash(&mut h);
         (self.commit_gen, h.finish())
+    }
+
+    /// Paints each frame that keeps the last paint anyway, and panics when the paint differs:
+    /// for an app's tests, so every frame they drive proves a kept paint right.
+    pub fn check_kept_paint(&mut self) {
+        self.last_paint.checked = true;
     }
 
     /// Moves animation time on by `dt`; returns the step in animation time.
