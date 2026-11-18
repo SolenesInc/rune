@@ -674,4 +674,13 @@ fn a_prose_measure_caps_top_level_prose_while_tables_code_and_front_matter_take_
     // Front matter, heading, paragraph, list, quote, table, code, rule and a picture 1200 wide.
     assert_eq!(widths(1600.0), [1600.0, MEASURE, MEASURE, MEASURE, MEASURE, 1600.0, 1600.0, 1600.0, MEASURE]);
     assert_eq!(widths(500.0), [500.0; 9]);
+
+    let mut rt = Runtime::new((src.to_owned(), 1600.0), view, (1600.0, 1200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let elements = rt.elements();
+    for i in 0..parse(src).len() {
+        let key = format!("b{i}");
+        let e = elements.iter().find(|e| e.key.as_deref() == Some(key.as_str())).unwrap_or_else(|| panic!("no {key}"));
+        assert!((e.rect[0] + e.rect[2] / 2.0 - 800.0).abs() < 1.0, "{key} is centered in the column: {:?}", e.rect);
+    }
 }

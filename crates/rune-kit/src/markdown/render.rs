@@ -525,7 +525,8 @@ impl Renderer {
             let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
             self.flow.set(flow);
             let drawn = match measure {
-                Some(measure) => drawn.max_w(measure),
+                Some(measure) => drawn.w_full().max_w(measure).self_center(),
+                None if top_level && self.s.prose_measure.is_some() && matches!(b, Block::Image { .. }) => drawn.self_center(),
                 None => drawn,
             };
             let drawn = if prose { bidi::directed(drawn, own.or(last)) } else { drawn };

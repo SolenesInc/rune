@@ -621,9 +621,9 @@ impl MarkdownStyle {
         self
     }
     /// The widest a top-level paragraph, heading, list, quote or alert, and any image, runs,
-    /// starting at the column's start, as a web page's `max-width` on those blocks keeps a
-    /// reading measure while tables, code, diagrams, front matter and rules take the whole
-    /// column (none by default). Tables and code inside a capped list or quote fit its measure.
+    /// centered in the column, as a web page's `max-width` and `margin-inline: auto` on those
+    /// blocks keep a reading measure while tables, code, diagrams, front matter and rules take
+    /// the whole column (none by default). Tables and code inside a capped list or quote fit its measure.
     pub fn prose_measure(mut self, points: f32) -> Self {
         self.prose_measure = (points.is_finite() && points > 0.0).then_some(points);
         self
