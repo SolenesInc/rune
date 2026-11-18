@@ -267,6 +267,7 @@ fn text_system_keys_glyphs_by_ink() {
 #[test]
 fn pipelines_never_share_masks() {
     let mut ts = crate::text::TextSystem::default();
+    ts.set_font_smoothing(crate::text::FontSmoothing::On);
     let style = crate::tok::TextStyle::new(16.0, 400.0);
     let mut seen = Vec::new();
     for pipeline in [ApplePipeline::SMOOTHED, ApplePipeline::UNSMOOTHED, ApplePipeline { flatten: false, ..ApplePipeline::UNSMOOTHED }] {

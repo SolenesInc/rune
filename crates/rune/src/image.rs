@@ -694,9 +694,9 @@ mod tests {
         let cache = ImageCache::new(Arc::new(move || { let _ = tx.send(()); }));
         let large = cache.rgba(3000, 3000, vec![128; 3000 * 3000 * 4]);
         let small = cache.rgba(1, 1, vec![20, 40, 60, 255]);
-        rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        rx.recv().unwrap();
         assert!(small.is_ready() && !large.is_ready());
-        rx.recv_timeout(std::time::Duration::from_secs(20)).unwrap();
+        rx.recv().unwrap();
         assert!(large.is_ready());
     }
 

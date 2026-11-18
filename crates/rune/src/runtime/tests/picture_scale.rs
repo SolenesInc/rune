@@ -27,6 +27,7 @@ fn text_inside_a_scale_draws_at_that_size() {
     }
     let run = |k: f32, how: How| {
         let mut rt = Runtime::new(State { k, how, pressed: 0 }, view, (300.0, 200.0), Env::new(true, 2.0));
+        rt.set_font_smoothing(crate::FontSmoothing::On);
         rt.frame(0.0);
         rt.frame(1.0 / 120.0);
         rt
@@ -149,6 +150,7 @@ fn a_changing_static_scale_keeps_the_glyph_atlas_bounded() {
     }
     let crisp = |rt: &Runtime<State>| rt.instances.iter().filter(|q| q.params[1] == KIND_GLYPH).all(|q| q.uv[2] == 0.0);
     let mut rt = Runtime::new(State { k: 1.0 }, view, (300.0, 200.0), Env::new(true, 2.0));
+    rt.set_font_smoothing(crate::FontSmoothing::On);
     rt.frame(0.0);
     let rest = rt.text.atlas.glyph_entries();
     // A slider or pinch: a new scale every frame, holding still now and then.

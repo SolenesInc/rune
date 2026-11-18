@@ -711,10 +711,10 @@ impl RuntimeCore {
     }
 
     /// The last frame came to rest on a paint that repeated the one before it: nothing moves,
-    /// and no delayed start, tooltip or held hover waits for a frame.
+    /// and no delayed start, tooltip, held hover or fling waits for a frame.
     fn rested(&self) -> bool {
         self.last_paint.repeated && !self.animating && self.loop_wake.is_none() && !self.dirty && !self.relayout
-            && !self.tooltip_unsettled() && !self.hover_hold.held()
+            && !self.tooltip_unsettled() && !self.hover_hold.held() && !self.scrolls.values().any(ScrollState::owes_motion)
     }
 
     /// Nothing the last paint was built from changed: no commit, no state outside commits that

@@ -210,6 +210,12 @@ impl ScrollState {
         self.scrolling() || self.glide().is_some() || self.x.glide.is_some()
     }
 
+    /// Momentum or a glide on either axis waits for the next step, such as a fling that has
+    /// not moved it yet.
+    pub(super) fn owes_motion(&self) -> bool {
+        self.coast() != 0.0 || self.glide().is_some() || self.x.v.abs() > 1.0 || self.x.glide.is_some()
+    }
+
     /// It follows its content's bottom.
     pub(super) fn pinned(&self) -> bool { self.mode.pinned() }
 

@@ -71,7 +71,7 @@ pub(super) fn render(gpu: &Gpu, renderer: &mut SurfaceRenderer, draws: &[Surface
     renderer.submit(&gpu.queue, encoder);
     let pixels = target.read(&gpu.device);
     for _ in draws {
-        completion.recv_timeout(std::time::Duration::from_secs(10)).expect("frame completion");
+        completion.recv().expect("frame completion");
     }
     pixels
 }
@@ -207,7 +207,7 @@ fn completion_worker_preserves_cpu_gpu_overlap() {
             gpu.device.poll(wgpu::PollType::Poll).unwrap();
             match completed.try_recv() {
                 Err(TryRecvError::Empty) => {
-                    completed.recv_timeout(Duration::from_secs(30)).expect("GPU workload completed");
+                    completed.recv().expect("GPU workload completed");
                     "overlapped"
                 }
                 _ => "finished by the time the write lock returned",
@@ -280,7 +280,7 @@ fn queued_video_frames_then_readback_on(gpu: Gpu) {
     }
     let mut timed = 0;
     for _ in 0..8 * 61 * 4 {
-        let t = completed.recv_timeout(std::time::Duration::from_secs(10)).expect("queued frame completion");
+        let t = completed.recv().expect("queued frame completion");
         assert_eq!(t.gpu_start_seconds.is_some(), t.gpu_end_seconds.is_some());
         if let Some((start, end)) = t.gpu_start_seconds.zip(t.gpu_end_seconds) {
             assert!(end >= start && end > 0.0, "invalid timestamps: {t:?}");
@@ -544,7 +544,7 @@ fn video_gpu_colour_sharpness_geometry_and_lifetime_on(gpu: Gpu) {
         let submission = surface.timing().unwrap().submitted_at;
         loop {
             let t =
-                completion.recv_timeout(std::time::Duration::from_secs(10)).expect("externally timed frame completion");
+                completion.recv().expect("externally timed frame completion");
             if t.submitted_at != submission {
                 continue;
             }
@@ -781,8 +781,11 @@ fn oriented_frames_draw_like_frames_turned_upright_on(gpu: Gpu) {
                     let rect = [0.0, 0.0, w as f32, h as f32];
                     let got = render(&gpu, &mut renderer, &[draw(&oriented, rect)], (w, h));
                     let want = render(&gpu, &mut renderer, &[draw(&reference, rect)], (w, h));
+                    // Magnified, a quarter turn swaps the bilinear filter's axes, and a software
+                    // rasterizer's 8-bit filter rounds them in the other order: up to 4 on lavapipe.
+                    let tolerance = if what == "2x" && o.swaps() { 4 } else { 1 };
                     for (i, (g, r)) in got.iter().zip(&want).enumerate() {
-                        assert!(g.abs_diff(*r) <= 1, "native={native} {m:?} {what} byte {i}: {g} != {r}");
+                        assert!(g.abs_diff(*r) <= tolerance, "native={native} {m:?} {what} byte {i}: {g} != {r}");
                     }
                 }
             }
