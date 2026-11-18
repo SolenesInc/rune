@@ -103,3 +103,20 @@ fn a_fling_from_rest_moves_the_content_on_the_next_frame() {
     rt.frame(1.0 / 60.0);
     assert!(x_of(&rt, "tile1") < x, "a horizontal fling moves the strip");
 }
+
+#[test]
+fn a_motion_frozen_by_a_zero_time_scale_keeps_its_paint() {
+    fn sized(width: &f32, _: &mut Cx<f32>) -> El {
+        col().size(100.0, 50.0).child(el().key("box").size(*width, 8.0))
+    }
+    let mut rt = Runtime::new(12.0, sized, (100.0, 50.0), Env::default());
+    rt.set_system_reduced_motion(false);
+    rt.time_scale = 0.0;
+    at_rest(&mut rt);
+    rt.update(|width, _| *width = 20.0);
+    for _ in 0..4 { rt.frame(1.0 / 60.0); }
+    let painted = rt.stats.paints;
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.stats.paints, painted, "a frozen motion paints as it did");
+    assert_eq!(rt.presented("box").unwrap().0[2], 12.0, "a zero time scale holds the box where it was");
+}

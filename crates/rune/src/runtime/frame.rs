@@ -668,7 +668,7 @@ impl RuntimeCore {
                 (self.instances.clone(), self.ime_area)
             });
             if !keeps_paint { self.stats.paints += 1; }
-            let animating = self.step_motion(dt, instant_scroll);
+            let animating = self.step_motion(dt, instant_scroll) && self.time_scale > 0.0;
             if let Some((kept, ime)) = kept { kept_paint::check(&kept, &self.instances, animating, (ime, self.ime_area)); }
             animating
         } || live_animating;
