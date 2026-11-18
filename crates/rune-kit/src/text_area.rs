@@ -25,6 +25,7 @@ pub struct TextArea {
     state: State,
     edits: EditActs,
     resizable: bool,
+    edge: Option<(rune::Color, rune::Color)>,
     resize: Option<ResizeDrag>,
 }
 
@@ -99,6 +100,7 @@ impl TextArea {
             state: State::Rest,
             edits: EditActs::default(),
             resizable: false,
+            edge: None,
             resize: None,
         }
     }
@@ -109,6 +111,13 @@ impl TextArea {
     /// The placeholder's ink, the palette's `text_faint` unless set; an invalid field's stays red.
     pub fn placeholder_ink(mut self, ink: rune::Color) -> Self {
         self.placeholder_ink = Some(ink);
+        self
+    }
+    /// Draws the box as a web `<textarea>` with a 1 point `border` does: `rest`, then `focused`
+    /// while it has focus (`:focus { border-color }`), in place of the kit's ring and focus
+    /// outline. An invalid or disabled area keeps the kit's look.
+    pub fn edge(mut self, rest: rune::Color, focused: rune::Color) -> Self {
+        self.edge = Some((rest, focused));
         self
     }
     /// A grip in the bottom-right corner drags the field taller or back to its least height
@@ -283,7 +292,14 @@ impl TextArea {
                 .child(icon(k.glyph.resize_grip, 10.0).color(c.icon_muted));
             e = e.key(box_key).child(drag(grip, shown, least));
         }
-        shell(k, e, self.state, self.invalid && !disabled, self.edit.focused && !disabled)
+        let invalid = self.invalid && !disabled;
+        let focused = (self.edit.focused && !disabled) || self.state == State::Focus;
+        match self.edge {
+            Some((rest, on_focus)) if !invalid && !disabled => {
+                edged(k, e, self.state, if focused { on_focus } else { rest })
+            }
+            _ => shell(k, e, self.state, invalid, self.edit.focused && !disabled),
+        }
     }
 
     /// The box's least height: what it shows with no text, which a drag never goes below.
@@ -301,4 +317,10 @@ impl TextArea {
     fn stylesheet_min_height(&self) -> f32 {
         self.min_height.unwrap_or(TEXTAREA_MIN_HEIGHT)
     }
+}
+
+/// The box with a 1 point border in `edge`, on the kit's fill and hover.
+fn edged(k: &Kit, e: El, state: State, edge: rune::Color) -> El {
+    let e = e.radius(k.radius.md).fill(k.c.bg_base).token_motion(k.motion.control).border(1.0, edge);
+    if state == State::Rest { e.hover(k.c.hover) } else { e }
 }
