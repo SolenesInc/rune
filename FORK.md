@@ -148,9 +148,7 @@ commit on `main` ends with `(cherry picked from commit <hash>)`. `scripts/rune-b
 |---|---|
 | `d80c872f` | macOS: a caret can ask for Option as the Alt key (ime_option_as_alt) (#837) |
 
-Last upstream commit reviewed: `50d5c6db` (2026-11-12), the last one merged
-before the fork became attn's own. Upstream's later commits have been read only
-for the picks above. Move this line when you read further.
+Last upstream commit reviewed: `78efd4a7` (2026-11-18). attn's `scripts/rune-upstream reviewed` moves this line.
 
 ## Dropped
 
