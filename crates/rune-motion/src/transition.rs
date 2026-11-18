@@ -74,6 +74,9 @@ pub struct Effect {
     /// ([`Transition::draw`]). Under Reduce Motion it is drawn whole.
     #[cfg_attr(feature = "serde", serde(default = "drawn_whole"))]
     pub draw: f32,
+    /// A removal that travels keeps its opacity instead of fading ([`Transition::leaves_opaque`]).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub opaque: bool,
 }
 
 #[cfg(feature = "serde")]
@@ -102,6 +105,7 @@ impl Effect {
         reveal: None,
         small_scale: false,
         draw: 1.0,
+        opaque: false,
     };
 
     pub fn opacity(opacity: f32) -> Effect {
@@ -129,6 +133,7 @@ impl Effect {
             reveal: self.reveal.or(o.reveal),
             small_scale: self.small_scale || o.small_scale,
             draw: self.draw * o.draw,
+            opaque: self.opaque || o.opaque,
         }
     }
 
@@ -138,7 +143,8 @@ impl Effect {
 
     /// Kit's rules, enforced: scale in [0.9, 1.1] (never to or from 0; down to
     /// [`SMALL_SCALE_FLOOR`] with `small_scale`), blur sigma ≤ 4 pt, no blur on anything that
-    /// travels (sliding content stays sharp), and nothing leaves at full opacity.
+    /// travels (sliding content stays sharp), and nothing leaves at full opacity unless it
+    /// travels and asked to ([`Transition::leaves_opaque`]).
     /// Whether the node looks the same absent as present: no fade, scale, offset, blur, reveal
     /// or drawing (the anchor alone moves nothing).
     pub fn shows_nothing(&self) -> bool {
@@ -151,7 +157,7 @@ impl Effect {
         self.blur = if self.travels() { 0.0 } else { self.blur.clamp(0.0, 4.0) };
         self.opacity = self.opacity.clamp(0.0, 1.0);
         self.draw = self.draw.clamp(0.0, 1.0);
-        if removal {
+        if removal && !(self.opaque && self.travels()) {
             self.opacity = 0.0;
         }
         self
@@ -269,6 +275,14 @@ impl Transition {
     pub fn allow_small_scale(mut self) -> Transition {
         self.insertion.small_scale = true;
         self.removal.small_scale = true;
+        self
+    }
+    /// A removal that travels leaves at the opacity it sets rather than fading: content that
+    /// slides out of a clipped area with its neighbours, as a carousel's page or a row of
+    /// tiles scrolling past, which a fade would dim while it is still in view. A removal that
+    /// stays in place still fades.
+    pub fn leaves_opaque(mut self) -> Transition {
+        self.removal.opaque = true;
         self
     }
     /// Keep the exiting node in flow (its slot collapses as it leaves) instead of popping it out.
