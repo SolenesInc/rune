@@ -283,8 +283,8 @@ impl RuntimeCore {
     /// A dead key that opened a composition (`preedit`, its accent) while the input method was
     /// on, as an Option dead key does on macOS: the press goes to handlers as `Key::Dead`
     /// first, and the composition goes on only when none takes it. A dead key inside an open
-    /// composition stays the input method's.
-    pub(crate) fn dead_key(&mut self, key: crate::PhysicalKeyCode, mods: crate::Mods, base: Option<char>, preedit: Ime) {
+    /// composition stays the input method's. A test presses one as the macOS window hears it.
+    pub fn dead_key(&mut self, key: crate::PhysicalKeyCode, mods: crate::Mods, base: Option<char>, preedit: Ime) {
         let accent = match &preedit { Ime::Preedit(s, _) => s.chars().next(), _ => None };
         let Some(accent) = accent.filter(|_| !self.composing()) else { return self.ime(preedit) };
         self.physical_then(crate::PhysicalInput::Key { key, mods, pressed: true, repeat: false },
