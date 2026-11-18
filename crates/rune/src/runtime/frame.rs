@@ -714,8 +714,8 @@ impl RuntimeCore {
     }
 
     /// Nothing the last paint was built from changed: no commit, no state outside commits that
-    /// paints (`paint_state_hash`), nothing hover follows (the pointer and what it holds), and
-    /// not the page's scroll.
+    /// paints (`paint_state_hash`), nothing hover follows (the pointer and what it holds), not
+    /// the page's scroll, and not the tooltip, which a wheel dismisses at once.
     fn paints_as_before(&self) -> bool {
         self.last_paint.inputs == Some(self.paint_inputs())
     }
@@ -727,6 +727,7 @@ impl RuntimeCore {
         self.pointer.map(|(x, y)| (x.to_bits(), y.to_bits())).hash(&mut h);
         (self.press.path(), self.press.inside(), self.secondary.path(), self.hover_paused).hash(&mut h);
         self.page.map(|p| [p.scroll, p.top, p.band, p.view].map(f32::to_bits)).hash(&mut h);
+        self.help_tooltip().map(|(text, rect)| (text, rect.map(f32::to_bits))).hash(&mut h);
         (self.commit_gen, h.finish())
     }
 
