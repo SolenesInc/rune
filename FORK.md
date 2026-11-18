@@ -132,6 +132,7 @@ commit on `main` ends with `(cherry picked from commit <hash>)`. `scripts/rune-b
 Last upstream commit reviewed: `50d5c6db` (2026-11-12), the last one merged
 before the fork became attn's own. Upstream's later commits have been read only
 for the picks above. Move this line when you read further.
+| A settle (`settle_all`, `Tx::settle`) lands the hover tracks and a scaled layer's snap to the grid too: a hover fade already running, one the settle starts by laying an element out under the resting pointer, and the correction a zoomed layer otherwise eases in over 0.1 s once it holds still. Before, the window kept animating on frames that move no time (`runtime/input/hover.rs`, `runtime/paint/pixel_snap.rs`) | Hover tracks and pixel snapping are Rune's, run after the commit a settle lands; the app has no way to reach them | `runtime::hover::tests::settle_all_lands_the_hover_with_the_rest_of_the_motion`, `runtime::pixel_snap_tests::a_settle_lands_a_zoom_on_whole_pixels_with_no_time_passing` | |
 
 ## Dropped
 

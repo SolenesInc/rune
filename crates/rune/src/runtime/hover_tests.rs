@@ -51,6 +51,35 @@ fn default_hover_matches_explicit_trajectories_through_scroll_and_reversal() {
     }
 }
 
+/// `settle_all` lands a hover fading out, by the default curve or a group's own, and one the
+/// settle itself starts by laying a row out under the resting pointer: frames that move no time
+/// then bring the window to rest.
+#[test]
+fn settle_all_lands_the_hover_with_the_rest_of_the_motion() {
+    fn settles(rt: &mut Runtime<State>) -> bool {
+        rt.settle_all();
+        rt.frame(0.0);
+        (0..3).any(|_| !rt.animating || { rt.frame(0.0); false })
+    }
+    for custom in [false, true] {
+        let mut rt = Runtime::new(State { custom, growth: false, rows: 3 }, view, (240.0, 150.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.pointer_move(60.0, 15.0);
+        rt.frame(1.0);
+        rt.pointer_leave();
+        rt.frame(0.0);
+        assert!(rt.animating, "the hover fades out, custom={custom}");
+        assert!(settles(&mut rt), "a settle lands the fade, custom={custom}");
+
+        rt.pointer_move(60.0, 45.0);
+        rt.frame(1.0);
+        rt.update(|s, _| s.rows = 0);
+        rt.frame(0.0);
+        rt.update(|s, _| s.rows = 3);
+        assert!(settles(&mut rt), "a settle lands the hover it starts under the pointer, custom={custom}");
+    }
+}
+
 #[test]
 fn unchanged_default_hover_does_not_dirty_scene_poses() {
     for custom in [false, true] {

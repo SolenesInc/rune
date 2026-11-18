@@ -101,7 +101,7 @@ impl RuntimeCore {
         });
         let default_ring = self.default_ring_owner();
         let mut active_cache: Option<ActiveCache> = None;
-        self.pixel_snap.begin_frame(self.t, [vp[2], vp[3]]);
+        self.pixel_snap.begin_frame(self.t, [vp[2], vp[3]], self.settled);
         for paint_index in 0..n_nodes {
             let i = if tree_order { self.layer_paint_order[paint_index] } else { paint_index };
             if let Some(rank) = self.paint_rank.as_mut() {
