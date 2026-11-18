@@ -8,7 +8,9 @@ commits of ours. attn's `docs/internal/rune-fork.md` has the rules.
 
 This file is the ledger. attn's `scripts/rune-bump` runs every test it names and
 fails when it does not record a commit on `main` that upstream's `dev` lacks. A
-commit records itself by changing this file: it adds or extends its row.
+commit records itself by changing this file: it adds or extends its row. The
+script pushes a new `main` only once attn's native suite passes against it, so
+a change here that breaks attn reaches `main` together with attn's side of it.
 
 ## Our changes
 
