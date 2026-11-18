@@ -440,3 +440,46 @@ fn removing_what_draws_nothing_skips_its_exit() {
     rt.frame(1.0 / 60.0);
     assert!(!exiting(&rt, "dot"), "the dot under a parent that hid at once is gone");
 }
+
+#[test]
+fn a_travelling_exit_asked_to_leave_opaque_slides_out_whole_while_one_in_place_fades() {
+    fn view(s: &(bool, Transition), _: &mut Cx<(bool, Transition)>) -> El {
+        col().size(200.0, 100.0).clip_rounded(0.0).children(s.0.then(|| el().key("page").size(200.0, 100.0)
+            .transition(s.1)))
+    }
+    let leaving = |transition| {
+        let mut rt = Runtime::new((true, transition), view, (200.0, 100.0), Env { scale: 1.0, system_dark: true });
+        rt.frame(0.0);
+        rt.state_mut().0 = false; rt.invalidate(); rt.frame(0.0);
+        let mut seen = Vec::new();
+        for _ in 0..120 {
+            rt.frame(1.0 / 60.0);
+            if let Some(e) = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("page")) {
+                seen.push((e.rect[0], e.opacity));
+            }
+        }
+        seen
+    };
+    let slid = leaving(Transition::offset(-200.0, 0.0).leaves_opaque());
+    assert!(slid.len() > 2 && slid.iter().all(|&(_, op)| op == 1.0), "slides out whole: {slid:?}");
+    assert!(slid.windows(2).all(|w| w[1].0 <= w[0].0) && slid.last().unwrap().0 < -150.0, "travels out: {slid:?}");
+    let faded = leaving(Transition::scale(0.92).leaves_opaque());
+    assert!(faded.iter().any(|&(_, op)| op < 0.5), "an exit in place still fades: {faded:?}");
+}
+
+#[test]
+fn a_child_that_asked_for_no_motion_leaves_at_once_under_its_parents_child_exit() {
+    fn view(shown: &bool, _: &mut Cx<bool>) -> El {
+        let children = shown.then(|| [
+            el().key("page").size(100.0, 100.0),
+            el().key("still").size(100.0, 100.0).transition(Transition::none()),
+        ]);
+        crate::row().size(200.0, 100.0).child_exit(Transition::offset(-200.0, 0.0).leaves_opaque()).children(children.into_iter().flatten())
+    }
+    let mut rt = Runtime::new(true, view, (200.0, 100.0), Env { scale: 1.0, system_dark: true });
+    rt.frame(0.0);
+    *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(1.0 / 60.0);
+    let leaving = |key: &str| rt.elements().into_iter().any(|e| e.key.as_deref() == Some(key));
+    assert!(leaving("page"), "the page leaves the way its parent says");
+    assert!(!leaving("still"), "the child that asked for no motion is gone at once");
+}

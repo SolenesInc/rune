@@ -8,7 +8,8 @@ impl El {
     /// last render. A node normally leaves the way it was last drawn, before anyone knew why it
     /// would go; a rolling counter's old digit has to leave the way the new one enters, which
     /// only the commit that removes it knows. Set it on each build with that build's direction.
-    /// Children still present, and those already leaving, keep their own transitions.
+    /// Children still present, those already leaving, and those whose own transition is
+    /// [`Transition::none`], which asked for no motion, keep their own transitions.
     pub fn child_exit(mut self, t: Transition) -> Self {
         self.vis.cold_mut().child_exit = Some(Box::new(t));
         self
