@@ -353,6 +353,7 @@ mod content_slide;
 mod elements;
 #[path = "a11y/tree.rs"]
 pub(crate) mod a11y_tree;
+pub use a11y_tree::AccessibleElement;
 #[path = "a11y/node.rs"]
 mod a11y_node;
 #[path = "a11y/text.rs"]

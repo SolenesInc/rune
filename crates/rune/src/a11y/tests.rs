@@ -451,3 +451,75 @@ fn scroll_into_view_reveals_through_every_scroll_view_around_the_element() {
 
     assert_eq!(shown(&rt), 20.0, "the whole row shows in the window");
 }
+
+fn picker(_: &(), _: &mut Cx<()>) -> El {
+    col()
+        .key("roots")
+        .role("listbox")
+        .child(row().role("option").focusable(true).on_press(|_: &mut ()| {}).child(text("Notebook")))
+        .child(row().role("option").focusable(true).on_press(|_: &mut ()| {}).child(text("A")))
+}
+
+#[test]
+fn accessible_elements_name_an_unkeyed_element_by_the_role_and_name_the_tree_prints() {
+    let mut rt = Runtime::new((), picker, (300.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+
+    let option = rt.accessible_elements().into_iter()
+        .find(|e| e.role == "list-box-option" && e.name.as_deref() == Some("Notebook"))
+        .expect("the option, as the tree names it");
+
+    let element = rt.elements().into_iter().find(|e| e.path == option.path).expect("its element");
+    assert_eq!((element.role, element.key), ("option", None));
+}
+
+fn tall_section(_: &(), _: &mut Cx<()>) -> El {
+    col()
+        .h(200.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().key("section").child(col().h(600.0)).child(row().role("button").h(20.0).child(text("Save"))))
+}
+
+#[test]
+fn an_action_at_a_path_scrolls_an_unkeyed_element_into_view_inside_a_keyed_section_taller_than_its_scroll_view() {
+    let mut rt = Runtime::new((), tall_section, (300.0, 200.0), Env::new(true, 1.0));
+    for _ in 0..4 { rt.frame(0.0); }
+    let save = rt.accessible_elements().into_iter()
+        .find(|e| e.role == "button" && e.name.as_deref() == Some("Save"))
+        .expect("the button")
+        .path;
+    let shown = |rt: &Runtime<()>| rt.elements().into_iter().find(|e| e.path == save).unwrap().visible[3];
+    assert_eq!(shown(&rt), 0.0, "the button starts out of view");
+
+    assert!(rt.accessibility_action_at(&save, Ak::ScrollIntoView, None));
+    for _ in 0..4 { rt.frame(0.0); }
+
+    assert_eq!(shown(&rt), 20.0, "the whole button shows");
+}
+
+#[test]
+fn an_action_at_a_link_s_path_reaches_the_link() {
+    let mut rt = Runtime::new(false, |_: &bool, _: &mut Cx<bool>| {
+        text("Continue from the receipt.")
+            .link(crate::Link::new(14..25, "s-receipt"))
+            .on_link(|followed: &mut bool, _: &str, _: &mut crate::Tx| *followed = true)
+    }, (300.0, 40.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let link = rt.accessible_elements().into_iter().find(|e| e.role == "link").expect("the link");
+    assert_eq!(link.name.as_deref(), Some("the receipt"));
+    assert!(rt.elements().iter().any(|e| e.path == link.path), "{} is an element", link.path);
+
+    assert!(rt.accessibility_action_at(&link.path, Ak::Click, None));
+    rt.frame(0.016);
+    assert!(*rt.state(), "the link was followed");
+}
+
+#[test]
+fn contains_names_an_unkeyed_element_by_its_path() {
+    let mut rt = Runtime::new((), tall_section, (300.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let spacer = rt.elements().into_iter().find(|e| e.key.is_none() && e.rect[3] == 600.0).expect("the spacer");
+
+    assert!(rt.contains(&spacer.path, 10.0, 10.0));
+    assert!(!rt.contains(&spacer.path, 10.0, 250.0), "outside the window's clip");
+}

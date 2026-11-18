@@ -30,6 +30,17 @@ pub(crate) fn link_id(id: NodeId, k: usize) -> AkId { AkId((id.0 << SUB) | (LINK
 pub(crate) fn split_id(id: AkId) -> (NodeId, u64) { (NodeId(id.0 >> SUB), id.0 & ((1 << SUB) - 1)) }
 pub(crate) fn sub_link(sub: u64) -> Option<usize> { (sub >= LINK_BASE).then(|| (sub - LINK_BASE) as usize) }
 
+/// An element as assistive technology reads it ([`Runtime::accessible_elements`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AccessibleElement {
+    /// Its path in [`Runtime::elements`]; a text's link is `"<text's path>#link-<k>"`.
+    pub path: String,
+    /// The AccessKit role, as `"list-box-option"` for an element of role `"option"`.
+    pub role: String,
+    /// What a reader hears it called: its label, its text, or the text inside it.
+    pub name: Option<String>,
+}
+
 /// What a tree update read last time: when none of it moved, nothing it builds can have.
 #[derive(Clone, PartialEq, Default)]
 struct Stamp {
@@ -252,6 +263,24 @@ impl RuntimeCore {
     /// window points. Tests assert on it.
     pub fn accessibility_json(&self) -> serde_json::Value {
         crate::a11y::dump::json(&self.accessibility_tree(), false)
+    }
+
+    /// Each element in [`Runtime::accessibility_tree`], keyed or not, with the role and name
+    /// [`Runtime::accessibility_json`] prints for it, so a tool that names an element as the
+    /// tree does finds it in [`Runtime::elements`] by its path.
+    pub fn accessible_elements(&self) -> Vec<AccessibleElement> {
+        let tree = self.accessibility_tree();
+        let paths: HashMap<u64, &str> = self.nodes.iter().map(|n| (n.id.0, n.path.as_str())).collect();
+        crate::a11y::dump::roles_and_names(&tree).into_iter().filter_map(|(id, role, name)| {
+            let (node, sub) = split_id(id);
+            let path = paths.get(&node.0)?;
+            let path = match sub_link(sub) {
+                Some(k) => format!("{path}#link-{k}"),
+                None if sub == 0 => (*path).to_owned(),
+                None => return None,
+            };
+            Some(AccessibleElement { path, role, name })
+        }).collect()
     }
 
     fn a11y_info(&self) -> TreeInfo {
