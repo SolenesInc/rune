@@ -313,6 +313,15 @@ impl Win {
         }
     }
 
+    /// Whether a display tick draws: when the window `wants` a frame, or one waits for the tick.
+    /// Otherwise the tick passes, and the link stops once the surface rests.
+    pub(super) fn tick_draws(&mut self, wants: bool) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.native.pacing.as_mut().is_none_or(|p| p.tick(wants));
+        #[cfg(not(target_os = "macos"))]
+        { let _ = wants; true }
+    }
+
     pub(super) fn stop_pacing(&mut self) {
         #[cfg(target_os = "macos")]
         if let Some(pacing) = &mut self.native.pacing { pacing.stop(); }

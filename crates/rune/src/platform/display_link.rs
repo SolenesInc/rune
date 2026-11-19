@@ -32,6 +32,8 @@ pub(crate) struct DisplayLink {
     display: Option<u32>,
     capped: bool,
     running: bool,
+    /// A frame asked for an opportunity and was told to wait for a tick.
+    waiting: bool,
 }
 
 const LOW_POWER_FRAME: Duration = Duration::from_nanos(1_000_000_000 / 60);
@@ -122,7 +124,7 @@ impl DisplayLink {
         });
         let status = unsafe { link.set_output_callback(Some(tick), (&mut *callback as *mut Callback).cast()) };
         if status != 0 { eprintln!("display link callback failed: {status}"); return None; }
-        let mut pacing = Self { link, callback, last_present: None, last_target: None, display: None, capped: false, running: false };
+        let mut pacing = Self { link, callback, last_present: None, last_target: None, display: None, capped: false, running: false, waiting: false };
         pacing.update_display(window);
         Some(pacing)
     }
@@ -165,6 +167,7 @@ impl DisplayLink {
         let now = Instant::now();
         let tick = (host_target != 0).then(|| target_time(now, CVGetCurrentHostTime(), host_target, self.callback.host_frequency));
         let next = opportunity(tick, self.last_present, self.last_target, now, self.frame_period());
+        self.waiting = next == Opportunity::Wait;
         match next {
             Opportunity::Tick(target) => self.last_target = Some(target),
             Opportunity::Now => self.last_target = Some(now),
@@ -189,7 +192,18 @@ impl DisplayLink {
 
     pub(crate) fn stop(&mut self) {
         if self.running { self.link.stop(); self.running = false; }
+        self.waiting = false;
         self.callback.target.store(0, Ordering::Relaxed);
+    }
+
+    /// A tick came. It draws when a frame waits for it or the window `wants` one; otherwise it
+    /// passes, and the link stops once the surface has rested (`tick_does`).
+    pub(crate) fn tick(&mut self, wants: bool) -> bool {
+        match tick_does(wants || self.waiting, self.last_present, self.last_target, Instant::now(), self.frame_period()) {
+            Tick::Draw => true,
+            Tick::Pass => { self.callback.target.store(0, Ordering::Release); false }
+            Tick::Stop => { self.stop(); false }
+        }
     }
 }
 
@@ -251,6 +265,17 @@ fn rested(last: Option<Instant>, last_target: Option<Instant>, now: Instant, per
         && last.is_none_or(|last| now.saturating_duration_since(last) >= period * 3 / 2)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Tick { Draw, Pass, Stop }
+
+/// A tick no frame wants keeps the link running until the surface rests: a frame asked for
+/// before then may only draw on a tick (`rested`), and the running link's next one is at most a
+/// refresh away, where a stopped link would restart and wait for its first. Once rested, a frame
+/// draws at once anyway, so the link stops and the surface sends no ticks at rest.
+fn tick_does(wanted: bool, last: Option<Instant>, last_target: Option<Instant>, now: Instant, period: Duration) -> Tick {
+    if wanted { Tick::Draw } else if rested(last, last_target, now, period) { Tick::Stop } else { Tick::Pass }
+}
+
 /// A stopped link has no tick waiting (`stop` clears it), so a rested surface's next frame is
 /// `Now` until the link starts: deciding first costs it no pacing.
 fn defers_start(running: bool, last: Option<Instant>, last_target: Option<Instant>, now: Instant, period: Duration) -> bool {
@@ -291,6 +316,20 @@ mod tests {
         assert!(!permits(Some(ms(100)), Some(ms(112)), ms(128), ms(102), period));
         assert_eq!(target_time(t, 100, 116, 1000.0), ms(16));
         assert_eq!(target_time(ms(32), 132, 116, 1000.0), ms(16));
+    }
+
+    #[test]
+    fn a_link_runs_on_after_the_last_frame_until_the_surface_rests() {
+        let t = Instant::now();
+        let ms = |n| t + Duration::from_millis(n);
+        let period = Duration::from_millis(8);
+        let (last, target) = (Some(ms(100)), Some(ms(100)));
+        assert_eq!(tick_does(false, last, target, ms(104), period), Tick::Pass, "the last frame may still be queued");
+        assert_eq!(tick_does(false, last, target, ms(111), period), Tick::Pass);
+        assert_eq!(tick_does(false, last, target, ms(112), period), Tick::Stop, "a frame from here draws at once");
+        assert_eq!(tick_does(true, last, target, ms(104), period), Tick::Draw, "a frame asked for meanwhile takes the next tick");
+        assert_eq!(opportunity(Some(ms(108)), last, target, ms(105), period), Opportunity::Tick(ms(108)));
+        assert_eq!(opportunity(None, last, target, ms(105), period), Opportunity::Wait, "where a stopped link has none to give");
     }
 
     #[test]
