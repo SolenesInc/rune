@@ -88,3 +88,22 @@ fn a_scroll_areas_wrapper_hands_its_outset_to_the_viewport_with_its_fade() {
     let i = rt.instances.iter().find(|i| i.fill[3] > 0.99 && i.params[1] == crate::render::KIND_RECT).expect("the ring's fill");
     assert_eq!([i.clip[0], i.clip[2]], [46.0, 154.0], "the viewport's clip reaches past it by the outset");
 }
+
+/// [`scroll_cell`] laid out right to left with no fade: the viewport cuts at its box by its own
+/// scroll clip, and the outset still belongs to its end, the left.
+fn rtl_scroll_cell(_: &[f32; 4], _: &mut Cx<[f32; 4]>) -> El {
+    let viewport = col().key("rows").w(100.0).h(28.0)
+        .scroll(crate::ScrollSpec { stick_bottom: false })
+        .child(el().key("ring").w(108.0).h(20.0).mr(-4.0).fill(crate::Color::WHITE));
+    let (_, _, outer, viewport) = viewport.wrap_scroll_area(("clip_outset_tests", 0, 0));
+    row().w(300.0).h(60.0).child(el().w(50.0).h(1.0))
+        .child(outer.child(viewport).dir(crate::Direction::Rtl).clip_outset(0.0, 0.0, 4.0, 0.0))
+}
+
+#[test]
+fn a_right_to_left_scroll_area_without_a_fade_takes_its_outset_at_its_end() {
+    let mut rt = Runtime::new([0.0; 4], rtl_scroll_cell, (300.0, 60.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let i = rt.instances.iter().find(|i| i.fill[3] > 0.99 && i.params[1] == crate::render::KIND_RECT).expect("the ring's fill");
+    assert_eq!([i.clip[0], i.clip[2]], [46.0, 150.0], "the outset reaches past the viewport's left");
+}

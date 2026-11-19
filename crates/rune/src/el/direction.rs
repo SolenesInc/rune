@@ -232,7 +232,8 @@ pub(crate) fn mirror_visual(vis: &mut Visual) {
     }
     let Some(cold) = vis.cold.get() else { return };
     let turns = cold.mirror_rtl && (cold.rotate != 0.0 || cold.icon_turn != 0.0);
-    let flips = turns || cold.border_sides.is_some() || cold.clip.is_some() || cold.clip_corners.is_some()
+    let flips = turns || cold.border_sides.is_some() || cold.clip.is_some() || cold.clip_outset != [0.0; 4]
+        || cold.clip_corners.is_some()
         || cold.radial.as_ref().is_some_and(|r| matches!(r.geometry, GradientGeometry::Linear { .. }));
     if !flips {
         return;
@@ -254,9 +255,9 @@ pub(crate) fn mirror_visual(vis: &mut Visual) {
     }
     if let Some([l, t, r, b]) = cold.clip {
         cold.clip = Some([r, t, l, b]);
-        let [l, t, r, b] = cold.clip_outset;
-        cold.clip_outset = [r, t, l, b];
     }
+    let [l, t, r, b] = cold.clip_outset;
+    cold.clip_outset = [r, t, l, b];
     if let Some([tl, tr, br, bl]) = cold.clip_corners {
         cold.clip_corners = Some([tr, tl, bl, br]);
     }
