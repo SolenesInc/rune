@@ -32,6 +32,9 @@ pub struct VisualCold {
     /// Soft clip of children to this rect: fade widths left, top, right, bottom. A negative
     /// width ramps linearly (`El::clip_fade_linear`).
     pub clip: Option<[f32; 4]>,
+    /// How far past the box the clip and its fades sit, left, top, right, bottom, in points
+    /// (`El::clip_outset`).
+    pub(crate) clip_outset: [f32; 4],
     /// Rounded clip of this element and its subtree, applied after subtree filters.
     pub clip_radius: Option<f32>,
     /// Per-corner clip radii override (`[tl, tr, br, bl]`, in points).
@@ -129,6 +132,7 @@ impl Empty for VisualCold {
         shadows: Vec::new(),
         blur_motion: None,
         clip: None,
+        clip_outset: [0.0; 4],
         clip_radius: None,
         clip_corners: None,
         cutout: None,
@@ -307,6 +311,15 @@ impl Visual {
             b.border_width = width;
             b.border = c;
         }
+    }
+}
+
+impl Visual {
+    /// The rectangle this element's clip covers: its box `r` (edges, device px) grown by its
+    /// [`El::clip_outset`](crate::El::clip_outset), at `k` device px per point.
+    pub(crate) fn clip_rect(&self, r: [f32; 4], k: f32) -> [f32; 4] {
+        let [l, t, rr, b] = self.clip_outset.map(|v| v * k);
+        [r[0] - l, r[1] - t, r[2] + rr, r[3] + b]
     }
 }
 

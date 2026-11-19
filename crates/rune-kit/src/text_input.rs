@@ -18,8 +18,9 @@ pub(crate) fn kit_rich_style(k: &Kit) -> RichStyle {
 
 /// Shared shell painting (text-input.css:5-75, textarea.css): the base fill, input elevation,
 /// hover overlay, a 1 point focus or invalid ring just inside the box in place of the shadow,
-/// disabled dimming.
-pub(crate) fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool) -> El {
+/// disabled dimming. A field given a `disabled_ink` shows it is disabled by that ink alone, so
+/// it keeps full strength.
+pub(crate) fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool, disabled_ink: Option<Color>) -> El {
     let c = &k.c;
     let hover = state == State::Hover && !invalid && !focused;
     let mut e = e
@@ -27,7 +28,8 @@ pub(crate) fn shell(k: &Kit, e: El, state: State, invalid: bool, focused: bool) 
         .fill(if hover { over(c.hover, c.bg_base) } else { c.bg_base })
         .token_motion(k.motion.control);
     if state == State::Disabled {
-        return shadows(k, e, k.elevation.input()).layer_opacity(0.5);
+        let e = shadows(k, e, k.elevation.input());
+        return if disabled_ink.is_some() { e } else { e.layer_opacity(0.5) };
     }
     if invalid {
         e = e.outline(1.0, -1.0, c.danger.fg);
@@ -146,6 +148,8 @@ pub struct TextInput {
     active: Option<String>,
     read_only: bool,
     state: State,
+    disabled_ink: Option<Color>,
+    fade_overflow: bool,
     edits: EditActs,
     copy_acts: Acts,
 }
@@ -210,12 +214,28 @@ impl TextInput {
             active: None,
             read_only: false,
             state: State::Rest,
+            disabled_ink: None,
+            fade_overflow: false,
             edits: EditActs::default(),
             copy_acts: Acts::default(),
         }
     }
     pub fn placeholder(mut self, p: impl Into<String>) -> Self {
         self.placeholder = p.into();
+        self
+    }
+    /// The value's ink while the field is disabled. With it the field is not dimmed to half: it
+    /// draws at full strength and this ink alone shows it can't be used, so the caller sets
+    /// the disabled look apart from the placeholder's.
+    pub fn disabled_ink(mut self, ink: Color) -> Self {
+        self.disabled_ink = Some(ink);
+        self
+    }
+    /// A value or placeholder longer than the field fades out at each side it runs past, in
+    /// place of a hard cut: at rest at its end, and while the caret has scrolled it, at the
+    /// start it scrolled past too ([`El::truncate_fade`]).
+    pub fn fade_overflow(mut self) -> Self {
+        self.fade_overflow = true;
         self
     }
     /// The accessible name ("Search", "Email"), when no visible label names the field. Without
@@ -334,7 +354,11 @@ impl TextInput {
         let c = &k.c;
         let disabled = self.state == State::Disabled;
         let red = self.invalid && !disabled && (k.invalid_text || self.plain);
-        let ink = if red { c.danger.fg } else { c.text_base };
+        let ink = match (red, disabled, self.disabled_ink) {
+            (true, ..) => c.danger.fg,
+            (false, true, Some(ink)) => ink,
+            _ => c.text_base,
+        };
         let hint = if red { c.danger.fg } else { c.text_faint };
         let style = self.style.unwrap_or(k.ty.ui_compact);
         let base: f32 = if self.large { 32.0 } else { 28.0 };
@@ -349,6 +373,7 @@ impl TextInput {
             .rich_style(kit_rich_style(k))
             .placeholder(self.placeholder.clone(), hint)
             .caret(ink, k.selection());
+        let field = if self.fade_overflow { field.truncate_fade() } else { field };
         let mut field = name_field(field, self.label.as_deref(), &self.placeholder, None, disabled)
             .invalid(self.invalid)
             .read_only(self.read_only);
@@ -403,9 +428,9 @@ impl TextInput {
             e = e.child(b);
         }
         if self.plain {
-            return if disabled { e.layer_opacity(0.5) } else { e };
+            return if disabled && self.disabled_ink.is_none() { e.layer_opacity(0.5) } else { e };
         }
-        shell(k, e, self.state, self.invalid && !disabled, self.edit.focused && !disabled)
+        shell(k, e, self.state, self.invalid && !disabled, self.edit.focused && !disabled, self.disabled_ink)
     }
 }
 

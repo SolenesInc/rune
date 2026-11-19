@@ -651,13 +651,25 @@ impl RuntimeCore {
             let mut origins = fade_origin;
             if spec.truncate_fade && overflows {
                 let width = (spec.style.size * spec.fade_em * sc * s).min((bounds[2] - bounds[0]).max(0.0));
-                // The fade is where the text is cut: the end of its own paragraph, which runs out
-                // past the box on that side. An Arabic title in a left-to-right row fades on the
-                // left and keeps its first words whole; a Latin one in a right-to-left row on the
-                // right.
-                let line = self.nodes[i].text_layout.as_ref().and_then(TextLayout::single).map_or(crate::el::Flow::Ltr, |l| crate::el::Flow::of_layout(l));
-                let own = if (spec.align == Align::End) != (line == crate::el::Flow::Rtl) { [width, 0.0, 0.0, 0.0] }
-                    else { [0.0, 0.0, width, 0.0] };
+                let layout = self.nodes[i].text_layout.as_ref().and_then(TextLayout::single);
+                let line = layout.map_or(crate::el::Flow::Ltr, |l| crate::el::Flow::of_layout(l));
+                let (start_hidden, end_hidden) = match self.nodes[i].input.as_ref().filter(|inp| inp.single_line) {
+                    // A field fades each side its scroll hides: at rest only its end, and once its
+                    // caret has scrolled the text, the start it scrolled past.
+                    Some(_) => {
+                        let shift = self.input_scroll.get(&self.nodes[i].path).map_or(0.0, |v| v.abs() * s * sc);
+                        let full = layout.map_or(0.0, |l| l.full_width() * sc);
+                        (shift > 0.5, full - shift > bounds[2] - bounds[0] + 0.5)
+                    }
+                    // A label is cut at the end of its own paragraph, which runs out past the box
+                    // on that side.
+                    None => (false, true),
+                };
+                // An Arabic title in a left-to-right row fades on the left and keeps its first
+                // words whole; a Latin one in a right-to-left row on the right.
+                let end_on_left = (spec.align == Align::End) != (line == crate::el::Flow::Rtl);
+                let (left, right) = if end_on_left { (end_hidden, start_hidden) } else { (start_hidden, end_hidden) };
+                let own = [if left { width } else { 0.0 }, 0.0, if right { width } else { 0.0 }, 0.0];
                 inherit_fade(&mut widths, &mut origins, bounds, own);
             }
             for instance in &mut self.instances[first_instance..] {

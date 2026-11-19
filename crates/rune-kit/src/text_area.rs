@@ -14,6 +14,7 @@ pub struct TextArea {
     label: Option<String>,
     placeholder: String,
     placeholder_ink: Option<rune::Color>,
+    disabled_ink: Option<rune::Color>,
     width: Option<f32>,
     rows: usize,
     grow: Option<(usize, usize)>,
@@ -89,6 +90,7 @@ impl TextArea {
             label: None,
             placeholder: String::new(),
             placeholder_ink: None,
+            disabled_ink: None,
             width: Some(280.0),
             rows: 3,
             grow: None,
@@ -111,6 +113,13 @@ impl TextArea {
     /// The placeholder's ink, the palette's `text_faint` unless set; an invalid field's stays red.
     pub fn placeholder_ink(mut self, ink: rune::Color) -> Self {
         self.placeholder_ink = Some(ink);
+        self
+    }
+    /// The value's ink while the area is disabled. With it the area is not dimmed to half: it
+    /// draws at full strength and this ink alone shows it can't be used, so the caller sets
+    /// the disabled look apart from the placeholder's.
+    pub fn disabled_ink(mut self, ink: rune::Color) -> Self {
+        self.disabled_ink = Some(ink);
         self
     }
     /// Draws the box as a web `<textarea>` with a 1 point `border` does: `rest`, then `focused`
@@ -229,7 +238,11 @@ impl TextArea {
         let least = self.least_height(style.line_px());
         let stylesheet_min_height = self.stylesheet_min_height();
         let red = self.invalid && !disabled && k.invalid_text;
-        let ink = if red { c.danger.fg } else { c.text_base };
+        let ink = match (red, disabled, self.disabled_ink) {
+            (true, ..) => c.danger.fg,
+            (false, true, Some(ink)) => ink,
+            _ => c.text_base,
+        };
         let hint = if red { c.danger.fg } else { self.placeholder_ink.unwrap_or(c.text_faint) };
         let field = text_input(&self.edit, style)
             .key(self.key.clone())
@@ -298,7 +311,7 @@ impl TextArea {
             Some((rest, on_focus)) if !invalid && !disabled => {
                 edged(k, e, self.state, if focused { on_focus } else { rest })
             }
-            _ => shell(k, e, self.state, invalid, self.edit.focused && !disabled),
+            _ => shell(k, e, self.state, invalid, self.edit.focused && !disabled, self.disabled_ink),
         }
     }
 

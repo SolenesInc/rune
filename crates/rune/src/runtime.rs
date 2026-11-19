@@ -254,6 +254,9 @@ pub(crate) use scroll_offset::ScrollRequest;
 pub(crate) use reveal::ScrollReveal;
 pub use selectable::{SelectedText, SelectionChange, TextSelection};
 #[cfg(test)]
+#[path = "runtime/clip_outset_tests.rs"]
+mod clip_outset_tests;
+#[cfg(test)]
 #[path = "runtime/timer_wake_tests.rs"]
 mod timer_wake_tests;
 #[cfg(test)]
