@@ -530,3 +530,26 @@ fn run_lookups_off_a_grapheme_start_find_nothing() {
     rt.frame(0.0);
     assert_eq!(rt.instances.iter().filter(|i| i.params[1] == crate::render::KIND_GLYPH).count(), 2);
 }
+
+/// A symbol whose default presentation is text (`⏺ ⏸`, Claude Code's bullet among them) takes
+/// a text font that has it, as Core Text gives AppKit and WebKit one, not the colour emoji
+/// font, which draws it untinted.
+#[test]
+fn text_default_symbols_take_a_text_font_before_the_colour_emoji_font() {
+    let mut ts = TextSystem::default();
+    ts.load_symbol_fonts();
+    let Some(emoji) = ts.emoji else {
+        eprintln!("skipping: no colour emoji font installed");
+        return;
+    };
+    if system_font_files(fallback::MATH_FONT_FILES).is_empty() {
+        eprintln!("skipping: no math font installed");
+        return;
+    }
+    for style in [TextStyle::new(13.0, 400.0), TextStyle::new(13.0, 400.0).mono()] {
+        for (family, id) in faces(&mut ts, "\u{23FA}\u{23F8}", &[], style) {
+            assert_ne!(id, 0, "missing symbol");
+            assert_ne!(family, emoji, "a text-default symbol drew from the colour emoji font");
+        }
+    }
+}

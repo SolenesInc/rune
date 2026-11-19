@@ -677,10 +677,11 @@ impl TextSystem {
         let emoji = self.emoji.as_slice();
         let system = self.system_mono.as_deref().unwrap_or_default();
         let mono_scripts = self.mono_scripts.as_deref().unwrap_or(&[]);
+        let text_symbols: Vec<&'static str> = self.symbol_families.iter().copied().filter(|name| !emoji.contains(name)).collect();
         let with_symbols = |primary, extra: &[&'static str]| {
             family_list(primary, system, self.sans.as_str())
                 .into_iter()
-                .chain(extra.iter().chain(self.symbol_families.iter()).chain(math).map(|name| FontFamilyName::named(name)))
+                .chain(extra.iter().chain(&text_symbols).chain(math).chain(emoji).map(|name| FontFamilyName::named(name)))
                 .collect::<Vec<_>>()
         };
         let sans = match style.family {
