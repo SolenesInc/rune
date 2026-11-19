@@ -1,0 +1,201 @@
+{
+  "children": [
+    {
+      "actions": [
+        "click",
+        "focus"
+      ],
+      "key": "pen",
+      "name": "Pen",
+      "role": "button",
+      "states": [
+        "unchecked"
+      ]
+    },
+    {
+      "actions": [
+        "focus"
+      ],
+      "key": "eraser",
+      "name": "Eraser",
+      "role": "button",
+      "states": [
+        "unchecked"
+      ]
+    },
+    {
+      "actions": [
+        "focus",
+        "increment",
+        "decrement",
+        "set-value"
+      ],
+      "key": "size",
+      "name": "Size",
+      "range": [
+        0.4000000059604645,
+        0.0,
+        1.0,
+        0.1
+      ],
+      "role": "slider",
+      "value": "40%"
+    },
+    {
+      "actions": [
+        "focus",
+        "increment",
+        "decrement",
+        "set-value"
+      ],
+      "children": [
+        {
+          "actions": [
+            "click"
+          ],
+          "key": "down",
+          "name": "Decrease Width",
+          "role": "button"
+        },
+        {
+          "actions": [
+            "click"
+          ],
+          "key": "up",
+          "name": "Increase Width",
+          "role": "button"
+        }
+      ],
+      "key": "width",
+      "name": "Width",
+      "range": [
+        3.0,
+        1.0,
+        5.0,
+        1.0
+      ],
+      "role": "spin-button",
+      "value": "3"
+    },
+    {
+      "children": [
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch0",
+          "name": "Red",
+          "position": 1,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch1",
+          "name": "Orange",
+          "position": 2,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch2",
+          "name": "Yellow",
+          "position": 3,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch3",
+          "name": "Green",
+          "position": 4,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch4",
+          "name": "Blue",
+          "position": 5,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch5",
+          "name": "Black",
+          "position": 6,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        },
+        {
+          "actions": [
+            "click",
+            "focus"
+          ],
+          "key": "swatch6",
+          "name": "White",
+          "position": 7,
+          "role": "radio-button",
+          "states": [
+            "unchecked"
+          ]
+        }
+      ],
+      "key": "colour",
+      "name": "Colour",
+      "role": "radio-group",
+      "setSize": 7
+    },
+    {
+      "key": "opacity",
+      "name": "Opacity",
+      "range": [
+        0.5,
+        0.0,
+        1.0,
+        0.01
+      ],
+      "role": "slider",
+      "states": [
+        "disabled"
+      ]
+    },
+    {
+      "role": "status",
+      "states": [
+        "live-polite"
+      ]
+    }
+  ],
+  "role": "window"
+}

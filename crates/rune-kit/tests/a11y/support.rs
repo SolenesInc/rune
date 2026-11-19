@@ -25,6 +25,9 @@ pub struct App {
     pub sidebar: PaneState,
     pub diff: DiffState,
     pub level: f32,
+    /// A stepper's number, and whether each slider change continued a drag.
+    pub count: f64,
+    pub continues: Vec<bool>,
 }
 
 impl Default for App {
@@ -43,6 +46,8 @@ impl Default for App {
             sidebar: PaneState::new(240.0),
             diff: DiffState::new(Vec::new()),
             level: 0.4,
+            count: 3.0,
+            continues: Vec::new(),
         }
     }
 }
