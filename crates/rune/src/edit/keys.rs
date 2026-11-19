@@ -141,7 +141,7 @@ impl KeyEvent {
     /// on Linux, so text typed with both still inserts there; Option alone types.
     pub(crate) fn is_command_chord(&self) -> bool {
         let m = self.mods;
-        matches!(self.key, Key::Text(_)) && (m.cmd || m.ctrl) && (cfg!(target_os = "macos") || !m.alt)
+        matches!(self.key, Key::Text(_)) && (m.cmd || m.ctrl) && (crate::KeyPlatform::current().mac() || !m.alt)
     }
 
     /// The standard edit command this is (paste, copy, cut, select all, undo, redo, format):
@@ -156,14 +156,14 @@ impl KeyEvent {
     /// (Option+Space types on macOS.)
     pub(crate) fn is_window_menu_chord(&self) -> bool {
         let m = self.mods;
-        !cfg!(target_os = "macos") && matches!(&self.key, Key::Text(t) if t == " ") && m.alt && !m.ctrl && !m.cmd && !m.logo
+        !crate::KeyPlatform::current().mac() && matches!(&self.key, Key::Text(t) if t == " ") && m.alt && !m.ctrl && !m.cmd && !m.logo
     }
     /// A macOS Control-letter text binding (Ctrl-A, Ctrl-E, Ctrl-K, …), as in every AppKit field.
     pub(crate) fn control_binding(&self) -> Option<char> {
         let m = self.mods;
         let Key::Text(s) = &self.key else { return None };
         let c = s.chars().next().filter(|_| s.chars().count() == 1)?.to_ascii_lowercase();
-        (cfg!(target_os = "macos") && m.ctrl && !m.cmd && !m.alt && "abefpndhk".contains(c)).then_some(c)
+        (crate::KeyPlatform::current().mac() && m.ctrl && !m.cmd && !m.alt && "abefpndhk".contains(c)).then_some(c)
     }
 }
 

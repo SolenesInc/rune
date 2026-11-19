@@ -25,11 +25,18 @@ pub enum KeyPlatform {
 }
 
 impl KeyPlatform {
-    /// The platform this build runs on.
+    /// The platform this build runs on, unless `RUNE_KEY_PLATFORM` names another (`mac` or
+    /// `linux`), so a test suite can run one platform's keymap on the other.
     #[cfg(not(target_arch = "wasm32"))]
-    pub const fn current() -> Self {
-        if cfg!(any(target_os = "macos", target_os = "ios")) { return Self::Mac; }
-        Self::Linux
+    pub fn current() -> Self {
+        static PLATFORM: std::sync::OnceLock<KeyPlatform> = std::sync::OnceLock::new();
+        *PLATFORM.get_or_init(|| match std::env::var("RUNE_KEY_PLATFORM").as_deref() {
+            Ok("mac") => Self::Mac,
+            Ok("linux") => Self::Linux,
+            Ok(other) => panic!("RUNE_KEY_PLATFORM is {other:?}; expected mac or linux"),
+            Err(_) if cfg!(any(target_os = "macos", target_os = "ios")) => Self::Mac,
+            Err(_) => Self::Linux,
+        })
     }
 
     /// The platform the browser runs on: `Mac` when `navigator.platform` names an Apple
@@ -45,7 +52,7 @@ impl KeyPlatform {
         })
     }
 
-    pub(super) fn mac(self) -> bool { matches!(self, Self::Mac) }
+    pub(crate) fn mac(self) -> bool { matches!(self, Self::Mac) }
 }
 
 /// One modifier as a chord names it.
@@ -376,7 +383,7 @@ fn held(m: Mods, platform: KeyPlatform) -> u8 {
     let bare = m.cmd && !m.ctrl && !m.logo;
     let (ctrl, logo) = if bare || cfg!(target_arch = "wasm32") {
         (m.ctrl, m.logo)
-    } else if cfg!(target_os = "macos") {
+    } else if crate::KeyPlatform::current().mac() {
         (m.ctrl, m.logo || m.cmd)
     } else {
         (m.ctrl || m.cmd, m.logo)

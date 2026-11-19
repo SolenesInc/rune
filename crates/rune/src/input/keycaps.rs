@@ -112,7 +112,7 @@ impl Keycaps {
 
 /// Apple's order: Control, Option, Shift, Command. `cmd` is Ctrl off macOS.
 fn mod_glyphs(m: Mods) -> String {
-    let mac = cfg!(target_os = "macos");
+    let mac = crate::KeyPlatform::current().mac();
     let held = [(m.ctrl || (!mac && m.cmd), "⌃"), (m.alt, "⌥"), (m.shift, "⇧"), (m.logo || (mac && m.cmd), "⌘")];
     held.iter().filter(|(on, _)| *on).map(|(_, g)| *g).collect()
 }
