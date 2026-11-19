@@ -371,6 +371,7 @@ impl<S: 'static> Host<S> {
                     else { rt.key(ev); }
                     redraw |= pressed;
                 }
+                if pressed { l.key_pressed(); }
                 if redraw {
                     l.timer_frame.asked_by_key();
                     l.request_redraw();

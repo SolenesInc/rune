@@ -322,6 +322,23 @@ impl Win {
         { let _ = wants; true }
     }
 
+    /// After a frame with nothing more to draw: the display link runs on while the user types
+    /// (`DisplayLink::runs_on`), and stops otherwise.
+    pub(super) fn rest_pacing(&mut self) {
+        #[cfg(target_os = "macos")]
+        if self.native.pacing.as_ref().is_some_and(|p| p.running() && p.runs_on(Instant::now())) {
+            self.present_with_transaction(false);
+            return;
+        }
+        self.stop_pacing();
+    }
+
+    /// The user pressed a key in the window.
+    pub(super) fn key_pressed(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(pacing) = &mut self.native.pacing { pacing.key(Instant::now()); }
+    }
+
     pub(super) fn stop_pacing(&mut self) {
         #[cfg(target_os = "macos")]
         if let Some(pacing) = &mut self.native.pacing { pacing.stop(); }

@@ -441,8 +441,7 @@ impl<S: 'static> Host<S> {
             l.stop_pacing();
             self.meter.set_pacing(l.pacing_state(false));
         } else {
-            #[cfg(target_os = "macos")]
-            l.present_with_transaction(false);
+            l.rest_pacing();
             self.meter.set_pacing(l.pacing_state(false));
         }
         // A frame change this frame's commit asked for starts with the layout springs it
