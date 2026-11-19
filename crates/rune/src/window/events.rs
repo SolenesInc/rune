@@ -114,7 +114,7 @@ impl<S: 'static> Host<S> {
                 let due = super::pacing::timer_deadline(&self.rt).is_some_and(|at| at <= Instant::now());
                 let idle = self.idle;
                 if let Some(w) = self.win.as_mut().filter(|w| w.paced())
-                    && w.tick_draws(!idle || due || w.redraw.get() != Redraw::Idle) {
+                    && w.tick_draws(!idle || due) {
                     self.redraw();
                     self.shell(event_loop);
                 }
