@@ -169,3 +169,16 @@ fn a_stream_grows_its_parse_like_a_whole_one() {
         assert_eq!((&*sources, &*tasks, &*starts, &*maps), (&want_sources[..], &want_tasks[..], &want_starts[..], &want_maps[..]), "{src:?}");
     }
 }
+
+/// A reference whose label is still arriving shows its text as a link, and none of the label.
+#[test]
+fn a_reference_shows_its_text_while_its_label_arrives() {
+    for src in ["Keep exploring [Pierre][", "Keep exploring [Pierre][pi", "Keep exploring [Pierre][pierre"] {
+        let blocks = stream(src);
+        assert_eq!(shown(&blocks), "Keep exploring Pierre", "{src:?}");
+        assert_eq!(styled(&blocks, Style::Link), ["Pierre"], "{src:?}");
+    }
+    // Whole, it is what its definition makes it: a link with one, its source without.
+    assert_eq!(shown(&stream("[pierre]: https://example.com\n\nKeep exploring [Pierre][pierre] now")), "Keep exploring Pierre now");
+    assert_eq!(shown(&stream("Keep exploring [Pierre][pierre] now")), "Keep exploring [Pierre][pierre] now");
+}

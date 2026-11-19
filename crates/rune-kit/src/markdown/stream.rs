@@ -6,7 +6,8 @@
 //!   start counts (`2 * 3` and `snake_case` stay text), `~` counts only as `~~`, and a parse
 //!   that would still show a marker falls back to the source as written.
 //! - A link still arriving draws as a link: `[text` and `[text](https://ex` are parsed with their
-//!   `](…)` or `)` added, so its brackets never show. A `[` that turns out not to start a link
+//!   `](…)` or `)` added, so its brackets never show; `[text][lab`, a reference whose label is
+//!   still arriving, draws its text as a link and no label. A `[` that turns out not to start a link
 //!   (`[x] done`, `[1]`) shows as written once the next character after its `]` says so.
 //! - A run of markers at the very end, which may yet open or close a span (`and **`), is left
 //!   out until the next character says which.
@@ -188,6 +189,19 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
                                 Some(q @ (b'"' | b'\'')) if !title.is_some_and(|t| t.len() > 1 && t.ends_with(q as char)) => q,
                                 _ => b'(',
                             };
+                            break;
+                        }
+                    },
+                    // A reference (`[text][label]`): with its label still arriving, its text
+                    // draws as the link it is about to be, and the label not at all.
+                    Some(b'[') => match run[i + 2..].find(']') {
+                        Some(j) => {
+                            stack.remove(p);
+                            i += 2 + j + 1;
+                        }
+                        None => {
+                            stack.truncate(p + 1);
+                            cut = i;
                             break;
                         }
                     },

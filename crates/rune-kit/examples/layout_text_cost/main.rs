@@ -29,7 +29,8 @@
 //!   (`Markdown::streaming`, word reveal on, the scroll view stuck to its end).
 //!   `md-stream-para` is one paragraph of `--kb`, `md-stream-fence` one open Rust fence, and
 //!   `md-stream-colon` the note after a fence whose code holds `]:`. `md-stream-parse` grows
-//!   the note through `parse_cached` alone, with no view. Each also prints `case:first` and
+//!   the note through `parse_cached` alone, with no view, and `md-parse` parses the whole note
+//!   from nothing (`cpu_ms` per parse; `--kb` over it is the parser's throughput). Each also prints `case:first` and
 //!   `case:last`, the first and last quarter of its frames: a cost that grows with the document
 //!   shows as the gap between them.
 //!
@@ -45,7 +46,9 @@
 //!
 //! CARGO_PROFILE_PERF_DEBUG=limited cargo build --profile perf -p rune-kit \
 //!   --example layout_text_cost --features markdown,frame-profile
-//! target/perf/examples/layout_text_cost [--case stack,list] [--kb 50] [--mode time|sample|heap] [--out FILE] [--repeat N]
+//! target/perf/examples/layout_text_cost [--case stack,list] [--kb 50] [--file NOTE.md] [--mode time|sample|heap] [--out FILE] [--repeat N]
+//!
+//! `--file` gives the Markdown cases that document in place of the generated note.
 mod probe;
 
 use std::borrow::Cow;
@@ -59,7 +62,7 @@ use rune_kit::{Badge, Button, ButtonVariant, Card, Kit, Markdown, MarkdownStyle,
 static ALLOC: probe::Probe = probe::Probe;
 
 const CASES: &[&str] = &["stack", "stack-same", "list", "edit", "md-resize", "md-resize-live", "md-same", "md-open", "md-virtual", "md-beside", "tree", "vlist-resize", "vlist-resize-live", "memo-chat",
-    "md-stream", "md-stream-para", "md-stream-fence", "md-stream-colon", "md-stream-parse"];
+    "md-stream", "md-stream-para", "md-stream-fence", "md-stream-colon", "md-stream-parse", "md-parse"];
 const METRICS: &[&str] = &["cpu_ms", "view_ms", "commit_ms", "layout_ms", "text_ms", "paint_ms", "apply_ms", "allocs", "alloc_bytes", "shaped", "rebroken", "nodes", "view_runs"];
 thread_local! {
     static VIEWS: Cell<usize> = const { Cell::new(0) };
@@ -512,9 +515,9 @@ fn census<S: 'static>(rt: &Runtime<S>, case: &str, heap0: i64) -> String {
     format!("case={case} nodes={} texts={texts} heap={}", rt.stats.layout_nodes, probe::live_bytes() - heap0)
 }
 
-fn run(case: &str, tag: u32, kb: usize, meta: &mut Vec<String>) -> Vec<Vec<f64>> {
+fn run(case: &str, tag: u32, kb: usize, file: Option<&str>, meta: &mut Vec<String>) -> Vec<Vec<f64>> {
     let heap0 = probe::live_bytes();
-    let src = note(kb * 1024);
+    let src = file.map_or_else(|| note(kb * 1024), |f| std::fs::read_to_string(f).expect("--file FILE"));
     match case {
         "stack" | "stack-same" => {
             let mut rt = runtime(stack_state(), stack_view, (900.0, 900.0));
@@ -617,6 +620,13 @@ fn run(case: &str, tag: u32, kb: usize, meta: &mut Vec<String>) -> Vec<Vec<f64>>
                 }
             })).collect()
         }
+        "md-parse" => (0..200).map(|_| {
+            let cpu0 = rune::thread_cpu_ms();
+            std::hint::black_box(rune_kit::markdown::parse(std::hint::black_box(&src)));
+            let mut v = vec![0.0; METRICS.len()];
+            v[0] = rune::thread_cpu_ms() - cpu0;
+            v
+        }).collect(),
         "md-stream-parse" => {
             let mut row = |end: usize| {
                 let (allocs0, bytes0, cpu0) = (probe::allocations(), probe::allocated_bytes(), rune::thread_cpu_ms());
@@ -628,7 +638,7 @@ fn run(case: &str, tag: u32, kb: usize, meta: &mut Vec<String>) -> Vec<Vec<f64>>
             chunks(&src).map(&mut row).collect()
         }
         c if c.starts_with("md-stream") => {
-            let src = stream_source(c, kb * 1024);
+            let src = if file.is_some() { src } else { stream_source(c, kb * 1024) };
             let mut rt = runtime(Stream { src: src.clone(), shown: 0, style: MarkdownStyle::neutral(true) }, stream_view, (900.0, 900.0));
             let rows = chunks(&src).map(|end| timed(&mut rt, tag, |rt| rt.update(|s, _| s.shown = end))).collect();
             meta.push(census(&rt, case, heap0));
@@ -645,6 +655,7 @@ fn main() {
     probe::init(mode == "heap");
     let repeat: usize = value("--repeat").map_or(1, |s| s.parse().expect("--repeat N"));
     let kb: usize = value("--kb").map_or(50, |s| s.parse().expect("--kb 50"));
+    let file = value("--file");
     let cases: Vec<String> = value("--case").map_or(CASES.iter().map(|c| c.to_string()).collect(), |c| c.split(',').map(String::from).collect());
     if cfg!(debug_assertions) { eprintln!("layout_text_cost: debug build; time a --profile perf build"); }
     let sampler = (mode == "sample").then(|| probe::Sampler::start(200));
@@ -653,7 +664,7 @@ fn main() {
     for (i, case) in cases.iter().enumerate() {
         let tag = i as u32 + 1;
         tags.push((tag, case.clone()));
-        let runs: Vec<_> = (0..repeat).map(|_| run(case, tag, kb, &mut meta)).collect();
+        let runs: Vec<_> = (0..repeat).map(|_| run(case, tag, kb, file.as_deref(), &mut meta)).collect();
         report(case, &runs.concat());
         if case.starts_with("md-stream") {
             let quarter = |last: bool| runs.iter().flat_map(|r| {
