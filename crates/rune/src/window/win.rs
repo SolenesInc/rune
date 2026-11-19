@@ -333,6 +333,14 @@ impl Win {
         self.stop_pacing();
     }
 
+    /// Whether the window's next frame would wait for a display tick rather than draw at once.
+    pub(super) fn frame_waits(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.native.pacing.as_ref().is_some_and(|p| p.frame_waits(Instant::now()));
+        #[cfg(not(target_os = "macos"))]
+        false
+    }
+
     /// The user pressed a key in the window.
     pub(super) fn key_pressed(&mut self) {
         #[cfg(target_os = "macos")]

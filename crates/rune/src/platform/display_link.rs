@@ -201,6 +201,12 @@ impl DisplayLink {
         self.callback.target.store(0, Ordering::Relaxed);
     }
 
+    /// Whether a frame asked for now would wait for a tick: the last one may still be on its
+    /// way to the display (`rested`).
+    pub(crate) fn frame_waits(&self, now: Instant) -> bool {
+        !rested(self.last_present, self.last_target, now, self.frame_period())
+    }
+
     /// The user pressed a key: until `TYPING` passes, the link runs on between frames.
     pub(crate) fn key(&mut self, at: Instant) { self.last_key = Some(at); }
 
