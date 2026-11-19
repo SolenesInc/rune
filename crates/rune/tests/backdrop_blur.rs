@@ -1,7 +1,7 @@
 //! `El::backdrop_blur`: an element blurs what is drawn behind it in the same window, inside its
 //! rounded rect and clip, under its fill.
 use rune::render::{Gpu, KIND_BACKDROP_BLUR, KIND_LAYER, OFFSCREEN_FORMAT, Offscreen, Renderer};
-use rune::{Color, Cx, El, Env, Runtime, ScrollSpec, col, el, row};
+use rune::{Color, Cx, El, Env, Runtime, ScrollSpec, Transition, col, el, row};
 
 const RED: Color = Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 };
 const BLUE: Color = Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 };
@@ -250,4 +250,40 @@ fn inside_a_layer_the_blur_reads_the_layer() {
     let px = pixels(&gpu, &mut rt, (200, 120));
     assert!(spread(&px, 200, 60, 60, 140) <= 3, "blurred inside: {}", spread(&px, 200, 60, 60, 140));
     assert!(spread(&px, 200, 10, 60, 140) > 60, "faded stripes outside");
+}
+
+#[test]
+fn a_blur_reads_as_layered_inside_a_layer_and_not_under_its_own_fade() {
+    let mut rt = Runtime::new(Grouped, grouped, (200.0, 120.0), Env::new(false, 1.0));
+    rt.frame(0.0);
+    assert_eq!(rt.layered_backdrop_blurs.len(), 1, "inside a half-faded group");
+    let faded = Bar { opacity: 0.5, ..BAR };
+    let mut rt = Runtime::new(Scene { bars: vec![faded], blur: true }, stripes, (200.0, 120.0), Env::new(false, 1.0));
+    rt.frame(0.0);
+    assert!(rt.layered_backdrop_blurs.is_empty(), "its own fade blurs the window: {:?}", rt.layered_backdrop_blurs);
+}
+
+#[derive(Default)]
+struct Opening {
+    open: bool,
+}
+
+/// A group that holds a blurred backdrop and a panel, fading in as it opens.
+fn opening(s: &Opening, _: &mut Cx<Opening>) -> El {
+    let group = el().key("group").absolute(0.0, 0.0).size(200.0, 120.0).transition(Transition::opacity())
+        .child(el().key("scrim").absolute(0.0, 0.0).size(200.0, 120.0).backdrop_blur(4.0).fill(Color::BLACK.alpha(0.5)))
+        .child(el().key("panel").absolute(40.0, 30.0).size(120.0, 60.0).fill(Color::WHITE));
+    el().size(200.0, 120.0).fill(Color::WHITE).children(s.open.then_some(group))
+}
+
+#[test]
+fn a_blur_under_a_fading_group_reads_as_layered_from_the_fades_first_frame() {
+    let mut rt = Runtime::new(Opening::default(), opening, (200.0, 120.0), Env::new(false, 1.0));
+    rt.frame(0.0);
+    rt.update(|s, _| s.open = true);
+    rt.frame(0.0);
+    assert_eq!(rt.layered_backdrop_blurs.len(), 1, "the fade's first frame");
+    rt.settle_all();
+    rt.frame(0.0);
+    assert!(rt.layered_backdrop_blurs.is_empty(), "at rest: {:?}", rt.layered_backdrop_blurs);
 }

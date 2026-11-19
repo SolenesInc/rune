@@ -2,6 +2,16 @@
 use super::*;
 
 impl RuntimeCore {
+    /// Whether an ancestor of node `i` is fading, or rests part-way faded.
+    fn ancestor_fades(&self, i: usize) -> bool {
+        let store = self.scene.store();
+        std::iter::successors(self.nodes[i].parent, |&j| self.nodes[j].parent).any(|j| {
+            let id = self.nodes[j].id;
+            store.is_animating(id, prop::OPACITY) || store.is_animating(id, prop::PRESENCE)
+                || self.scene.presented(id).is_some_and(|p| p.opacity < 1.0)
+        })
+    }
+
     pub(super) fn build(&mut self) -> bool {
         let (_paint_time, _blend) = (crate::frame::profile::Scope::new(crate::frame::profile::Phase::Paint), crate::theme::scope(self.srgb_blend));
         let s = self.env.scale;
@@ -61,6 +71,7 @@ impl RuntimeCore {
         let vp = [0.0, 0.0, self.viewport.0 * s, self.viewport.1 * s];
         let mut glyph_count = 0usize;
         let mut backdrop_blurs = 0usize;
+        self.layered_backdrop_blurs.clear();
         let mut ambient: Option<f32> = None;
         // Retain scope capacity across frames. Records preserve absolute instance indices
         // for images, video insertions, retained springs and compositor list ranges.
@@ -654,6 +665,9 @@ impl RuntimeCore {
                 .then(|| paint_slots::push_backdrop_blur(&mut self.instances, n.vis.backdrop_blur, ([r[0], r[1], w, h], radii, n.vis_flags.continuous_corners()),
                     (clip, fade, fade_origin), rounded, sc * s, (paint_own * pinh.paint_opacity * n.vis.paint_alpha).clamp(0.0, 1.0)));
             backdrop_blurs += blur_hole.is_some() as usize;
+            if n.vis.backdrop_blur > 0.0 && !skip_paint && visible && (!layers.is_empty() || self.ancestor_fades(i)) {
+                self.layered_backdrop_blurs.push(n.path.clone());
+            }
             // The packed ABI carries one clip rectangle. Preserve a rectangular cut through
             // a rounded corner on a separate outer scope, never recenter the rounded mask.
             if !skip_paint && let Some((mask, _)) = rounded.or(own_round)

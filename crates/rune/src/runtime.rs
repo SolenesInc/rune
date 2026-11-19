@@ -489,6 +489,10 @@ pub struct RuntimeCore {
     secondary: capture::Secondary,
     drag_data: f32,
     pub instances: Vec<Instance>,
+    /// The paths of the backdrop blurs (`El::backdrop_blur`) the last frame painted inside an
+    /// ancestor drawn as one layer, or under an ancestor whose opacity is moving, which a fade
+    /// draws as one: each blurs only what that layer has drawn, not the window behind it.
+    pub layered_backdrop_blurs: Vec<String>,
     /// Per instance, the `El::mark` of its nearest marked node (0 for none). Filled only while
     /// `track_marks` is set (a compositor is attached).
     pub marks: Vec<u32>,
@@ -908,6 +912,7 @@ impl RuntimeCore {
             secondary: Default::default(),
             drag_data: 0.0,
             instances: Vec::new(),
+            layered_backdrop_blurs: Vec::new(),
             marks: Vec::new(),
             track_marks: false,
             surfaces: Vec::new(),
