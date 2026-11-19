@@ -95,10 +95,8 @@ impl Renderer {
                 None => glyph,
             };
         };
-        // Its own size in points, as a browser draws an image's pixels at 1x, up to the text's
-        // width and the prose measure of the paragraph a page holds it in.
-        let widest = (w as f32).min(self.s.prose_measure.unwrap_or(f32::INFINITY));
-        let mut e = el().role("image").label(if alt.is_empty() { "Image preview" } else { alt }).w_full().max_w(widest).pixels(picture.pixels()).radius(4.0).cursor(Cursor::ZoomIn);
+        // Its own size in points, as a browser draws an image's pixels at 1x, up to the text's width.
+        let mut e = el().role("image").label(if alt.is_empty() { "Image preview" } else { alt }).w_full().max_w(w as f32).pixels(picture.pixels()).radius(4.0).cursor(Cursor::ZoomIn);
         if !title.is_empty() {
             e = e.help(title);
         }

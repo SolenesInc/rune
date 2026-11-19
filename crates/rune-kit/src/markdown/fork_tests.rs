@@ -642,7 +642,7 @@ fn an_inline_code_chip_pads_the_fonts_ascent_and_descent_by_its_vertical_pad() {
 }
 
 #[test]
-fn a_prose_measure_caps_top_level_prose_while_tables_code_and_front_matter_take_the_column() {
+fn a_prose_measure_centers_top_level_prose_at_the_measure_while_tables_code_and_front_matter_take_the_column() {
     const MEASURE: f32 = 760.0;
     let src = "---\ntitle: Plan\n---\n# Heading\n\nA paragraph long enough to wrap if it had to, and then some more words after that.\n\n- an item\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```rust\nfn main() {}\n```\n\n---\n\n![Wide](wide.png)\n";
     fn view((src, column): &(String, f32), _: &mut Cx<(String, f32)>) -> El {
@@ -667,11 +667,13 @@ fn a_prose_measure_caps_top_level_prose_while_tables_code_and_front_matter_take_
             .map(|i| {
                 let key = format!("b{i}");
                 let e = elements.iter().find(|e| e.key.as_deref() == Some(key.as_str())).unwrap_or_else(|| panic!("no {key}"));
-                e.rect[2].round()
+                (e.rect[0].round(), e.rect[2].round())
             })
             .collect::<Vec<_>>()
     };
     // Front matter, heading, paragraph, list, quote, table, code, rule and a picture 1200 wide.
-    assert_eq!(widths(1600.0), [1600.0, MEASURE, MEASURE, MEASURE, MEASURE, 1600.0, 1600.0, 1600.0, MEASURE]);
-    assert_eq!(widths(500.0), [500.0; 9]);
+    let prose = ((1600.0 - MEASURE) / 2.0, MEASURE);
+    let column = (0.0, 1600.0);
+    assert_eq!(widths(1600.0), [column, prose, prose, prose, prose, column, column, column, (200.0, 1200.0)]);
+    assert_eq!(widths(500.0), [(0.0, 500.0); 9]);
 }

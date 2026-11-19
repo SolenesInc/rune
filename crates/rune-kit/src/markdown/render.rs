@@ -157,10 +157,15 @@ fn block_key(i: usize, keys: &[String], used: &mut Vec<String>) -> String {
 }
 
 /// Whether `b` keeps [`MarkdownStyle::prose_measure`] at the top level: the blocks a reader
-/// reads line by line, not the tables, code, diagrams and front matter that want the room. An
-/// image takes the measure as its own widest ([`Renderer::image`]).
+/// reads line by line, not the tables, code, diagrams, pictures and front matter that want the room.
 fn measured(b: &Block) -> bool {
     matches!(b, Block::Para(_) | Block::Heading(..) | Block::List { .. } | Block::Quote(_) | Block::Alert(..))
+}
+
+/// Whether `b` sits centered in a column that keeps a [`MarkdownStyle::prose_measure`]: the
+/// measured prose, and a picture narrower than the column.
+fn centered(b: &Block) -> bool {
+    measured(b) || matches!(b, Block::Image { .. })
 }
 
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
@@ -525,10 +530,11 @@ impl Renderer {
             let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
             self.flow.set(flow);
             let drawn = match measure {
-                Some(measure) => drawn.max_w(measure),
+                Some(measure) => drawn.w_full().max_w(measure),
                 None => drawn,
             };
             let drawn = if prose { bidi::directed(drawn, own.or(last)) } else { drawn };
+            let drawn = if top_level && self.s.prose_measure.is_some() && centered(b) { drawn.self_center() } else { drawn };
             if own.is_some() {
                 last = own;
             }
