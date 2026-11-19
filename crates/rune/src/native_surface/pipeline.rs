@@ -269,7 +269,7 @@ impl SurfaceRenderer {
     fn pipeline_with(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, format: wgpu::TextureFormat, blend: wgpu::BlendState) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("video"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("video.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(format!("{}\n{}", crate::render::CLIP_WGSL, include_str!("video.wgsl")).into()),
         });
         let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("video"),
