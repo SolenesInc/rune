@@ -25,6 +25,13 @@
 //!   one layout read; each frame bumps one row's count and keeps that row on screen.
 //! - `memo-chat`: a three-pane workspace — a sidebar of 300 memo'd rows, an item page of memo'd
 //!   Markdown sections, and a chat of memo'd `virtual_rows` whose composer input changes per keystroke.
+//! - `md-stream`: the Markdown note arriving 256 bytes a frame, as a reply streams
+//!   (`Markdown::streaming`, word reveal on, the scroll view stuck to its end).
+//!   `md-stream-para` is one paragraph of `--kb`, `md-stream-fence` one open Rust fence, and
+//!   `md-stream-colon` the note after a fence whose code holds `]:`. `md-stream-parse` grows
+//!   the note through `parse_cached` alone, with no view. Each also prints `case:first` and
+//!   `case:last`, the first and last quarter of its frames: a cost that grows with the document
+//!   shows as the gap between them.
 //!
 //! `--mode time` (default) prints `METRIC case=.. metric=.. median=.. p95=.. mean=..` per measurement,
 //! and again as `case=..:commit` over only the frames that committed when not all of them did;
@@ -51,7 +58,8 @@ use rune_kit::{Badge, Button, ButtonVariant, Card, Kit, Markdown, MarkdownStyle,
 #[global_allocator]
 static ALLOC: probe::Probe = probe::Probe;
 
-const CASES: &[&str] = &["stack", "stack-same", "list", "edit", "md-resize", "md-resize-live", "md-same", "md-open", "md-virtual", "md-beside", "tree", "vlist-resize", "vlist-resize-live", "memo-chat"];
+const CASES: &[&str] = &["stack", "stack-same", "list", "edit", "md-resize", "md-resize-live", "md-same", "md-open", "md-virtual", "md-beside", "tree", "vlist-resize", "vlist-resize-live", "memo-chat",
+    "md-stream", "md-stream-para", "md-stream-fence", "md-stream-colon", "md-stream-parse"];
 const METRICS: &[&str] = &["cpu_ms", "view_ms", "commit_ms", "layout_ms", "text_ms", "paint_ms", "apply_ms", "allocs", "alloc_bytes", "shaped", "rebroken", "nodes", "view_runs"];
 thread_local! {
     static VIEWS: Cell<usize> = const { Cell::new(0) };
@@ -216,6 +224,50 @@ struct Md { src: String, style: MarkdownStyle }
 fn md_view(s: &Md, _: &mut Cx<Md>) -> El {
     view_ran();
     scroller(col().w_full().px(32.0).py(24.0).child(Markdown::new(s.src.as_str()).render(&s.style)))
+}
+
+// md-stream*
+
+const CHUNK: usize = 256;
+
+struct Stream { src: String, shown: usize, style: MarkdownStyle }
+
+fn stream_view(s: &Stream, _: &mut Cx<Stream>) -> El {
+    view_ran();
+    let md = Markdown::new(&s.src[..s.shown]).streaming(true).reveal(0.18).render(&s.style);
+    col().w_full().h_full().fill(BG).child(
+        col().key("viewport").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: true })
+            .child(col().w_full().px(32.0).py(24.0).child(md)),
+    )
+}
+
+/// What a `md-stream*` case streams, at least `bytes` long.
+fn stream_source(case: &str, bytes: usize) -> String {
+    let mut r = Rng(0x2545_f491_4f6c_dd1d);
+    match case {
+        "md-stream-para" => {
+            let mut out = String::new();
+            while out.len() < bytes { out += &r.words(12); out += " "; }
+            out
+        }
+        "md-stream-fence" => {
+            let mut out = String::from("```rust\n");
+            let mut i = 0;
+            while out.len() < bytes {
+                let (name, call) = (WORDS[r.next(WORDS.len())], WORDS[r.next(WORDS.len())]);
+                out += &format!("    let {name}_{i} = {call}(\"{}\");\n", r.words(2));
+                i += 1;
+            }
+            out
+        }
+        "md-stream-colon" => format!("```ts\nconst seen = {{ [key]: 1 }};\n```\n\n{}", note(bytes)),
+        _ => note(bytes),
+    }
+}
+
+/// The end of each chunk of `src`.
+fn chunks(src: &str) -> impl Iterator<Item = usize> + '_ {
+    (1..=src.len().div_ceil(CHUNK)).map(|i| src.floor_char_boundary((i * CHUNK).min(src.len())))
 }
 
 // md-virtual, md-beside
@@ -565,6 +617,23 @@ fn run(case: &str, tag: u32, kb: usize, meta: &mut Vec<String>) -> Vec<Vec<f64>>
                 }
             })).collect()
         }
+        "md-stream-parse" => {
+            let mut row = |end: usize| {
+                let (allocs0, bytes0, cpu0) = (probe::allocations(), probe::allocated_bytes(), rune::thread_cpu_ms());
+                std::hint::black_box(rune_kit::markdown::parse_cached(&src[..end]));
+                let mut v = vec![0.0; METRICS.len()];
+                (v[0], v[7], v[8]) = (rune::thread_cpu_ms() - cpu0, (probe::allocations() - allocs0) as f64, (probe::allocated_bytes() - bytes0) as f64);
+                v
+            };
+            chunks(&src).map(&mut row).collect()
+        }
+        c if c.starts_with("md-stream") => {
+            let src = stream_source(c, kb * 1024);
+            let mut rt = runtime(Stream { src: src.clone(), shown: 0, style: MarkdownStyle::neutral(true) }, stream_view, (900.0, 900.0));
+            let rows = chunks(&src).map(|end| timed(&mut rt, tag, |rt| rt.update(|s, _| s.shown = end))).collect();
+            meta.push(census(&rt, case, heap0));
+            rows
+        }
         other => panic!("unknown case {other}; one of {CASES:?}"),
     }
 }
@@ -584,8 +653,16 @@ fn main() {
     for (i, case) in cases.iter().enumerate() {
         let tag = i as u32 + 1;
         tags.push((tag, case.clone()));
-        let rows: Vec<_> = (0..repeat).flat_map(|_| run(case, tag, kb, &mut meta)).collect();
-        report(case, &rows);
+        let runs: Vec<_> = (0..repeat).map(|_| run(case, tag, kb, &mut meta)).collect();
+        report(case, &runs.concat());
+        if case.starts_with("md-stream") {
+            let quarter = |last: bool| runs.iter().flat_map(|r| {
+                let n = (r.len() / 4).max(1);
+                if last { r[r.len() - n..].to_vec() } else { r[..n].to_vec() }
+            }).collect::<Vec<_>>();
+            summarize(&format!("{case}:first"), &quarter(false));
+            summarize(&format!("{case}:last"), &quarter(true));
+        }
     }
     for m in &meta { println!("CENSUS {m}"); }
     // How often a word repeats: the ceiling on what a per-word shaping cache could reuse.

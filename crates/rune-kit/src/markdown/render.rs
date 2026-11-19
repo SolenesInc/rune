@@ -256,6 +256,9 @@ fn shift_past(tabs: &Tabs, b: usize) -> usize {
     }
 }
 
+/// How many lines of a code block share one text (see [`Renderer::code`]).
+pub(super) const CODE_GROUP_LINES: usize = 32;
+
 fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, (presses, strikes): (Vec<(Range<usize>, String)>, Vec<Range<usize>>), style: TextStyle) -> El {
     let (shown, tabs) = tabs_padded(code, style);
     let shift = |b: u32| shift_past(&tabs, b as usize) as u32;
@@ -516,7 +519,15 @@ impl Renderer {
             None => (s.code_block_fill, s.code_block_border, s.code_text.unwrap_or(s.text)),
         };
         let spans = if shell.is_some() { Vec::new() } else { self.syntax_spans(code, source) };
-        let body = self.wire_presses(self.with_reveal(tabbed(code, spans, highlights, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2), any);
+        // Texts of `CODE_GROUP_LINES` lines each, so a block still arriving shapes its newest
+        // lines and not all of them. A shorter block is one text.
+        let body = self.with_reveal(tabbed(code, spans, highlights, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2);
+        let wide = self.scroll_wide;
+        let body = body.line_groups(CODE_GROUP_LINES).into_iter().enumerate().map(|(k, g)| {
+            let g = self.select(self.wire_presses(g, any));
+            let g = if wide { g } else { g.w_full() };
+            if k == 0 { g } else { g.key(format!("g{k}")) }
+        });
         // `.highlights`' `border: 0.5px` takes its device pixel each side, inside which the padding sits.
         // Code reads left to right in any document, as `markdown.css` isolates it.
         let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(0.5, border).border_layout();
@@ -525,9 +536,9 @@ impl Renderer {
             // padding so lines run to the frame's edge.
             let viewport = col().key("scroll").w_full().scroll_x();
             let viewport = if s.wide_fade > 0.0 { viewport.scroll_edge_fade(s.wide_fade) } else { viewport };
-            return frame.child(viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body))));
+            return frame.child(viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).children(body)));
         }
-        frame.px(s.code_block_pad[0]).py(s.code_block_pad[1]).child(self.select(body.w_full()))
+        frame.px(s.code_block_pad[0]).py(s.code_block_pad[1]).children(body)
     }
 
     /// Colour-only spans, so highlighting never moves a glyph: a block streaming in draws its

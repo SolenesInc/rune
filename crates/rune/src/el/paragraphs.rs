@@ -64,6 +64,104 @@ impl El {
         self.children = pieces.into_iter().chain(kept).collect();
         self
     }
+
+    /// This text as texts of `lines` lines each (a line being what a newline ends), to stack
+    /// in a column in place of it: a change to one line then shapes that line's text, not the
+    /// whole one, so a long text that grows a line at a time (a code block streaming in) costs
+    /// what its newest lines cost. The first is this element with the first lines; the rest are
+    /// new texts with the same font, colour, wrapping, reveal and copy settings. Each takes
+    /// the spans, links, highlights, strikes and uncopied ranges over its own lines, and they
+    /// copy joined by the newlines between them, as [`El::dir_by_paragraph`]'s paragraphs do.
+    /// Stacked with no gap they keep the one text's line pitch.
+    ///
+    /// Call it on the text itself, before its size, key, selection and handlers: each text
+    /// returned takes its own. A text of `lines` lines or fewer comes back as it is, alone, and
+    /// growing past that adds texts after it without changing it. So does a secure, live,
+    /// truncated or line-clamped text, one that is a field's, and one with pills or blocks.
+    pub fn line_groups(mut self, lines: usize) -> Vec<El> {
+        let Some(t) = self.text.as_mut() else { return vec![self] };
+        let whole = lines == 0 || self.cold.input.is_some() || t.redacted || t.truncate || t.truncate_fade || t.max_lines > 0 || t.source.is_some()
+            || t.cold.live.is_some() || t.cold.advance_in.is_some()
+            || !(t.cold.blocks.is_empty() && t.cold.soft_breaks.is_empty() && t.cold.pills.is_empty() && t.cold.isolates.is_empty());
+        if whole {
+            return vec![self];
+        }
+        // Each group's bytes, the newline between two groups left out. A newline that ends the
+        // text stays in the last group, which lays it out as the one text did.
+        let mut groups: Vec<(u32, u32)> = Vec::new();
+        let (mut start, mut seen) = (0, 0);
+        for (i, _) in t.content.bytes().enumerate().filter(|&(_, b)| b == b'\n') {
+            seen += 1;
+            if seen % lines == 0 && i + 1 < t.content.len() {
+                groups.push((start as u32, i as u32));
+                start = i + 1;
+            }
+        }
+        if groups.is_empty() {
+            return vec![self];
+        }
+        groups.push((start as u32, t.content.len() as u32));
+        // The parts of `s..e` in each group it reaches, as that group's bytes.
+        let parts = |s: u32, e: u32| {
+            let first = groups.partition_point(|g| g.1 <= s);
+            groups[first..].iter().enumerate().take_while(move |(_, g)| g.0 < e).filter_map(move |(k, g)| {
+                let (a, b) = (s.max(g.0), e.min(g.1));
+                (a < b).then_some((first + k, a - g.0, b - g.0))
+            })
+        };
+        let content = std::mem::take(&mut t.content);
+        let spans = std::mem::take(&mut t.spans);
+        let cold = (!t.cold.is_empty()).then(|| {
+            let c = &mut *t.cold;
+            (std::mem::take(&mut c.links), std::mem::take(&mut c.uncopied), std::mem::take(&mut c.rings), std::mem::take(&mut c.strikes),
+                std::mem::take(&mut c.highlights), c.copy_breaks, c.copy_prefix.take())
+        });
+        t.exact_lines = true;
+        t.shape = None;
+        let last = groups.len() - 1;
+        let mut pieces: Vec<TextSpec> = groups.iter().map(|&(a, b)| {
+            let mut p = (**t).clone();
+            p.content = content[a as usize..b as usize].to_owned();
+            p
+        }).collect();
+        for s in spans {
+            for (k, start, end) in parts(s.start, s.end) {
+                pieces[k].spans.push(crate::text::Span { start, end, ..s.clone() });
+            }
+        }
+        if let Some((links, uncopied, rings, strikes, highlights, breaks, prefix)) = cold {
+            for l in links {
+                for (k, start, end) in parts(l.start, l.end) {
+                    pieces[k].cold.links.push(Link { start, end, ..l.clone() });
+                }
+            }
+            for (s, e) in uncopied {
+                for (k, s, e) in parts(s, e) { pieces[k].cold.uncopied.push((s, e)); }
+            }
+            for (s, e, c, w) in rings {
+                for (k, s, e) in parts(s, e) { pieces[k].cold.rings.push((s, e, c, w)); }
+            }
+            for (s, e, c) in strikes {
+                for (k, s, e) in parts(s, e) { pieces[k].cold.strikes.push((s, e, c)); }
+            }
+            for h in highlights {
+                for (k, start, end) in parts(h.start, h.end) {
+                    pieces[k].cold.highlights.push(crate::text::TextHighlight { start, end, ..h.clone() });
+                }
+            }
+            for (k, p) in pieces.iter_mut().enumerate() {
+                p.cold.copy_breaks = [if k == 0 { breaks[0] } else { 1 }, if k == last { breaks[1] } else { 1 }];
+            }
+            pieces[0].cold.copy_prefix = prefix;
+        }
+        let mut pieces = pieces.into_iter();
+        self.text = pieces.next().map(crate::cold::SharedBox::new);
+        std::iter::once(self).chain(pieces.map(|p| {
+            let mut e = text(String::new());
+            e.text = Some(crate::cold::SharedBox::new(p));
+            e
+        })).collect()
+    }
 }
 
 /// The byte ranges of `content`'s paragraphs, the separators between them left out: a UAX #9
