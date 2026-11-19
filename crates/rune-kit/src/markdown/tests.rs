@@ -21,7 +21,7 @@ fn spans_with(src: &str, style: &MarkdownStyle, highlighter: Highlighter) -> Vec
     let (blocks, sources, tasks, _, _) = doc_cached(src);
     let r = Renderer { s: style.clone(), highlights: Vec::new(), reveal: 0.0, streaming: false, on_link: None, on_highlight: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None, on_task: None, details: None,
         tasks_read_only: false, selectable: false, scroll_wide: false, tentative: None, highlighter, sources: sources.clone(),
-        next_source: Cell::new(0), tasks, next_task: Cell::new(0), current_block_key: RefCell::new("b0".into()),
+        next_source: Cell::new(0), tasks, next_task: Cell::new(0), current_block_key: RefCell::new("b0".into()), kept: None,
         #[cfg(feature = "mermaid")] diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, flow: Cell::default() };
     let mut found = Vec::new();
     codes(&blocks, &mut found);
@@ -263,6 +263,56 @@ fn a_reference_definition_parses_whole() {
     assert_eq!(parse_cached("[x]\n\nsome text\n\n[x]: https://example.com")[0], parse("[x]\n\nsome text\n\n[x]: https://example.com")[0]);
 }
 
+/// Only a definition makes a source parse whole: text that looks like one inside code doesn't,
+/// and a definition that arrives late still links what came before it.
+#[test]
+fn only_a_real_reference_definition_parses_whole() {
+    let code = "```ts\nconst seen = { [key]: 1 };\n```\n\nFirst para.\n\nSecond para, still arriving word by word.";
+    let late = "See [the docs][d] first.\n\nMore text here.\n\n[d]: https://example.com\n\nAfter it.";
+    // From `from` on, each source ends in a paragraph after the part in question.
+    for (doc, from, defined) in [(code, code.find("Second").unwrap() + 1, false), (late, late.find("After").unwrap() + 1, true)] {
+        let mut before = parses();
+        for end in (1..=doc.len()).filter(|&i| doc.is_char_boundary(i)) {
+            if end == from {
+                before = parses();
+            }
+            let src = &doc[..end];
+            assert_eq!(*doc_cached(src).0, parse_doc(src, Reading::LINKED).0, "blocks of {src:?}");
+        }
+        let (whole, tail) = (parses().0 - before.0, parses().1 - before.1);
+        let grown = doc.len() + 1 - from;
+        assert_eq!((whole, tail), if defined { (grown, 0) } else { (0, grown) }, "{doc:?}");
+    }
+}
+
+/// A reply still arriving builds its newest block each time it grows; the blocks above it,
+/// which can't change, are built once.
+#[test]
+fn a_stream_builds_only_its_last_block() {
+    fn view(src: &String, _: &mut rune::Cx<String>) -> El {
+        Markdown::new(src.clone()).streaming(true).reveal(0.18).selectable(true).render(&MarkdownStyle::neutral(true))
+    }
+    let head = "# Title\n\nFirst para.\n\n- one\n- [x] two\n\n```rust\nfn main() {}\n```\n\n> quoted\n\nLast para";
+    let mut rt = rune::Runtime::new(head.to_owned(), view, (400.0, 800.0), rune::Env::default());
+    rt.frame(0.0);
+    for word in [" grows", " and grows", " some more."] {
+        let before = BLOCKS.get();
+        rt.update(|s, _| s.push_str(word));
+        rt.frame(1.0 / 60.0);
+        assert_eq!(BLOCKS.get() - before, 1, "after {word:?}");
+    }
+    // A handler is the app's own, and may have changed: every block builds again.
+    fn linked(src: &String, _: &mut rune::Cx<String>) -> El {
+        Markdown::new(src.clone()).streaming(true).on_link(|_: &mut String, _| {}).render(&MarkdownStyle::neutral(true))
+    }
+    let mut rt = rune::Runtime::new(head.to_owned(), linked, (400.0, 800.0), rune::Env::default());
+    rt.frame(0.0);
+    let before = BLOCKS.get();
+    rt.update(|s, _| s.push_str(" grows"));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(BLOCKS.get() - before, 6);
+}
+
 #[test]
 fn link_spans_come_before_inner_inline_styles_so_bold_em_and_code_keep_theirs() {
     let style = MarkdownStyle::neutral(true);
@@ -274,7 +324,7 @@ fn link_spans_come_before_inner_inline_styles_so_bold_em_and_code_keep_theirs() 
     let Block::Para(inl) = &blocks[0] else { panic!() };
     let r = Renderer { s: style.clone(), highlights: Vec::new(), reveal: 0.0, streaming: false, on_link: None, on_highlight: None, on_link_secondary: None, link_look: Some(look), link_help: None, link_ring: None, code_link: None, on_task: None, details: None,
         tasks_read_only: false, selectable: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(), sources,
-        next_source: Cell::new(0), tasks, next_task: Cell::new(0), current_block_key: RefCell::new("b0".into()),
+        next_source: Cell::new(0), tasks, next_task: Cell::new(0), current_block_key: RefCell::new("b0".into()), kept: None,
         #[cfg(feature = "mermaid")] diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, flow: Cell::default() };
     let spans = r.spans(inl, style.body);
     // The link span is first so `flatten_spans` applies inner Strong/Em/Code over it.

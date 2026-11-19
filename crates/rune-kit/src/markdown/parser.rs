@@ -497,6 +497,14 @@ pub(super) fn parse_doc(src: &str, how: Reading) -> ParsedDoc {
 
 /// [`parse_doc`], and what the source ends inside.
 pub(super) fn parse_doc_tail(src: &str, how: Reading) -> (ParsedDoc, Tail) {
+    let (doc, tail, _) = parse_doc_defs(src, how);
+    (doc, tail)
+}
+
+/// [`parse_doc_tail`], and a hash of the source's link reference definitions (`[label]: url`),
+/// `None` when it has none. A definition is the one thing in a source that changes how blocks
+/// anywhere else in it parse.
+pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Option<u64>) {
     let mut b = Builder {
         stack: vec![(Container::Root, Vec::new(), Vec::new())],
         inline: None,
@@ -518,7 +526,11 @@ pub(super) fn parse_doc_tail(src: &str, how: Reading) -> (ParsedDoc, Tail) {
         tail: Tail::None,
     };
     let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
-    let mut events = super::interrupt::list_interrupts(src, Parser::new_ext(src, opts).into_offset_iter());
+    let parser = Parser::new_ext(src, opts);
+    let mut defs: Vec<(&str, &str, Option<&str>)> = parser.reference_definitions().iter().map(|(label, d)| (label, &*d.dest, d.title.as_deref())).collect();
+    defs.sort_unstable();
+    let defs = (!defs.is_empty()).then(|| hash_of(&defs));
+    let mut events = super::interrupt::list_interrupts(src, parser.into_offset_iter());
     while let Some((ev, range)) = events.next() {
         let starts_block = matches!(
             ev,
@@ -780,7 +792,7 @@ pub(super) fn parse_doc_tail(src: &str, how: Reading) -> (ParsedDoc, Tail) {
     if src.lines().next().is_some_and(|l| l.trim_end() == "---") && !matches!(blocks.first(), Some(Block::FrontMatter(_))) {
         b.cuts.retain(|c| c.at == 0);
     }
-    ((blocks, b.sources, b.tasks, b.cuts, b.block_starts, maps), b.tail)
+    ((blocks, b.sources, b.tasks, b.cuts, b.block_starts, maps), b.tail, defs)
 }
 
 fn code_block(text: String, fence: &Fence) -> Block {

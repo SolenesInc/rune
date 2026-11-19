@@ -17,11 +17,22 @@
 //! markers) mean the same in the parse. A finished document never comes here.
 
 use super::*;
-use super::parser::{ParsedDoc, Scope, Tail, parse_doc_tail};
+use super::parser::{ParsedDoc, Scope, Tail, parse_doc_defs};
 
 /// [`parse_doc`] of `src` as a stream's current text.
 pub(super) fn parse_streaming(src: &str, how: Reading) -> ParsedDoc {
-    let (raw, tail) = parse_doc_tail(src, how);
+    parse_streaming_defs(src, how).0
+}
+
+/// [`parse_streaming`], and the hash of the source's reference definitions (see
+/// [`parse_doc_defs`]). The tail's patch never adds or ends a definition: it closes inline
+/// spans, and a definition is a block of its own.
+pub(super) fn parse_streaming_defs(src: &str, how: Reading) -> (ParsedDoc, Option<u64>) {
+    let (raw, tail, defs) = parse_doc_defs(src, how);
+    (settle(src, how, raw, tail), defs)
+}
+
+fn settle(src: &str, how: Reading, raw: ParsedDoc, tail: Tail) -> ParsedDoc {
     let end = held_table(src, tail, raw.0.last()).unwrap_or(src.len());
     let patch = match tail {
         Tail::Inline(start, scope) if start < end => close_tail(&src[start..end], start, scope),

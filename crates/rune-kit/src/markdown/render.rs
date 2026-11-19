@@ -32,6 +32,11 @@ pub(super) struct Renderer {
     /// The next of `tasks`, advanced at each list item in document order.
     pub(super) next_task: Cell<usize>,
     pub(super) current_block_key: RefCell<Rc<str>>,
+    /// When a top-level block's element can be kept from one build to the next: a digest of
+    /// everything but the block that decides what it draws, and each block's own digest
+    /// ([`cache::Parsed::digests`]). `None` when a block's element holds what a digest can't
+    /// tell apart: an app's handlers or frames.
+    pub(super) kept: Option<((u64, u64), Rc<[Option<(u64, u64)>]>)>,
     /// `Markdown::diagram_frame`.
     #[cfg(feature = "mermaid")]
     pub(super) diagram_frame: Option<FrameWire>,
@@ -253,6 +258,20 @@ fn shift_past(tabs: &Tabs, b: usize) -> usize {
     match tabs.partition_point(|t| t.0 < b) {
         0 => b,
         n => b + tabs[n - 1].3,
+    }
+}
+
+/// How many of the renderer's sources and tasks building `b` takes (see
+/// [`Renderer::next_source`] and [`Renderer::next_task`]), or `None` for a block whose element
+/// is more than its source says: a diagram, which draws itself in over time.
+fn spent(b: &Block) -> Option<(usize, usize)> {
+    let all = |blocks: &[Block]| blocks.iter().try_fold((0, 0), |n, b| spent(b).map(|m| (n.0 + m.0, n.1 + m.1)));
+    match b {
+        Block::Code(_) => Some((1, 0)),
+        Block::Mermaid(_) => None,
+        Block::List { items, .. } => items.iter().try_fold((0, items.len()), |n, item| all(item).map(|m| (n.0 + m.0, n.1 + m.1))),
+        Block::Quote(inner) | Block::Alert(_, inner) | Block::Details { body: inner, .. } => all(inner),
+        _ => Some((0, 0)),
     }
 }
 
@@ -494,12 +513,39 @@ impl Renderer {
             }
             let own = bidi::blocks_dir(std::slice::from_ref(b));
             let prose = !matches!(b, Block::Code(_) | Block::Diff(_) | Block::Mermaid(_) | Block::Image { .. } | Block::Rule);
-            let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
-            let drawn = if prose { bidi::directed(drawn, own.or(last)) } else { drawn };
+            let dir = own.or(last).filter(|_| prose);
+            let build = |key: String| {
+                #[cfg(test)]
+                if top_level {
+                    BLOCKS.with(|n| n.set(n.get() + 1));
+                }
+                bidi::directed(self.block(b, maps.get(i).unwrap_or(&empty)), dir).key(key).mt(top)
+            };
+            // A block that can't change any more is built once: the blocks above a stream's
+            // last cost a lookup each time it grows, so a reply costs what its newest block
+            // costs. The last block of a stream changes with every chunk, so it always builds.
+            let digest = self.kept.as_ref().filter(|_| top_level && !(self.streaming && i + 1 == blocks.len()))
+                .and_then(|(all, each)| Some((all, each.get(i).copied().flatten()?)));
+            let drawn = match (digest, spent(b)) {
+                (Some((all, own)), Some((sources, tasks))) => {
+                    let (s0, t0) = (self.next_source.get(), self.next_task.get());
+                    let h = rune::memo::digest(&(all, own, &key, top.to_bits(), dir));
+                    let drawn = rune::memo::cached(h, || {
+                        let drawn = build(key);
+                        debug_assert_eq!((self.next_source.get() - s0, self.next_task.get() - t0), (sources, tasks), "`spent` counts what a block's build takes");
+                        drawn
+                    });
+                    // A kept block's build didn't run: what it would have taken is still spent.
+                    self.next_source.set(s0 + sources);
+                    self.next_task.set(t0 + tasks);
+                    drawn
+                }
+                _ => build(key),
+            };
             if own.is_some() {
                 last = own;
             }
-            c = c.child(drawn.key(key).mt(top));
+            c = c.child(drawn);
             prev_mb = mb;
             after_heading = matches!(b, Block::Heading(..));
         }

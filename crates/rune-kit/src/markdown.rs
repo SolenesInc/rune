@@ -16,7 +16,11 @@
 //! **Cost.** [`parse_cached`] keeps the parse of every source string the last two commits drew
 //! (and others up to a memory budget), so re-rendering unchanged text (every frame of an
 //! animation, a transcript of any length) parses nothing. A growing stream parses only from the
-//! start of its last top-level block each time it grows.
+//! start of its last top-level block each time it grows, unless it holds a link reference
+//! definition (`[label]: url`), which can change links anywhere and so parses whole. It builds
+//! only that last block too: each block above it keeps its element, found by a digest of its
+//! source and the style, as long as nothing of the app's is in it (no handler, frame, image
+//! source, highlighter or highlight). With any of those, every block builds each time.
 //!
 //! **Keys.** Top-level blocks are keyed `b{index}` (or by [`Markdown::block_keys`]), list items
 //! `i{index}` and their blocks by `b{index}` inside the item. Appending to a stream only ever
@@ -299,6 +303,8 @@ pub struct Markdown {
 #[cfg(test)]
 thread_local! {
     static RENDERS: Cell<usize> = const { Cell::new(0) };
+    /// Top-level blocks built.
+    static BLOCKS: Cell<usize> = const { Cell::new(0) };
 }
 
 impl Markdown {
@@ -558,8 +564,8 @@ impl Markdown {
 
     /// Builds with `style`, for apps without a [`Kit`] (see [`MarkdownStyle::neutral`]).
     pub fn render(self, style: &MarkdownStyle) -> El {
-        let can_cache = !self.streaming
-            && self.on_link.is_none()
+        // Nothing of the app's is in what it builds: no handler, frame or highlighter.
+        let pure = self.on_link.is_none()
             && self.on_highlight.is_none()
             && self.on_link_secondary.is_none()
             && self.link_look.is_none()
@@ -576,9 +582,8 @@ impl Markdown {
             && self.link_favicon.is_none()
             && self.images.is_none()
             && self.on_image.is_none()
-            && self.text_links.is_none()
-            && !(cfg!(feature = "mermaid") && self.src.contains("mermaid"));
-        if can_cache {
+            && self.text_links.is_none();
+        if pure && !self.streaming && !(cfg!(feature = "mermaid") && self.src.contains("mermaid")) {
             let h = rune::memo::digest(&(
                 &self.src,
                 style,
@@ -591,17 +596,24 @@ impl Markdown {
                 self.scroll_wide,
                 self.tentative,
             ));
-            return rune::memo::cached(h, || self.render_uncached(style));
+            return rune::memo::cached(h, || self.render_uncached(style, pure));
         }
-        self.render_uncached(style)
+        self.render_uncached(style, pure)
     }
 
-    fn render_uncached(self, style: &MarkdownStyle) -> El {
+    fn render_uncached(self, style: &MarkdownStyle, pure: bool) -> El {
         #[cfg(test)]
         RENDERS.with(|n| n.set(n.get() + 1));
         let how = Reading { autolink: self.autolink, smart: self.smart };
+        let mut kept = None;
         let (blocks, sources, tasks, starts, maps) = if self.autolink {
-            cache::doc_as(&self.src, how, self.streaming)
+            let parsed = cache::parsed_as(&self.src, how, self.streaming);
+            // Highlights are ranges of the whole source, which a block's own digest can't see.
+            if pure && self.highlights.is_empty() {
+                let all = rune::memo::digest(&(style, how, parsed.defs, self.reveal.to_bits(), self.tasks_read_only, self.selectable, self.scroll_wide, self.streaming));
+                kept = Some((all, parsed.digests));
+            }
+            parsed.doc
         } else {
             let (b, s, t, _, st, m) = if self.streaming { parse_streaming(&self.src, how) } else { parse_doc(&self.src, how) };
             (Rc::new(b), s.into(), t.into(), st.into(), m.into())
@@ -621,7 +633,7 @@ impl Markdown {
         let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_highlight: self.on_highlight, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
             on_task: self.on_task, tasks_read_only: self.tasks_read_only, details: self.details, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
-            current_block_key: RefCell::new("b0".into()),
+            current_block_key: RefCell::new("b0".into()), kept,
             #[cfg(feature = "mermaid")]
             diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, flow: Cell::default() };
         // The document reads the way its first words do; until any arrive, the way it was asked.
