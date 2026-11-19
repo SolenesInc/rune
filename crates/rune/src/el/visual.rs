@@ -35,6 +35,9 @@ pub struct VisualCold {
     /// How far past the box the clip and its fades sit, left, top, right, bottom, in points
     /// (`El::clip_outset`).
     pub(crate) clip_outset: [f32; 4],
+    /// How far the clip moves in from its box on each side, left, top, right, bottom, in
+    /// points: at rest and while the nearest ancestor group is hovered (`El::group_clip`).
+    pub(crate) group_clip: Option<Box<[[f32; 4]; 2]>>,
     /// Rounded clip of this element and its subtree, applied after subtree filters.
     pub clip_radius: Option<f32>,
     /// Per-corner clip radii override (`[tl, tr, br, bl]`, in points).
@@ -133,6 +136,7 @@ impl Empty for VisualCold {
         blur_motion: None,
         clip: None,
         clip_outset: [0.0; 4],
+        group_clip: None,
         clip_radius: None,
         clip_corners: None,
         cutout: None,
@@ -320,6 +324,15 @@ impl Visual {
     pub(crate) fn clip_rect(&self, r: [f32; 4], k: f32) -> [f32; 4] {
         let [l, t, rr, b] = self.clip_outset.map(|v| v * k);
         [r[0] - l, r[1] - t, r[2] + rr, r[3] + b]
+    }
+
+    /// [`Self::clip_rect`] moved in by its [`El::group_clip`](crate::El::group_clip) at
+    /// `group`, how hovered its group is (0 to 1).
+    pub(crate) fn group_clip_rect(&self, r: [f32; 4], k: f32, group: f32) -> [f32; 4] {
+        let r = self.clip_rect(r, k);
+        let Some(insets) = self.group_clip.as_deref() else { return r };
+        let [l, t, rr, b] = std::array::from_fn(|i| (insets[0][i] + (insets[1][i] - insets[0][i]) * group) * k);
+        [r[0] + l, r[1] + t, (r[2] - rr).max(r[0] + l), (r[3] - b).max(r[1] + t)]
     }
 }
 
