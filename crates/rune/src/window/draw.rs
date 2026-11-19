@@ -186,7 +186,7 @@ impl<S: 'static> Host<S> {
             if renderer.srgb_blend() == rt.srgb_blend()
                 && l.presented.as_ref().is_some_and(|p| p.unchanged(rt, &l.config, animating, next_tick, self.comp.as_deref())) {
                 sync_platform(l, rt, &mut self.secure_input, &mut self.ime_allowed, &self.clipboard);
-                l.stop_pacing();
+                l.rest_pacing();
                 self.meter.set_pacing(l.pacing_state(false));
                 self.frame_reports.unchanged(target, &self.rt);
                 return;
