@@ -40,7 +40,9 @@ pub struct SidebarToggle {
     shortcut: Option<&'static str>,
 }
 
-const DEFAULT_TOGGLE_SHORTCUT: &str = if cfg!(target_os = "macos") { "⇧⌘B" } else { "Ctrl+Shift+B" };
+fn default_toggle_shortcut() -> &'static str {
+    if rune::KeyPlatform::current() == rune::KeyPlatform::Mac { "⇧⌘B" } else { "Ctrl+Shift+B" }
+}
 
 impl SidebarToggle {
     /// A 24 point button 8 points past the traffic lights (12 from the window's edge when there
@@ -53,7 +55,7 @@ impl SidebarToggle {
             gap: 8.0,
             in_header: false,
             unread: false,
-            shortcut: Some(DEFAULT_TOGGLE_SHORTCUT),
+            shortcut: Some(default_toggle_shortcut()),
         }
     }
     /// The button's size: 16, 20, 24, 28 or 36 points.
