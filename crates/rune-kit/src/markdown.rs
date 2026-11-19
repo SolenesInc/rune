@@ -17,7 +17,9 @@
 //! (and others up to a memory budget), so re-rendering unchanged text (every frame of an
 //! animation, a transcript of any length) parses nothing. A growing stream parses only from the
 //! start of its last top-level block each time it grows, unless it holds a link reference
-//! definition (`[label]: url`), which can change links anywhere and so parses whole. It builds
+//! definition (`[label]: url`), which can change links anywhere and so parses whole. Its parse
+//! grows in place, so a chunk costs what its last block costs however long the reply is, and
+//! up to eight replies can arrive at once this way. It builds
 //! only that last block too: each block above it keeps its element, found by a digest of its
 //! source and the style, as long as nothing of the app's is in it (no handler, frame, image
 //! source, highlighter or highlight). With any of those, every block builds each time.
@@ -651,7 +653,7 @@ impl Markdown {
             parsed.doc
         } else {
             let (b, s, t, _, st, m) = if self.streaming { parse_streaming(&self.src, how) } else { parse_doc(&self.src, how) };
-            (Rc::new(b), s.into(), t.into(), st.into(), m.into())
+            (Rc::new(b), Rc::new(s), Rc::new(t), Rc::new(st), Rc::new(m))
         };
         let blocks = match &self.text_links {
             Some(f) => {

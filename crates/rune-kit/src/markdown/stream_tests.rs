@@ -166,7 +166,7 @@ fn a_stream_grows_its_parse_like_a_whole_one() {
         let (blocks, sources, tasks, starts, maps) = stream_cached(src);
         let (want, want_sources, want_tasks, _, want_starts, want_maps) = parse_streaming(src, Reading::LINKED);
         assert_eq!(*blocks, want, "blocks of {src:?}");
-        assert_eq!((&*sources, &*tasks, &*starts, &*maps), (&want_sources[..], &want_tasks[..], &want_starts[..], &want_maps[..]), "{src:?}");
+        assert_eq!((&sources[..], &tasks[..], &starts[..], &maps[..]), (&want_sources[..], &want_tasks[..], &want_starts[..], &want_maps[..]), "{src:?}");
     }
 }
 

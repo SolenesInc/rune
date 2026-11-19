@@ -213,7 +213,7 @@ fn a_stream_reparses_from_its_last_block_and_matches_a_whole_parse() {
             assert_eq!(&*tasks, &want_tasks[..], "tasks of {src:?}");
             assert_eq!(&*starts, &want_starts[..], "block starts of {src:?}");
             assert_eq!(&*maps, &want_maps[..], "maps of {src:?}");
-            let cuts = CACHE.with_borrow(|c| c.docs.peek(src).unwrap().cuts.clone());
+            let cuts = CACHE.with_borrow(|c| c.peek(src).unwrap().cuts.clone());
             assert_eq!(&*cuts, &want_cuts[..], "cuts of {src:?}");
         }
         let (whole, tail) = (parses().0 - before.0, parses().1 - before.1);
@@ -234,7 +234,7 @@ fn a_stream_drops_the_strings_it_grew_from() {
     for doc in &docs {
         doc_cached(doc);
     }
-    let held = CACHE.with_borrow(|c| c.docs.bytes());
+    let held = CACHE.with_borrow(|c| c.bytes());
     let mut stream = String::new();
     for i in 0.. {
         stream += &format!("Line {i} of a streamed answer, with a few more words.\n\n");
@@ -245,13 +245,46 @@ fn a_stream_drops_the_strings_it_grew_from() {
         doc_cached(&stream[..end]);
     }
     CACHE.with_borrow(|c| {
-        let last = c.docs.peek(stream.as_str()).expect("the whole stream is cached");
+        let last = c.peek(stream.as_str()).expect("the whole stream is cached");
         let bytes = 2 * stream.len() + 64 * last.cuts.len() + 128;
-        assert_eq!(c.docs.bytes(), held + bytes, "only the newest string of the stream is held");
+        assert_eq!(c.bytes(), held + bytes, "only the newest string of the stream is held");
         for doc in &docs {
-            assert!(c.docs.peek(doc.as_str()).is_some(), "{doc:?} was evicted");
+            assert!(c.peek(doc.as_str()).is_some(), "{doc:?} was evicted");
         }
     });
+}
+
+/// Replies arriving at once each grow from their own last block: none makes another parse whole.
+#[test]
+fn streams_arriving_together_each_parse_from_their_last_block() {
+    let replies: Vec<String> = (0..4).map(|r| (0..30).map(|i| format!("Reply {r}, paragraph {i} with **bold** and `code`.\n\n")).collect()).collect();
+    let before = parses();
+    // From its third paragraph on, a reply has a block before its last to grow from.
+    let ends: Vec<usize> = (120..=replies[0].len()).step_by(40).collect();
+    for &end in &ends {
+        for reply in &replies {
+            let src = &reply[..end];
+            assert_eq!(*doc_cached(src).0, parse_doc(src, Reading::LINKED).0, "blocks of {src:?}");
+        }
+    }
+    let (whole, tail) = (parses().0 - before.0, parses().1 - before.1);
+    assert_eq!((whole, tail), (replies.len(), replies.len() * (ends.len() - 1)), "each reply parses whole once, then from its last block");
+}
+
+/// A string drawn in the same commit as the one grown from it keeps its own parse.
+#[test]
+fn a_string_drawn_beside_its_longer_self_keeps_its_parse() {
+    let (short, long) = ("First paragraph.\n\nSecond one, still", "First paragraph.\n\nSecond one, still arriving.\n\nThird.");
+    fn view(both: &(String, String), _: &mut rune::Cx<(String, String)>) -> El {
+        let style = MarkdownStyle::neutral(true);
+        col().child(Markdown::new(both.0.clone()).render(&style).key("a")).child(Markdown::new(both.1.clone()).render(&style).key("b"))
+    }
+    let mut rt = rune::Runtime::new((short.to_owned(), long.to_owned()), view, (400.0, 800.0), rune::Env::default());
+    rt.frame(0.0);
+    let before = parses();
+    assert_eq!(*doc_cached(short).0, parse_doc(short, Reading::LINKED).0);
+    assert_eq!(*doc_cached(long).0, parse_doc(long, Reading::LINKED).0);
+    assert_eq!(parses(), before, "both are held as they were drawn");
 }
 
 #[test]

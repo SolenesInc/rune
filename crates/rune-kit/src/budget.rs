@@ -40,6 +40,7 @@ impl<K: Hash + Eq, V> Budget<K, V> {
     }
 
     /// Looks `key` up without counting it as used.
+    #[cfg(test)]
     pub(crate) fn peek<Q: Hash + Eq + ?Sized>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -47,26 +48,6 @@ impl<K: Hash + Eq, V> Budget<K, V> {
         self.map.get(key).map(|s| &s.value)
     }
 
-    /// Drops `key`, returning whether it was there.
-    pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, key: &Q) -> bool
-    where
-        K: Borrow<Q>,
-    {
-        let Some(slot) = self.map.remove(key) else { return false };
-        self.bytes -= slot.bytes;
-        true
-    }
-
-    /// Whether `key` was used in the commit running now (never outside one).
-    pub(crate) fn used_now<Q: Hash + Eq + ?Sized>(&self, key: &Q) -> bool
-    where
-        K: Borrow<Q>,
-    {
-        let now = rune::commit_generation();
-        now > 0 && self.map.get(key).is_some_and(|s| s.commit == now)
-    }
-
-    /// Estimated bytes held.
     #[cfg(test)]
     pub(crate) fn bytes(&self) -> usize {
         self.bytes

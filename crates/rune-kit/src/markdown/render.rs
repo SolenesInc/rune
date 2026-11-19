@@ -25,10 +25,10 @@ pub(super) struct Renderer {
     /// `Markdown::dir_tentative`.
     pub(super) tentative: Option<rune::Direction>,
     pub(super) highlighter: Highlighter,
-    pub(super) sources: Rc<[Source]>,
+    pub(super) sources: Rc<Vec<Source>>,
     /// The next of `sources`, advanced at each [`Block::Code`] in document order.
     pub(super) next_source: Cell<usize>,
-    pub(super) tasks: Rc<[Option<(bool, usize)>]>,
+    pub(super) tasks: Rc<Vec<Option<(bool, usize)>>>,
     /// The next of `tasks`, advanced at each list item in document order.
     pub(super) next_task: Cell<usize>,
     /// `Markdown::id`, and the next sideways scroll bar's number in the top-level block being
@@ -41,7 +41,7 @@ pub(super) struct Renderer {
     /// ([`cache::Parsed::digests`]). With the app's handlers or frames in the elements
     /// ([`Markdown::kept`]), each block's start in the source too. `None` when a block's
     /// element holds what a digest can't tell apart.
-    pub(super) kept: Option<((u64, u64), Rc<[Option<(u64, u64)>]>, Option<Rc<[usize]>>)>,
+    pub(super) kept: Option<((u64, u64), Rc<Vec<Option<(u64, u64)>>>, Option<Rc<Vec<usize>>>)>,
     /// `Markdown::diagram_frame`.
     #[cfg(feature = "mermaid")]
     pub(super) diagram_frame: Option<FrameWire>,
