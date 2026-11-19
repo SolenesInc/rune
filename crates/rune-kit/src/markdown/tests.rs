@@ -311,6 +311,42 @@ fn a_stream_builds_only_its_last_block() {
     rt.update(|s, _| s.push_str(" grows"));
     rt.frame(1.0 / 60.0);
     assert_eq!(BLOCKS.get() - before, 6);
+    // Unless the app vouches for its handlers, until what they read changes.
+    fn vouched(src: &(String, u8), _: &mut rune::Cx<(String, u8)>) -> El {
+        Markdown::new(src.0.clone()).streaming(true).on_link(|_: &mut (String, u8), _| {}).kept(src.1).render(&MarkdownStyle::neutral(true))
+    }
+    let mut rt = rune::Runtime::new((head.to_owned(), 0), vouched, (400.0, 800.0), rune::Env::default());
+    rt.frame(0.0);
+    let before = BLOCKS.get();
+    rt.update(|s, _| s.0.push_str(" grows"));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(BLOCKS.get() - before, 1);
+    rt.update(|s, _| s.1 = 1);
+    rt.frame(1.0 / 60.0);
+    assert_eq!(BLOCKS.get() - before, 7);
+}
+
+/// A vouched Markdown's task handler is told where its marker is now, not where it was
+/// when its block was built: an edit above a task list builds the list again.
+#[test]
+fn a_kept_task_list_is_built_again_when_it_moves_in_the_source() {
+    type S = (String, Vec<usize>);
+    fn view(s: &S, _: &mut rune::Cx<S>) -> El {
+        Markdown::new(s.0.clone()).on_task(|s: &mut S, _, at, _| s.1.push(at)).kept(()).render(&MarkdownStyle::neutral(true))
+    }
+    let mut rt = rune::Runtime::new(("Intro.\n\n- [ ] todo\n".to_owned(), Vec::new()), view, (400.0, 800.0), rune::Env::default());
+    rt.frame(0.0);
+    // The same blocks under the same keys, each task a few bytes further on.
+    rt.update(|s, _| s.0.insert_str(0, "A longer "));
+    rt.frame(1.0 / 60.0);
+    let boxed = rt.elements().into_iter().find(|e| e.role == "checkbox").expect("the task's checkbox");
+    let (x, y) = (boxed.rect[0] + boxed.rect[2] / 2.0, boxed.rect[1] + boxed.rect[3] / 2.0);
+    rt.pointer_move(x, y);
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    let at = rt.state().0.find("[ ]").unwrap();
+    assert_eq!(rt.state().1, [at]);
 }
 
 #[test]

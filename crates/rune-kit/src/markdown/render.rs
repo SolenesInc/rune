@@ -34,9 +34,10 @@ pub(super) struct Renderer {
     pub(super) current_block_key: RefCell<Rc<str>>,
     /// When a top-level block's element can be kept from one build to the next: a digest of
     /// everything but the block that decides what it draws, and each block's own digest
-    /// ([`cache::Parsed::digests`]). `None` when a block's element holds what a digest can't
-    /// tell apart: an app's handlers or frames.
-    pub(super) kept: Option<((u64, u64), Rc<[Option<(u64, u64)>]>)>,
+    /// ([`cache::Parsed::digests`]). With the app's handlers or frames in the elements
+    /// ([`Markdown::kept`]), each block's start in the source too. `None` when a block's
+    /// element holds what a digest can't tell apart.
+    pub(super) kept: Option<((u64, u64), Rc<[Option<(u64, u64)>]>, Option<Rc<[usize]>>)>,
     /// `Markdown::diagram_frame`.
     #[cfg(feature = "mermaid")]
     pub(super) diagram_frame: Option<FrameWire>,
@@ -525,11 +526,12 @@ impl Renderer {
             // last cost a lookup each time it grows, so a reply costs what its newest block
             // costs. The last block of a stream changes with every chunk, so it always builds.
             let digest = self.kept.as_ref().filter(|_| top_level && !(self.streaming && i + 1 == blocks.len()))
-                .and_then(|(all, each)| Some((all, each.get(i).copied().flatten()?)));
+                .and_then(|(all, each, starts)| Some((all, each.get(i).copied().flatten()?, starts)));
             let drawn = match (digest, spent(b)) {
-                (Some((all, own)), Some((sources, tasks))) => {
+                (Some((all, own, starts)), Some((sources, tasks))) => {
                     let (s0, t0) = (self.next_source.get(), self.next_task.get());
-                    let h = rune::memo::digest(&(all, own, &key, top.to_bits(), dir));
+                    let place = starts.as_ref().map(|at| (at.get(i).copied(), s0, t0));
+                    let h = rune::memo::digest(&(all, own, &key, top.to_bits(), dir, place));
                     let drawn = rune::memo::cached(h, || {
                         let drawn = build(key);
                         debug_assert_eq!((self.next_source.get() - s0, self.next_task.get() - t0), (sources, tasks), "`spent` counts what a block's build takes");

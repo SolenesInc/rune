@@ -271,6 +271,7 @@ pub struct Markdown {
     smart: bool,
     reveal: f32,
     streaming: bool,
+    vouched: Option<u64>,
     on_link: Option<LinkWire>,
     on_highlight: Option<LinkWire>,
     presses: Option<Box<dyn std::any::Any>>,
@@ -309,7 +310,7 @@ thread_local! {
 
 impl Markdown {
     pub fn new(src: impl Into<String>) -> Markdown {
-        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
+        Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, smart: false, reveal: -1.0, streaming: false, vouched: None, on_link: None, on_highlight: None, presses: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, details: None, selectable: false, copy_source: false, scroll_wide: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
             diagram_frame: None, #[cfg(feature = "mermaid")] diagram_source_frame: None, code_frame: None, quote_frame: None, front_matter_frame: None, link_favicon: None, images: None, on_image: None, text_links: None }
@@ -389,6 +390,25 @@ impl Markdown {
     /// the text is whole.
     pub fn streaming(mut self, on: bool) -> Self {
         self.streaming = on;
+        self
+    }
+    /// Vouches for what the app put in this Markdown (handlers, frames, `details`, `images`,
+    /// a highlighter, link looks and icons), so its blocks keep their elements from one build
+    /// to the next while `version` is the same, as [`rune::memo`]'s version does: a reply still
+    /// arriving then builds only its newest block, and an edit only the blocks from the edit
+    /// on. Put in `version` whatever those closures read that can change: which `<details>`
+    /// are open, a theme, whether an image has loaded. A handler that only sends a message, a
+    /// URL or an id needs nothing in it. Without this, a Markdown holding any of those builds
+    /// every block each time, since nothing says its closures still do what they did. One
+    /// with highlights always does.
+    ///
+    /// ```ignore
+    /// Markdown::new(&reply.text).streaming(reply.arriving).on_link(|s: &mut App, url| s.open(url)).kept(()).build(&kit)
+    /// ```
+    pub fn kept(mut self, version: impl Hash) -> Self {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        version.hash(&mut h);
+        self.vouched = Some(h.finish());
         self
     }
     /// Called when a GFM task list item (`- [ ]` or `- [x]`) is clicked, or pressed with Space
@@ -609,9 +629,11 @@ impl Markdown {
         let (blocks, sources, tasks, starts, maps) = if self.autolink {
             let parsed = cache::parsed_as(&self.src, how, self.streaming);
             // Highlights are ranges of the whole source, which a block's own digest can't see.
-            if pure && self.highlights.is_empty() {
-                let all = rune::memo::digest(&(style, how, parsed.defs, self.reveal.to_bits(), self.tasks_read_only, self.selectable, self.scroll_wide, self.streaming));
-                kept = Some((all, parsed.digests));
+            if (pure || self.vouched.is_some()) && self.highlights.is_empty() {
+                let all = rune::memo::digest(&(style, how, parsed.defs, self.reveal.to_bits(), self.tasks_read_only, self.selectable, self.scroll_wide, self.streaming, self.vouched, self.copy_source));
+                // The app's closures are handed places in the source (a task's marker, a
+                // fence's index), so a block of theirs is the same only where it was.
+                kept = Some((all, parsed.digests, (!pure).then(|| parsed.doc.3.clone())));
             }
             parsed.doc
         } else {
