@@ -388,6 +388,8 @@ mod paint_content;
 mod hit;
 #[path = "runtime/paint/build.rs"]
 mod build;
+#[path = "runtime/input/heard.rs"]
+mod heard;
 #[path = "runtime/input/keys.rs"]
 mod keys;
 #[path = "runtime/input/pointer.rs"]

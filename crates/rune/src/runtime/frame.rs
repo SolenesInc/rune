@@ -166,7 +166,7 @@ impl RuntimeCore {
         if std::mem::take(&mut tx.minimize) { self.minimize_step(crate::window::MinimizeEvent::Asked); }
         self.titlebar.toggle_maximized |= std::mem::take(&mut tx.toggle_maximized);
         self.titlebar.toggle_full_screen |= std::mem::take(&mut tx.toggle_full_screen);
-        for ev in std::mem::take(&mut tx.keys) { self.key(ev); }
+        for ev in std::mem::take(&mut tx.keys) { self.queue_key(ev, false); }
         self.latch_playground(tx);
         for prefix in std::mem::take(&mut tx.evict_memos) { self.invalidate_memos_by_prefix(&prefix); }
         if !tx.open_urls.is_empty() { self.open_urls(std::mem::take(&mut tx.open_urls)); }

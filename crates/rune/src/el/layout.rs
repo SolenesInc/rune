@@ -463,6 +463,20 @@ impl El {
         self.style.set_max_width(length(w));
         self
     }
+    /// Widest it may be, as a fraction of the parent's (CSS `max-width: 100%` is
+    /// `.max_w_frac(1.0)`). An item that a column does not stretch takes its content's width,
+    /// which can run past the column; this holds it inside and lets its children shrink.
+    #[inline]
+    pub fn max_w_frac(mut self, f: f32) -> Self {
+        self.set_max_w_frac(f);
+        self
+    }
+    /// [`El::max_w_frac`] in place.
+    #[inline]
+    pub fn set_max_w_frac(&mut self, f: f32) -> &mut Self {
+        self.style.set_max_width(percent(f));
+        self
+    }
     /// Minimum height in points.
     ///
     /// Flex items default to a minimum of their content height (CSS `min-height: auto`), so a

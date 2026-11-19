@@ -488,7 +488,7 @@ impl<S: 'static> Host<S> {
         let present_log = args.trace.as_ref().map(|_| Arc::default());
         let mut app = app;
         let comp = app.compositor.take();
-        let (on_focus, on_ime, on_visibility) = (app.on_focus, app.on_ime, app.on_visibility);
+        let (on_focus, on_ime, on_visibility, on_input) = (app.on_focus, app.on_ime, app.on_visibility, app.on_input);
         let on_field_key = app.on_field_key;
         let titlebar = app.titlebar.filter(|_| !options.borderless);
         let chrome = app.chrome;
@@ -519,6 +519,7 @@ impl<S: 'static> Host<S> {
         }
         rt.app_mut().on_focus = on_focus;
         rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_input = on_input;
         rt.app_mut().on_field_key = on_field_key;
         rt.app_mut().on_ime = on_ime;
         rt.set_modifier_keys(modifier_keys);
