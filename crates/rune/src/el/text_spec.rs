@@ -132,6 +132,8 @@ pub(crate) struct TextCold {
     /// Visual palette for rich block and inline decorations; the default's when unset.
     pub(crate) rich_style: Option<crate::edit::RichStyle>,
     pub(crate) secure_revealed: bool,
+    /// See [`El::end_mark`](crate::El::end_mark): how many bytes at the end of `content` are it.
+    pub(crate) end_mark: u32,
 }
 
 impl Empty for TextCold {
@@ -157,6 +159,7 @@ impl Empty for TextCold {
         pill_colors: None,
         rich_style: None,
         secure_revealed: false,
+        end_mark: 0,
     };
 }
 

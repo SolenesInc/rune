@@ -36,6 +36,9 @@ pub(super) struct Renderer {
     pub(super) id: String,
     pub(super) next_wide: Cell<usize>,
     pub(super) current_block_key: RefCell<Rc<str>>,
+    /// The text a stream's caret follows ([`MarkdownStyle::caret`]): where the last inline's
+    /// or code block's string is held, which names it among the document's.
+    pub(super) caret_after: Option<*const u8>,
     /// When a top-level block's element can be kept from one build to the next: a digest of
     /// everything but the block that decides what it draws, and each block's own digest
     /// ([`cache::Parsed::digests`]). With the app's handlers or frames in the elements
@@ -301,6 +304,26 @@ fn spent(b: &Block) -> Option<(usize, usize)> {
 /// How many lines of a code block share one text (see [`Renderer::code`]).
 pub(super) const CODE_GROUP_LINES: usize = 32;
 
+/// A stream's caret: a no-break space apart from the last word, then one that carries the
+/// caret's colour as its background. Neither lets a line break before it, so the caret never
+/// stands alone on a line.
+const CARET: &str = "\u{a0}\u{a0}";
+
+/// Where the string of the last text of `blocks` is held: what a stream's caret follows. `None`
+/// when the document ends in something that isn't text (a table, a picture, a rule) or in text
+/// with nothing in it yet.
+pub(super) fn last_text(blocks: &[Block]) -> Option<*const u8> {
+    match blocks.last()? {
+        Block::Para(i) | Block::Heading(_, i) => Some(&i.text),
+        Block::Code(c) => Some(c),
+        Block::List { items, .. } => return last_text(items.last()?),
+        Block::Quote(inner) | Block::Alert(_, inner) | Block::Details { body: inner, .. } => return last_text(inner),
+        _ => None,
+    }
+    .filter(|t| !t.is_empty())
+    .map(|t| t.as_ptr())
+}
+
 fn tabbed(code: &str, mut spans: Vec<Span>, mut highlights: Vec<TextHighlight>, (presses, strikes): (Vec<(Range<usize>, String)>, Vec<Range<usize>>), style: TextStyle) -> El {
     let (shown, tabs) = tabs_padded(code, style);
     let shift = |b: u32| shift_past(&tabs, b as usize) as u32;
@@ -499,7 +522,15 @@ impl Renderer {
             Some((cols, lead, before)) => e.copy_prefix(format!("{}{}", " ".repeat(cols.into()), lead.marker())).copy_breaks(before, 1),
             None => e.copy_breaks(2, 2),
         };
-        self.select_inline(e, inl, map)
+        self.caret(self.select_inline(e, inl, map), &inl.text)
+    }
+
+    /// `e`, which draws `text`, ending in the stream's caret when `text` is the document's last.
+    pub(super) fn caret(&self, e: El, text: &str) -> El {
+        match self.s.caret {
+            Some(color) if self.caret_after == Some(text.as_ptr()) => e.end_mark(CARET, [Span::new(CARET.len() / 2, CARET.len()).bg(color, 0.0)]),
+            _ => e,
+        }
     }
 
     /// `blocks` in a column, spaced by their collapsed margins. A heading's bottom margin alone
@@ -619,7 +650,11 @@ impl Renderer {
         // lines and not all of them. A shorter block is one text.
         let body = self.with_reveal(tabbed(code, spans, highlights, (presses, self.strikes(&marks)), s.code_block).font(s.code_block).color(ink)).copy_breaks(2, 2);
         let wide = self.scroll_wide;
-        let body = body.line_groups(CODE_GROUP_LINES).into_iter().enumerate().map(|(k, g)| {
+        let mut groups = body.line_groups(CODE_GROUP_LINES);
+        if let Some(last) = groups.pop() {
+            groups.push(self.caret(last, code));
+        }
+        let body = groups.into_iter().enumerate().map(|(k, g)| {
             let g = self.select(self.wire_presses(g, any));
             let g = if wide { g } else { g.w_full() };
             if k == 0 { g } else { g.key(format!("g{k}")) }

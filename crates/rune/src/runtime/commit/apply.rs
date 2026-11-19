@@ -621,7 +621,8 @@ impl RuntimeCore {
             if let Some(spec) = &nodes[i].text
                 && spec.reveal >= 0.0
             {
-                let content = &spec.content;
+                // An end mark is not the text's: words are counted in what comes before it.
+                let content = &spec.content[..spec.content.len() - spec.cold.end_mark as usize];
                 let now = if time_scaled { self.scene.store().node_time(id) } else { now };
                 let fade = if self.reduced_motion { 0.15 } else { spec.reveal };
                 let mounted_late = !was_present && !instant && !tx.unprompted && !nodes[i].virtual_mount;

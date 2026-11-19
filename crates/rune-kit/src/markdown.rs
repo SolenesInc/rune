@@ -30,6 +30,9 @@
 //! source has them. A mark with no definition stays as written. A source with a footnote
 //! parses whole each time it grows, as one with a reference definition does.
 //!
+//! **Caret.** In a style with one ([`MarkdownStyle::caret`]), a document still streaming ends
+//! in a caret after its last word.
+//!
 //! **Keys.** Top-level blocks are keyed `b{index}` (or by [`Markdown::block_keys`]), list items
 //! `i{index}` and their blocks by `b{index}` inside the item. Appending to a stream only ever
 //! changes the last block or adds blocks after it, so earlier blocks keep their keys and never
@@ -678,6 +681,7 @@ impl Markdown {
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),
             id: self.id, next_wide: Cell::new(0),
             current_block_key: RefCell::new("b0".into()), kept,
+            caret_after: if self.streaming && style.caret.is_some() { render::last_text(&blocks) } else { None },
             #[cfg(feature = "mermaid")]
             diagram_frame: self.diagram_frame, #[cfg(feature = "mermaid")] diagram_source_frame: self.diagram_source_frame, code_frame: self.code_frame, quote_frame: self.quote_frame, front_matter_frame: self.front_matter_frame, link_favicon: self.link_favicon, images: self.images, on_image: self.on_image, missing_image: self.missing_image, flow: Cell::default() };
         // The document reads the way its first words do; until any arrive, the way it was asked.

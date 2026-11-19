@@ -21,6 +21,7 @@ mod direction;
 pub(crate) mod drop;
 pub(crate) mod effect;
 mod element_info;
+mod end_mark;
 mod enter_delay;
 mod focus;
 mod growth;

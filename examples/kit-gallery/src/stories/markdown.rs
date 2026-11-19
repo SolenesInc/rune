@@ -608,7 +608,7 @@ pub(super) fn markdown_streaming(s: &G, k: &Kit, _: &mut Vec<El>) -> El {
                 .build(k)
                 .key("stream-more"),
         )
-        .child(Markdown::new(&MARKDOWN[..end]).reveal(0.18).streaming(end < MARKDOWN.len()).build(k))
+        .child(Markdown::new(&MARKDOWN[..end]).reveal(0.18).streaming(end < MARKDOWN.len()).render(&MarkdownStyle::from_kit(k).caret(k.c.text_weak)))
 }
 
 /// A reply streaming in a chunk a press, each ending inside markup: an open emphasis, code or
@@ -634,7 +634,7 @@ pub(super) fn markdown_stream_tail(s: &G, k: &Kit, _: &mut Vec<El>) -> El {
                 .build(k)
                 .key("stream-more"),
         )
-        .child(Markdown::new(src).streaming(n < TAIL_STREAM.len()).build(k))
+        .child(Markdown::new(src).streaming(n < TAIL_STREAM.len()).render(&MarkdownStyle::from_kit(k).caret(k.c.text_weak)))
 }
 
 /// A reply streaming in with a flowchart and a sequence diagram: each "Stream more" adds lines up

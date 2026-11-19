@@ -238,7 +238,8 @@ impl RuntimeCore {
 
     pub(super) fn reveal_alpha(st: &RevealState, byte: u32, now: f64) -> f32 {
         let i = st.words.partition_point(|w| w.0 <= byte);
-        if i == 0 {
+        // Past the text is its end mark (`El::end_mark`), which draws at once.
+        if i == 0 || byte as usize >= st.len {
             return 1.0;
         }
         let t0 = st.words[i - 1].1;

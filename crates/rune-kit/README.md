@@ -338,6 +338,13 @@ source each time, and earlier blocks stay mounted.
   blocks, a tab between table cells, no list markers, fences or `**`. Links still open on a
   click, and a selection stays while the source streams on after it. The highlight is
   `k.selection()`; set another with `MarkdownStyle::selection`.
+- **Streaming.** `Markdown::streaming(true)` draws a reply that is still arriving: unfinished
+  emphasis, code, links and tags draw as what they are about to be, never as markers that
+  later vanish, and each chunk builds and shapes only the last block. `MarkdownStyle::caret(color)`
+  ends it in a caret after its last word. An app with handlers or frames in its Markdown says
+  when they change with `Markdown::kept(version)` so the blocks above the last are kept too.
+- **Footnotes.** `[^label]` draws as its number in superscript, and the definitions stand as a
+  numbered list under a rule at the end.
 - **`highlights(..)` and `markdown::find(src, query, case)`** search and highlight the rendered
   text in source UTF-8 byte ranges across inline markers, tables and code blocks without
   reshaping text (`Highlight::new()` and `Highlight::current()`, scrolled to with

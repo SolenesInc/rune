@@ -437,7 +437,8 @@ policy changes are applied in the same mutation phase.
   shaped layout. A width rewrap can shrink the row; completion lands at its full measured height.
 - **Stream edges** (`edge::{FEATHER, FAST_FEATHER, NO_MASK, WORD_FADE}`): the feather mask under a
   growing row and the word-fade duration. `.reveal(word_fade)` fades appended words in, staggered from
-  20 ms down to 5.5 ms as a backlog builds.
+  20 ms down to 5.5 ms as a backlog builds. `.end_mark(mark, spans)` ends the text with characters
+  that are not its own (a caret): they draw at once, never fade in, and are not copied.
 - **Settling** (`Tx::settle()`): no animation, every track lands, and removed nodes unmount at once.
   Opening a session lands at the bottom on its first frame with nothing animating in. A
   `stick_bottom` viewport lands at its end only when it follows it or glides there; one a hand or
