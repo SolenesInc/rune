@@ -111,7 +111,10 @@ impl<S: 'static> Host<S> {
                 self.drain(event_loop, true);
             }
             WakeEvent::DisplayTick(_) => {
-                if self.win.as_ref().is_some_and(Win::paced) {
+                let due = super::pacing::timer_deadline(&self.rt).is_some_and(|at| at <= Instant::now());
+                let idle = self.idle;
+                if let Some(w) = self.win.as_mut().filter(|w| w.paced())
+                    && w.tick_draws(!idle || due) {
                     self.redraw();
                     self.shell(event_loop);
                 }
@@ -368,6 +371,7 @@ impl<S: 'static> Host<S> {
                     else { rt.key(ev); }
                     redraw |= pressed;
                 }
+                if pressed { l.key_pressed(); }
                 if redraw {
                     l.timer_frame.asked_by_key();
                     l.request_redraw();
@@ -379,7 +383,7 @@ impl<S: 'static> Host<S> {
                         Some((key, mods, base)) => rt.dead_key(key, mods, base, Ime::Preedit(s, cur)),
                         None => rt.ime(Ime::Preedit(s, cur)),
                     },
-                    WIme::Commit(s) => rt.ime(Ime::Commit(s)),
+                    WIme::Commit(s) => { l.key_pressed(); rt.ime(Ime::Commit(s)) }
                     WIme::Enabled => rt.ime(Ime::Enabled),
                     WIme::Disabled => rt.ime(Ime::Disabled),
                 }
