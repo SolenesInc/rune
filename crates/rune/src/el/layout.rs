@@ -132,6 +132,24 @@ impl El {
         self.style.set_grow(g);
         self
     }
+    /// Start a row's child at `basis` points, take a `g` share of the free space, and shrink
+    /// below the basis when the line is narrower (CSS `flex: g 1 basis; min-width: 0`). In a
+    /// wrapping row the basis decides when the child moves to a line of its own, and there it
+    /// fits that line however narrow, where `.grow(g).min_w(basis)` would run past it.
+    #[inline]
+    pub fn grow_from(mut self, g: f32, basis: f32) -> Self {
+        self.set_grow_from(g, basis);
+        self
+    }
+    /// [`El::grow_from`] in place.
+    #[inline]
+    pub fn set_grow_from(&mut self, g: f32, basis: f32) -> &mut Self {
+        self.style.set_flex_grow(g);
+        self.style.set_flex_shrink(1.0);
+        self.style.set_flex_basis(length(basis));
+        self.style.set_min_width(length(0.0));
+        self
+    }
     #[inline]
     pub fn padding(mut self, p: f32) -> Self {
         self.set_padding(p);
