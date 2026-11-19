@@ -170,7 +170,8 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
                 cut = i;
                 break;
             }
-            b'[' if word_start(run[..i].chars().next_back()) => {
+            // `[^1]` is a footnote's mark, never a link's text.
+            b'[' if word_start(run[..i].chars().next_back()) && b.get(i + 1) != Some(&b'^') => {
                 let at = if i > 0 && b[i - 1] == b'!' { i - 1 } else { i };
                 stack.push(Open { at, ch: b'[', n: i + 1 - at, len: i + 1 - at, both: false });
                 i += 1;

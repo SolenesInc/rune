@@ -59,6 +59,7 @@ fn an_open_span_never_shows_its_markers() {
         "| a | **b** |\n|---|---|\n| `c` | *d* |",
         "See [the **docs**](https://example.com/a_b \"t\") and ![a chart](x.png), then *[more](y)*.",
         "- [ ] todo\n- [x] done",
+        "A claim [^1] and another[^note], then [a link](https://example.com).",
         "In bold **2*3 = 6** and **a * b** too, then snake\\_case and a \\* star in *em\\_ph*.",
         "Press <kbd>Ctrl</kbd> + <kbd class=\"k\">C</kbd>, a <br/> break, **bold <b>tag</b>** and <!-- a note --> more.",
     ] {
