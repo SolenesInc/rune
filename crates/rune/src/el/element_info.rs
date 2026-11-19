@@ -24,6 +24,7 @@ impl Default for ElementInfo {
             opacity: 1.0,
             scale: 1.0,
             blur: 0.0,
+            backdrop_blur: 0.0,
             radius: 0.0,
             fill: Color::TRANSPARENT,
             text_color: None,
@@ -47,6 +48,7 @@ impl Default for ElementInfo {
             expanded: None,
             item_selected: false,
             stuck: 0.0,
+            picture: None,
         }
     }
 }

@@ -205,6 +205,7 @@ pub struct Button {
     expanded: Option<bool>,
     help: Option<String>,
     shortcut: Option<String>,
+    reachable: bool,
     acts: Acts,
 }
 
@@ -233,6 +234,7 @@ impl Button {
             expanded: None,
             help: None,
             shortcut: None,
+            reachable: false,
             acts: Acts::default(),
         }
     }
@@ -285,6 +287,16 @@ impl Button {
         if d {
             self.state = State::Disabled;
         }
+        self
+    }
+    /// Disabled for `reason`, as the web's `aria-disabled` with a description: it draws
+    /// disabled and ignores presses, but stays in the Tab order and takes focus, so the keyboard
+    /// reaches it and assistive technology reads `reason`, which is also its tooltip. Built
+    /// enabled again under the same key, it keeps the focus.
+    pub fn unavailable(mut self, reason: impl Into<String>) -> Self {
+        self.state = State::Disabled;
+        self.help = Some(reason.into());
+        self.reachable = true;
         self
     }
     /// The trigger of a menu or popover (`data-expanded`), open or not: ghost variants hold the
@@ -371,7 +383,9 @@ impl Button {
             Label::Custom(f) => e.child(f(font, ink).a11y_hidden()),
         };
         if self.state == State::Disabled { e = e.layer_opacity(disabled_alpha); }
-        self.acts.apply(e.disabled(!enabled), enabled)
+        e = e.disabled(!enabled);
+        if self.reachable { e = e.focusable(true); }
+        self.acts.apply(e, enabled)
     }
 }
 

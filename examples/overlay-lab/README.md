@@ -41,7 +41,7 @@ capture request while grounding input coordinates; omit it for the exclusion che
 
 Linux capture exclusion is unavailable. Wayland only observes pointer movement inside its
 input region, and the compositor chooses an output for UnderPointer. It cannot follow the
-global pointer. OnDemand permits click-to-focus on layer-shell v4; Windows/X11 do not offer
+global pointer. OnDemand permits click-to-focus on layer-shell v4; X11 does not offer
 nonactivating key focus. Capture requests on macOS must be supplemented with an explicit
 ScreenCaptureKit window-ID filter when the OS capture path ignores NSWindow sharingType.
 Wayland keeps all three levels on the compositor's overlay layer; it has no higher layer and
@@ -69,10 +69,9 @@ does not guarantee ordering among peers. Native status/status+1 levels are macOS
   key) are not delivered; the desktop and Wayland overlay callbacks have TODOs for a
   shared modifier-only key event. Pressed keys
   still carry modifier state, and Escape works.
-- `Display::native_id()` maps to `DisplayTarget::Native`: macOS CGDirectDisplayID, Windows
-  full-width HMONITOR, X11 RandR CRTC, Wayland wl_output registry name. X11 output IDs can
+- `Display::native_id()` maps to `DisplayTarget::Native`: macOS CGDirectDisplayID, X11 RandR CRTC, Wayland wl_output registry name. X11 output IDs can
   also be targeted with `NativeDisplayId::X11Output`. `native_bounds()` is global top-left
-  (macOS/Wayland points, Windows/X11 pixels); `scale` converts local lengths.
+  (macOS/Wayland points, X11 pixels); `scale` converts local lengths.
 - The pill uses `AboveOverlays` (macOS 27), above the picker's `AboveStatus` (26). Both use
   CanJoinAllSpaces, FullScreenAuxiliary and Stationary. Wayland ordering remains compositor-owned.
 - Desktop hide retains the native window, GPU surface and renderer. With `prewarm`, macOS
@@ -97,8 +96,7 @@ does not guarantee ordering among peers. Native status/status+1 levels are macOS
   Regions pill with the pointer elsewhere and about **0.002% CPU** hidden. Neither interval
   produced drawable callbacks. All/None stopped polling and also produced no drawable callbacks.
 
-The idle path filters outside-canvas motion and skips unchanged hover redraws. Windows hooks
-run on a separate message-loop thread; X11 observes XI2 raw motion instead of polling. The
+The idle path filters outside-canvas motion and skips unchanged hover redraws. X11 observes XI2 raw motion instead of polling. The
 shared Wayland socket wakes its private queue; legacy noninteractive HUDs bind no seat and
 reuse their empty input region.
 

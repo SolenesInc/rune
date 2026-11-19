@@ -9,6 +9,9 @@ pub enum Side {
     Bottom,
     Left,
     Right,
+    /// Centered over the anchor both ways, as a menu over the pane it acts on: it never flips,
+    /// the alignment and the gap don't apply, and it stays 8 points inside the window.
+    Over,
 }
 
 #[derive(Clone, Debug, PartialEq)]

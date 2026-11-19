@@ -55,6 +55,41 @@ fn buttons_read_their_label_tooltip_shortcut_and_state() {
     assert_eq!(rt.state().presses, 12, "assistive click, pointer and Space reach the same handlers");
 }
 
+fn resume(s: &App, _: &mut Cx<App>) -> El {
+    let k = kit();
+    let resume = Button::new("Resume");
+    let resume = if s.on { resume } else { resume.unavailable("The outpost is unreachable") };
+    col()
+        .gap(8.0)
+        .child(Button::new("Before").on_press(|_: &mut App| {}).build(&k).key("before"))
+        .child(resume.on_press(|s: &mut App| s.presses += 1).build(&k).key("resume"))
+}
+
+#[test]
+fn an_unavailable_button_takes_focus_reads_its_reason_ignores_presses_and_keeps_focus_once_available() {
+    let mut rt = mount(App::default(), resume);
+    rt.set_tab_visits_controls(true);
+    press_key(&mut rt, Key::Tab);
+    press_key(&mut rt, Key::Tab);
+    let tree = rt.accessibility_json();
+    assert_eq!(focused(&tree).as_deref(), Some("resume"), "Tab reaches it: {tree}");
+    let off = node(&tree, "resume");
+    assert!(has(off, "disabled") && !can(off, "click"), "{off}");
+    assert_eq!(off["description"], "The outpost is unreachable");
+    press_key(&mut rt, Key::Text(" ".into()));
+    tap(&mut rt, "resume");
+    assert!(!act(&mut rt, "resume", Action::Click));
+    assert_eq!(rt.state().presses, 0, "an unavailable button takes no press");
+
+    rt.state_mut().on = true;
+    settle(&mut rt);
+    let tree = rt.accessibility_json();
+    assert_eq!(focused(&tree).as_deref(), Some("resume"), "the focus stays as it becomes available");
+    assert!(!has(node(&tree, "resume"), "disabled"));
+    press_key(&mut rt, Key::Text(" ".into()));
+    assert_eq!(rt.state().presses, 1);
+}
+
 fn toggles(s: &App, _: &mut Cx<App>) -> El {
     let k = kit();
     col()

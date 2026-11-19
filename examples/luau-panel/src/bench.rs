@@ -50,7 +50,7 @@ pub struct Report {
     /// `Script::view` on a view rebuilt by host state only, and the VM entries those calls made.
     pub memo_hit: (Stat, u64),
     /// Wall time, and the time the thread ran (Windows).
-    pub rebuild20: (Stat, Option<Stat>),
+    pub rebuild20: Stat,
     /// Script time per 120 fps scroll frame, whole frame time, rows `renderRow` built.
     pub scroll: (Stat, Stat, u64),
     /// Compile + swap, compile, swap; whether hot state survived every reload.
@@ -121,57 +121,19 @@ fn memo_hit(n: usize) -> (Stat, u64) {
     (Stat::of(samples), calls)
 }
 
-/// Wall time, and (on Windows) the time the thread actually ran, which leaves out the time
-/// other processes on a busy machine held its core.
-fn rebuild20(n: usize) -> (Stat, Option<Stat>) {
+fn rebuild20(n: usize) -> Stat {
     let script = Script::new("panel20", sources());
     for _ in 0..50 {
         drop(script.render_uncached::<State>("panel20", true));
     }
-    let per_us = cpu::cycles_per_us();
-    let (mut wall, mut ran) = (Vec::with_capacity(n), Vec::with_capacity(n));
+    let mut wall = Vec::with_capacity(n);
     for _ in 0..n {
-        let (start, cycles) = (Instant::now(), cpu::cycles());
+        let start = Instant::now();
         let el = script.render_uncached::<State>("panel20", true);
         wall.push(us(start.elapsed()));
-        if let (Some(per_us), Some(a), Some(b)) = (per_us, cycles, cpu::cycles()) {
-            ran.push((b - a) as f64 / per_us);
-        }
         drop(el);
     }
-    (Stat::of(wall), (!ran.is_empty()).then(|| Stat::of(ran)))
-}
-
-/// The thread's cycle count (`QueryThreadCycleTime`), and its rate, measured against the clock.
-mod cpu {
-    #[cfg(windows)]
-    pub fn cycles() -> Option<u64> {
-        unsafe extern "system" {
-            fn GetCurrentThread() -> isize;
-            fn QueryThreadCycleTime(thread: isize, cycles: *mut u64) -> i32;
-        }
-        let mut c = 0;
-        // SAFETY: the pseudo-handle for this thread, and a valid out pointer.
-        (unsafe { QueryThreadCycleTime(GetCurrentThread(), &mut c) } != 0).then_some(c)
-    }
-
-    #[cfg(not(windows))]
-    pub fn cycles() -> Option<u64> {
-        None
-    }
-
-    /// The fastest of a few 20 ms spins: a spin the scheduler interrupted reads slow.
-    pub fn cycles_per_us() -> Option<f64> {
-        (0..5)
-            .filter_map(|_| {
-                let (start, c0) = (rune::time::Instant::now(), cycles()?);
-                while start.elapsed().as_millis() < 20 {
-                    std::hint::spin_loop();
-                }
-                Some((cycles()? - c0) as f64 / (start.elapsed().as_secs_f64() * 1e6))
-            })
-            .reduce(f64::max)
-    }
+    Stat::of(wall)
 }
 
 fn scroll() -> (Stat, Stat, u64) {
@@ -220,7 +182,7 @@ impl Report {
         format!(
             concat!(
                 r#"{{"native_code":{},"idle":{{"frames":{},"frames_asked":{},"vm_calls":{}}},"#,
-                r#""memo_hit":{{"view":{},"vm_calls":{}}},"rebuild20":{},"rebuild20_thread_time":{},"#,
+                r#""memo_hit":{{"view":{},"vm_calls":{}}},"rebuild20":{},"#,
                 r#""scroll":{{"script_per_frame":{},"frame":{},"rows_built":{}}},"#,
                 r#""reload":{{"total":{},"compile":{},"swap":{},"state_kept":{}}},"checks":[{}]}}"#
             ),
@@ -230,8 +192,7 @@ impl Report {
             self.idle.2,
             self.memo_hit.0.json(),
             self.memo_hit.1,
-            self.rebuild20.0.json(),
-            self.rebuild20.1.map_or("null".to_owned(), |s| s.json()),
+            self.rebuild20.json(),
             self.scroll.0.json(),
             self.scroll.1.json(),
             self.scroll.2,
@@ -254,10 +215,7 @@ impl fmt::Display for Report {
         writeln!(f, "Luau {}", if self.native_code { "native code (luau-jit)" } else { "interpreter" })?;
         writeln!(f, "idle: {} frames polled, {} asked for a frame, {} VM calls (gate: 0)", self.idle.0, self.idle.1, self.idle.2)?;
         writeln!(f, "{}  VM calls {}", row("memo hit (Script::view)", &self.memo_hit.0, "≤ 5 µs"), self.memo_hit.1)?;
-        writeln!(f, "{}", row("20-row panel rebuild", &self.rebuild20.0, "≤ 120 µs"))?;
-        if let Some(s) = &self.rebuild20.1 {
-            writeln!(f, "{}", row("20-row panel rebuild, thread time", s, "≤ 120 µs"))?;
-        }
+        writeln!(f, "{}", row("20-row panel rebuild", &self.rebuild20, "≤ 120 µs"))?;
         writeln!(f, "{}", row("scroll frame, script time", &self.scroll.0, "≤ 300 µs"))?;
         writeln!(f, "{}  rows built {}", row("scroll frame, whole frame", &self.scroll.1, "—"), self.scroll.2)?;
         writeln!(f, "{}", row("hot reload, compile + swap", &self.reload.0, "≤ 5,000 µs"))?;

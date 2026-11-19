@@ -140,6 +140,7 @@ fn send_flight_follows_the_measured_bubble_while_earlier_rows_land() {
     let mut draft = crate::edit::TextEdit::new("héllo flight");
     draft.focused = true;
     let mut rt = Runtime::new(State { draft, sent: false, height: 80.0 }, view, (400.0, 300.0), Env::new(true, 2.0));
+    rt.set_font_smoothing(crate::FontSmoothing::On);
     rt.frame(0.0);
     rt.state_mut().height = 400.0;
     rt.invalidate();
@@ -220,11 +221,17 @@ fn virtual_rows_match_full_layout_while_paging_and_keep_a_keyed_anchor() {
         assert!((rect.1[1] - anchor.1[1]).abs() < 0.05, "resize anchor moved: {:?} vs {:?}", anchor, rect);
         window.frame(1.0 / 120.0);
     }
+    let read = visible(&window);
+    window.settle_all();
+    window.frame(0.0);
+    assert_eq!(read, visible(&window), "a return keeps a reader off the end where they are");
+    window.update(|_, tx| tx.scroll_to_bottom("scroll"));
+    window.frame(1.0 / 120.0);
     window.settle_all();
     window.frame(0.0);
     let last = visible(&window).pop().unwrap();
     assert_eq!(last.0, "r599");
-    assert!((last.1[1] + last.1[3] - 276.0).abs() < 0.05, "return lands at the exact bottom");
+    assert!((last.1[1] + last.1[3] - 276.0).abs() < 0.05, "a return lands a glide to the end at the exact bottom");
     assert!(!window.animating, "moving: {:?}; active: {}", window.elements().into_iter().filter(|e| e.moving).map(|e| (e.path, e.rect, e.target, e.opacity)).collect::<Vec<_>>(), window.scene.store().active_len());
 }
 

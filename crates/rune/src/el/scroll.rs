@@ -143,6 +143,17 @@ impl El {
         self.cold_mut().scroll_edges.anchor = true;
         self
     }
+    /// On a scroll viewport, while its content overflows along an axis it scrolls, keep `pts`
+    /// clear at the edge across from it, as a browser's classic scroll bar takes its width from
+    /// an `overflow: auto` box: the end edge (the right, or the left right to left) while it
+    /// overflows down, the bottom while it overflows sideways. The content lays out in the rest,
+    /// so a vertical viewport's rows wrap short of the strip, and scrolling to an end shows the
+    /// content's end clear of the other axis's strip. While the content fits, the room goes back
+    /// to it. A scroll bar draws in the room (`rune-kit`'s `ScrollBarStyle::room`).
+    pub fn scroll_room(mut self, pts: f32) -> Self {
+        self.cold_mut().scroll_edges.room = pts.max(0.0);
+        self
+    }
 }
 
 /// How a scroll viewport's edges fade with the content hidden under them ([`El::scroll_fade`]).
@@ -267,6 +278,8 @@ pub(crate) struct ScrollEdges {
     pub(crate) margin: f32,
     /// The viewport keeps its top row where it is when content above it changes.
     pub(crate) anchor: bool,
+    /// Points kept clear across from each axis the content overflows on (`El::scroll_room`).
+    pub(crate) room: f32,
 }
 
 /// The axes a scroll viewport moves on: `El::scroll` (vertical), `El::scroll_x`, `El::scroll_xy`.

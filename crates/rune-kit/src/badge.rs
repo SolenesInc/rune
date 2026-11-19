@@ -45,7 +45,7 @@ impl Badge {
             BadgeVariant::Neutral => {
                 (c.layer_02, c.text_muted, Some(if self.high_contrast { c.border_strong } else { c.border_base }))
             }
-            BadgeVariant::Accent => (c.bg_accent, c.text_contrast, None),
+            BadgeVariant::Accent => (c.bg_accent, c.text_on_accent, None),
             BadgeVariant::Subtle => (c.layer_03, c.text_muted, None),
         };
         let (h, px, radius, font) = if self.standard {
@@ -55,7 +55,7 @@ impl Badge {
         };
         let e = row().role("status").label(self.label.clone()).center().gap(4.0).h(h).px(px).radius(radius).fill(fill);
         // A status: assistive technology announces a change to its label, politely.
-        let e = e.child(text(self.label).font(font).color(ink).a11y_hidden());
+        let e = e.child(text(self.label).key("label").font(font).color(ink).a11y_hidden());
         match border {
             Some(b) => e.border(0.5, b),
             None => e,

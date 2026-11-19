@@ -392,3 +392,288 @@ fn a_diagram_that_does_not_draw_comes_to_the_frame_as_its_source() {
     assert!(within("b0", "card") && !within("b0", "why"), "a drawn diagram isn't framed as source");
     assert!(within("b1", "source") && within("b1", "why"), "a fence shown as its source comes to the frame with it");
 }
+
+#[test]
+fn list_items_and_their_markers_and_deep_headings_take_their_own_font_and_colours() {
+    let (marker, deep) = (rune::oklch(0.6, 0.2, 260.0), rune::oklch(0.9, 0.0, 0.0));
+    let small = TextStyle { size: 11.0, line_height: 14.0, ..Kit::neutral(true).ty.body };
+    fn styled(src: &String, _: &mut Cx<String>) -> El {
+        let k = Kit::neutral(true);
+        let style = MarkdownStyle::from_kit(&k)
+            .list_font(TextStyle { size: 11.0, line_height: 14.0, ..k.ty.body })
+            .list_marker(rune::oklch(0.6, 0.2, 260.0))
+            .deep_heading(rune::oklch(0.9, 0.0, 0.0));
+        col().w_full().child(Markdown::new(src.clone()).render(&style))
+    }
+    let mut rt = Runtime::new("Above.\n\n- One\n- Two\n\n#### Deep\n".to_owned(), styled, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let shown = |t: &str| elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}"));
+    assert_eq!(shown("•").text_color, Some(marker));
+    assert_eq!(shown("Deep").text_color, Some(deep));
+    assert_eq!(shown("One").rect[3], small.line_height);
+    assert!(shown("Above.").rect[3] > small.line_height, "a paragraph outside a list keeps the body font");
+}
+
+#[test]
+fn alerts_show_their_icon_before_their_title() {
+    let rt = laid_out("> [!WARNING]\n> Careful.\n\n> [!TIP]\n> Try.\n");
+    let icons: Vec<_> = rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("icon")).collect();
+    assert_eq!(icons.len(), 2);
+    let elements = rt.elements();
+    let title = elements.iter().find(|e| e.text.as_deref() == Some("Warning")).expect("the title");
+    assert!(icons[0].rect[0] + icons[0].rect[2] <= title.rect[0], "the icon stands before the title");
+    assert_eq!(icons[0].text_color, title.text_color);
+}
+
+#[test]
+fn an_app_draws_an_image_with_no_picture_in_its_own_words() {
+    fn framed(src: &String, _: &mut Cx<String>) -> El {
+        col().w_full().child(
+            Markdown::new(src.clone())
+                .images(|_| None)
+                .missing_image_frame(|_, image| text(format!("[missing image: {} at {}]", image.alt, image.src)))
+                .build(&Kit::neutral(true)),
+        )
+    }
+    let mut rt = Runtime::new("![A chart](chart.png)\n\n![](plain.png)\n".to_owned(), framed, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let texts: Vec<_> = rt.elements().into_iter().filter_map(|e| e.text).collect();
+    assert!(texts.iter().any(|t| t == "[missing image: A chart at chart.png]"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "[missing image:  at plain.png]"), "an image without alt text comes too: {texts:?}");
+    assert!(!texts.iter().any(|t| t == "A chart"), "the default glyph and alt text are replaced: {texts:?}");
+}
+
+#[test]
+fn each_heading_level_takes_its_own_colour() {
+    fn styled(src: &String, _: &mut Cx<String>) -> El {
+        let style = MarkdownStyle::from_kit(&Kit::neutral(true))
+            .heading_text(2, rune::oklch(0.8, 0.0, 0.0))
+            .heading_text(3, rune::oklch(0.7, 0.0, 0.0));
+        col().w_full().child(Markdown::new(src.clone()).render(&style))
+    }
+    let mut rt = Runtime::new("# One\n\n## Two\n\n### Three\n\nBody.\n".to_owned(), styled, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let ink = |t: &str| elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}")).text_color;
+    assert_eq!(ink("Two"), Some(rune::oklch(0.8, 0.0, 0.0)));
+    assert_eq!(ink("Three"), Some(rune::oklch(0.7, 0.0, 0.0)));
+    assert_eq!(ink("One"), ink("Body."), "a level left alone keeps the text colour");
+}
+
+#[test]
+fn an_alerts_bar_runs_the_whole_height_of_its_box() {
+    let rt = laid_out("> [!IMPORTANT]\n> One line changes behavior.\n");
+    let elements = rt.elements();
+    let alert = elements.iter().find(|e| e.role == "note").expect("the alert");
+    let title = elements.iter().find(|e| e.text.as_deref() == Some("Important")).expect("the title");
+    let bar = elements
+        .iter()
+        .find(|e| e.rect[2] == 3.0 && e.fill == title.text_color.expect("the title's colour"))
+        .expect("the bar");
+    assert_eq!((bar.rect[1], bar.rect[3]), (alert.rect[1], alert.rect[3]), "the bar spans the padding too");
+    assert!(title.rect[1] >= alert.rect[1] + 8.0, "the title sits inside the padding");
+}
+
+struct Styled {
+    src: String,
+    style: MarkdownStyle,
+}
+
+fn styled_view(s: &Styled, _: &mut Cx<Styled>) -> El {
+    col().w_full().child(Markdown::new(s.src.clone()).render(&s.style))
+}
+
+fn styled(src: &str, style: impl FnOnce(MarkdownStyle) -> MarkdownStyle) -> Runtime<Styled> {
+    let state = Styled { src: src.to_owned(), style: style(MarkdownStyle::from_kit(&Kit::neutral(true))) };
+    let mut rt = Runtime::new(state, styled_view, (480.0, 800.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt
+}
+
+fn shown<'a>(elements: &'a [rune::ElementInfo], t: &str) -> &'a rune::ElementInfo {
+    elements.iter().find(|e| e.text.as_deref() == Some(t)).unwrap_or_else(|| panic!("no text {t:?}"))
+}
+
+#[test]
+fn a_finished_task_draws_dimmed_and_struck_through_and_its_nested_list_does_not() {
+    let done = rune::oklch(0.6, 0.0, 0.0);
+    let src = "- [x] Finished\n  - inside\n- [ ] Open\n";
+    let rt = styled(src, |s| s.task_done(done));
+    let elements = rt.elements();
+    assert_eq!(shown(&elements, "Finished").text_color, Some(done));
+    assert_eq!(shown(&elements, "Finished").strikes, [[0, "Finished".len() as u32]]);
+    assert!(shown(&elements, "inside").strikes.is_empty(), "a list inside the item keeps its own look");
+    assert!(shown(&elements, "Open").strikes.is_empty());
+    assert_ne!(shown(&elements, "Open").text_color, Some(done));
+    let plain = styled(src, |s| s);
+    assert!(shown(&plain.elements(), "Finished").strikes.is_empty(), "by default a finished task reads as an open one");
+}
+
+#[test]
+fn a_task_checkbox_keeps_its_ring_checked_and_its_text_the_gap_away() {
+    let (ring, mark) = (rune::oklch(0.7, 0.15, 145.0), rune::oklch(0.7, 0.15, 145.0));
+    let rt = styled("- [x] Finished\n- [ ] Open\n", |s| s.task_checked(Color::TRANSPARENT, ring, mark).task_ring(2.0, 11.0));
+    let elements = rt.elements();
+    let boxes: Vec<_> = elements.iter().filter(|e| e.key.as_deref() == Some("control")).collect();
+    assert_eq!(boxes.len(), 2);
+    assert_eq!(boxes[0].fill, Color::TRANSPARENT, "a checked box stays a ring");
+    let marks: Vec<_> = elements.iter().filter(|e| e.key.as_deref() == Some("mark")).collect();
+    assert_eq!(marks[0].text_color, Some(mark));
+    let text = shown(&elements, "Finished");
+    assert_eq!(text.rect[0], boxes[0].rect[0] + boxes[0].rect[2] + 11.0);
+}
+
+#[test]
+fn rules_table_rules_and_code_outlines_take_the_line_width() {
+    let src = "Above.\n\n---\n\n| a |\n|---|\n| b |\n| c |\n";
+    let thick = styled(src, |s| s.lines(1.0));
+    let hairline = styled(src, |s| s);
+    let heights = |rt: &Runtime<Styled>| -> Vec<f32> {
+        let mut h: Vec<f32> = rt.elements().iter().filter(|e| e.rect[3] > 0.0 && e.rect[3] <= 1.0 && e.rect[2] > 100.0).map(|e| e.rect[3]).collect();
+        h.sort_by(f32::total_cmp);
+        h
+    };
+    assert!(!heights(&thick).is_empty() && heights(&thick).iter().all(|&h| h == 1.0), "{:?}", heights(&thick));
+    assert!(heights(&hairline).iter().all(|&h| h == 0.5), "{:?}", heights(&hairline));
+}
+
+#[test]
+fn blocks_space_by_the_margins_the_style_gives_them() {
+    let src = "# Title\n\nText.\n\n### Code\n\n```\nlet x = 1;\n```\n\n- item\n\n---\n\nAfter.\n";
+    let rt = styled(src, |s| {
+        s.heading_margin(1, 21.0, 14.0)
+            .heading_margin(3, 21.0, 7.0)
+            .paragraph_margin(14.0)
+            .code_margin(17.5, 17.5)
+            .list_margin(5.25, 5.25)
+            .rule_margin(28.0, 28.0)
+            .heading_margins_collapse(true)
+    });
+    let elements = rt.elements();
+    let top = |t: &str| shown(&elements, t).rect[1];
+    let bottom = |t: &str| shown(&elements, t).rect[1] + shown(&elements, t).rect[3];
+    assert_eq!(top("Text.") - bottom("Title"), 14.0);
+    assert_eq!(top("Code") - bottom("Text."), 21.0);
+    let code = elements.iter().find(|e| e.role == "code").expect("the code block");
+    assert_eq!(code.rect[1] - bottom("Code"), 17.5, "a heading's bottom margin collapses with the code's top");
+    let rule = elements.iter().find(|e| e.rect[3] == 0.5 && e.rect[1] > bottom("item")).expect("the rule");
+    assert_eq!(rule.rect[1] - bottom("item"), 28.0);
+    assert_eq!(top("After.") - (rule.rect[1] + rule.rect[3]), 28.0);
+
+    let default = styled(src, |s| s);
+    let elements = default.elements();
+    let code = elements.iter().find(|e| e.role == "code").expect("the code block");
+    let heading = shown(&elements, "Code");
+    assert_eq!(code.rect[1] - (heading.rect[1] + heading.rect[3]), 8.0, "by default a heading's bottom margin alone sets the gap");
+}
+
+#[test]
+fn a_quote_can_be_italic_and_its_words_lean() {
+    let src = "> Every word of this quote.\n";
+    let upright = styled(src, |s| s);
+    let italic = styled(src, |s| s.quote_italic(true));
+    let width = |rt: &Runtime<Styled>| shown(&rt.elements(), "Every word of this quote.").rect[2];
+    let ink = |rt: &Runtime<Styled>| rt.instances.iter().filter(|i| i.params[1] == rune::render::KIND_GLYPH).map(|i| (i.rect, i.params)).collect::<Vec<_>>();
+    assert!(width(&upright) != width(&italic) || ink(&upright).iter().zip(ink(&italic)).any(|(a, b)| *a != b), "italic draws other glyphs");
+}
+
+#[test]
+fn inline_code_keeps_its_size_whatever_text_it_sits_in() {
+    let src = "Some `code` here.\n\n- an `item`\n";
+    let rt = styled(src, |s| s.list_font(TextStyle { size: 11.0, line_height: 16.0, ..Kit::neutral(true).ty.body }).inline_code_size(12.0));
+    let scaled = styled(src, |s| s.list_font(TextStyle { size: 11.0, line_height: 16.0, ..Kit::neutral(true).ty.body }));
+    let width = |rt: &Runtime<Styled>| {
+        let e = rt.elements().into_iter().find(|e| e.text.as_deref().is_some_and(|t| t.contains("item"))).expect("the item");
+        let xs: Vec<f32> = rt.instances.iter()
+            .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+            .filter(|i| i.rect[1] >= e.rect[1] && i.rect[1] + i.rect[3] <= e.rect[1] + e.rect[3])
+            .map(|i| i.rect[0] + i.rect[2])
+            .collect();
+        xs.into_iter().fold(0.0f32, f32::max)
+    };
+    assert!(width(&rt) > width(&scaled), "the list's inline code grows to its own size");
+}
+
+#[test]
+fn ordered_list_numbers_can_set_figures_at_one_width() {
+    let src = "1. one\n2. two\n";
+    let marks = |rt: &Runtime<Styled>| -> Vec<[f32; 4]> {
+        rt.instances.iter().filter(|i| i.params[1] == rune::render::KIND_GLYPH).map(|i| i.rect).filter(|r| r[0] < 30.0).collect()
+    };
+    let tabular = styled(src, |s| s.list_markers_outside(true).list_tabular_figures(true));
+    let proportional = styled(src, |s| s.list_markers_outside(true));
+    assert_ne!(marks(&tabular), marks(&proportional), "the numbers set at another width");
+}
+
+#[test]
+fn an_outside_marker_stands_the_gap_away_from_its_text() {
+    let src = "- one\n";
+    let bullet_end = |rt: &Runtime<Styled>| {
+        let column = shown(&rt.elements(), "•").rect;
+        rt.instances.iter()
+            .filter(|i| i.params[1] == rune::render::KIND_GLYPH)
+            .map(|i| i.rect)
+            .filter(|r| r[0] >= column[0] && r[0] + r[2] <= column[0] + column[2] && r[1] >= column[1] && r[1] <= column[1] + column[3])
+            .map(|r| r[0] + r[2])
+            .fold(0.0f32, f32::max)
+    };
+    let near = bullet_end(&styled(src, |s| s.list_markers_outside(true).list_marker_gap(4.0)));
+    let far = bullet_end(&styled(src, |s| s.list_markers_outside(true).list_marker_gap(12.0)));
+    assert_eq!(near - far, 8.0, "the marker moves left by what the gap grows");
+}
+
+#[test]
+fn an_inline_code_chip_pads_the_fonts_ascent_and_descent_by_its_vertical_pad() {
+    let chip_bg = rune::oklch(0.5, 0.2, 140.0);
+    let chip = |pad: Option<f32>| {
+        let rt = styled("Some `code` here.\n", |s| {
+            let s = s.inline_code_bg(chip_bg);
+            match pad { Some(p) => s.inline_code_pad_y(p), None => s }
+        });
+        let fill = chip_bg.premul(1.0);
+        rt.instances.iter().find(|i| i.params[1] == rune::render::KIND_RECT && i.fill == fill).expect("the code chip").rect
+    };
+    let (balanced, bare, padded) = (chip(None), chip(Some(0.0)), chip(Some(2.0)));
+    assert_ne!(bare, balanced, "a vertical pad leaves the cap height for the font's ascent and descent");
+    let grown = padded[3] - bare[3];
+    assert!((3.0..=5.0).contains(&grown), "two points above and below: {bare:?} {padded:?}");
+    assert!((padded[1] - (bare[1] - 2.0)).abs() <= 1.0, "half the room is above: {bare:?} {padded:?}");
+}
+
+#[test]
+fn a_prose_measure_centers_top_level_prose_at_the_measure_while_tables_code_and_front_matter_take_the_column() {
+    const MEASURE: f32 = 760.0;
+    let src = "---\ntitle: Plan\n---\n# Heading\n\nA paragraph long enough to wrap if it had to, and then some more words after that.\n\n- an item\n\n> a quote\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```rust\nfn main() {}\n```\n\n---\n\n![Wide](wide.png)\n";
+    fn view((src, column): &(String, f32), _: &mut Cx<(String, f32)>) -> El {
+        thread_local! {
+            static WIDE: rune::Image = {
+                let cache = rune::ImageCache::new(std::sync::Arc::new(|| {}));
+                let image = cache.rgba(1200, 8, [40u8, 80, 120, 255].repeat(1200 * 8));
+                image.wait().unwrap();
+                image
+            };
+        }
+        let picture = WIDE.with(|p| p.clone());
+        let style = MarkdownStyle::from_kit(&Kit::neutral(true)).table_full_width(true).text_width(*column).prose_measure(MEASURE);
+        let md = Markdown::new(src.clone()).style(style).images(move |_| Some(picture.clone()));
+        col().w_full().child(md.build(&Kit::neutral(true)))
+    }
+    let widths = |column: f32| {
+        let mut rt = Runtime::new((src.to_owned(), column), view, (column, 1200.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let elements = rt.elements();
+        (0..parse(src).len())
+            .map(|i| {
+                let key = format!("b{i}");
+                let e = elements.iter().find(|e| e.key.as_deref() == Some(key.as_str())).unwrap_or_else(|| panic!("no {key}"));
+                (e.rect[0].round(), e.rect[2].round())
+            })
+            .collect::<Vec<_>>()
+    };
+    // Front matter, heading, paragraph, list, quote, table, code, rule and a picture 1200 wide.
+    let prose = ((1600.0 - MEASURE) / 2.0, MEASURE);
+    let column = (0.0, 1600.0);
+    assert_eq!(widths(1600.0), [column, prose, prose, prose, prose, column, column, column, (200.0, 1200.0)]);
+    assert_eq!(widths(500.0), [(0.0, 500.0); 9]);
+}

@@ -42,7 +42,22 @@ pub(super) fn area(r: [f32; 4], s: f32) -> [f32; 4] {
     [r[0] / s, r[1] / s, (r[2] - r[0]) / s, (r[3] - r[1]) / s]
 }
 
+/// An `El::ime_cursor_at` caret, [x, y, width, height] in its element's points, inside that
+/// element's drawn rect `r` in device pixels.
+pub(super) fn within(r: [f32; 4], at: [f32; 4], s: f32) -> [f32; 4] {
+    let [x, y, w, h] = at;
+    [r[0] + x * s, r[1] + y * s, r[0] + (x + w.max(0.0)) * s, r[1] + (y + h.max(0.0)) * s]
+}
+
 impl RuntimeCore {
+    /// Places the input method's area again at an `El::ime_cursor_at` caret's latest value, on
+    /// a frame that keeps the last paint.
+    pub(super) fn place_ime_anchor(&mut self) {
+        if let Some((r, at)) = &self.ime_anchor {
+            self.ime_area = Some(area(within(*r, at.get(), self.env.scale), self.env.scale));
+        }
+    }
+
     /// An input method event goes to the focused text field, else to `App::on_ime`. A
     /// composition the app has open ends there even after a field took focus, and the input
     /// method turning on or off is only the app's to hear.

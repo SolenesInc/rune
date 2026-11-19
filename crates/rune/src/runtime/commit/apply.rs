@@ -691,7 +691,7 @@ impl RuntimeCore {
                     e.slack = scroll_bottom::Slack::landed(self.viewport);
                     e.x = AxisScroll::default();
                 }
-                if tx.commit.lands() && sp.stick_bottom {
+                if e.follows_after(tx.commit.lands(), sp.stick_bottom) {
                     e.pin();
                 }
                 // A window resize, a settle or an instant change lands the slack: the rows go
@@ -758,7 +758,8 @@ impl RuntimeCore {
                     if tx.commit.lands() || ((instant || tx.unprompted) && !self.is_exiting(old.id)) || drew_nothing.get(oi).copied().unwrap_or(false) {
                         self.scene.unmount(old.id);
                     } else {
-                        if let Some(t) = old_parent_id.and_then(|pid| self.node_index.get(&pid)).and_then(|&p| nodes[p].vis.child_exit.as_deref().copied()) {
+                        let still = old.transition.as_deref() == Some(&Transition::none());
+                        if let Some(t) = old_parent_id.and_then(|pid| self.node_index.get(&pid)).and_then(|&p| nodes[p].vis.child_exit.as_deref().copied()).filter(|_| !still) {
                             self.scene.set_transition(old.id, t);
                         }
                         self.scene.remove(old.id);

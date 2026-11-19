@@ -51,6 +51,7 @@ mod visuals;
 
 pub use a11y::LiveRegion;
 pub(crate) use a11y::{A11y, Checked};
+pub use a11y::DrawnText;
 pub use anchor::{Anchor, Side, anchor_rect};
 pub(crate) use crate::clipboard::tx::{ClipboardRead, ReadFn};
 pub use crate::cursor::{Cursor, CursorImage};
@@ -59,9 +60,10 @@ pub(crate) use direction::{DirEffect, DirEvent, Flow, Pin, mirror_anchor, mirror
 pub(crate) use drop::{DropHoverFn, DropSpec};
 pub(crate) use focus::FocusSpec;
 pub(crate) use focus::ModalSpec;
+pub(crate) use focus::Reveal;
 pub(crate) use handler_set::Handlers;
 pub use handlers::{Drag, Phase, PointerEvent, PointerPress};
-pub(crate) use handlers::{DragEndFn, DragFn, DragOutFn, InputKeyFn, PointerFn, PressFn, StepFn, StepLimitFn, WindowDrag};
+pub(crate) use handlers::{DragEndFn, DragFn, DragOutFn, InputKeyFn, OwnTextFn, PointerFn, PressFn, StepFn, StepLimitFn, WindowDrag};
 pub(crate) use help::{HELP_KEY, HELP_ROW, help_words};
 pub use input::{InputSpec, auto_grow, edit_access, text_input};
 pub use pills::InlineIcon;
@@ -224,7 +226,6 @@ pub(crate) type LayoutFn = Rc<dyn Fn(crate::states::States<'_>, [f32; 4])>;
 pub(crate) type LayoutTxFn = Rc<dyn Fn(crate::states::States<'_>, [f32; 4], &mut Tx)>;
 pub(crate) type ScrollOffsetFn = Rc<dyn Fn(crate::ScrollPos)>;
 pub(crate) type WindowFocusFn = Rc<dyn Fn(crate::states::States<'_>, bool, &mut Tx)>;
-pub(crate) type LanguagesFn = Rc<dyn Fn(crate::states::States<'_>, Vec<String>, &mut Tx)>;
 
 /// An element: layout, paint, children and handlers. Hot fields sit inline in three cache lines;
 /// the rest wait behind `cold`, allocated on the first write.

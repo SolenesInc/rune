@@ -5,7 +5,10 @@ use super::*;
 pub(super) const CLICK_SLOP: f32 = 4.0;
 
 impl RuntimeCore {
-    pub fn pointer_move(&mut self, x: f32, y: f32) { self.move_pointer(x, y, true); }
+    pub fn pointer_move(&mut self, x: f32, y: f32) {
+        self.heard_input();
+        self.move_pointer(x, y, true);
+    }
 
     /// `drag_move` false keeps a held drag from getting a `Phase::Move`: a release at the
     /// point the drag last saw has nothing new to report, and its instant transaction would
@@ -72,7 +75,7 @@ impl RuntimeCore {
     pub(crate) fn observe_pointer(&mut self, x: f32, y: f32) -> bool {
         if self.pointer == Some((x, y)) { return false; }
         let visual_changed = self.nodes.iter().enumerate().any(|(i, n)| {
-            if n.vis.hover().a <= 0.0 && n.vis.press().a <= 0.0 && n.handlers.get().is_none_or(|h| h.press_scale.is_none()) { return false; }
+            if !n.vis.hovers() && n.vis.press().a <= 0.0 && n.handlers.get().is_none_or(|h| h.press_scale.is_none()) { return false; }
             let inside = |p: Option<(f32, f32)>| p.is_some_and(|(x, y)| self.node_contains(i, x, y));
             inside(self.pointer) != inside(Some((x, y)))
         });
@@ -198,7 +201,38 @@ impl RuntimeCore {
         }
     }
 
+    /// Asks the open modal to close when the wheel turns at (x, y) outside where it is drawn
+    /// and it closes on that (`El::modal_wheel_closes`).
+    pub(super) fn wheel_outside_modal(&mut self, x: f32, y: f32) {
+        let Some(i) = self.active_modal() else { return };
+        if !self.nodes[i].handlers.modal.as_ref().is_some_and(|m| m.wheel_closes) { return; }
+        let inside = self.drawn.get(i).is_some_and(|&[left, top, w, h]| x >= left && x < left + w && y >= top && y < top + h);
+        if !inside { self.queue.push(Action::Dismiss(self.nodes[i].path.clone())); }
+    }
+
+    /// Queues `on_press_within` for each element holding the topmost hit at (x, y), innermost
+    /// first, up to a node the pointer may not reach. A primary press on an element that keeps
+    /// its press from them (`El::keeps_press_from_within`) queues none.
+    pub(super) fn queue_presses_within(&mut self, x: f32, y: f32, button: crate::PointerButton) {
+        let top = self.hits.iter().rev().find(|&&(id, r)| self.hit_contains(id, r, x, y)).and_then(|(id, _)| self.node_index.get(id).copied());
+        let kept = |i: usize| self.nodes[i].handlers.get().is_some_and(|h| h.keeps_press_from_within);
+        if button == crate::PointerButton::Primary && top.is_some_and(kept) { return; }
+        let within: Vec<String> = std::iter::successors(top, |&i| self.nodes[i].parent)
+            .take_while(|&i| !self.subtree_exiting(i) && self.pointer_allowed(i))
+            .filter(|&i| self.nodes[i].handlers.get().is_some_and(|h| h.on_press_within.is_some()))
+            .map(|i| self.nodes[i].path.clone())
+            .collect();
+        self.queue.extend(within.into_iter().map(Action::PressWithin));
+    }
+
     pub fn pointer_down(&mut self, x: f32, y: f32) {
+        self.heard_input();
+        let other_button_held = self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary);
+        self.press_down(x, y);
+        if !other_button_held { self.queue_presses_within(x, y, crate::PointerButton::Primary); }
+    }
+
+    fn press_down(&mut self, x: f32, y: f32) {
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
             return;
@@ -252,7 +286,7 @@ impl RuntimeCore {
         let now = self.now_clock();
         if self.bare_drag_region(ti) {
             self.titlebar.press_region(now, x, y, self.double_click_interval);
-            if self.focus.path().is_some() {
+            if self.focus.path().is_some() && !self.press_keeps_focus(ti) {
                 self.queue.push(Action::Blur);
             }
             return;
@@ -328,6 +362,7 @@ impl RuntimeCore {
     }
 
     pub fn pointer_up(&mut self, x: f32, y: f32) {
+        self.heard_input();
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
             return;
@@ -506,9 +541,11 @@ impl RuntimeCore {
     /// negative deltaY). Applied 1:1: the platform supplies its own momentum phases. It scrolls the
     /// innermost viewport under the pointer with room to move that way.
     pub fn wheel(&mut self, x: f32, y: f32, dy: f32) {
+        self.heard_input();
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();
+        self.wheel_outside_modal(x, y);
         let Some(id) = self.scroll_toward(x, y, dy) else { return };
         let stick = self.node_index.get(&id).and_then(|&i| self.nodes[i].scroll).is_some_and(|s| s.stick_bottom);
         if let Some(st) = self.scrolls.get_mut(&id) {

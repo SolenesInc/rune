@@ -42,11 +42,9 @@ pub use language::set_language;
 mod line_break;
 mod ltr_units;
 pub use ltr_units::ltr_units;
-pub mod mask_cache;
 mod paragraphs;
 mod span;
 mod system_fonts;
-mod system_weight;
 mod default_fonts;
 #[cfg(all(test, target_os = "macos"))]
 mod core_text_tests;
@@ -65,8 +63,7 @@ mod hairline;
 pub(crate) mod icon;
 mod layout_cache;
 mod macos;
-pub use macos::smoothing::ApplePipeline;
-mod windows;
+pub use macos::smoothing::{ApplePipeline, SmoothingInk, smoothed_glyph};
 mod measure;
 pub(crate) mod outline;
 pub use outline::Outline;
@@ -78,7 +75,6 @@ mod support;
 pub use support::SmoothingSupport;
 pub(crate) use support::note_dual_source;
 mod svg_path;
-mod synthetic_bold;
 mod trak;
 mod underline;
 mod line_metrics;
@@ -90,7 +86,7 @@ pub use case::TextCase;
 pub use hash::text_hash;
 pub(crate) use hash::{directed, elide_key, shape_key};
 pub(crate) use families::choose_families;
-pub use measure::{FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, measure, measure_with, with_families};
+pub use measure::{FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, layout, measure, measure_with, with_families};
 pub use rich_layout::RichLayoutOptions;
 pub use run::{Run, RunLayout};
 pub(crate) use case::Source as CaseSource;
@@ -127,7 +123,7 @@ use atlas::{MAX_OVERFLOW_PAGES, MAX_STEADY_PAGES};
 pub(crate) use glyph_emit::GLIDE_PHASES;
 use line_break::break_lines_with_blocks;
 use span::PILL_BOX;
-use system_fonts::{LoadedFiles, family_list, load_installed, load_system_mono, named_list, names_system_mono, register_cjk_fallbacks};
+use system_fonts::{LoadedFiles, family_list, load_installed, load_system_mono, named_families, names_generic_mono, names_system_mono, register_cjk_fallbacks};
 #[cfg(any(test, not(target_arch = "wasm32")))]
 use system_fonts::system_font_files;
 #[cfg(test)]
@@ -205,8 +201,6 @@ pub struct TextSystem {
     font_files: LoadedFiles,
     /// The system fonts looked up so far, and the app's own (`load_fallbacks`).
     fallbacks: system_fonts::Fallbacks,
-    /// The loaded system faces' families, for the face DirectWrite picks (`system_weight`).
-    system_faces: system_weight::Faces,
     /// Installed families looked up by name (`load_installed`), lowercase.
     installed: std::collections::HashSet<String>,
     pub atlas: Atlas,
@@ -233,8 +227,6 @@ pub struct TextSystem {
     primary_axes: FxHashMap<(Family, u32, bool), Rc<[parley::FontVariation]>>,
     /// CoreGraphics' glyph pipeline for `smoothing`, and its per-ink state.
     apple: macos::smoothing::Smoothing,
-    /// DirectWrite for `FontSmoothing::DirectWrite`, and its per-ink state.
-    windows: windows::Rasterizer,
     pub(crate) glyph_cache: glyph_cache::GlyphCache,
     /// Device px `[x, y]` the next glyphs glide from their resting pixel ([`Self::set_glide`]).
     glide: [f32; 2],
@@ -244,8 +236,6 @@ pub struct TextSystem {
     paths: outline::Paths,
     /// What each face (font, index) is, for drawing it from outlines.
     face_kinds: FxHashMap<(u64, u32), windfoil::FaceKind>,
-    /// Masks kept across launches (`mask_cache`).
-    masks: mask_cache::Masks,
 }
 
 impl Default for TextSystem {
@@ -326,8 +316,7 @@ impl TextSystem {
             slot_system_mono: names_system_mono(families.0) || names_system_mono(families.1),
             scripts: 0,
             font_files: LoadedFiles::new(),
-            fallbacks: system_fonts::Fallbacks::new(list, cjk),
-            system_faces: Default::default(),
+            fallbacks: system_fonts::Fallbacks::new(list, registered, cjk),
             installed: Default::default(),
             atlas: Atlas::new(),
             color_glyphs: GlyphMap::default(),
@@ -344,12 +333,10 @@ impl TextSystem {
             primary_traks: Default::default(),
             primary_axes: Default::default(),
             apple: Default::default(),
-            windows: Default::default(),
             glyph_cache: Default::default(),
             glide: [0.0; 2],
             emit: outline::Emit::Atlas,
             paths: Default::default(),
-            masks: Default::default(),
             face_kinds: Default::default(),
         };
         text.load_installed(families.0);
@@ -397,7 +384,7 @@ impl TextSystem {
 
     /// The font text in `family` at `weight` shapes with first.
     fn primary_font(&mut self, family: Family, weight: f32, italic: bool) -> Option<parley::fontique::QueryFont> {
-        if family == Family::SystemMono || self.slot_system_mono {
+        if family == Family::SystemMono || self.slot_system_mono || matches!(family, Family::Named(list) if names_generic_mono(list)) {
             self.system_mono();
         }
         if let Family::Named(list) = family {
@@ -413,7 +400,7 @@ impl TextSystem {
         let names = match family {
             Family::Sans => named(&self.sans),
             Family::Mono => named(&self.mono),
-            Family::Named(list) => named_list(list).into_iter().filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None }).chain(named(&self.sans)).collect(),
+            Family::Named(list) => named_families(list, system).into_iter().filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None }).chain(named(&self.sans)).collect(),
             Family::SystemMono => system.iter().cloned().chain(named(&self.mono)).collect(),
         };
         let mut query = self.font_cx.collection.query(&mut self.font_cx.source_cache);
@@ -441,29 +428,22 @@ impl TextSystem {
     }
 
     /// The colours the next glyphs draw in (`spans` by `Ink`). On macOS they choose each
-    /// glyph's dilation and on Windows its gamma table, so glyphs in light and dark inks
-    /// rasterize separately.
+    /// glyph's dilation, so glyphs in light and dark inks rasterize separately.
     pub fn set_glyph_inks(&mut self, element: Color, spans: &[Span]) {
         self.apple.set_inks(element, spans);
-        self.windows.set_inks(element, spans);
-    }
-
-    /// Whether glyphs rasterise with DirectWrite: `FontSmoothing::DirectWrite` where it exists.
-    pub(crate) fn direct_write(&mut self) -> bool {
-        matches!(self.smoothing, FontSmoothing::DirectWrite | FontSmoothing::ClearType) && self.windows.available()
     }
 
     /// How glyphs rasterise and place ([`FontSmoothing`]).
     pub fn font_smoothing(&self) -> FontSmoothing { self.requested }
 
     /// How far each gliding glyph mask's ink sits below the top of its quad, in device px, keyed
-    /// as `blend::apron_key` keys its instance: a DirectWrite or Windfoil mask keeps one box across its y
+    /// as `blend::apron_key` keys its instance: a Windfoil mask keeps one box across its y
     /// phases and moves its ink down that box by its phase, so the box moves a whole pixel only
     /// where the phase wraps. The motion gate's raster, which spreads a glyph over its quad,
     /// moves its coverage by this so a glide reads as the quarter-pixel steps it draws.
     pub(crate) fn glyph_shifts(&self) -> std::collections::HashMap<[u32; 3], f32> {
         self.atlas.map.iter()
-            .filter(|(k, _)| k.subpy != 0 && k.apple & (glyph_emit::DIRECT_WRITE_KEY | glyph_emit::WINDFOIL_KEY) != 0)
+            .filter(|(k, _)| k.subpy != 0 && k.apple & glyph_emit::WINDFOIL_KEY != 0)
             .filter_map(|(k, a)| a.mask().map(|a| ([(a.x as f32).to_bits(), (a.y as f32).to_bits(), (a.page as f32).to_bits()], k.subpy as f32 / glyph_emit::GLIDE_PHASES as f32)))
             .collect()
     }
@@ -473,7 +453,7 @@ impl TextSystem {
     /// elsewhere.
     pub fn coverage_exponent(&self, fill: [f32; 4]) -> f32 {
         let apple = cfg!(any(target_os = "macos", target_os = "ios"));
-        coretext_match::coverage_exponent(self.smoothing, fill, apple, cfg!(target_os = "windows"))
+        coretext_match::coverage_exponent(self.smoothing, fill, apple)
     }
 
     /// Rasterise and place glyphs in `mode` from the next placement on, with its CoreGraphics
@@ -486,11 +466,9 @@ impl TextSystem {
         self.atlas.lcd = self.smoothing.lcd();
     }
 
-    /// Whether subpixel text draws here now: the renderer draws outlines and blends by channel,
-    /// and for ClearType, DirectWrite is there.
+    /// Whether subpixel text draws here now: the renderer draws outlines and blends by channel.
     fn lcd_ok(&mut self) -> bool {
         support::lcd_ok(self.atlas.outlines.support())
-            && (self.requested != FontSmoothing::ClearType || self.windows.available())
     }
 
     /// The CoreGraphics stages glyphs rasterize with.
@@ -503,7 +481,7 @@ impl TextSystem {
     /// Previously emitted quads must no longer be sampled after this call. Runtime
     /// calls this automatically; direct text/renderer users call it before shaping.
     pub fn begin_frame(&mut self) {
-        let _ = self.begin_frame_pinned(0);
+        self.begin_frame_pinned(0);
     }
 
     /// Forgets every text's raster path and cached glyph runs, so the next paint places every
@@ -513,16 +491,14 @@ impl TextSystem {
         self.glyph_cache = Default::default();
     }
 
-    /// [`Self::begin_frame`] keeping the pages in `pinned_mask`. Returns when the window should
-    /// wake for the glyph mask cache's first write (`mask_cache`).
-    pub(crate) fn begin_frame_pinned(&mut self, pinned_mask: u32) -> Option<std::time::Duration> {
+    /// [`Self::begin_frame`] keeping the pages in `pinned_mask`.
+    pub(crate) fn begin_frame_pinned(&mut self, pinned_mask: u32) {
         // A subpixel mode draws grayscale until the renderer can blend by channel, and after it
         // says it can't.
         if self.requested.lcd() && self.requested.drawn(self.lcd_ok()) != self.smoothing {
             self.set_font_smoothing(self.requested);
         }
         self.atlas.begin_frame(pinned_mask);
-        let wake = self.mask_cache_frame(true);
         self.paths.begin_frame();
         self.glyph_cache.begin_frame();
         if self.color_bytes > COLOR_GLYPH_BUDGET {
@@ -543,7 +519,6 @@ impl TextSystem {
         }
         for c in self.color_glyphs.values_mut() { c.used = false; }
         self.color_icons.begin_frame();
-        wake
     }
 
     /// `shape` is [`shape_key`] of the same text when the caller already has it.
@@ -692,7 +667,7 @@ impl TextSystem {
             settings.extend(extra);
             settings
         };
-        if style.family == Family::SystemMono || self.slot_system_mono {
+        if style.family == Family::SystemMono || self.slot_system_mono || matches!(style.family, Family::Named(list) if names_generic_mono(list)) {
             self.system_mono();
         }
         if let Family::Named(list) = style.family {
@@ -702,10 +677,11 @@ impl TextSystem {
         let emoji = self.emoji.as_slice();
         let system = self.system_mono.as_deref().unwrap_or_default();
         let mono_scripts = self.mono_scripts.as_deref().unwrap_or(&[]);
+        let text_symbols: Vec<&'static str> = self.symbol_families.iter().copied().filter(|name| !emoji.contains(name)).collect();
         let with_symbols = |primary, extra: &[&'static str]| {
             family_list(primary, system, self.sans.as_str())
                 .into_iter()
-                .chain(extra.iter().chain(self.symbol_families.iter()).chain(math).map(|name| FontFamilyName::named(name)))
+                .chain(extra.iter().chain(&text_symbols).chain(math).chain(emoji).map(|name| FontFamilyName::named(name)))
                 .collect::<Vec<_>>()
         };
         let sans = match style.family {
@@ -713,7 +689,7 @@ impl TextSystem {
             Family::Mono => with_symbols(self.mono.as_str(), mono_scripts),
             Family::Named(list) => {
                 let mut families = with_symbols(self.sans.as_str(), &[]);
-                families.splice(0..0, named_list(list));
+                families.splice(0..0, named_families(list, system));
                 families
             }
             Family::SystemMono => {
@@ -746,7 +722,7 @@ impl TextSystem {
         let off = [b"liga", b"clig", b"calt", b"dlig"].map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 0));
         let unligated: Vec<parley::FontFeature> = features.iter().chain(&off).copied().collect();
         type Spacings = [(std::ops::Range<usize>, f32)];
-        let build = |lcx: &mut LayoutContext<Ink>, fcx: &mut FontContext, exact: &Spacings, widen: &Spacings, weights: &Spacings, fits: &Spacings, bold: &[(std::ops::Range<usize>, u16)]| {
+        let build = |lcx: &mut LayoutContext<Ink>, fcx: &mut FontContext, exact: &Spacings, widen: &Spacings, fits: &Spacings| {
             let mut b = lcx.ranged_builder(fcx, text, scale, true);
             b.set_base_direction(base);
             // Lines break where Chromium breaks them: after every run of spaces, even before a
@@ -817,14 +793,8 @@ impl TextSystem {
                     b.push(StyleProperty::LetterSpacing(v), r.clone());
                 }
             }
-            for (range, w) in weights {
-                b.push(StyleProperty::FontWeight(FontWeight::new(*w)), range.clone());
-            }
             for (range, lh) in fits {
                 b.push(LineHeight::Absolute(*lh), range.clone());
-            }
-            for (range, ink) in bold {
-                b.push(StyleProperty::Brush(Ink(*ink)), range.clone());
             }
             for (range, stack) in &routed {
                 b.push(FontFamily::from(stacks[*stack].as_deref().unwrap_or_default()), range.clone());
@@ -834,14 +804,6 @@ impl TextSystem {
             }
             for (range, v) in widen {
                 b.push(StyleProperty::WordSpacing(*v), range.clone());
-            }
-            // Blink widens each glyph in synthetic bold by a pixel (`SyntheticBoldOffset`).
-            for (range, _) in bold {
-                let at = range.start;
-                let v = exact.iter().find(|(r, _)| r.contains(&at)).map(|e| e.1)
-                    .or_else(|| spans.iter().zip(&span_spacing).rev().find_map(|(s, v)| v.filter(|_| span_range(s).contains(&at))))
-                    .unwrap_or(base_spacing);
-                b.push(StyleProperty::LetterSpacing(v + synthetic_bold::ADVANCE), range.clone());
             }
             // Boxes before and after a pill's label make room for its chip. The label may break
             // like any text; `break_lines_with_blocks` moves a split pill whole to the next line
@@ -863,29 +825,11 @@ impl TextSystem {
             break_lines(&mut layout);
             layout
         };
-        let mut layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &[], &[], &[]);
-        // On Windows, system faces as DirectWrite picks them for each run's weight, as Chromium.
-        let system = cfg!(target_os = "windows") && !text.is_ascii();
-        let wanted = |at: usize| spans.iter().rev().find_map(|s| s.weight.filter(|_| span_range(s).contains(&at))).unwrap_or(style.weight);
-        let weights = if system {
-            system_weight::corrections(&mut self.system_faces, &mut self.font_cx, &self.font_files, &layout, wanted)
-        } else {
-            Vec::new()
-        };
-        if !weights.is_empty() {
-            layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &weights, &[], &[]);
-        }
+        let mut layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &[]);
         // Inline code keeps inside the line box its text sets, as a browser's does.
         let fits = strut.map_or_else(Vec::new, |strut| inline_fit::mono_fits(&layout, text, spans, style, scale, strut));
-        // Bold asked of a system face with no bold draws synthetic bold, as Chromium's does.
-        let bolds = cfg!(target_os = "windows") && (style.weight >= 600.0 || spans.iter().any(|s| s.weight.is_some_and(|w| w >= 600.0)));
-        let bold = if bolds {
-            synthetic_bold::inks(&system_weight::synthetic_bold(&mut self.system_faces, &mut self.font_cx, &self.font_files, &layout, wanted), spans)
-        } else {
-            Vec::new()
-        };
-        if !fits.is_empty() || !bold.is_empty() {
-            layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &weights, &fits, &bold);
+        if !fits.is_empty() {
+            layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &fits);
         }
         // The spacing each run got, against the spacing its own font needs.
         let given = |at: usize| {
@@ -910,7 +854,7 @@ impl TextSystem {
             }
         }
         if mismatch {
-            layout = build(&mut self.layout_cx, &mut self.font_cx, &exact, &widen, &weights, &fits, &bold);
+            layout = build(&mut self.layout_cx, &mut self.font_cx, &exact, &widen, &fits);
         }
         layout.align(align, AlignmentOptions::default());
         let l = Rc::new(layout);

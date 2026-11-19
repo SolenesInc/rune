@@ -57,6 +57,19 @@ pub(crate) struct A11yMore {
     pub described_by: Option<String>,
     /// `El::busy`.
     pub busy: bool,
+    /// `El::holds_keys`.
+    pub holds_keys: bool,
+}
+
+/// Text an element draws itself ([`El::a11y_text`], [`El::a11y_text_from`]): what it says, the
+/// caret or selection as byte offsets into it, equal for a caret, and the byte offsets where a
+/// drawn line wraps without a newline, ascending.
+#[derive(Clone, Debug, Default, PartialEq, Hash)]
+pub struct DrawnText {
+    pub text: String,
+    pub anchor: usize,
+    pub focus: usize,
+    pub wraps: Vec<usize>,
 }
 
 /// Accessibility state beyond role and label (`El::level`, `El::expanded`, `El::secure`, and
@@ -115,6 +128,14 @@ impl El {
         self.cold_mut().a11y.more().description = Some(text.into());
         self
     }
+    /// Keys reach this element through the app rather than through keyboard focus, as a
+    /// terminal or a document the window's key handler drives: while no element has keyboard
+    /// focus, assistive technology treats the first such element in the tree as focused, so
+    /// a screen reader names it and follows its [`El::active_descendant`].
+    pub fn holds_keys(mut self, holds: bool) -> Self {
+        if holds { self.cold_mut().a11y.more().holds_keys = true; }
+        self
+    }
     /// The element whose content is active while this one keeps keyboard focus (ARIA
     /// `aria-activedescendant`): the highlighted row of a tree, table or suggestion list whose
     /// container or search field holds focus. `key` names it as `Cx::layout` does.
@@ -165,6 +186,32 @@ impl El {
     /// report their text and range controls their number without it.
     pub fn a11y_value(mut self, text: impl Into<String>) -> Self {
         self.cold_mut().a11y.more().value = Some(text.into());
+        self
+    }
+    /// Text this element draws itself, as an app's own editor does, for assistive technology to
+    /// read line by line and follow the caret: `anchor` and `focus` are byte offsets into
+    /// `text`, equal for a caret, and `wraps` the ascending byte offsets where a drawn line
+    /// wraps without a newline, so a line is the line the reader sees. A `"textbox"` with it is
+    /// an editable text area, which a screen reader reads the line or word the caret moves to
+    /// in, and echoes typing into.
+    pub fn a11y_text(self, text: impl Into<String>, anchor: usize, focus: usize, wraps: Vec<usize>) -> Self {
+        let drawn = DrawnText { text: text.into(), anchor, focus, wraps };
+        self.a11y_own_text(std::rc::Rc::new(move |_| Some(drawn.clone())))
+    }
+    /// [`Self::a11y_text`] read from the state only while assistive technology reads the tree,
+    /// for text that changes without the view running again, as a terminal's screen does:
+    /// whatever changes it calls [`crate::RuntimeCore::a11y_text_changed`].
+    ///
+    /// ```
+    /// # use rune::{DrawnText, el::el};
+    /// # struct App { screen: String }
+    /// el().role("terminal").a11y_text_from(|s: &App| Some(DrawnText { text: s.screen.clone(), anchor: 0, focus: 0, wraps: Vec::new() }));
+    /// ```
+    pub fn a11y_text_from<S: 'static>(self, f: impl Fn(&S) -> Option<DrawnText> + 'static) -> Self {
+        self.a11y_own_text(std::rc::Rc::new(move |s| f(s.cast::<S>().expect("handler registered for a different state type than the app's"))))
+    }
+    fn a11y_own_text(mut self, f: crate::el::OwnTextFn) -> Self {
+        self.handlers.own_text = Some(f);
         self
     }
     /// A slider's or progress bar's number, between `min` and `max` (ARIA `aria-valuenow`,

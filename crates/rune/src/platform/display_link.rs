@@ -32,8 +32,15 @@ pub(crate) struct DisplayLink {
     display: Option<u32>,
     capped: bool,
     running: bool,
+    /// A frame asked for an opportunity and was told to wait for a tick.
+    waiting: bool,
+    /// When the user last pressed a key in the window.
+    last_key: Option<Instant>,
 }
 
+/// How long after a key the link keeps running between frames, past the gap between keys
+/// while someone types, so each key and its echo take the next tick.
+const TYPING: Duration = Duration::from_secs(1);
 const LOW_POWER_FRAME: Duration = Duration::from_nanos(1_000_000_000 / 60);
 static CREATE_FAILED: AtomicBool = AtomicBool::new(false);
 /// The last creation's CoreVideo status (0 once one succeeds), and when it failed.
@@ -122,7 +129,7 @@ impl DisplayLink {
         });
         let status = unsafe { link.set_output_callback(Some(tick), (&mut *callback as *mut Callback).cast()) };
         if status != 0 { eprintln!("display link callback failed: {status}"); return None; }
-        let mut pacing = Self { link, callback, last_present: None, last_target: None, display: None, capped: false, running: false };
+        let mut pacing = Self { link, callback, last_present: None, last_target: None, display: None, capped: false, running: false, waiting: false, last_key: None };
         pacing.update_display(window);
         Some(pacing)
     }
@@ -165,6 +172,7 @@ impl DisplayLink {
         let now = Instant::now();
         let tick = (host_target != 0).then(|| target_time(now, CVGetCurrentHostTime(), host_target, self.callback.host_frequency));
         let next = opportunity(tick, self.last_present, self.last_target, now, self.frame_period());
+        self.waiting = next == Opportunity::Wait;
         match next {
             Opportunity::Tick(target) => self.last_target = Some(target),
             Opportunity::Now => self.last_target = Some(now),
@@ -189,7 +197,33 @@ impl DisplayLink {
 
     pub(crate) fn stop(&mut self) {
         if self.running { self.link.stop(); self.running = false; }
+        self.waiting = false;
         self.callback.target.store(0, Ordering::Relaxed);
+    }
+
+    /// Whether a frame asked for now would wait for a tick: the last one may still be on its
+    /// way to the display (`rested`).
+    pub(crate) fn frame_waits(&self, now: Instant) -> bool {
+        !rested(self.last_present, self.last_target, now, self.frame_period())
+    }
+
+    /// The user pressed a key: until `TYPING` passes, the link runs on between frames.
+    pub(crate) fn key(&mut self, at: Instant) { self.last_key = Some(at); }
+
+    /// Whether the link runs on after a frame with nothing more to draw: only while the user
+    /// types, so output nobody waits on keeps the link's idle stop.
+    pub(crate) fn runs_on(&self, now: Instant) -> bool { typing(self.last_key, now) }
+
+    /// A tick came. It draws when a frame waits for it or the window `wants` one; otherwise it
+    /// passes, and the link stops once the surface has rested (`tick_does`).
+    pub(crate) fn tick(&mut self, wants: bool) -> bool {
+        let now = Instant::now();
+        let rested = rested(self.last_present, self.last_target, now, self.frame_period()) && !typing(self.last_key, now);
+        match tick_does(wants || self.waiting, rested) {
+            Tick::Draw => true,
+            Tick::Pass => { self.callback.target.store(0, Ordering::Release); false }
+            Tick::Stop => { self.stop(); false }
+        }
     }
 }
 
@@ -251,6 +285,22 @@ fn rested(last: Option<Instant>, last_target: Option<Instant>, now: Instant, per
         && last.is_none_or(|last| now.saturating_duration_since(last) >= period * 3 / 2)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Tick { Draw, Pass, Stop }
+
+/// A tick no frame wants keeps the link running until the surface rests and the user stopped
+/// typing: a frame asked for before then may only draw on a tick (`rested`), and the running
+/// link's next one is at most a refresh away, where a stopped link would restart and wait for
+/// its first. Once rested, a frame draws at once anyway, so the link stops and the surface sends
+/// no ticks at rest.
+fn tick_does(wanted: bool, rested: bool) -> Tick {
+    if wanted { Tick::Draw } else if rested { Tick::Stop } else { Tick::Pass }
+}
+
+fn typing(last_key: Option<Instant>, now: Instant) -> bool {
+    last_key.is_some_and(|key| now.saturating_duration_since(key) < TYPING)
+}
+
 /// A stopped link has no tick waiting (`stop` clears it), so a rested surface's next frame is
 /// `Now` until the link starts: deciding first costs it no pacing.
 fn defers_start(running: bool, last: Option<Instant>, last_target: Option<Instant>, now: Instant, period: Duration) -> bool {
@@ -291,6 +341,21 @@ mod tests {
         assert!(!permits(Some(ms(100)), Some(ms(112)), ms(128), ms(102), period));
         assert_eq!(target_time(t, 100, 116, 1000.0), ms(16));
         assert_eq!(target_time(ms(32), 132, 116, 1000.0), ms(16));
+    }
+
+    #[test]
+    fn a_link_runs_on_after_a_key_until_typing_stops_and_the_surface_rests() {
+        let t = Instant::now();
+        let ms = |n| t + Duration::from_millis(n);
+        let period = Duration::from_millis(8);
+        let (last, target) = (Some(ms(100)), Some(ms(100)));
+        assert!(typing(Some(ms(100)), ms(1099)) && !typing(Some(ms(100)), ms(1100)) && !typing(None, ms(0)));
+        assert_eq!(tick_does(false, false), Tick::Pass, "the last frame may still be queued, or the user types");
+        assert_eq!(tick_does(false, true), Tick::Stop, "a frame from here draws at once");
+        assert_eq!(tick_does(true, false), Tick::Draw, "a frame asked for meanwhile takes the next tick");
+        assert!(!rested(last, target, ms(111), period) && rested(last, target, ms(112), period));
+        assert_eq!(opportunity(Some(ms(108)), last, target, ms(105), period), Opportunity::Tick(ms(108)));
+        assert_eq!(opportunity(None, last, target, ms(105), period), Opportunity::Wait, "where a stopped link has none to give");
     }
 
     #[test]

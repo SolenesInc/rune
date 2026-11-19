@@ -24,6 +24,8 @@ pub enum Placement {
     Left,
     Right,
     RightStart,
+    /// Centered over the anchor both ways.
+    Center,
 }
 
 impl Placement {
@@ -38,6 +40,7 @@ impl Placement {
             Placement::Left => (Side::Left, Align::Center),
             Placement::Right => (Side::Right, Align::Center),
             Placement::RightStart => (Side::Right, Align::Start),
+            Placement::Center => (Side::Over, Align::Center),
         }
     }
 }
@@ -53,6 +56,7 @@ fn anchor_origin(side: Side, align: Align) -> Vec2 {
         Side::Bottom => Vec2::new(along, 0.0),
         Side::Left => Vec2::new(1.0, along),
         Side::Right => Vec2::new(0.0, along),
+        Side::Over => Vec2::new(0.5, 0.5),
     }
 }
 

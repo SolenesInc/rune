@@ -30,6 +30,8 @@ impl Stats {
         true
     }
 
+    pub fn recorded(&self) -> bool { self.total > 0 }
+
     pub fn prune(&mut self, now: u64) {
         while self.recent.front().is_some_and(|s| now.saturating_sub(s.at_ms) > WINDOW_MS) { self.recent.pop_front(); }
     }
@@ -53,5 +55,5 @@ pub(crate) fn percentiles(mut values: Vec<f64>) -> Value {
     if values.is_empty() { return Value::Null; }
     values.sort_by(f64::total_cmp);
     let p = |q: f64| values[((values.len() as f64 * q).ceil() as usize).saturating_sub(1)];
-    json!({"p50": p(0.5), "p95": p(0.95), "max": values.last(), "count": values.len()})
+    json!({"p50": p(0.5), "p95": p(0.95), "p99": p(0.99), "max": values.last(), "count": values.len()})
 }

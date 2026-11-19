@@ -18,6 +18,8 @@ pub(crate) struct RoleCtx {
     pub has_text: bool,
     /// It shows a picture or video (`El::pixels`, `El::video`).
     pub image: bool,
+    /// It draws its own text (`El::a11y_text`).
+    pub drawn_text: bool,
 }
 
 /// The AccessKit role for `role`, or `None` when the element adds nothing to the tree and its
@@ -97,6 +99,9 @@ pub(crate) fn map(role: &str, cx: &RoleCtx) -> Option<Role> {
         "figure" => Role::Figure,
         "code" => Role::Code,
         "blockquote" => Role::Blockquote,
+        // An editor that draws its own text is the text area.
+        "textbox" if cx.drawn_text => Role::MultilineTextInput,
+        "terminal" => Role::Terminal,
         // A box around a field that only routes its presses to the editor: the editor is the
         // text box. Kept as a group when keyed, so drivers still find it by key.
         "textbox" | "searchbox" => if cx.keyed { Role::Group } else { return None },
@@ -162,7 +167,7 @@ mod tests {
 
     fn cx() -> RoleCtx {
         RoleCtx { pressable: false, focusable: false, input: false, multiline: false, secure: false, scrolls: false, modal: false,
-            default_button: false, labelled: false, keyed: false, has_text: false, image: false }
+            default_button: false, labelled: false, keyed: false, has_text: false, image: false, drawn_text: false }
     }
 
     #[test]
@@ -182,6 +187,9 @@ mod tests {
         assert_eq!(map("textbox", &field), Some(Role::TextInput));
         assert_eq!(map("textbox", &RoleCtx { multiline: true, ..field }), Some(Role::MultilineTextInput));
         assert_eq!(map("textbox", &RoleCtx { secure: true, ..field }), Some(Role::PasswordInput));
+        assert_eq!(map("textbox", &RoleCtx { keyed: true, ..cx() }), Some(Role::Group));
+        assert_eq!(map("textbox", &RoleCtx { keyed: true, drawn_text: true, ..cx() }), Some(Role::MultilineTextInput));
+        assert_eq!(map("terminal", &cx()), Some(Role::Terminal));
     }
 
     #[test]

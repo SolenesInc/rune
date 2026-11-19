@@ -2,6 +2,16 @@
 use super::*;
 
 impl RuntimeCore {
+    /// Whether an ancestor of node `i` is fading, or rests part-way faded.
+    fn ancestor_fades(&self, i: usize) -> bool {
+        let store = self.scene.store();
+        std::iter::successors(self.nodes[i].parent, |&j| self.nodes[j].parent).any(|j| {
+            let id = self.nodes[j].id;
+            store.is_animating(id, prop::OPACITY) || store.is_animating(id, prop::PRESENCE)
+                || self.scene.presented(id).is_some_and(|p| p.opacity < 1.0)
+        })
+    }
+
     pub(super) fn build(&mut self) -> bool {
         let (_paint_time, _blend) = (crate::frame::profile::Scope::new(crate::frame::profile::Phase::Paint), crate::theme::scope(self.srgb_blend));
         let s = self.env.scale;
@@ -15,9 +25,7 @@ impl RuntimeCore {
                 }
             }
         }
-        if let Some(after) = self.text.begin_frame_pinned(pinned_pages) {
-            self.schedule_wakes([after]);
-        }
+        self.text.begin_frame_pinned(pinned_pages);
         self.marks.clear();
         self.icon_aprons.clear();
         self.surfaces.clear();
@@ -57,11 +65,13 @@ impl RuntimeCore {
         let sel_ranges = self.selection_ranges();
         let mark_ranges = self.mark_ranges();
         self.ime_area = None;
+        self.ime_anchor = None;
         self.ime_option_as_alt = false;
         let now = self.t;
         let vp = [0.0, 0.0, self.viewport.0 * s, self.viewport.1 * s];
         let mut glyph_count = 0usize;
         let mut backdrop_blurs = 0usize;
+        self.layered_backdrop_blurs.clear();
         let mut ambient: Option<f32> = None;
         // Retain scope capacity across frames. Records preserve absolute instance indices
         // for images, video insertions, retained springs and compositor list ranges.
@@ -76,9 +86,7 @@ impl RuntimeCore {
             let i = self.layer_paint_order.get(index).copied().unwrap_or(index);
             let n = &self.nodes[i];
             let inherited_group = n.parent.map_or(0.0, |p| self.inh_scratch[p].group);
-            self.inh_scratch[i].group = if n.vis.hover().a > 0.0 || n.vis_flags.hover_group() {
-                self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
-            } else { inherited_group };
+            self.inh_scratch[i].group = self.group_level(i).unwrap_or(inherited_group);
             let Some(parent) = n.parent.filter(|&p| self.nodes[p].vis_flags.blend() == crate::render::Blend::PlusLighter) else { continue };
             let Some(p) = self.scene.presented(n.id) else { continue };
             let mut opacity = p.opacity * n.vis.layer_opacity;
@@ -89,7 +97,8 @@ impl RuntimeCore {
             self.dissolve_scratch[parent] |= opacity > 0.001 && opacity < 1.0;
         }
 
-        let paint_state_hash = self.prepare_cache_layers(&sel_ranges, &mark_ranges);
+        let paint_state_hash = self.paint_state_hash(&sel_ranges, &mark_ranges);
+        self.prepare_cache_layers();
 
         self.place_growth_rows();
 
@@ -105,7 +114,7 @@ impl RuntimeCore {
         });
         let default_ring = self.default_ring_owner();
         let mut active_cache: Option<ActiveCache> = None;
-        self.pixel_snap.begin_frame(self.t, [vp[2], vp[3]]);
+        self.pixel_snap.begin_frame(self.t, [vp[2], vp[3]], self.settled);
         for paint_index in 0..n_nodes {
             let i = if tree_order { self.layer_paint_order[paint_index] } else { paint_index };
             if let Some(rank) = self.paint_rank.as_mut() {
@@ -273,12 +282,9 @@ impl RuntimeCore {
             let mut hit_own = own * self.group_factor(n, 1.0);
             own *= self.group_factor(n, pinh.group);
             let base_opacity = (own * pinh.opacity).clamp(0.0, 1.0);
-            let hover_owner = n.vis.hover().a > 0.0 || n.vis_flags.hover_group();
-            let group = if hover_owner {
-                self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0)
-            } else {
-                pinh.group
-            };
+            let own_group = self.group_level(i);
+            let hover_owner = own_group.is_some();
+            let group = own_group.unwrap_or(pinh.group);
             // Loops and reveals run on the node's clock (`El::time_scale`).
             let track = self.loops.get(&n.id);
             let lnow = if track.is_some() { self.scene.store().node_time(n.id) } else { self.t };
@@ -659,6 +665,9 @@ impl RuntimeCore {
                 .then(|| paint_slots::push_backdrop_blur(&mut self.instances, n.vis.backdrop_blur, ([r[0], r[1], w, h], radii, n.vis_flags.continuous_corners()),
                     (clip, fade, fade_origin), rounded, sc * s, (paint_own * pinh.paint_opacity * n.vis.paint_alpha).clamp(0.0, 1.0)));
             backdrop_blurs += blur_hole.is_some() as usize;
+            if n.vis.backdrop_blur > 0.0 && !skip_paint && visible && (!layers.is_empty() || self.ancestor_fades(i)) {
+                self.layered_backdrop_blurs.push(n.path.clone());
+            }
             // The packed ABI carries one clip rectangle. Preserve a rectangular cut through
             // a rounded corner on a separate outer scope, never recenter the rounded mask.
             if !skip_paint && let Some((mask, _)) = rounded.or(own_round)
@@ -786,8 +795,12 @@ impl RuntimeCore {
                     && f.alphas(f.destination, now, self.reduced_motion).0 > 0.0))
                 .and_then(|_| input_caret(n, r, sc, s, gliding, &mut self.input_scroll));
             if let Some((_, area)) = input_caret
-                && n.input.as_ref().is_some_and(|input| !input.edit.is_secure()) { self.ime_area = Some(area); }
-            else if n.ime_cursor && self.ime_area.is_none() && self.allowed(i) && !self.subtree_exiting(i) { self.ime_area = Some(app_ime::area(r, s)); self.ime_option_as_alt = n.ime_option_as_alt; }
+                && n.input.as_ref().is_some_and(|input| !input.edit.is_secure()) { self.ime_area = Some(area); self.ime_anchor = None; }
+            else if n.ime_cursor && self.ime_area.is_none() && self.allowed(i) && !self.subtree_exiting(i) {
+                self.ime_anchor = n.ime_at.clone().map(|at| (r, at));
+                self.ime_area = Some(self.ime_anchor.as_ref().map_or_else(|| app_ime::area(r, s), |(r, at)| app_ime::area(app_ime::within(*r, at.get(), s), s)));
+                self.ime_option_as_alt = n.ime_option_as_alt;
+            }
             let paint_visible = if in_cache {
                 r[2] >= clip[0] - filter_margin - 2.0
                     && r[0] <= clip[2] + filter_margin + 2.0
@@ -881,7 +894,11 @@ impl RuntimeCore {
                 let layered = n.vis.gradient.is_some() || n.vis.radial.is_some() || n.vis.surface.is_some();
                 let fill = if layered { base } else { over(overlay, base) }.map(|c| c * o);
                 let bw = pixel_snap::line_width(n.vis.border_width() * s) * sc;
-                let border = if bw > 0.0 { premul(self.color(n.id, P_BORDER, n.vis.border()), o, srgb) } else { [0.0; 4] };
+                let border_c = self.color(n.id, P_BORDER, n.vis.border());
+                let border_c = if !focus_flat && n.vis.hover_border().a > 0.0 {
+                    border_c.mix(n.vis.hover_border(), self.scene.get(n.id, P_HOVER).unwrap_or(0.0).clamp(0.0, 1.0))
+                } else { border_c };
+                let border = if bw > 0.0 { premul(border_c, o, srgb) } else { [0.0; 4] };
                 // A gradient border draws as KIND_GRADIENT with a width: `border` top, `uv` bottom.
                 // After a switch back to `border`, it stays a gradient until both stops meet.
                 let store = self.scene.store();
@@ -1153,6 +1170,7 @@ impl RuntimeCore {
             }
             // A scroll viewport clips its content with a hard edge unless it sets soft ones.
             if let Some(f) = n.vis.clip.or(n.scroll.map(|_| [0.0; 4])) {
+                let r = n.vis.clip_rect(r, sc * s);
                 clip = intersect(r, clip);
                 let (own, origin) = self.scroll_edge_fade(i, f, r, sc * s, p.rect.edges()[3]);
                 inherit_fade(&mut fade, &mut fade_origin, origin, own);

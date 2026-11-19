@@ -1,7 +1,7 @@
 //! X11 autorepeat filter for grabbed shortcuts. Without detectable autorepeat the server sends
 //! each repeat as a KeyRelease and a KeyPress with the same timestamp; with it, as KeyPresses
-//! with no release between. Either way only the first press of a hold fires, as on macOS and
-//! Windows. A release is held back until the next event shows whether a repeat follows it.
+//! with no release between. Either way only the first press of a hold fires, as on macOS. A
+//! release is held back until the next event shows whether a repeat follows it.
 
 use crate::machine::Effects;
 

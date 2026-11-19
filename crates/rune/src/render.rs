@@ -10,7 +10,6 @@ use crate::text::{ATLAS_SIZE, Atlas};
 mod backdrop_blur;
 mod breaker;
 pub mod cpu_boot;
-mod dxbc;
 mod fill;
 #[doc(hidden)]
 pub use fill::FillDrift;
@@ -134,15 +133,6 @@ impl Default for LayerSpec {
 /// to the shader source.
 pub const CLIP_WGSL: &str = include_str!("clip.wgsl");
 
-/// The WGSL the precompiled DX12 bytecode is compiled from (Windfoil's, CRLF read as LF), its
-/// BLAKE3 and the hash of its pipeline layout, as the bytecode records them;
-/// `examples/regen_dxbc.rs` regenerates that bytecode from them.
-#[cfg(target_os = "windows")]
-#[doc(hidden)]
-pub fn uber_shader_identity() -> (&'static str, &'static str, u64) {
-    (variant::windfoil_wgsl(), uber_wgsl::WINDFOIL_BLAKE3, variant::windfoil_abi_hash())
-}
-
 /// Where a compositor is asked to draw an effect slot (`Renderer::draw_range_with`).
 pub struct EffectSite<'a> {
     /// The slot's position in the painter stream.
@@ -231,9 +221,11 @@ pub struct Instance {
 
 const _: () = assert!(std::mem::size_of::<Instance>() == 128);
 
+/// Converts in software (`half`'s `_const` forms): `half`'s other forms take F16C wherever CPUID
+/// lists it, and its VEX instructions fault where the OS keeps the AVX state off.
 pub fn pack_fade(width: [f32; 4], origin: [f32; 4], clip: [f32; 4]) -> [u32; 4] {
     // A negative width is a linear ramp of that width (`El::clip_fade_linear`).
-    let halves = width.map(|w| half::f16::from_f32(w.clamp(-65504.0, 65504.0)).to_bits() as u32);
+    let halves = width.map(|w| half::f16::from_f32_const(w.clamp(-65504.0, 65504.0)).to_bits() as u32);
     let mut offsets = 0;
     for edge in 0..4 {
         let distance = if edge < 2 { clip[edge] - origin[edge] } else { origin[edge] - clip[edge] };
@@ -247,7 +239,7 @@ pub fn pack_fade(width: [f32; 4], origin: [f32; 4], clip: [f32; 4]) -> [u32; 4] 
 /// Decode widths and normalized origin offsets for tools inspecting the instance stream. A
 /// negative width is a linear ramp.
 pub fn unpack_fade(fade: [u32; 4]) -> ([f32; 4], [f32; 4]) {
-    (std::array::from_fn(|e| half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32()),
+    (std::array::from_fn(|e| half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32_const()),
      std::array::from_fn(|e| ((fade[2] >> (e * 8)) & 255) as f32 / 255.0))
 }
 
@@ -402,8 +394,7 @@ pub struct Gpu {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    /// Set by the device's lost callback: a device that went away (a driver reset, a GPU removed,
-    /// Windows' Modern Standby) can't configure a surface, and wgpu drops that error, so nothing
+    /// Set by the device's lost callback: a device that went away (a driver reset, a GPU removed) can't configure a surface, and wgpu drops that error, so nothing
     /// else would report it. See `is_lost`.
     lost: Arc<AtomicBool>,
 }
@@ -446,7 +437,7 @@ impl Gpu {
     #[cfg(not(target_arch = "wasm32"))]
     fn try_picked(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, wanted: wgpu::Features, translucent: bool, presented: bool) -> Result<Gpu, String> {
         let _serial = GPU_INIT.lock().unwrap_or_else(|e| e.into_inner());
-        let pick = crate::gpu::pick::pick(&instance, surface, presented)?;
+        let pick = crate::gpu::pick::pick(&instance, surface)?;
         crate::marks::mark("gpu.adapter");
         if !crate::marks::noted("adapter") { crate::marks::note("adapter", Box::leak(pick.adapter.get_info().name.into_boxed_str())); }
         let adapter = match surface {
@@ -456,7 +447,6 @@ impl Gpu {
         match Self::device_on(&adapter, wanted) {
             Ok((device, queue)) => {
                 crate::marks::mark("gpu.device");
-                crate::native_surface::note_device(&device, surface.is_some() || presented);
                 Ok(Gpu::made(instance, adapter, device, queue, surface.is_some() || presented))
             }
             // A driver that can't make a device (a broken integrated GPU on a hybrid laptop)
@@ -474,7 +464,6 @@ impl Gpu {
                 for other in others {
                     if let Ok((device, queue)) = Self::device_on(&other, wanted) {
                         eprintln!("rune: {} ({:?}) made no device ({error}); using {}", first.name, first.backend, other.get_info().name);
-                        crate::native_surface::note_device(&device, surface.is_some() || presented);
                         return Ok(Gpu::made(instance, other, device, queue, surface.is_some() || presented));
                     }
                 }
@@ -485,19 +474,17 @@ impl Gpu {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn device_on(adapter: &wgpu::Adapter, wanted: wgpu::Features) -> Result<(wgpu::Device, wgpu::Queue), String> {
-        // Dual-source blending is for subpixel text (`FontSmoothing::WindfoilRgb`, `ClearType`).
+        // Dual-source blending is for subpixel text (`FontSmoothing::WindfoilRgb`).
         let optional_features = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::DUAL_SOURCE_BLENDING | wanted | crate::gpu::backend::free_features(adapter);
-        // Precompiled uber shaders: a metallib on macOS, DXBC on Windows.
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        // Precompiled uber shaders: a metallib on macOS.
+        #[cfg(target_os = "macos")]
         let optional_features = optional_features | wgpu::Features::PASSTHROUGH_SHADERS;
         let required_features = adapter.features() & optional_features;
         // A compositor that asks for immediates (`Compositor::features`) gets all the adapter has.
         let max_immediate_size = if required_features.contains(wgpu::Features::IMMEDIATES) { adapter.limits().max_immediate_size } else { 0 };
         let adapter_limits = adapter.limits();
-        // Views and buffers bound at once (D3D12's shader-visible descriptor heap, which wgpu sizes from
-        // this limit when it makes the device). wgpu's default, a million, is a 32-64 MB heap on
-        // Windows; 65,536 is far more than Rune binds and keeps it to a few MB (a bare wgpu window:
-        // 82.0 MB private bytes with a million, 24.8 MB with 65,536; a bare D3D12 window, 14.1 MB).
+        // Views and buffers bound at once: 65,536 is far more than Rune binds. wgpu's default, a
+        // million, sizes a 32-64 MB descriptor heap on backends that make one from this limit.
         let views = MAX_VIEWS.min(adapter_limits.max_non_sampler_bindings);
         let required_limits = if adapter_limits.max_inter_stage_shader_variables < wgpu::Limits::default().max_inter_stage_shader_variables
             || adapter_limits.max_color_attachments < wgpu::Limits::default().max_color_attachments
@@ -526,16 +513,12 @@ impl Gpu {
             experimental_features: Default::default(),
             // `Performance` suballocates from 128 MB device and 64 MB host blocks, so a device
             // that holds a few atlases commits about 190 MB more than it uses: process memory on
-            // an integrated GPU, and on Windows on a discrete one too. Rune keeps and reuses its
+            // an integrated GPU. Rune keeps and reuses its
             // buffers and textures, so the smaller blocks only cost a few more heaps.
             memory_hints: wgpu::MemoryHints::MemoryUsage,
             trace: Default::default(),
         }))
         .map_err(|error| format!("no GPU device: {error}"));
-        #[cfg(feature = "alloc-sites")]
-        if let Ok((device, _)) = &made {
-            report_gpu_allocations(device.clone());
-        }
         made
     }
 
@@ -573,28 +556,14 @@ impl Gpu {
         if crate::gpu::backend::wgpu_for(wanted) { Self::wgpu_instance() } else { Self::instance() }
     }
 
-    /// wgpu's own backends, whatever `RUNE_GPU_BACKEND` says: DX12 alone on Windows. It's the
-    /// backend that composites transparent surfaces, and a Vulkan instance loads every GPU's Vulkan
-    /// driver, where a broken one (Intel's, on a hybrid laptop) crashed the process before its first
-    /// window (Hex #662). A machine without a hardware D3D12 adapter gets WARP, D3D12's software
-    /// adapter, from the same instance.
-    #[cfg(target_os = "windows")]
-    fn wgpu_instance() -> wgpu::Instance {
-        let _serial = GPU_INIT.lock().unwrap_or_else(|e| e.into_inner());
-        let instance = Self::wgpu_instance_on(wgpu::Backends::DX12);
-        crate::marks::mark("gpu.instance");
-        instance
-    }
-
     /// wgpu's own backends, whatever `RUNE_GPU_BACKEND` says.
-    #[cfg(not(target_os = "windows"))]
     fn wgpu_instance() -> wgpu::Instance {
         let _serial = GPU_INIT.lock().unwrap_or_else(|e| e.into_inner());
         Self::wgpu_instance_on(wgpu::Backends::all())
     }
 
     /// One instance per set of backends for the whole process: a new one per device was a new
-    /// DXGI factory and adapter list each time a window or overlay made a device (hex#1268).
+    /// adapter list each time a window or overlay made a device (hex#1268).
     fn wgpu_instance_on(backends: wgpu::Backends) -> wgpu::Instance {
         static MADE: std::sync::Mutex<Vec<(wgpu::Backends, wgpu::Instance)>> = std::sync::Mutex::new(Vec::new());
         let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
@@ -608,12 +577,6 @@ impl Gpu {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = backends;
         descriptor.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
-        // An HWND's DXGI swapchain is opaque only; DirectComposition composites alpha on every GPU.
-        descriptor.backend_options.dx12.presentation_system = wgpu::Dx12SwapchainKind::DxgiFromVisual;
-        // FXC ships with Windows (d3dcompiler_47.dll in System32). wgpu's default looks for
-        // dxcompiler.dll on PATH, where another app's incompatible copy crashes the first
-        // shader compile (Hex #587).
-        descriptor.backend_options.dx12.shader_compiler = wgpu::Dx12Compiler::Fxc;
         wgpu::Instance::new(descriptor)
     }
 
@@ -737,7 +700,7 @@ pub struct Renderer {
     surfaces_building: Option<crate::native_surface::Building>,
     pipeline: wgpu::RenderPipeline,
     format: wgpu::TextureFormat,
-    shader: dxbc::Shaders,
+    shader: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
     vertex_entry: &'static str,
     /// Pipelines for other target formats a compositor draws into (`add_format`).
@@ -1151,6 +1114,10 @@ pub fn write_png(path: &std::path::Path, width: u32, height: u32, rgba: &[u8]) -
 mod backdrop_tests;
 
 #[cfg(test)]
+#[path = "render/f16_tests.rs"]
+mod f16_tests;
+
+#[cfg(test)]
 #[path = "render/warm_tests.rs"]
 mod warm_tests;
 
@@ -1296,35 +1263,4 @@ mod prewarm_tests {
         let described = crate::gpu::backend::describe(&gpu.device);
         assert!(described.starts_with("Rune's Metal backend on ") && described.ends_with("(the default)"), "{described}");
     }
-}
-
-/// With `alloc-sites` (a measuring build), every heap dump also lists what the device holds by kind
-/// (`textures <count> <bytes>`, `buffers <count> <bytes>`, views, bind groups, pipelines, command
-/// encoders, shader modules, memory allocations) and its suballocator's allocations by label.
-#[cfg(all(feature = "alloc-sites", not(target_arch = "wasm32")))]
-fn report_gpu_allocations(device: wgpu::Device) {
-    procwatch::alloc::sites::contribute("gpu", move || {
-        // What the device holds, by kind (wgpu's counters: committed resources count here too).
-        let c = device.get_internal_counters().hal;
-        let mut out = format!(
-            "textures {} {}\nbuffers {} {}\nviews {}\nbind_groups {}\npipelines {}\nencoders {}\nshader_modules {}\nallocations {}\n",
-            c.textures.read(),
-            c.texture_memory.read(),
-            c.buffers.read(),
-            c.buffer_memory.read(),
-            c.texture_views.read(),
-            c.bind_groups.read(),
-            c.render_pipelines.read(),
-            c.command_encoders.read(),
-            c.shader_modules.read(),
-            c.memory_allocations.read()
-        );
-        if let Some(r) = device.generate_allocator_report() {
-            out.push_str(&format!("gpu {} {} {}\n", r.total_allocated_bytes, r.total_reserved_bytes, r.blocks.len()));
-            for a in &r.allocations {
-                out.push_str(&format!("alloc {} {}\n", a.size, a.name));
-            }
-        }
-        out
-    });
 }

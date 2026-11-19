@@ -60,8 +60,25 @@ fn unpack_clip_radii(w: u32) -> vec4<f32> {
     ) * (step * sgn);
 }
 
+// An f16's bits as an f32, in integer maths: `unpack2x16float` needs SHADER_FLOAT16_IN_FLOAT32,
+// which some adapters lack (lavapipe on a CPU without AVX). `pack_fade` clamps widths to finite
+// values, so infinities and NaNs never arrive.
+fn half_to_f32(h: u32) -> f32 {
+    let exponent = (h >> 10u) & 0x1fu;
+    let mantissa = h & 0x3ffu;
+    var magnitude = f32(mantissa) * (1.0 / 16777216.0);
+    if (exponent != 0u) {
+        magnitude = bitcast<f32>(((exponent + 112u) << 23u) | (mantissa << 13u));
+    }
+    return select(magnitude, -magnitude, (h & 0x8000u) != 0u);
+}
+
+fn unpack_half2(w: u32) -> vec2<f32> {
+    return vec2<f32>(half_to_f32(w & 0xffffu), half_to_f32(w >> 16u));
+}
+
 fn clip_alpha(p: vec2<f32>, c: vec4<f32>, packed: vec4<u32>) -> f32 {
-    let f = vec4<f32>(unpack2x16float(packed.x), unpack2x16float(packed.y));
+    let f = vec4<f32>(unpack_half2(packed.x), unpack_half2(packed.y));
     let offset = unpack4x8unorm(packed.z);
     let hard = vec4<f32>(p - c.xy, c.zw - p);
     var alpha = 1.0;

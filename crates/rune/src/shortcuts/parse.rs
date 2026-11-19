@@ -10,8 +10,7 @@ const PRIMARY_NAME: u8 = 16;
 /// A validated, layout-independent accelerator. cmd/command/logo/meta/win are aliases for
 /// super; option/opt is alt; mod (primary) is super on macOS and ctrl elsewhere, as in a
 /// [`Chord`](crate::Chord), and is stored as that key; plus is the key that types "+" on a US
-/// layout (equal). Stored keys are physical US positions. Windows resolves these to virtual
-/// keys at registration; Wayland's portal may rebind the preferred trigger.
+/// layout (equal). Stored keys are physical US positions. Wayland's portal may rebind the preferred trigger.
 /// Display uses ctrl+alt+shift+super order, lowercase keys and normalized aliases.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Shortcut {

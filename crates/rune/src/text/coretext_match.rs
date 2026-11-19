@@ -7,7 +7,7 @@ use super::ApplePipeline;
 /// `Tx::set_font_smoothing`, which redraws with glyphs rasterised for the new mode.
 ///
 /// The default is [`FontSmoothing::On`] on macOS and in a Mac's browser, and
-/// [`FontSmoothing::WindfoilChromium`] everywhere else (Windows, Linux, the web); every mode can be
+/// [`FontSmoothing::WindfoilChromium`] everywhere else (Linux, the web); every mode can be
 /// chosen on every OS. `On` and `Off` work on any OS (they are arithmetic on outlines, not calls
 /// into CoreText). Either way the pipeline
 /// floors pens to CoreGraphics' subpixel steps (`quantisation_steps`), flattens curves and
@@ -26,11 +26,6 @@ pub enum FontSmoothing {
     /// ([`ApplePipeline::UNSMOOTHED`]). Lighter than `On`. Linux and the web other than a Mac's
     /// browser drew with it before `Windfoil`.
     Off,
-    /// Text that matches Chromium's on Windows: DirectWrite rasterises each glyph as Skia asks it
-    /// to (the rendering mode the font's `gasp` table picks, its hints, grayscale antialiasing),
-    /// pens sit on quarter pixels, and Skia's text gamma and contrast weigh the coverage by the
-    /// text's luminance. Elsewhere, without DirectWrite, it draws as `Off`.
-    DirectWrite,
     /// Rune's own text with CoreText's weight, the same on every platform: each
     /// glyph's exact pixel coverage from its outline (Windfoil's box filter), grown by CoreText's
     /// font smoothing dilation (times `TEXT_WEIGHT`, so its ink matches CoreText's), with
@@ -58,17 +53,12 @@ pub enum FontSmoothing {
     /// each size, then Windfoil's box coverage, through Skia's text gamma. Pens on quarter pixels.
     HintedGpu,
     /// What Chromium draws on Linux: the light-autohinted outline (FreeType's `hintslight`) on
-    /// whole-pixel pens, with grayscale box coverage through Skia's text gamma. On Windows
-    /// Chromium's text is `DirectWrite`'s.
+    /// whole-pixel pens, with grayscale box coverage through Skia's text gamma.
     Hinted,
     /// `WindfoilChromium` per subpixel: Windfoil's box over each third of a pixel, red to blue,
     /// blended channel by channel (dual-source blending), as ClearType draws. Inside layers, and
     /// where the GPU can't blend that way, it draws as `WindfoilChromium`.
     WindfoilRgb,
-    /// Windows only: DirectWrite's ClearType (`CLEARTYPE_3x1`, Skia's gamma per channel),
-    /// blended channel by channel, as Chromium draws text on an opaque background. Inside layers,
-    /// and where the GPU can't blend that way, it draws as `DirectWrite`.
-    ClearType,
 }
 
 impl Default for FontSmoothing {
@@ -82,13 +72,11 @@ impl Default for FontSmoothing {
 
 impl FontSmoothing {
     /// The mode this OS drew with before `Windfoil`: `On` on macOS and in a Mac's browser,
-    /// `DirectWrite` on Windows and `Off` elsewhere. Where it's `On` it stays the default; an
+    /// and `Off` elsewhere. Where it's `On` it stays the default; an
     /// app's setting offers it as the way back elsewhere.
     pub fn classic() -> FontSmoothing {
         if cfg!(target_os = "macos") {
             FontSmoothing::On
-        } else if cfg!(target_os = "windows") {
-            FontSmoothing::DirectWrite
         } else {
             #[cfg(target_arch = "wasm32")]
             if let Some(platform) = crate::platform::web::platform::browser_platform() {
@@ -110,7 +98,7 @@ pub(crate) fn browser_default(platform: &str, touch_points: u32) -> FontSmoothin
 
 impl FontSmoothing {
     /// The CoreGraphics stages glyphs rasterise with: all of them for `On`, all but the
-    /// dilation for `Off` (and for `DirectWrite` where DirectWrite can't draw a glyph).
+    /// dilation for `Off`.
     pub fn pipeline(self) -> ApplePipeline {
         match self {
             FontSmoothing::On | FontSmoothing::Windfoil => ApplePipeline::SMOOTHED,
@@ -128,7 +116,7 @@ impl FontSmoothing {
             FontSmoothing::HintedGpu => chromium(Coverage::Box, OutlineHint::Auto, false),
             FontSmoothing::Hinted => chromium(Coverage::Box, OutlineHint::Auto, true),
             FontSmoothing::WindfoilRgb => chromium(Coverage::Rgb, OutlineHint::DirectWrite, false),
-            FontSmoothing::On | FontSmoothing::Off | FontSmoothing::DirectWrite | FontSmoothing::ClearType => return None,
+            FontSmoothing::On | FontSmoothing::Off => return None,
         })
     }
 
@@ -141,14 +129,14 @@ impl FontSmoothing {
             FontSmoothing::HintedGpu => 3,
             FontSmoothing::Hinted => 4,
             FontSmoothing::WindfoilRgb => 5,
-            FontSmoothing::On | FontSmoothing::Off | FontSmoothing::DirectWrite | FontSmoothing::ClearType => return None,
+            FontSmoothing::On | FontSmoothing::Off => return None,
         };
         Some(super::glyph_emit::WINDFOIL_KEY | n)
     }
 
     /// Whether it draws subpixel masks, three coverages a pixel.
     pub(crate) fn lcd(self) -> bool {
-        matches!(self, FontSmoothing::WindfoilRgb | FontSmoothing::ClearType)
+        matches!(self, FontSmoothing::WindfoilRgb)
     }
 
     /// What a subpixel mode draws as while subpixel text can't draw here (`lcd_ok` false): its
@@ -156,7 +144,6 @@ impl FontSmoothing {
     pub(crate) fn drawn(self, lcd_ok: bool) -> FontSmoothing {
         match self {
             FontSmoothing::WindfoilRgb if !lcd_ok => FontSmoothing::WindfoilChromium,
-            FontSmoothing::ClearType if !lcd_ok => FontSmoothing::DirectWrite,
             mode => mode,
         }
     }
@@ -192,7 +179,7 @@ pub(crate) enum OutlineHint {
     CoreGraphics,
     /// FreeType's light autohint (skrifa), baked into the glyph's record at its size.
     Auto,
-    /// What DirectWrite does for Chromium on Windows: a face with TrueType hints runs them
+    /// What DirectWrite does for Chromium: a face with TrueType hints runs them
     /// vertically where its `gasp` table asks for grid fitting, baked into the record at its
     /// size; a face without hints draws its design outline. Off on macOS, where Chromium's text
     /// (CoreText's) isn't hinted.
@@ -231,21 +218,17 @@ pub(crate) fn glyph_x(x: f32, ppem: f32) -> (f32, u8) {
 const TEXT_GAMMA: [f32; 2] = [1.12, 0.45];
 
 /// The exponent glyph coverage in `mode` is raised to when drawn in premultiplied `fill`, on
-/// Apple platforms (`apple`) or Windows (`windows`) or neither. With smoothing off on Linux,
-/// Windows and the web it stands in for the text gamma a browser's grayscale antialiasing
+/// Apple platforms (`apple`) or not. With smoothing off on Linux and the web it stands in for the text gamma a browser's grayscale antialiasing
 /// applies there: light text on a dark page draws heavier and dark text on a light one a little
 /// lighter than coverage blended as is, keyed by the text's luminance. On macOS and iOS coverage
 /// is drawn as is in every mode: CoreText with smoothing off, and Safari and Chrome with
 /// `-webkit-font-smoothing: antialiased`, apply no text gamma (measured on macOS 15.3 with
 /// Chrome 156: the same ink as CoreText, where the gamma drew light-on-dark text up to 24%
-/// heavier). With smoothing on, CoreText's dilation does that job, and with DirectWrite on
-/// Windows Skia's gamma tables do; coverage is drawn as is.
-pub(crate) fn coverage_exponent(mode: FontSmoothing, fill: [f32; 4], apple: bool, windows: bool) -> f32 {
-    // DirectWrite masks already carry Skia's gamma for their text's luminance.
-    let direct_write = matches!(mode, FontSmoothing::DirectWrite | FontSmoothing::ClearType) && windows;
+/// heavier). With smoothing on, CoreText's dilation does that job; coverage is drawn as is.
+pub(crate) fn coverage_exponent(mode: FontSmoothing, fill: [f32; 4], apple: bool) -> f32 {
     // Outline modes with Chromium's weight take its gamma on every OS, as the lab drew them.
     let chromium = mode.look().is_some_and(|l| !l.macos_weight);
-    if (apple && !chromium) || direct_write || matches!(mode, FontSmoothing::On | FontSmoothing::Windfoil) || fill[3] <= 0.0 {
+    if (apple && !chromium) || matches!(mode, FontSmoothing::On | FontSmoothing::Windfoil) || fill[3] <= 0.0 {
         return 1.0;
     }
     let luma = (0.2126 * fill[0] + 0.7152 * fill[1] + 0.0722 * fill[2]) / fill[3];

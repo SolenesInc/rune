@@ -100,21 +100,31 @@ impl Pixels {
         self.source.notify();
     }
 
-    pub(crate) fn set_mips(&self, mips: Arc<crate::image::Decoded>) {
-        {
-            let mut frame = self.frame.lock().unwrap();
-            frame.width = mips.mips[0].width;
-            frame.height = mips.mips[0].height;
-            frame.rgba.clear();
-            frame.mips = Some(mips);
-            frame.generation += 1;
-        }
-        self.source.notify();
+    /// Takes a decoded image's mips without waking anyone; the image wakes its windows once it
+    /// reports ready.
+    pub(crate) fn hold_mips(&self, mips: Arc<crate::image::Decoded>) {
+        let mut frame = self.frame.lock().unwrap();
+        [frame.width, frame.height] = mips.size;
+        frame.rgba.clear();
+        frame.mips = Some(mips);
+        frame.generation += 1;
     }
 
     pub fn size(&self) -> (u32, u32) {
         let frame = self.frame.lock().unwrap();
         (frame.width, frame.height)
+    }
+
+    /// The size of the largest level it holds, which bounds how sharp it draws: its own
+    /// [`size`](Self::size), unless an `ImageCache` was asked for it smaller (as
+    /// [`ImageCache::load_across`](crate::ImageCache::load_across) asks). `None` while it holds
+    /// nothing.
+    pub fn sharpest(&self) -> Option<(u32, u32)> {
+        let frame = self.frame.lock().unwrap();
+        match &frame.mips {
+            Some(decoded) => decoded.mips.first().map(|m| (m.width, m.height)),
+            None => (frame.width > 0 && frame.height > 0).then_some((frame.width, frame.height)),
+        }
     }
 
     pub(crate) fn signature(&self) -> (u64, u64) {

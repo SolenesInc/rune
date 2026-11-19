@@ -24,7 +24,7 @@ impl Tx {
     /// and ⇧A, and `'a'` for AZERTY's A key, which sits where QWERTY's Q does. A binding by
     /// letter, as macOS's `DefaultKeyBinding.dict` binds ⌥-letters, matches this rather than
     /// [`Tx::physical_key`], which names where the key sits (`KeyQ` there). `None` off
-    /// macOS, Windows and Linux, for a key that types no single character (arrows, Return),
+    /// macOS and Linux, for a key that types no single character (arrows, Return),
     /// for a key with no physical origin (`Runtime::key`, a script's `"key"` without a
     /// `"code"`) and outside key handlers.
     pub fn key_base(&self) -> Option<char> { self.key_base }
@@ -39,7 +39,7 @@ impl Tx {
     /// AppKit dispatched it in, elsewhere when the window took it from winit. Input that piles
     /// up between frames keeps each event's own time. `None` in handlers no input caused
     /// (timers, polls, updates, layout callbacks) and for input fed to a `Runtime` directly
-    /// (`Runtime::key` and kin, headless scripts).
+    /// (`Runtime::key` and kin, headless scripts) outside [`input_arrived`](crate::input_arrived).
     pub fn input_time(&self) -> Option<crate::time::Instant> { self.input_time }
 
     /// The key of the element that had focus when the event arrived, `None` when nothing had:
@@ -53,6 +53,14 @@ impl Tx {
     /// whole order is under "Key routing" in the rune README.
     pub fn focused(&self) -> Option<&str> {
         self.focused.as_deref()
+    }
+
+    /// In an [`El::on_press_within`](crate::El::on_press_within) handler, whether the focus is
+    /// on the element or inside it (CSS `:focus-within`) after the press moved it, as a press in
+    /// a text field focuses the field. A pane that takes the keyboard on a press keeps that
+    /// focus, and takes the keys off a control elsewhere.
+    pub fn focus_within(&self) -> bool {
+        self.focus_within
     }
 
     /// Whether the element that had focus when the key arrived is a text field. A window's

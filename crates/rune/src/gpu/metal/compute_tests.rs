@@ -11,11 +11,15 @@ fn wgpu_metal() -> (wgpu::Device, wgpu::Queue) {
     pollster::block_on(adapter.request_device(&desc)).unwrap()
 }
 
-fn timed() -> (wgpu::Device, wgpu::Queue) {
+/// A device that samples timestamps, or none on a virtual machine's GPU, which samples no GPU
+/// counters, like the iOS simulator's.
+fn timed() -> Option<(wgpu::Device, wgpu::Queue)> {
     let adapter = pollster::block_on(instance().request_adapter(&Default::default())).unwrap();
-    assert!(adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY), "Apple GPUs sample at stage boundaries");
+    let name = adapter.get_info().name;
+    if name == "Apple Paravirtual device" { return None; }
+    assert!(adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY), "Apple GPUs sample at stage boundaries, but {name} does not");
     let desc = wgpu::DeviceDescriptor { required_features: wgpu::Features::TIMESTAMP_QUERY, ..Default::default() };
-    pollster::block_on(adapter.request_device(&desc)).unwrap()
+    Some(pollster::block_on(adapter.request_device(&desc)).unwrap())
 }
 
 fn texture(device: &wgpu::Device, format: wgpu::TextureFormat, size: wgpu::Extent3d, mips: u32, usage: wgpu::TextureUsages) -> wgpu::Texture {
@@ -175,7 +179,10 @@ fn new_textures_read_as_zero() {
 #[test]
 #[cfg_attr(target_abi = "sim", ignore = "the iOS simulator samples no GPU counters")]
 fn passes_sample_timestamps_at_their_boundaries() {
-    let (device, queue) = timed();
+    let Some((device, queue)) = timed() else {
+        eprintln!("skipped: a virtual machine's GPU samples no timestamps");
+        return;
+    };
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(r#"
         @compute @workgroup_size(1) fn noop() {}
         @vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {

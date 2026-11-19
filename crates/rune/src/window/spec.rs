@@ -18,8 +18,6 @@ impl PlaceRequest {
             #[cfg(target_os = "macos")]
             { request.display = crate::platform::macos::pointer_display().map_or(crate::DisplayTarget::Primary,
                 |id| crate::DisplayTarget::Native(crate::NativeDisplayId::MacOS(id))); }
-            #[cfg(target_os = "windows")]
-            { request.pointer = crate::platform::win32::pointer_position(); }
             #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
             { request.pointer = crate::platform::x11::overlay::pointer_position(); }
         }
@@ -55,7 +53,7 @@ impl Display {
     pub fn native_id(&self) -> Option<crate::NativeDisplayId> { self.id.as_ref().and_then(|id| id.native_id()) }
 
     /// (x, y, width, height) in the native global, top-left coordinate space. macOS uses
-    /// CGDisplayBounds points; Windows/X11 use desktop pixels; Wayland uses compositor
+    /// CGDisplayBounds points; X11 uses desktop pixels; Wayland uses compositor
     /// logical coordinates. Keep the origin in this space; scale only local offsets.
     pub fn native_bounds(&self) -> [f64; 4] {
         #[cfg(target_os = "macos")]
@@ -260,6 +258,8 @@ impl<S> WindowSpec<S> {
     pub fn on_modifiers(mut self, f: fn(&mut S, crate::Mods, &mut crate::Tx)) -> Self { self.app = self.app.on_modifiers(f); self }
     /// This window going off screen and back, like `App::on_visibility`.
     pub fn on_visibility(mut self, f: fn(&mut S, bool, &mut crate::Tx)) -> Self { self.app = self.app.on_visibility(f); self }
+    /// Each input this window takes, like `App::on_input`.
+    pub fn on_input(mut self, f: fn(&mut S, &mut crate::Tx)) -> Self { self.app = self.app.on_input(f); self }
     /// This window's editor's input method events, like `App::on_ime`.
     pub fn on_ime(mut self, f: fn(&mut S, &crate::Ime, &mut crate::Tx) -> bool) -> Self { self.app = self.app.on_ime(f); self }
     /// This window's playground, like `App::playground`.
@@ -355,11 +355,6 @@ pub struct WindowPlacement {
     pub maximized: bool,
     pub minimized: bool,
     pub full_screen: bool,
-    /// While the window is maximized or minimized, the frame restoring it returns to, as
-    /// `position` and `content_size` give a frame: the system's own record on Windows
-    /// (`GetWindowPlacement`), which follows the window to another display (Win+Shift+Arrow).
-    /// None otherwise, and where the system keeps no such record (macOS, Linux).
-    pub restore: Option<((i32, i32), (u32, u32))>,
     /// The display the window is on (the one with the most of it): its position and size, as
     /// `Display::position` and `Display::size` give them.
     pub display: Option<((i32, i32), (u32, u32))>,

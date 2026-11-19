@@ -108,3 +108,133 @@ fn an_anchored_menu_gives_focus_back_to_where_it_was_not_to_its_anchor() {
     assert!(!rt.state().open);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 }
+
+fn standard_menu_with_its_own_look(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu = crate::StandardMenu { edge_alpha: 1.0, radius: 8.0, inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
+    k.c.surface_menu = k.c.bg_base;
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze").standard().anchor("row.actions").item(MenuItem::new("For an hour")).open(true).build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_standard_menu_takes_its_frame_and_rows_from_the_kit_s_standard_menu_and_menu_fill() {
+    let mut rt = Runtime::new((), standard_menu_with_its_own_look, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let element = |key: &str| rt.elements().iter().find(|e| e.key.as_deref() == Some(key)).cloned().unwrap_or_else(|| panic!("no {key}"));
+    let (frame, row) = (element("snooze-menu"), element("snooze-item0"));
+    let neutral = Kit::neutral(true);
+    assert_eq!((frame.radius, frame.fill), (8.0, neutral.c.bg_base));
+    assert_eq!(row.radius, 5.0);
+    let (menu, item) = (frame.rect, row.rect);
+    let line = neutral.ty.text_small_medium.line_height;
+    assert_eq!(item[0] - menu[0], 5.0, "{menu:?} {item:?}");
+    assert_eq!(item[1] - menu[1], 5.0, "{menu:?} {item:?}");
+    assert_eq!(item[3], line + 12.0, "{item:?}");
+}
+
+fn standard_menu_with_quiet_choices(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted, focused_ink: k.c.text_strong });
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze")
+        .standard()
+        .anchor("row.actions")
+        .item(MenuItem::new("For an hour").detail("11:00"))
+        .note("esc cancel")
+        .open(true)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_standard_menu_draws_its_labels_details_and_note_in_the_kit_s_menu_text() {
+    let mut rt = Runtime::new((), standard_menu_with_quiet_choices, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let elements = rt.elements();
+    let text_of = |said: &str| elements.iter().find(|e| e.text.as_deref() == Some(said)).cloned().unwrap_or_else(|| panic!("no text {said}"));
+    let neutral = Kit::neutral(true);
+    assert_eq!(text_of("For an hour").text_color, Some(neutral.c.text_muted));
+    let detail = text_of("11:00");
+    assert_eq!((detail.text_color, detail.opacity), (Some(neutral.c.text_faint), 0.75));
+    assert_eq!(text_of("esc cancel").text_color, Some(neutral.c.text_muted));
+    let row = elements.iter().find(|e| e.key.as_deref() == Some("snooze-item0")).expect("the item");
+    assert_eq!(row.label.as_deref(), Some("For an hour"));
+    let (detail_right, row_right) = (detail.rect[0] + detail.rect[2], row.rect[0] + row.rect[2]);
+    assert!(row_right - detail_right <= 9.0, "the detail ends the row: {:?} {:?}", detail.rect, row.rect);
+}
+
+fn standard_menu_of_quiet_choices(open: &bool, _: &mut Cx<bool>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu_label = Some(crate::MenuLabel { font: k.ty.text_small, ink: k.c.text_muted, focused_ink: k.c.text_strong });
+    let mut layer = Vec::new();
+    let menu = Menu::new("snooze")
+        .standard()
+        .anchor("row.actions")
+        .item(MenuItem::new("For an hour"))
+        .item(MenuItem::new("Until tomorrow"))
+        .open(*open)
+        .on_close(|open: &mut bool| *open = false)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn the_row_the_keys_or_pointer_reach_draws_its_label_in_the_focused_ink() {
+    let mut rt = Runtime::new(false, standard_menu_of_quiet_choices, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    rt.update(|open, _| *open = true);
+    rt.frame(2.0 / 60.0);
+    let neutral = Kit::neutral(true);
+    let (rest, lit) = (Some(neutral.c.text_muted), Some(neutral.c.text_strong));
+    let inks = |rt: &Runtime<bool>| {
+        let elements = rt.elements();
+        let ink = |said: &str| elements.iter().find(|e| e.text.as_deref() == Some(said)).and_then(|e| e.text_color);
+        (ink("For an hour"), ink("Until tomorrow"))
+    };
+    assert_eq!(inks(&rt), (rest, rest));
+
+    rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
+    rt.frame(3.0 / 60.0);
+    assert_eq!(inks(&rt), (lit, rest));
+
+    rt.key(rune::KeyEvent { key: rune::Key::Down, mods: rune::Mods::default() });
+    rt.frame(4.0 / 60.0);
+    assert_eq!(inks(&rt), (rest, lit));
+
+    let first = rt.elements().iter().find(|e| e.key.as_deref() == Some("snooze-item0")).expect("the first row").rect;
+    rt.pointer_move(first[0] + first[2] / 2.0, first[1] + first[3] / 2.0);
+    rt.frame(5.0 / 60.0);
+    assert_eq!(inks(&rt), (lit, rest));
+}
+
+fn standard_menu_with_inset_separators(_: &(), _: &mut Cx<()>) -> El {
+    let mut k = Kit::neutral(true);
+    k.standard_menu = crate::StandardMenu { edge_alpha: 1.0, radius: 8.0, inset: 5.0, row_padding: (9.0, 6.0), row_radius: 5.0 };
+    let mut layer = Vec::new();
+    let menu = Menu::new("session")
+        .standard()
+        .anchor("row.actions")
+        .separator_inset(3.0)
+        .item(MenuItem::new("Rename session"))
+        .separator()
+        .item(MenuItem::new("Close session"))
+        .open(true)
+        .build(&k, &mut layer);
+    let row_button = rune::row().key("row.actions").role("button").label("Actions").size(40.0, 20.0).absolute(20.0, 20.0);
+    rune::el().w_full().h_full().child(row_button).child(menu).children(layer)
+}
+
+#[test]
+fn a_menus_separators_sit_its_separator_inset_inside_its_rows() {
+    let mut rt = Runtime::new((), standard_menu_with_inset_separators, (400.0, 300.0), Env { system_dark: true, scale: 1.0 });
+    rt.frame(0.0);
+    let element = |key: &str| rt.elements().iter().find(|e| e.key.as_deref() == Some(key)).cloned().unwrap_or_else(|| panic!("no {key}"));
+    let (menu, rule) = (element("session-menu").rect, element("sep1").rect);
+    assert_eq!(rule[0] - menu[0], 8.0, "{menu:?} {rule:?}");
+    assert_eq!((menu[0] + menu[2]) - (rule[0] + rule[2]), 8.0, "{menu:?} {rule:?}");
+}

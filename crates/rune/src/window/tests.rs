@@ -718,7 +718,7 @@ fn a_surface_lost_after_every_replacement_gives_up_after_the_tries() {
     assert_eq!(retries.attempt(), SurfaceStep::Replace);
 }
 
-/// A device that went away (a driver reset, a GPU removed, Windows' Modern Standby) configures
+/// A device that went away (a driver reset, a GPU removed) configures
 /// nothing, and wgpu drops the `DeviceLost` that would say so: `configure` reports the lost
 /// device itself, and no drawable is ever asked of it.
 #[cfg(target_os = "linux")]
@@ -780,6 +780,69 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the press asks for a frame");
     assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the read asks for none");
     assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
+}
+
+/// A wheel an inspection feeds moves the scroll view at once, without queueing input or
+/// changing state, and asks the window for a frame that lays the rows out where it scrolled
+/// them. A tool that scrolls an element into view waits for that frame.
+#[test]
+fn an_inspection_s_wheel_asks_for_a_frame_to_show_the_rows_it_scrolled() {
+    use crate::{App, AppSpec, ScrollSpec, col, el};
+    fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        col().key("list").w(100.0).h(100.0).scroll(ScrollSpec { stick_bottom: false })
+            .children((0..10).map(|i| el().key(format!("row-{i}")).w(100.0).h(40.0)))
+    }
+    let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (100.0, 100.0), crate::Env::default());
+    rt.frame(0.0);
+    handle.inspect(|rt| rt.wheel(50.0, 50.0, -120.0));
+    handle.inspect(|_| {});
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the wheel asks for a frame");
+    rt.frame(1.0 / 60.0);
+    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read after that frame asks for none");
+    let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row-3")).expect("row 3 is laid out");
+    assert_eq!(row.rect[1], 0.0, "the frame laid row 3 out at the top, where the wheel scrolled it");
+}
+
+/// A selection drag that an inspection feeds over the text the pointer already rests on changes
+/// only the selection: no state, no queued action. It still asks the window for a frame, and the
+/// release reaches `on_selection_change`. Repeating the same drag selects what is already
+/// selected, and its release is heard once more, though no frame came between press and release.
+#[test]
+fn an_inspection_s_selection_drag_asks_for_a_frame_and_its_release_is_heard() {
+    use crate::{App, AppSpec, TextStyle, col, text};
+    fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+        col().w_full().selection_group(true)
+            .on_selection_change(|n: &mut u32, c, _| if !c.dragging() && c.selection().is_some() { *n += 1 })
+            .child(text("select these words, then these ones").key("t").font(TextStyle::new(14.0, 400.0)).w(380.0).selectable(true))
+    }
+    let app = App::new(AppSpec::new("t", (400.0, 100.0), || 0u32, view));
+    let (handle, shared) = (app.handle(), app.shared.clone());
+    let mut rt = Runtime::new(0u32, view, (400.0, 100.0), crate::Env::new(true, 1.0));
+    let mut t = 0.0;
+    let mut settle = |rt: &mut Runtime<u32>| for _ in 0..3 { t += 1.0 / 60.0; rt.frame(t); };
+    settle(&mut rt);
+    let (x, y) = rt.find("t").expect("laid out");
+    rt.pointer_move(x - 100.0, y);
+    settle(&mut rt);
+    let drag = move |rt: &mut Runtime<u32>| {
+        rt.pointer_move(x - 100.0, y);
+        rt.pointer_down(x - 100.0, y);
+        rt.pointer_move(x, y);
+        rt.pointer_move(x + 40.0, y);
+        rt.pointer_up(x + 40.0, y);
+    };
+    handle.inspect(drag);
+    handle.inspect(drag);
+    let mut inspections = shared.take().inspections.into_iter();
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the drag asks for a frame");
+    settle(&mut rt);
+    assert_eq!(*rt.state(), 1, "the release reached on_selection_change");
+    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the same drag again asks for a frame");
+    settle(&mut rt);
+    assert_eq!(*rt.state(), 2, "its release was heard once more");
 }
 
 /// A covered window builds no view for an update until it shows again; an inspection builds it

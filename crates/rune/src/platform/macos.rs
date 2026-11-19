@@ -136,6 +136,12 @@ pub(crate) fn show_without_focus(window: &winit::window::Window) {
     unsafe { w.orderFrontRegardless() };
 }
 
+/// Makes a window the app's key window and orders it front, without activating the app.
+pub(crate) fn make_key(window: &winit::window::Window) {
+    let Some(w) = ns_window(window) else { return };
+    w.makeKeyAndOrderFront(None);
+}
+
 /// An overlay's non-activating panel. winit's content view (with the Metal layer wgpu draws
 /// into) moves into it, so clicks reach Rune through winit while the app never activates and
 /// the panel only becomes key on request. winit's own window stays hidden and gets its view back on drop.
@@ -193,6 +199,7 @@ impl Panel {
             panel.setFloatingPanel(true);
             panel.setBecomesKeyOnlyIfNeeded(options.keys == KeyPolicy::None);
             panel.setHidesOnDeactivate(false);
+            panel.setCanHide(false);
             panel.setBackgroundColor(Some(&NSColor::clearColor()));
             panel.setCollectionBehavior(
                 NSWindowCollectionBehavior::CanJoinAllSpaces
@@ -296,6 +303,14 @@ impl Panel {
         }
     }
     pub fn is_key(&self) -> bool { self.panel.isKeyWindow() }
+
+    /// Moves the panel with the pointer, from inside the mouse-down AppKit is handling.
+    pub fn drag(&self) {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        if let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() {
+            self.panel.performWindowDragWithEvent(&event);
+        }
+    }
 }
 
 impl Drop for Panel {

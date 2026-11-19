@@ -34,10 +34,6 @@ use chrome::{frame_chrome, place_chrome, sync_chrome, titlebar_double_click};
 mod configure;
 pub(crate) use configure::configure;
 mod create;
-#[cfg(target_os = "windows")]
-mod cpu_frame;
-#[cfg(target_os = "windows")]
-mod video_layer;
 mod native;
 use native::Native;
 mod wake;
@@ -49,16 +45,8 @@ use first_frame::FirstFrame;
 mod draw;
 mod redraw;
 use redraw::{Redraw, RedrawEffect, RedrawEvent};
-#[cfg(target_os = "windows")]
-use redraw::{Steady, SteadyEvent};
-#[cfg(target_os = "windows")]
-mod covered_draw;
-#[cfg(target_os = "windows")]
-use covered_draw::{CoveredDraw, CoveredDrawEvent};
 mod presented;
 pub(crate) use presented::Presented;
-#[cfg(target_os = "windows")]
-use presented::composed;
 use presented::composing;
 mod platform_sync;
 use platform_sync::sync_platform;
@@ -126,27 +114,16 @@ pub(crate) enum WakeEvent {
     Position(usize, (i32, i32)), Level(usize, bool),
     Place(usize, crate::windows::PlaceRequest),
     Frame(usize, crate::window::frame::FrameRequest),
-    /// Windows: other windows started or stopped covering the window (platform::win32::occlusion).
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    Covered(usize, bool),
-    /// The app was reopened (macOS: its Dock icon clicked; Windows: launched again while it
-    /// runs, see `single_instance`); for `Windows`, not one host.
-    #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
-    Reopen,
-    /// The system asks the app to quit (`crate::quit`): every window's `App::on_quit` runs;
-    /// with `true` the session ends now and the windows close.
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    Quit(bool),
+    /// The app was reopened (macOS: its Dock icon clicked; Linux: launched again, with the
+    /// launch's activation token); for `Windows`, not one host.
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+    Reopen(Option<String>),
     /// An assistive client asked something of a surface's accessibility tree (`crate::a11y`):
     /// the host answers at the end of the turn this wakes.
     #[cfg_attr(not(feature = "accessibility"), allow(dead_code))]
     A11y(usize),
     /// A native menu's modal loop holds the event loop: run its idle turn (`Windows::turn`).
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     Turn,
-    /// Windows: the GPU a CPU-drawn window was waiting for is made, or failed (`cpu_frame`).
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    GpuReady(usize),
 }
 
 /// What `Windows` needs of a host, whatever its state type: an app window or an overlay.
@@ -159,8 +136,8 @@ pub(crate) trait AnyHost {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent);
     /// Draws what has no redraw event (a layer surface); true while it needs more frames.
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) -> bool { false }
-    /// The turn ends: the next frame it wants is asked for, or a paint put off runs (`redraw`).
-    fn turn_ends(&mut self, _event_loop: &ActiveEventLoop, _now: Instant) {}
+    /// The turn ends: the next frame it wants is asked for (`redraw`).
+    fn turn_ends(&mut self) {}
     fn finished(&self) -> bool { false }
     /// The OS is ending the app without Rune asking: run close hooks before the hosts drop.
     fn terminate(&mut self) {}
@@ -183,7 +160,7 @@ pub(crate) trait AnyHost {
     /// when that wake arrives.
     fn apply_pending(&mut self, _event_loop: &ActiveEventLoop) {}
     /// Shows, restores and activates it as the default reopen.
-    fn reopen(&mut self, _event_loop: &ActiveEventLoop) {}
+    fn reopen(&mut self, _event_loop: &ActiveEventLoop, _token: Option<String>) {}
 }
 
 /// Builds every host, attaching its shortcut and menu guards, before any resumes: a window's
@@ -259,7 +236,7 @@ impl Windows {
             // button would, once the quit's hooks ran. A quit already asked to exit and skips
             // their close hooks.
             if !event_loop.exiting() {
-                self.quit(event_loop, false, true);
+                self.quit();
                 for host in self.hosts.iter_mut().flatten() { host.terminate(); }
             }
             event_loop.exit();
@@ -306,13 +283,11 @@ pub(crate) fn start<S: 'static>(mut spec: WindowSpec<S>, handle: Option<WindowHa
 
 impl ApplicationHandler<WakeEvent> for Windows {
     fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
-        let _handling = crate::quit::handling();
         for host in self.hosts.iter_mut().flatten() { host.new_events(event_loop, cause); }
         // Before resumed there are no hosts to clean up.
         if self.factory.is_none() { self.cleanup(event_loop); }
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let _handling = crate::quit::handling();
         let Some(factory) = self.factory.take() else { return };
         crate::marks::mark("loop.resumed");
         let primary = event_loop.primary_monitor();
@@ -334,34 +309,28 @@ impl ApplicationHandler<WakeEvent> for Windows {
         #[cfg(target_os = "macos")]
         {
             let proxy = self.proxy.clone();
-            crate::platform::reopen::install(move || proxy.send_event(WakeEvent::Reopen).is_ok());
+            crate::platform::reopen::install(move || proxy.send_event(WakeEvent::Reopen(None)).is_ok());
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(target_os = "linux")]
         {
-            let proxy = self.proxy.clone();
-            crate::open_url::instance::on_relaunch(move || proxy.send_event(WakeEvent::Reopen).is_ok());
+            let proxy = std::sync::Mutex::new(self.proxy.clone());
+            crate::open_url::instance::on_launch(move |token| {
+                let _ = proxy.lock().unwrap_or_else(|e| e.into_inner()).send_event(WakeEvent::Reopen(token));
+            });
         }
-        let proxy = self.proxy.clone();
-        crate::quit::install(move |ending| proxy.send_event(WakeEvent::Quit(ending)).is_ok());
+        crate::quit::install();
         crate::open_url::incoming::settle();
         // A window opened at launch took it; a GPU kept for a later one would sit idle until then.
         crate::render::discard_prewarm();
         self.cleanup(event_loop);
     }
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: WakeEvent) {
-        let _handling = crate::quit::handling();
         let slot = match &event {
             WakeEvent::DisplayTick(i) | WakeEvent::App(i) | WakeEvent::Live(i) | WakeEvent::Window(i, _) | WakeEvent::Focus(i)
                 | WakeEvent::Position(i, _) | WakeEvent::Level(i, _) | WakeEvent::Place(i, _) | WakeEvent::Frame(i, _)
-                | WakeEvent::A11y(i) | WakeEvent::Covered(i, _) | WakeEvent::GpuReady(i) => *i,
-            WakeEvent::Reopen => {
-                self.reopen(event_loop);
-                self.cleanup(event_loop);
-                return;
-            }
-            // A session query (`ending: false`) can still be cancelled: the windows stay up.
-            WakeEvent::Quit(ending) => {
-                self.quit(event_loop, *ending, *ending);
+                | WakeEvent::A11y(i) => *i,
+            WakeEvent::Reopen(token) => {
+                self.reopen(event_loop, token.clone());
                 self.cleanup(event_loop);
                 return;
             }
@@ -373,7 +342,6 @@ impl ApplicationHandler<WakeEvent> for Windows {
         self.cleanup(event_loop);
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        let _handling = crate::quit::handling();
         if let Some(host) = self.hosts.iter_mut().flatten().find(|h| h.owns(id)) {
             let _input = crate::input::time::arrived(&event);
             host.window_event(event_loop, id, event);
@@ -381,27 +349,14 @@ impl ApplicationHandler<WakeEvent> for Windows {
         self.cleanup(event_loop);
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let _handling = crate::quit::handling();
-        // Windows: a later launch handed to this loop (`single_instance`) is served once the app
-        // goes on with a window shown. One that came as the app ended (its last window already
-        // closing, the quit not started) isn't: the process starts the app again for it.
-        #[cfg(target_os = "windows")]
-        if crate::open_url::instance::launches_waiting() && !event_loop.exiting() {
-            let windows: Vec<_> = self.hosts.iter().map(|h| h.as_ref().map(|h| h.reopen_candidate()).unwrap_or_default()).collect();
-            if crate::platform::reopen::has_visible(&windows) {
-                crate::open_url::instance::served();
-            }
-        }
         crate::marks::loop_waits();
         crate::cursor::os::make_pending(event_loop);
         let mut animating = false;
         for host in self.hosts.iter_mut().flatten() {
             animating |= host.about_to_wait(event_loop);
         }
-        // The frames windows want next (`redraw`), and on Windows the paints the system keeps
-        // putting off behind another window's.
-        let now = Instant::now();
-        for host in self.hosts.iter_mut().flatten() { host.turn_ends(event_loop, now); }
+        // The frames windows want next (`redraw`).
+        for host in self.hosts.iter_mut().flatten() { host.turn_ends(); }
         // Layer surfaces have no redraw events: keep turning while one animates (its vsync
         // paces the loop). Hosts whose only motion is an ambient loop sleep until its next step.
         let deadline = self.hosts.iter().flatten().filter_map(|host| host.wake_deadline()).min();
@@ -409,11 +364,10 @@ impl ApplicationHandler<WakeEvent> for Windows {
             else { deadline.map_or(ControlFlow::Wait, |at| ControlFlow::WaitUntil(crate::time::for_winit(at))) });
     }
     fn exiting(&mut self, event_loop: &ActiveEventLoop) {
-        let _handling = crate::quit::handling();
         crate::marks::mark("loop.exiting");
         // Every quit ends here, so the windows still open run `App::on_quit` first, unless the
-        // quit's hooks already ran (a Windows logoff, the last window closing).
-        self.quit(event_loop, false, true);
+        // quit's hooks already ran (the last window closing).
+        self.quit();
         // Rune didn't ask to exit, so the OS is ending the app: macOS Quit, Cmd-Q, the Dock's
         // Quit, logout. Windows close as their close button would, before the clipboard stops.
         if !event_loop.exiting() {
@@ -429,8 +383,6 @@ impl ApplicationHandler<WakeEvent> for Windows {
         if crate::quit::send(crate::quit::Event::Exited).contains(&crate::quit::Effect::Relaunch) {
             crate::relaunch::spawn();
         }
-        #[cfg(target_os = "windows")]
-        crate::open_url::instance::exited();
     }
 }
 
@@ -536,7 +488,7 @@ impl<S: 'static> Host<S> {
         let present_log = args.trace.as_ref().map(|_| Arc::default());
         let mut app = app;
         let comp = app.compositor.take();
-        let (on_focus, on_ime, on_visibility) = (app.on_focus, app.on_ime, app.on_visibility);
+        let (on_focus, on_ime, on_visibility, on_input) = (app.on_focus, app.on_ime, app.on_visibility, app.on_input);
         let on_field_key = app.on_field_key;
         let titlebar = app.titlebar.filter(|_| !options.borderless);
         let chrome = app.chrome;
@@ -567,6 +519,7 @@ impl<S: 'static> Host<S> {
         }
         rt.app_mut().on_focus = on_focus;
         rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_input = on_input;
         rt.app_mut().on_field_key = on_field_key;
         rt.app_mut().on_ime = on_ime;
         rt.set_modifier_keys(modifier_keys);

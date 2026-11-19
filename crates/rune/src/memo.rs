@@ -387,7 +387,7 @@ pub(crate) fn enter(
     accent: crate::SystemAccent,
     reduced_motion: bool,
     srgb_blend: bool,
-    chrome: [u32; 4],
+    chrome: [u32; 3],
     caret: Option<(String, [f32; 4])>,
     layout: LayoutRects,
 ) -> Guard {
@@ -449,7 +449,7 @@ pub(crate) fn enter_partial(
     accent: crate::SystemAccent,
     reduced_motion: bool,
     srgb_blend: bool,
-    chrome: [u32; 4],
+    chrome: [u32; 3],
     caret: Option<(String, [f32; 4])>,
     layout: LayoutRects,
 ) -> Guard {
@@ -1029,7 +1029,7 @@ mod tests {
     #[test]
     fn a_view_panicking_inside_a_memo_leaves_no_scope_for_the_next_build() {
         let panicked = std::panic::catch_unwind(|| {
-            let _scope = enter(MemoCache::default(), Env::new(true, 1.0), crate::SystemAccent::DEFAULT, false, true, [0; 4], None, LayoutRects::default());
+            let _scope = enter(MemoCache::default(), Env::new(true, 1.0), crate::SystemAccent::DEFAULT, false, true, [0; 3], None, LayoutRects::default());
             memo("outer", 0, || memo("inner", 0, || panic!("view panicked")))
         });
         assert!(panicked.is_err());
@@ -1153,6 +1153,23 @@ mod tests {
         rt.key(crate::KeyEvent { key: crate::Key::Text("offscreen".into()), mods: Default::default() });
         rt.frame(0.0);
         assert_eq!(rt.state()[0].text, "offscreen");
+    }
+
+    #[test]
+    fn a_field_tx_focus_focuses_in_a_memo_keyed_on_something_else_draws_its_caret() {
+        use crate::{TextEdit, TextStyle, text_input};
+        fn view(s: &TextEdit, _: &mut Cx<TextEdit>) -> El {
+            col().size(200.0, 100.0).child(memo("form", 0, || {
+                col().child(text_input(s, TextStyle::new(14.0, 400.0)).key("field").size(200.0, 40.0).on_edit(|s: &mut TextEdit| s))
+            }))
+        }
+        let mut rt = Runtime::new(TextEdit::new(""), view, (200.0, 100.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.update(|_, tx| tx.focus("field", false));
+        rt.frame(0.0);
+        let field = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("field")).expect("the field shows");
+        assert!(field.focused && rt.state().focused, "the field took focus");
+        assert!(field.caret.is_some(), "the focused field draws its caret");
     }
 
     #[test]

@@ -331,6 +331,14 @@ impl El {
         self.vis.set_hover(c);
         self
     }
+    /// The border's colour while hovered, as CSS `:hover { border-color }` sets it: the border
+    /// [`El::border`] draws turns to `c` on the hover track, fading as [`El::hover`]'s overlay
+    /// does. It needs a border to recolour, and works with or without a hover fill.
+    #[inline]
+    pub fn hover_border(mut self, c: Color) -> Self {
+        self.vis.set_hover_border(c);
+        self
+    }
     /// Overlay drawn over the fill while pressed.
     #[inline]
     pub fn press(mut self, c: Color) -> Self {
@@ -425,12 +433,14 @@ impl El {
     }
     /// A scroll area's wrapper passes its clip to the viewport, beside which it draws the bar.
     fn set_clip(&mut self, clip: [f32; 4]) {
-        if self.vis.clip_to_content
-            && let Some(viewport) = self.children.first_mut()
-        {
-            viewport.vis.cold_mut().clip = Some(clip);
+        self.clipped_visual().cold_mut().clip = Some(clip);
+    }
+    /// Where this element's clip lives: its own visual, or a scroll area's viewport's.
+    fn clipped_visual(&mut self) -> &mut crate::el::Visual {
+        if self.vis.clip_to_content && !self.children.is_empty() {
+            &mut self.children[0].vis
         } else {
-            self.vis.cold_mut().clip = Some(clip);
+            &mut self.vis
         }
     }
     /// Clip children to this box with soft gradient edges (never a hard crop).
@@ -482,6 +492,15 @@ impl El {
     /// Soft clip with a fade width per side (left, top, right, bottom).
     pub fn clip_fade(mut self, left: f32, top: f32, right: f32, bottom: f32) -> Self {
         self.set_clip([left, top, right, bottom].map(|w| w.max(0.0)));
+        self
+    }
+    /// Move this element's clip, and its fades with it, out past its box by these points on each
+    /// side (left, top, right, bottom), as paint alone: layout doesn't change. A cell that fades
+    /// its overflow keeps whole what reaches out of it, such as a control's focus ring. Right to
+    /// left, the sides mirror with the fades; on a scroll area's wrapper, the outset goes to the
+    /// viewport with the clip. A rounded clip ([`Self::clip_rounded`]) stays at the box.
+    pub fn clip_outset(mut self, left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        self.clipped_visual().cold_mut().clip_outset = [left, top, right, bottom].map(|v| v.max(0.0));
         self
     }
     /// [`Self::clip_fade`] with linear ramps: alpha falls in proportion to distance, from whole
@@ -538,7 +557,8 @@ impl El {
         self.vis.cold_mut().group_opacity = Some([rest, hovered]);
         self
     }
-    /// Text or icon colour while the nearest ancestor group is hovered.
+    /// Text or icon colour while the nearest ancestor group is hovered, or, in a
+    /// [`Self::focus_highlight`] row, while the row is highlighted.
     pub fn group_color(mut self, c: Color) -> Self {
         self.vis.cold_mut().group_color = Some(c);
         self

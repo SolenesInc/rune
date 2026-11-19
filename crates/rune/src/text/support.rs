@@ -1,5 +1,4 @@
-//! Which [`FontSmoothing`] modes this machine draws as named: DirectWrite and ClearType need
-//! Windows, the modes drawn from outlines need the renderer's Windfoil shader, which a renderer
+//! Which [`FontSmoothing`] modes this machine draws as named: the modes drawn from outlines need the renderer's Windfoil shader, which a renderer
 //! reports when it builds or fails to build it (`note_outlines`), and subpixel text needs
 //! dual-source blending (`note_dual_source`). An app's setting lists every mode with this.
 
@@ -43,15 +42,13 @@ pub(crate) fn note_outlines(support: Outlines) {
 
 impl FontSmoothing {
     /// Every mode, in the order a setting lists them.
-    pub const ALL: [FontSmoothing; 10] = [
+    pub const ALL: [FontSmoothing; 8] = [
         FontSmoothing::Windfoil,
         FontSmoothing::WindfoilChromium,
         FontSmoothing::Slug,
         FontSmoothing::WindfoilRgb,
         FontSmoothing::HintedGpu,
         FontSmoothing::Hinted,
-        FontSmoothing::DirectWrite,
-        FontSmoothing::ClearType,
         FontSmoothing::On,
         FontSmoothing::Off,
     ];
@@ -61,9 +58,7 @@ impl FontSmoothing {
         let outlines_out = OUTLINES.load(Ordering::Relaxed) == 2;
         let no_dual = DUAL.load(Ordering::Relaxed) == 2;
         match self {
-            FontSmoothing::DirectWrite if !cfg!(target_os = "windows") => SmoothingSupport::No("DirectWrite is Windows only"),
-            FontSmoothing::ClearType if !cfg!(target_os = "windows") => SmoothingSupport::No("ClearType is Windows only"),
-            FontSmoothing::WindfoilRgb | FontSmoothing::ClearType if no_dual || outlines_out => {
+            FontSmoothing::WindfoilRgb if no_dual || outlines_out => {
                 SmoothingSupport::Fallback("This GPU can't blend subpixel text (dual-source blending), so it draws grayscale")
             }
             FontSmoothing::Slug if outlines_out => SmoothingSupport::No("Slug draws on the GPU, and this renderer can't build its shader"),

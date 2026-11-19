@@ -70,6 +70,43 @@ fn sequences_run_without_commits_then_sleep_and_settle() {
 }
 
 #[test]
+fn a_repeating_sequence_bounces_every_lap_without_commits_and_cools_to_rest_when_dropped() {
+    fn view(bouncing: &bool, _: &mut Cx<bool>) -> El {
+        const BOUNCE: &[crate::Beat] = &[
+            crate::Beat::new(0.0).opacity(0.5).scale(0.6),
+            crate::Beat::new(0.56).easing(crate::Easing::LINEAR),
+            crate::Beat::new(1.12).opacity(0.5).scale(0.6).easing(crate::Easing::LINEAR),
+            crate::Beat::new(1.4).opacity(0.5).scale(0.6),
+        ];
+        let dot = el().key("dot").size(4.0, 4.0).fill(Color::WHITE);
+        el().size(20.0, 20.0).child(if *bouncing { dot.sequence(crate::Sequence::new(BOUNCE).repeat()) } else { dot })
+    }
+    let pose = |rt: &Runtime<bool>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("dot")).unwrap();
+    let mut rt = Runtime::new(true, view, (20.0, 20.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let commits = rt.stats.commits;
+    for lap in 0..3 {
+        let to_quarter = if lap == 0 { 0.28 } else { 1.4 - 0.56 + 0.28 };
+        assert!(rt.frame(to_quarter), "lap {lap} keeps asking for frames");
+        assert!((pose(&rt).scale - 0.8).abs() < 1e-3, "lap {lap}: {}", pose(&rt).scale);
+        assert!((pose(&rt).opacity - 0.75).abs() < 1e-3);
+        assert!(rt.frame(0.28));
+        assert!((pose(&rt).scale - 1.0).abs() < 1e-3, "lap {lap} peaks");
+    }
+    assert_eq!(rt.stats.commits, commits, "laps play on the render clock");
+    rt.update(|s, _| *s = false);
+    for _ in 0..120 { rt.frame(1.0 / 60.0); }
+    assert!(!rt.frame(1.0 / 60.0), "a dropped loop cools and sleeps");
+    assert!((pose(&rt).scale - 1.0).abs() < 1e-3 && (pose(&rt).opacity - 1.0).abs() < 1e-3);
+    let mut reduced = Runtime::new(true, view, (20.0, 20.0), Env::new(true, 1.0));
+    reduced.set_system_reduced_motion(true);
+    assert!(!reduced.frame(0.0));
+    reduced.frame(0.56);
+    assert_eq!(pose(&reduced).scale, 0.6, "reduced motion holds the first pose");
+    assert_eq!(pose(&reduced).loop_phase, Some(0.0));
+}
+
+#[test]
 fn motion_curve_moves_layout_on_a_tween() {
     fn view(h: &f32, _: &mut Cx<f32>) -> El {
         col().size(200.0, 300.0).child(el().key("card").w(100.0).h(*h))
@@ -439,4 +476,47 @@ fn removing_what_draws_nothing_skips_its_exit() {
     rt.frame(1.0 / 60.0);
     rt.frame(1.0 / 60.0);
     assert!(!exiting(&rt, "dot"), "the dot under a parent that hid at once is gone");
+}
+
+#[test]
+fn a_travelling_exit_asked_to_leave_opaque_slides_out_whole_while_one_in_place_fades() {
+    fn view(s: &(bool, Transition), _: &mut Cx<(bool, Transition)>) -> El {
+        col().size(200.0, 100.0).clip_rounded(0.0).children(s.0.then(|| el().key("page").size(200.0, 100.0)
+            .transition(s.1)))
+    }
+    let leaving = |transition| {
+        let mut rt = Runtime::new((true, transition), view, (200.0, 100.0), Env { scale: 1.0, system_dark: true });
+        rt.frame(0.0);
+        rt.state_mut().0 = false; rt.invalidate(); rt.frame(0.0);
+        let mut seen = Vec::new();
+        for _ in 0..120 {
+            rt.frame(1.0 / 60.0);
+            if let Some(e) = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("page")) {
+                seen.push((e.rect[0], e.opacity));
+            }
+        }
+        seen
+    };
+    let slid = leaving(Transition::offset(-200.0, 0.0).leaves_opaque());
+    assert!(slid.len() > 2 && slid.iter().all(|&(_, op)| op == 1.0), "slides out whole: {slid:?}");
+    assert!(slid.windows(2).all(|w| w[1].0 <= w[0].0) && slid.last().unwrap().0 < -150.0, "travels out: {slid:?}");
+    let faded = leaving(Transition::scale(0.92).leaves_opaque());
+    assert!(faded.iter().any(|&(_, op)| op < 0.5), "an exit in place still fades: {faded:?}");
+}
+
+#[test]
+fn a_child_that_asked_for_no_motion_leaves_at_once_under_its_parents_child_exit() {
+    fn view(shown: &bool, _: &mut Cx<bool>) -> El {
+        let children = shown.then(|| [
+            el().key("page").size(100.0, 100.0),
+            el().key("still").size(100.0, 100.0).transition(Transition::none()),
+        ]);
+        crate::row().size(200.0, 100.0).child_exit(Transition::offset(-200.0, 0.0).leaves_opaque()).children(children.into_iter().flatten())
+    }
+    let mut rt = Runtime::new(true, view, (200.0, 100.0), Env { scale: 1.0, system_dark: true });
+    rt.frame(0.0);
+    *rt.state_mut() = false; rt.invalidate(); rt.frame(0.0); rt.frame(1.0 / 60.0);
+    let leaving = |key: &str| rt.elements().into_iter().any(|e| e.key.as_deref() == Some(key));
+    assert!(leaving("page"), "the page leaves the way its parent says");
+    assert!(!leaving("still"), "the child that asked for no motion is gone at once");
 }

@@ -156,7 +156,7 @@ impl RuntimeCore {
                 && swept[2] > clip[0] - margin && swept[0] < clip[2] + margin
                 && swept[3] > clip[1] - margin && swept[1] < clip[3] + margin;
             let clip = if n.vis.clip.is_some() || n.scroll.is_some() {
-                intersect(clip, swept)
+                intersect(clip, n.vis.clip_rect(swept, 1.0))
             } else { clip };
             let (shift_min, shift_max) = match (self.scrolls.get(&n.id), n.scroll) {
                 (Some(st), Some(sp)) => {

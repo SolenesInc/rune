@@ -16,6 +16,8 @@
 //!     .build(&s.zoom, &kit, window)
 //! ```
 
+#[cfg(test)]
+mod fork_tests;
 pub mod gesture;
 mod glide;
 pub mod math;
@@ -106,6 +108,26 @@ impl ImageZoom {
 
     /// ⌘ 0, 0, the level button and a double-click on a zoomed image.
     pub fn fit(&mut self, tx: &mut Tx) { self.ease(FIT_VIEW, tx) }
+
+    /// The 100% button ([`Preview::actual_size`]): the image at its natural size, about the
+    /// middle. An image that fits stays fitted.
+    pub fn actual(&mut self, tx: &mut Tx) {
+        let goal = self.glide.goal();
+        self.ease(math::zoom_at(goal, 1.0 / self.fit_ratio.get().max(f32::EPSILON), [0.0, 0.0], &self.bounds.get()), tx);
+    }
+
+    /// Opens at once at the natural size of an image `natural` pixels large in a `window` of
+    /// points, its start (left and top edges) at the body's, as a page shows a wide figure
+    /// scrolled to its beginning. An image that fits opens fitted.
+    pub fn open_actual(&mut self, natural: [f32; 2], window: [f32; 2]) {
+        *self = ImageZoom::default();
+        self.measure(window, natural);
+        let b = self.bounds.get();
+        let scale = (1.0 / self.fit_ratio.get().max(f32::EPSILON)).clamp(1.0, b.max_scale.max(1.0));
+        let start = |size: f32, viewport: f32| (size * scale - viewport) / 2.0;
+        let view = ZoomView { scale, x: start(b.width, b.viewport_width), y: start(b.height, b.viewport_height) };
+        self.glide = Glide::snap(math::clamp_view(view, &b));
+    }
 
     fn step_by(&mut self, factor: f32, tx: &mut Tx) {
         let goal = self.glide.goal();
@@ -220,6 +242,9 @@ pub struct Preview<S> {
     labels: [String; 4],
     format: fn(u32) -> String,
     controls: Option<rune::Transition>,
+    scaled: bool,
+    actual: Option<String>,
+    escape_returns: bool,
 }
 
 impl<S: 'static> Preview<S> {
@@ -235,7 +260,33 @@ impl<S: 'static> Preview<S> {
             labels: ["Zoom out".into(), "Zoom to fit".into(), "Zoom in".into(), "Close".into()],
             format: |n| format!("{n}%"),
             controls: None,
+            scaled: false,
+            actual: None,
+            escape_returns: false,
         }
+    }
+
+    /// Lays `image` out at its `natural` size in points and draws it scaled to the zoom
+    /// ([`El::scale`]), for content that does not stretch to the size it is given, such as a
+    /// diagram's drawing. Without it the preview sizes `image` itself, as a picture stretches.
+    pub fn scale_content(mut self) -> Self {
+        self.scaled = true;
+        self
+    }
+
+    /// A "100%" button in the zoom bar, after +, that shows the image at its natural size
+    /// ([`ImageZoom::actual`]), as the 1 key does; `label` names it to assistive tech. None by
+    /// default.
+    pub fn actual_size(mut self, label: impl Into<String>) -> Self {
+        self.actual = Some(label.into());
+        self
+    }
+
+    /// Escape closes the preview at any zoom, as a view people return from does, instead of
+    /// fitting a zoomed image first.
+    pub fn escape_returns(mut self) -> Self {
+        self.escape_returns = true;
+        self
     }
 
     /// How the zoom bar comes and goes (as the image flies, or with the scrim).
@@ -276,7 +327,13 @@ impl<S: 'static> Preview<S> {
         let bar = self.bar(zoom, k);
         let scale = zoom.view().scale;
         // A glide's frames, a pinch and a pan move it to exactly where the view says.
-        let image = self.image.absolute(x, y).size(w, h).radius(k.radius.md * scale).instant_changes();
+        let image = if self.scaled {
+            let [nw, nh] = self.natural;
+            let drawn = self.image.absolute((w - nw) * 0.5, (h - nh) * 0.5).size(nw, nh).scale(w / nw.max(f32::EPSILON)).instant_changes();
+            el().absolute(x, y).size(w, h).child(drawn).instant_changes()
+        } else {
+            self.image.absolute(x, y).size(w, h).radius(k.radius.md * scale).instant_changes()
+        };
         let close = self.close.clone();
         let mut body_el = el()
             .key("image-preview-body")
@@ -324,17 +381,29 @@ impl<S: 'static> Preview<S> {
             .h_full()
             .focusable(true)
             .no_focus_ring()
-            .modal_tx(false, move |s: &mut S, tx: &mut Tx| {
-                if lens(s).owns_escape() { lens(s).fit(tx) } else { dismiss(s, tx) }
+            .modal_tx(false, {
+                let escape_returns = self.escape_returns;
+                move |s: &mut S, tx: &mut Tx| {
+                    if !escape_returns && lens(s).owns_escape() { lens(s).fit(tx) } else { dismiss(s, tx) }
+                }
             })
             .on_drag(move |s: &mut S, d: &mut Drag, tx: &mut Tx| press(s, lens, d, false, &close, tx))
             .on_wheel(|_: &mut S, _, _: &mut Tx| true)
             .on_key({
                 let close = self.close.clone();
-                move |s: &mut S, ev: &KeyEvent, tx: &mut Tx| match lens(s).key(ev, tx) {
-                    Some(true) => { close(s, tx); true }
-                    Some(false) => true,
-                    None => false,
+                let (escape_returns, actual) = (self.escape_returns, self.actual.is_some());
+                move |s: &mut S, ev: &KeyEvent, tx: &mut Tx| {
+                    let bare = !ev.mods.cmd && !ev.mods.ctrl && !ev.mods.alt && !ev.mods.logo;
+                    match &ev.key {
+                        Key::Escape if escape_returns => { close(s, tx); return true; }
+                        Key::Text(t) if actual && bare && t == "1" => { lens(s).actual(tx); return true; }
+                        _ => {}
+                    }
+                    match lens(s).key(ev, tx) {
+                        Some(true) => { close(s, tx); true }
+                        Some(false) => true,
+                        None => false,
+                    }
                 }
             })
             .child(body_el)
@@ -364,11 +433,22 @@ impl<S: 'static> Preview<S> {
             .key("image-preview-zoom-level")
             // Three tabular digits, so the bar holds still as the level passes 100%.
             .min_w(58.0);
+        let actual = self.actual.clone().map(|label| {
+            #[allow(deprecated)]
+            Button::new("100%")
+                .variant(crate::ButtonVariant::GhostMuted)
+                .size(crate::ButtonSize::Small)
+                .help(label)
+                .on_press_tx(move |s: &mut S, tx: &mut Tx| lens(s).actual(tx))
+                .build(k)
+                .key("image-preview-zoom-actual")
+        });
         bar.child(IconButton::new(glyphs[0]).variant(IconButtonVariant::Ghost).label(out)
                 .on_press_tx(move |s: &mut S, tx: &mut Tx| lens(s).zoom_out(tx)).build(k).key("image-preview-zoom-out"))
             .child(level)
             .child(IconButton::new(glyphs[1]).variant(IconButtonVariant::Ghost).label(into)
                 .on_press_tx(move |s: &mut S, tx: &mut Tx| lens(s).zoom_in(tx)).build(k).key("image-preview-zoom-in"))
+            .children(actual)
             .child(el().key("image-preview-divider").size(1.0, 16.0).mx(2.0).fill(k.c.border_base))
             .child(IconButton::new(k.glyph.close).variant(IconButtonVariant::Ghost).label(close_label)
                 .on_press_tx(move |s: &mut S, tx: &mut Tx| close(s, tx)).build(k).key(CLOSE_KEY))

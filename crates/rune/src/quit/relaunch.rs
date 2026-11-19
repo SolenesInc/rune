@@ -9,10 +9,6 @@
 
 /// The variable that tells a relaunched process the pid it waits for.
 const AFTER: &str = "RUNE_RELAUNCH_AFTER";
-/// The variable that tells a launch handed on by a quitting process (`spawn_with`) that process's
-/// pid: it claims the instance once that one lets go of it, not once it has exited.
-#[cfg(target_os = "windows")]
-const HANDED: &str = "RUNE_INSTANCE_HANDED";
 /// The longest a relaunched process waits for the previous one.
 const WAIT: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -23,22 +19,6 @@ pub(crate) fn spawn() {
     if let Err(e) = start(std::env::args_os().skip(1).collect(), AFTER) {
         eprintln!("rune: couldn't start the app again: {e}");
     }
-}
-
-/// Starts this app with another launch's arguments: a launch that reached this process while it
-/// quits (`single_instance`). The new process claims the instance as soon as this one lets go of
-/// it (`release_instance`), and starts meanwhile.
-#[cfg(target_os = "windows")]
-pub(crate) fn spawn_with(args: Vec<String>) {
-    if let Err(e) = start(args.into_iter().map(Into::into).collect(), HANDED) {
-        eprintln!("rune: couldn't start the app for a launch that came while it quit: {e}");
-    }
-}
-
-/// The quitting process that handed this launch on (`spawn_with`), once.
-#[cfg(target_os = "windows")]
-pub(crate) fn handed_from() -> Option<u32> {
-    std::env::var_os(HANDED).and_then(|v| v.to_str().and_then(|v| v.parse::<u32>().ok())).filter(|pid| *pid != std::process::id())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -54,22 +34,8 @@ fn start(args: Vec<std::ffi::OsString>, wait_var: &str) -> std::io::Result<()> {
     let mut cmd = Command::new(&exe);
     // Only this launch's wait goes to the new process, not one this process was started with.
     cmd.args(&args).env_remove(AFTER);
-    #[cfg(target_os = "windows")]
-    cmd.env_remove(HANDED);
     cmd.env(wait_var, &pid).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     if let Ok(dir) = std::env::current_dir() { cmd.current_dir(dir); }
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
-        // Out of any job this process runs in, so the new one outlives it; a job that refuses
-        // the breakaway still starts it inside.
-        let flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
-        if cmd.creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB).spawn().is_ok() { return Ok(()); }
-        cmd.creation_flags(flags);
-    }
     cmd.spawn().map(drop)
 }
 
@@ -91,42 +57,6 @@ pub(crate) fn wait_for_previous() {
     });
 }
 
-#[cfg(target_os = "windows")]
-fn wait(pid: u32) {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
-    // SAFETY: a plain handle request; a process that already exited answers null. The handle is
-    // closed once.
-    unsafe {
-        let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
-        if handle.is_null() { return; }
-        WaitForSingleObject(handle, WAIT.as_millis() as u32);
-        CloseHandle(handle);
-    }
-}
-
-/// Whether process `pid` still runs: it hasn't exited, and it isn't ending (a process that was
-/// terminated has its exit code at once, while its last threads and kernel objects can linger
-/// for seconds).
-#[cfg(target_os = "windows")]
-pub(crate) fn alive(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE, WAIT_TIMEOUT};
-    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject};
-    // SAFETY: a plain handle request; a process that already exited answers null. The handle is
-    // closed once; the exit code is written into `code`.
-    unsafe {
-        let handle = OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle.is_null() {
-            return false;
-        }
-        let mut code = 0;
-        let running = WaitForSingleObject(handle, 0) == WAIT_TIMEOUT && GetExitCodeProcess(handle, &mut code) != 0 && code == STILL_ACTIVE as u32;
-        CloseHandle(handle);
-        running
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
 fn wait(pid: u32) {
     let deadline = std::time::Instant::now() + WAIT;
     while alive(pid) && std::time::Instant::now() < deadline {
@@ -145,7 +75,7 @@ fn alive(pid: u32) -> bool {
     std::path::Path::new(&format!("/proc/{pid}")).exists()
 }
 
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(unix))]
 fn alive(_pid: u32) -> bool {
     false
 }

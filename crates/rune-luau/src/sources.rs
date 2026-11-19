@@ -205,7 +205,7 @@ static PRECOMPILED: std::sync::OnceLock<std::collections::HashMap<&'static str, 
 /// script made from them starts without compiling: `Sources::compile` takes a module's bytecode from
 /// here when its text is the same. Compile it as Rune does: optimisation level 2, type information
 /// level 1, debug level 1 (`mlua::chunk::Compiler`, from the same Luau as this build). Compiling
-/// is most of a script's start (a 100 KB plugin: about 28,000 µs of its 30,000 on a Windows
+/// is most of a script's start (a 100 KB plugin: about 28,000 µs of its 30,000 on a
 /// laptop). Call it once, before scripts start; later calls do nothing. A table from another Luau
 /// bytecode version than this build's is ignored, and those scripts compile as before.
 pub fn precompiled(modules: impl IntoIterator<Item = (&'static str, &'static [u8])>) {

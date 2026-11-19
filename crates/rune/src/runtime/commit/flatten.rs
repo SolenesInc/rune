@@ -447,6 +447,7 @@ fn flatten_owned(
     let pin = crate::el::Pin::of(&el);
     let El { handlers, key, mut style, mut vis, vis_flags, mut text, children, memo, mut cold, scale: static_scale, .. } = el;
     let option_as_alt = cold.option_as_alt;
+    let ime_at = cold.ime_at.clone();
     let focus = cold.focus.clone();
     // Only a text field's element has to own its cold fields here; a memo placeholder shares them.
     let mut input = if cold.input.is_some() { cold.get_mut_if_some().and_then(|c| c.input.take()) } else { None };
@@ -491,6 +492,8 @@ fn flatten_owned(
     } else {
         None
     };
+    let room_taken = scroll_room::room_taken_before(memo_ctx, id, cold.scroll_edges.room);
+    scroll_room::pad_room(&mut style, cold.scroll_edges.room, room_taken, 1.0);
     let time_scale = cold.time_scale;
     let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
@@ -512,6 +515,7 @@ fn flatten_owned(
             scroll: c.scroll,
             scroll_axes: c.scroll_axes,
             scroll_edges: c.scroll_edges,
+            room_taken,
             sticky: c.sticky,
             growth: c.growth,
             glide: c.glide,
@@ -564,6 +568,7 @@ fn flatten_owned(
         selection_group: flags.has(ElFlags::SELECTION_GROUP),
         window_drag: flags.window_drag(),
         ime_cursor: flags.has(ElFlags::IME_CURSOR),
+        ime_at,
         ime_option_as_alt: option_as_alt,
         moved_stub: false,
     });
@@ -692,6 +697,10 @@ fn flatten_ref(
     } else {
         None
     };
+    let room_taken = scroll_room::room_taken_before(memo_ctx, id, c.scroll_edges.room);
+    if room_taken != [false; 2] {
+        scroll_room::pad_room(style.to_mut(), c.scroll_edges.room, room_taken, 1.0);
+    }
     let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
     } else {
@@ -714,6 +723,7 @@ fn flatten_ref(
             scroll: c.scroll,
             scroll_axes: c.scroll_axes,
             scroll_edges: c.scroll_edges,
+            room_taken,
             sticky: c.sticky.clone(),
             growth: c.growth.clone(),
             glide: c.glide,
@@ -766,6 +776,7 @@ fn flatten_ref(
         selection_group: flags.has(ElFlags::SELECTION_GROUP),
         window_drag: flags.window_drag(),
         ime_cursor: flags.has(ElFlags::IME_CURSOR),
+        ime_at: el.cold.ime_at.clone(),
         ime_option_as_alt: el.cold.option_as_alt,
         moved_stub: false,
     });

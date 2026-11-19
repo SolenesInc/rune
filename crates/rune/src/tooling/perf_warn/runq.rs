@@ -11,7 +11,10 @@ use super::{STALL_CPU_RATIO, STALL_MS};
 pub(crate) fn wait_ms() -> Option<f64> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let stats = std::fs::read_to_string("/proc/thread-self/schedstat").ok()?;
+        use std::io::Read;
+        let mut buf = [0u8; 128];
+        let len = std::fs::File::open("/proc/thread-self/schedstat").ok()?.read(&mut buf).ok()?;
+        let stats = std::str::from_utf8(&buf[..len]).ok()?;
         let ns: f64 = stats.split_whitespace().nth(1)?.parse().ok()?;
         Some(ns / 1e6)
     }

@@ -344,7 +344,8 @@ impl RuntimeCore {
             crate::el::Flow::Rtl => view[2] - self.nodes[c].target[0],
         };
         let content_w = self.scroll_children(i).map(|c| f64::from(reach(c))).reduce(f64::max).unwrap_or(0.0);
-        content_w - f64::from(view[2] - view[0])
+        let [end, _] = scroll_room::room_sides(self.nodes[i].scroll_edges.room, self.nodes[i].room_taken);
+        content_w - f64::from(view[2] - view[0] - end)
     }
 
     /// Steps viewport `i`'s horizontal limit and momentum, as `step_scroll` does the vertical.

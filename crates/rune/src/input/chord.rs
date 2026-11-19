@@ -1,7 +1,7 @@
 //! In-app key chords: "mod+shift+t" as data, matched against a `KeyEvent` and drawn per
 //! platform. `mod` is the platform's primary modifier (⌘ on macOS, Ctrl elsewhere); `ctrl`,
 //! `alt`, `shift` and `super` name keys. Both sides of a match resolve to the keys held on
-//! the platform, so "mod+b" and "ctrl+b" are the same chord on Windows and Linux, and
+//! the platform, so "mod+b" and "ctrl+b" are the same chord on Linux, and
 //! different ones (⌘B and ⌃B) on macOS. `Keybind` adds alternatives and per-platform chords.
 use std::{fmt, hash::{Hash, Hasher}, str::FromStr};
 
@@ -19,8 +19,6 @@ const SUPER: u8 = 16;
 pub enum KeyPlatform {
     /// ⌘ is the primary modifier; Control is a separate key. Glyph labels: "⇧⌘T".
     Mac,
-    /// Ctrl is the primary modifier. Word labels: "Ctrl+Shift+T", the logo key is "Win".
-    Windows,
     /// Ctrl is the primary modifier. Word labels, the logo key is "Super". The web uses this
     /// in a browser that isn't on an Apple device.
     Linux,
@@ -31,7 +29,6 @@ impl KeyPlatform {
     #[cfg(not(target_arch = "wasm32"))]
     pub const fn current() -> Self {
         if cfg!(any(target_os = "macos", target_os = "ios")) { return Self::Mac; }
-        if cfg!(target_os = "windows") { return Self::Windows; }
         Self::Linux
     }
 
@@ -61,7 +58,7 @@ pub enum ChordMod {
     /// "alt": Option on macOS.
     Alt,
     Shift,
-    /// "super": the logo key (Windows key, Super); ⌘ on macOS, where it equals `Primary`.
+    /// "super": the logo key (Super); ⌘ on macOS, where it equals `Primary`.
     Super,
 }
 
@@ -182,7 +179,7 @@ impl Chord {
     }
 
     /// Whether `self` and `other` are the same keys on `platform`: "mod+b" and "ctrl+b" are
-    /// on Windows and Linux, not on macOS. For conflict checks in a shortcut table or editor.
+    /// on Linux, not on macOS. For conflict checks in a shortcut table or editor.
     pub fn same_keys(&self, other: &Chord, platform: KeyPlatform) -> bool {
         self.key() == other.key() && fold(self.mods, platform) == fold(other.mods, platform)
     }
@@ -262,8 +259,8 @@ impl FromStr for Chord {
 }
 
 /// A command's chords: any of several alternatives ("mod+t, mod+n"), with other chords on
-/// some platforms. `Keybind::new("mod+b").on(KeyPlatform::Windows, "alt+home")` is ⌘B on
-/// macOS, Ctrl+B on Linux and Alt+Home on Windows. "" and "none" bind nothing.
+/// some platforms. `Keybind::new("mod+b").on(KeyPlatform::Linux, "alt+home")` is ⌘B on
+/// macOS and Alt+Home on Linux. "" and "none" bind nothing.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Keybind {
     chords: Vec<Chord>,
@@ -402,7 +399,7 @@ fn key_named(name: &str) -> Option<ChordKey> {
 /// The one character `key` types, lowercased.
 fn typed(key: &Key) -> Option<char> {
     match key {
-        Key::Command(c) => Some(lower(*c)),
+        Key::Command(c) | Key::Dead(c) => Some(lower(*c)),
         Key::Text(t) => {
             let mut chars = t.chars();
             match (chars.next(), chars.next()) { (Some(c), None) => Some(lower(c)), _ => None }

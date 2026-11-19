@@ -3,30 +3,19 @@
 use super::*;
 
 impl Windows {
-    /// The app starts to quit (`crate::quit`): every window still open runs `App::on_quit`, once
-    /// per quit. A session ending now (`ending`) then closes the windows as their close buttons
-    /// would, before the loop ends, as a macOS logout does: the OS may end the process next.
-    /// With `hide`, every window leaves the screen first, so the quit looks done the moment it
-    /// starts and the hooks run unseen.
-    pub(super) fn quit(&mut self, event_loop: &ActiveEventLoop, ending: bool, hide: bool) {
+    /// The app starts to quit (`crate::quit`): every window leaves the screen, so the quit looks
+    /// done the moment it starts, then every window still open runs `App::on_quit` unseen, once
+    /// per quit.
+    pub(super) fn quit(&mut self) {
         use crate::quit::{After, Effect, Event};
-        if hide {
-            for host in self.hosts.iter_mut().flatten() { host.vanish(); }
-            crate::marks::mark("quit.hidden");
-        }
-        for effect in crate::quit::send(Event::Start { ending, after: After::Exit }) {
+        for host in self.hosts.iter_mut().flatten() { host.vanish(); }
+        crate::marks::mark("quit.hidden");
+        for effect in crate::quit::send(Event::Start { after: After::Exit }) {
             match effect {
                 Effect::RunHooks => {
                     for host in self.hosts.iter_mut().flatten() { host.quit_hook(); }
                     crate::marks::mark("quit.hooks");
                     crate::quit::send(Event::HooksRan);
-                }
-                Effect::CloseAndExit => {
-                    if !event_loop.exiting() {
-                        for host in self.hosts.iter_mut().flatten() { host.terminate(); }
-                        event_loop.exit();
-                    }
-                    crate::quit::send(Event::WindowsClosed);
                 }
                 // Only the loop's end relaunches.
                 Effect::Relaunch => {}
@@ -36,29 +25,43 @@ impl Windows {
 
     /// The app was reopened: every `on_reopen` hook runs, then, unless one handled it or the
     /// app is an accessory, the default brings back a window when none shows (`reopen::target`).
-    pub(super) fn reopen(&mut self, event_loop: &ActiveEventLoop) {
-        let candidates = |hosts: &[Option<Box<dyn AnyHost>>]| -> Vec<_> {
-            hosts.iter().map(|h| h.as_ref().map(|h| h.reopen_candidate()).unwrap_or_default()).collect()
-        };
-        let has_visible = crate::platform::reopen::has_visible(&candidates(&self.hosts));
+    /// On Linux a reopen is a later launch of the app, so a window comes forward too: the front
+    /// one, focused with the launch's activation token, unless the default just brought one back
+    /// with it.
+    pub(super) fn reopen(&mut self, event_loop: &ActiveEventLoop, token: Option<String>) {
+        let brought_back = self.reopen_hidden(event_loop, token.clone());
+        #[cfg(target_os = "linux")]
+        if !brought_back && !event_loop.exiting() {
+            for host in self.hosts.iter_mut().flatten() { host.apply_pending(event_loop); }
+            if let Some(Some(host)) = crate::platform::reopen::focus_target(&self.reopen_candidates()).and_then(|i| self.hosts.get_mut(i)) {
+                host.reopen(event_loop, token);
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = (brought_back, token);
+    }
+
+    fn reopen_candidates(&self) -> Vec<crate::platform::reopen::Candidate> {
+        self.hosts.iter().map(|h| h.as_ref().map(|h| h.reopen_candidate()).unwrap_or_default()).collect()
+    }
+
+    /// The hooks and the default; true when the default brought a window back.
+    fn reopen_hidden(&mut self, event_loop: &ActiveEventLoop, token: Option<String>) -> bool {
+        let has_visible = crate::platform::reopen::has_visible(&self.reopen_candidates());
         let mut handled = false;
         for host in self.hosts.iter_mut().flatten() {
             handled |= host.reopen_hook(event_loop, has_visible);
         }
-        if handled || event_loop.exiting() { return; }
+        if handled || event_loop.exiting() { return false; }
         #[cfg(target_os = "macos")]
-        if crate::platform::reopen::accessory() { return; }
+        if crate::platform::reopen::accessory() { return false; }
         // The default sees what the hooks did, to other windows too.
         for host in self.hosts.iter_mut().flatten() { host.apply_pending(event_loop); }
-        if event_loop.exiting() { return; }
+        if event_loop.exiting() { return false; }
         #[cfg(target_os = "macos")]
         crate::platform::reopen::unhide();
-        if let Some(Some(host)) = crate::platform::reopen::target(&candidates(&self.hosts)).and_then(|i| self.hosts.get_mut(i)) {
-            host.reopen(event_loop);
-        }
-        // Windows: a launch while the app runs brings its front window forward, restored, as
-        // AppKit's activation does on macOS; the launch let this process take the foreground.
-        #[cfg(target_os = "windows")]
-        crate::open_url::instance::raise_front();
+        let Some(Some(host)) = crate::platform::reopen::target(&self.reopen_candidates()).and_then(|i| self.hosts.get_mut(i)) else { return false };
+        host.reopen(event_loop, token);
+        true
     }
 }

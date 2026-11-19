@@ -144,11 +144,15 @@ impl RuntimeCore {
         }
     }
 
-    /// What the top modal focuses: its `El::autofocus` control, else under `Cx::web_focus` its
-    /// first text field and otherwise its first Tab stop, else the modal itself, as a web dialog
-    /// focuses its content (Kobalte's `onOpenAutoFocus` in OpenCode's `Dialog`).
+    /// What the top modal focuses: itself when it is marked `El::autofocus`, else its
+    /// `El::autofocus` control, else under `Cx::web_focus` its first text field and otherwise
+    /// its first Tab stop, else the modal itself, as a web dialog focuses its content (Kobalte's
+    /// `onOpenAutoFocus` in OpenCode's `Dialog`).
     fn modal_initial_focus(&self) -> Option<String> {
         let i = self.active_modal()?;
+        if self.nodes[i].focus.autofocus {
+            return Some(self.nodes[i].path.clone());
+        }
         let inside = |j: usize| self.modal_member(j) && j > i;
         let autofocus = (i..self.nodes.len()).find(|&j| inside(j) && self.nodes[j].focus.autofocus && self.can_focus(j));
         let first = if self.defaults.web_focus {

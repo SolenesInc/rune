@@ -151,6 +151,33 @@ fn a_track_press_pages_toward_itself_while_held_and_option_jumps() {
 }
 
 #[test]
+fn an_always_shown_bar_stays_up_at_rest_under_every_system_setting() {
+    fn pane(_: &usize, _: &mut rune::Cx<usize>) -> El {
+        col().size(200.0, 100.0).child(
+            col()
+                .key("scroll")
+                .w_full()
+                .h(100.0)
+                .scroll(rune::ScrollSpec { stick_bottom: false })
+                .child(col().children((0..20).map(|i| el().key(format!("row{i}")).w_full().h(20.0))))
+                .scroll_bar_styled(ScrollBarStyle::neutral(true).always()),
+        )
+    }
+    for (bars, scroller_overlay) in [(ScrollBars::WhenScrolling, true), (ScrollBars::Automatic, true), (ScrollBars::Always, false)] {
+        let mut rt = rune::Runtime::new(0usize, pane, (200.0, 100.0), rune::Env::new(true, 1.0));
+        rt.set_system_scroll_bars(bars);
+        rt.set_system_scroller_overlay(scroller_overlay);
+        rt.frame(0.0);
+        assert_eq!(opacity(&rt, "scroll-bar"), 1.0, "shown at once under {bars:?}");
+        rt.wheel(100.0, 50.0, -40.0);
+        for _ in 0..120 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(opacity(&rt, "scroll-bar"), 1.0, "still shown at rest under {bars:?}");
+    }
+}
+
+#[test]
 fn every_scroll_bar_setting_and_automatic_device_style_behave_as_specified() {
     // 1. Always: visible immediately when overflowing, stays visible at rest.
     let mut always = rune::Runtime::new(20usize, view, (200.0, 100.0), rune::Env::new(true, 1.0));

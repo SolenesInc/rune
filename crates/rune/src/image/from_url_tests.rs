@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 #[test]
 fn fetched_pixels_land_as_mips_and_oversized_or_short_ones_fail_naming_the_url() {
-    let decoded = land("a.webp", Fetched::Rgba(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]), 1).unwrap();
+    let decoded = land("a.webp", Fetched::Rgba(2, 1, vec![255, 0, 0, 255, 0, 0, 255, 255]), 0).unwrap();
     assert_eq!((decoded.mips[0].width, decoded.mips[0].height), (2, 1));
     assert_eq!(decoded.mips.len(), 2);
     let side = MAX_SIDE + 1;
@@ -24,12 +24,8 @@ fn fetched_svg_rasterizes_at_the_requested_size() {
 #[test]
 fn native_urls_name_files_and_refuse_the_network() {
     assert_eq!(file_path("assets/logo.png").unwrap(), std::path::PathBuf::from("assets/logo.png"));
-    #[cfg(not(windows))]
-    {
-        assert_eq!(file_path("file:///tmp/a%20b.png").unwrap(), std::path::PathBuf::from("/tmp/a b.png"));
-        assert_eq!(file_path("FILE://localhost/tmp/x.png").unwrap(), std::path::PathBuf::from("/tmp/x.png"));
-    }
-    assert_eq!(file_path(r"C:\art\x.png").unwrap(), std::path::PathBuf::from(r"C:\art\x.png"), "a drive letter isn't a scheme");
+    assert_eq!(file_path("file:///tmp/a%20b.png").unwrap(), std::path::PathBuf::from("/tmp/a b.png"));
+    assert_eq!(file_path("FILE://localhost/tmp/x.png").unwrap(), std::path::PathBuf::from("/tmp/x.png"));
     for url in ["https://example.com/a.png", "data:image/png;base64,AAAA", "file:relative.png", "file:///bad%zz.png"] {
         assert!(file_path(url).is_err(), "{url}");
     }
@@ -47,7 +43,6 @@ fn the_cache_loads_a_url_once_and_wakes_when_it_lands() {
     assert!(Arc::ptr_eq(&by_path.0, &cache.url(path.to_str().unwrap(), 16.0, 2.0).0), "one handle per URL, size and scale");
     rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
     assert_eq!(by_path.size(), Some([3, 2]));
-    #[cfg(not(windows))]
     assert_eq!(cache.url(&format!("file://{}", path.display()), 16.0, 2.0).wait(), Ok([3, 2]));
     let remote = cache.url("https://example.com/dot.png", 16.0, 2.0);
     assert!(remote.wait().unwrap_err().0.contains("ImageCache::load"));

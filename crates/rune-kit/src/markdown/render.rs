@@ -31,6 +31,10 @@ pub(super) struct Renderer {
     pub(super) tasks: Rc<[Option<(bool, usize)>]>,
     /// The next of `tasks`, advanced at each list item in document order.
     pub(super) next_task: Cell<usize>,
+    /// `Markdown::id`, and the next sideways scroll bar's number in the top-level block being
+    /// built: a bar is named by the document, its block's key and that number.
+    pub(super) id: String,
+    pub(super) next_wide: Cell<usize>,
     pub(super) current_block_key: RefCell<Rc<str>>,
     /// When a top-level block's element can be kept from one build to the next: a digest of
     /// everything but the block that decides what it draws, and each block's own digest
@@ -55,6 +59,7 @@ pub(super) struct Renderer {
     /// `Markdown::images` and `Markdown::on_image`.
     pub(super) images: Option<image::ImageWire>,
     pub(super) on_image: Option<image::ImagePress>,
+    pub(super) missing_image: Option<image::MissingFrame>,
     /// Where the blocks being drawn sit: list depth and a quote's text colour.
     pub(super) flow: Cell<Flow>,
 }
@@ -73,6 +78,10 @@ pub(super) struct Flow {
     /// The marker a copy puts before the paragraph that opens a list item, its indent, and the
     /// newlines before it: two to set a top-level list apart from the block before it.
     pub(super) lead: Option<(u8, Lead, u8)>,
+    /// Whether their text is italic, as a quote's may be.
+    pub(super) italic: bool,
+    /// Whether their text is struck through, as a finished task's may be.
+    pub(super) struck: bool,
 }
 
 /// A list item's marker as copying writes it.
@@ -154,18 +163,31 @@ fn block_key(i: usize, keys: &[String], used: &mut Vec<String>) -> String {
     cand
 }
 
+/// Whether `b` keeps [`MarkdownStyle::prose_measure`] at the top level: the blocks a reader
+/// reads line by line, not the tables, code, diagrams, pictures and front matter that want the room.
+fn measured(b: &Block) -> bool {
+    matches!(b, Block::Para(_) | Block::Heading(..) | Block::List { .. } | Block::Quote(_) | Block::Alert(..))
+}
+
+/// Whether `b` sits centered in a column that keeps a [`MarkdownStyle::prose_measure`]: the
+/// measured prose, and a picture narrower than the column.
+fn centered(b: &Block) -> bool {
+    measured(b) || matches!(b, Block::Image { .. })
+}
+
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
 pub(super) fn margins(b: &Block, s: &MarkdownStyle) -> (f32, f32) {
     match b {
-        Block::Para(_) => (0.0, 12.0),
-        Block::Heading(1, _) => (28.0, 12.0),
-        Block::Heading(2, _) => (24.0, 10.0),
-        Block::Heading(..) => (20.0, 8.0),
+        Block::Para(_) => (0.0, s.margins.para),
+        Block::Heading(level, _) => {
+            let [top, bottom] = s.margins.headings[usize::from((*level).clamp(1, 4)) - 1];
+            (top, bottom)
+        }
         Block::Code { .. } | Block::Diff(_) | Block::Mermaid(_) => (s.code_margin[0], s.code_margin[1]),
-        Block::List { .. } => (8.0, 12.0),
-        Block::Quote(_) | Block::Alert(..) => (16.0, 16.0),
+        Block::List { .. } => (s.margins.list[0], s.margins.list[1]),
+        Block::Quote(_) | Block::Alert(..) => (s.margins.quote[0], s.margins.quote[1]),
         Block::FrontMatter(_) => (0.0, 16.0),
-        Block::Rule => (32.0, 32.0),
+        Block::Rule => (s.margins.rule[0], s.margins.rule[1]),
         Block::Table(_) => (s.table_margin[0], s.table_margin[1]),
         Block::Image { .. } => (24.0, 24.0),
         Block::Details { .. } => (0.0, 12.0),
@@ -344,17 +366,18 @@ impl Renderer {
                 Style::Code if self.code_link_color(a, b, inl).is_some() => {
                     sp.mono = true;
                     sp.weight = Some(s.inline_code_weight);
-                    sp.size = Some(base * s.inline_code_scale);
+                    sp.size = Some(s.inline_code_size.unwrap_or(base * s.inline_code_scale));
                     sp.color = self.code_link_color(a, b, inl);
                 }
                 Style::Code => {
                     let link_base = in_link.and_then(|l| l.size).unwrap_or(base);
                     sp.mono = true;
                     sp.weight = Some(s.inline_code_weight);
-                    sp.size = Some(link_base * s.inline_code_scale);
+                    sp.size = Some(s.inline_code_size.unwrap_or(link_base * s.inline_code_scale));
                     sp.underline = no_line;
                     if in_link.is_none_or(|l| l.bg.is_none()) {
                         sp = sp.bg(s.code_bg, s.inline_code_pad);
+                        sp.bg_pad_y = s.inline_code_pad_y;
                     }
                 }
                 Style::CodePad => {
@@ -383,6 +406,12 @@ impl Renderer {
         }
         if let Some((rc, rw)) = ring {
             th = th.ring(rc, rw);
+        }
+        if let Some(pad) = hl.pad {
+            th = th.pad(pad);
+        }
+        if let Some(radius) = hl.radius {
+            th = th.radius(radius);
         }
         th
     }
@@ -459,7 +488,10 @@ impl Renderer {
     pub(super) fn para(&self, inl: &Inline, map: Option<&SpanMap>, style: TextStyle, color: Color) -> El {
         // Lines keep their own 22.4 points, as a page's do, so a long list doesn't drift a
         // point per item.
+        let flow = self.flow.get();
+        let style = TextStyle { italic: style.italic || flow.italic, ..style };
         let e = self.with_reveal(rich(inl.text.clone(), self.spans(inl, style)).font(style).color(color).exact_lines()).w_full();
+        let e = if flow.struck { e.strike(0, inl.text.len(), None) } else { e };
         let e = bidi::directed(bidi::isolated(e, inl), bidi::inline_dir(inl));
         // A copy puts a blank line around a paragraph, one newline around a list item's first
         // with its marker before it.
@@ -502,11 +534,13 @@ impl Renderer {
                 // An image keeps its own 24 under a heading: the page zeroes the top margin of
                 // the paragraph holding it, not the image's, which collapses through.
                 Block::Heading(..) | Block::Rule | Block::Image { .. } => mt.max(prev_mb),
-                _ if after_heading => prev_mb,
+                _ if after_heading && !self.s.margins.collapse_under_heading => prev_mb,
                 _ => mt.max(prev_mb),
             };
             if top_level {
                 self.current_block_key.replace(key.clone().into());
+                // Its sideways scroll bars are named within it, so a kept block's are its own.
+                self.next_wide.set(0);
             }
             // Only an item's first block copies after its marker.
             if i > 0 {
@@ -520,7 +554,21 @@ impl Renderer {
                 if top_level {
                     BLOCKS.with(|n| n.set(n.get() + 1));
                 }
-                bidi::directed(self.block(b, maps.get(i).unwrap_or(&empty)), dir).key(key).mt(top)
+                // Measured prose is narrower than the column by what the measure leaves over.
+                let measure = self.s.prose_measure.filter(|_| top_level && measured(b));
+                let flow = self.flow.get();
+                if let (Some(measure), Some(width)) = (measure, self.s.text_width) {
+                    self.flow.set(Flow { inset: flow.inset + (width - measure).max(0.0), ..flow });
+                }
+                let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
+                self.flow.set(flow);
+                let drawn = match measure {
+                    Some(measure) => drawn.w_full().max_w(measure),
+                    None => drawn,
+                };
+                let drawn = bidi::directed(drawn, dir);
+                let drawn = if top_level && self.s.prose_measure.is_some() && centered(b) { drawn.self_center() } else { drawn };
+                drawn.key(key).mt(top)
             };
             // A block that can't change any more is built once: the blocks above a stream's
             // last cost a lookup each time it grows, so a reply costs what its newest block
@@ -578,15 +626,26 @@ impl Renderer {
         });
         // `.highlights`' `border: 0.5px` takes its device pixel each side, inside which the padding sits.
         // Code reads left to right in any document, as `markdown.css` isolates it.
-        let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(0.5, border).border_layout();
+        let frame = col().role("code").dir(rune::Direction::Ltr).w_full().radius(6.0).fill(fill).border(s.line, border).border_layout();
         if self.scroll_wide {
             // The text sizes to its longest line inside the viewport, which scrolls under the
             // padding so lines run to the frame's edge.
             let viewport = col().key("scroll").w_full().scroll_x();
             let viewport = if s.wide_fade > 0.0 { viewport.scroll_edge_fade(s.wide_fade) } else { viewport };
-            return frame.child(viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).children(body)));
+            let viewport = viewport.child(col().px(s.code_block_pad[0]).py(s.code_block_pad[1]).children(body));
+            return frame.child(match s.code_bar {
+                Some(bar) => self.wide_bar(bar.horizontal().room(), viewport),
+                None => viewport,
+            });
         }
         frame.px(s.code_block_pad[0]).py(s.code_block_pad[1]).children(body)
+    }
+
+    /// `viewport`, scrolling sideways, with a scroll bar in `style` that is its own in the window.
+    pub(super) fn wide_bar(&self, style: crate::ScrollBarStyle, viewport: El) -> El {
+        let n = self.next_wide.get();
+        self.next_wide.set(n + 1);
+        crate::scroll_bar::wrap_in(style, &format!("{}wide-{}-{n}", self.id, self.current_block_key.borrow()), viewport)
     }
 
     /// Colour-only spans, so highlighting never moves a glyph: a block streaming in draws its
@@ -606,7 +665,7 @@ impl Renderer {
     pub(super) fn diff(&self, src: &str, map: Option<&SpanMap>) -> El {
         let s = &self.s;
         let all_marks = self.marks_for(src, map);
-        let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(6.0).fill(s.code_block_fill).border(0.5, s.code_block_border).border_layout();
+        let mut c = col().role("code").dir(rune::Direction::Ltr).w_full().py(s.code_block_pad[1]).radius(6.0).fill(s.code_block_fill).border(s.line, s.code_block_border).border_layout();
         let mut line_start = 0usize;
         let last = src.split('\n').count() - 1;
         for (n, line) in src.split('\n').enumerate() {
@@ -692,12 +751,12 @@ impl Renderer {
             .key("control")
             .size(t.size, t.size)
             .ml(t.left)
-            .mr((indent - t.left - t.size).max(0.0))
+            .mr(t.gap.unwrap_or(indent - t.left - t.size).max(0.0))
             .mt(t.top.unwrap_or(((self.s.body.line_height - t.size) * 0.5).max(0.0)))
             .center()
             .radius(t.radius)
             .fill(fill)
-            .border(1.0, border)
+            .border(t.ring, border)
             .token_motion(t.motion)
             .focus_ring(1.0, 0.0, t.focus_ring)
             .child(icon(t.check, t.size * 0.625).key("mark").color(t.mark).opacity(if checked { 1.0 } else { 0.0 }))
@@ -716,12 +775,23 @@ impl Renderer {
             .focusable(interactive)
             .w_full()
             .child(control)
-            .child(self.blocks_in(item, item_maps, &[], false, true).grow(1.0).shrink());
+            .child(self.done_item(checked, || self.blocks_in(item, item_maps, &[], false, true)).grow(1.0).shrink());
         if let Some(on_task) = self.on_task.as_ref().filter(|_| !self.tasks_read_only) {
             let block_key = self.current_block_key.borrow().clone();
             r = on_task(r.cursor(Cursor::Pointer), block_key, item_idx, !checked);
         }
         r
+    }
+
+    /// A task item's blocks, drawn by `draw`: a checked one's in the style's done colour and
+    /// struck through, when the style sets one.
+    fn done_item(&self, checked: bool, draw: impl FnOnce() -> El) -> El {
+        let Some(done) = self.s.task.done.filter(|_| checked) else { return draw() };
+        let flow = self.flow.get();
+        self.flow.set(Flow { ink: Some(done), struck: true, ..flow });
+        let drawn = draw();
+        self.flow.set(flow);
+        drawn
     }
 
     pub(super) fn block(&self, b: &Block, map: &BlockMap) -> El {
@@ -735,8 +805,12 @@ impl Renderer {
             _ => None,
         };
         match b {
-            Block::Para(inl) => self.para(inl, inl_map, s.body, self.flow.get().ink.unwrap_or(s.text)),
-            Block::Heading(l, inl) => self.para(inl, inl_map, s.headings[(*l as usize).clamp(1, 4) - 1], if *l >= 4 { s.muted } else { s.text }).role("heading").level(u32::from(*l)),
+            Block::Para(inl) => self.para(inl, inl_map, if self.flow.get().lists > 0 { s.list_font.unwrap_or(s.body) } else { s.body }, self.flow.get().ink.unwrap_or(s.text)),
+            Block::Heading(l, inl) => {
+                let level = (*l as usize).clamp(1, 4) - 1;
+                let ink = s.heading_text[level].unwrap_or(if level == 3 { s.muted } else { s.text });
+                self.para(inl, inl_map, s.headings[level], ink).role("heading").level(u32::from(*l))
+            }
             Block::Code(code) => {
                 let n = self.next_source.get();
                 self.next_source.set(n + 1);
@@ -779,7 +853,11 @@ impl Renderer {
                     _ => s.list_indent,
                 };
                 // Outside markers end a space's width before the text, as a browser sets "1. ".
-                let space = if s.list_outside { rune::text::measure("x x", &[], s.body, None).0 - rune::text::measure("xx", &[], s.body, None).0 } else { 0.0 };
+                let space = match s.list_marker_gap {
+                    _ if !s.list_outside => 0.0,
+                    Some(gap) => gap,
+                    None => rune::text::measure("x x", &[], s.body, None).0 - rune::text::measure("xx", &[], s.body, None).0,
+                };
                 let mut c = col().role("list").w_full();
                 let n = items.len();
                 // Between items, their 8 collapsed with the margins passing out of the blocks
@@ -800,7 +878,7 @@ impl Renderer {
                         (None, Some(n)) => Lead::Number(n + k as u64),
                         (None, None) => Lead::Bullet,
                     };
-                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), ..flow });
+                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), struck: false, ..flow });
                     if let Some((checked, marker_offset)) = task {
                         c = c.child(self.task_item((k, n), indent, item, imap, marker_offset, checked).mt(gap(k)));
                         continue;
@@ -809,7 +887,9 @@ impl Renderer {
                         Some(n) => format!("{}.", n + k as u64),
                         None => "•".into(),
                     };
-                    let marker = text(marker).font(s.body).color(s.muted).exact_lines().w(indent);
+                    let font = s.list_font.unwrap_or(s.body);
+                    let font = if s.list_tabular && start.is_some() { TextStyle { features: super::table::with_tnum(font.features), ..font } } else { font };
+                    let marker = text(marker).font(font).color(s.list_marker.unwrap_or(s.muted)).exact_lines().w(indent);
                     let marker = if s.list_outside { marker.align(Align::End).pr(space) } else { marker.align(Align::Center) };
                     // The item's place in the list says what its marker shows.
                     c = c.child(
@@ -836,7 +916,7 @@ impl Renderer {
                 let q = s.quote;
                 let flow = self.flow.get();
                 let first_task = self.next_task.get();
-                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, ..flow });
+                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, italic: flow.italic || q.italic, ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
                 // The rule stands on the side the quote starts on.
@@ -864,15 +944,19 @@ impl Renderer {
                 self.flow.set(Flow { inset: flow.inset + 3.0 + q.pad, ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
-                let title = text(alert.title()).font(TextStyle { size: 15.0, weight: 600.0, ..s.body }).color(ink).mb(4.0);
+                let title = row()
+                    .gap(8.0)
+                    .items_center()
+                    .mb(4.0)
+                    .child(icon(alert_icon::of(*alert), 16.0).key("icon").color(ink).a11y_hidden())
+                    .child(text(alert.title()).font(TextStyle { size: 15.0, weight: 600.0, ..s.body }).color(ink));
                 let quote = bidi::directed(
                     row()
                         .role("note")
                         .label(alert.title())
                         .w_full()
-                        .py(8.0)
                         .child(el().w(3.0).h_full().fill(ink))
-                        .child(col().grow(1.0).shrink().pl(q.pad).child(title).child(drawn)),
+                        .child(col().grow(1.0).shrink().py(8.0).pl(q.pad).child(title).child(drawn)),
                     bidi::blocks_dir(inner),
                 );
                 match &self.quote_frame {
@@ -906,7 +990,7 @@ impl Renderer {
             // A clear rule is spacing only (`hr { border: none; height: 0 }`).
             Block::Image { src, alt, title } => self.image(src, alt, title),
             Block::Rule if s.rule.a <= 0.0 => el().w_full().h(0.0),
-            Block::Rule => el().w_full().h(0.5).fill(s.rule),
+            Block::Rule => el().w_full().h(s.line).fill(s.rule),
         }
     }
 }

@@ -23,9 +23,6 @@ impl<T: 'static> AnyHost for Overlay<T> {
         let deadline = deadline.filter(|_| !self.surface.live().and_then(|l| l.pacing.as_ref()).is_some_and(|p| p.running()));
         #[cfg(target_os = "macos")]
         let deadline = deadline.into_iter().chain(self.panel.as_ref().and_then(|p| p.pointer_deadline(self.presence.occluded()))).min();
-        // A Windows fade-out steps its alpha once a frame.
-        #[cfg(target_os = "windows")]
-        let deadline = deadline.into_iter().chain(self.presence.fading().then(|| Instant::now() + crate::window::TIMER_FRAME)).min();
         deadline.into_iter().chain(self.backoff.deadline().filter(|_| self.presence.drawing())).chain(self.presence.deadline())
             .chain(self.hidden_pace.deadline().filter(|_| !self.presence.drawing())).min()
     }
@@ -80,7 +77,7 @@ impl<T: 'static> AnyHost for Overlay<T> {
                 Some(crate::el::Shell::Close) => self.hide(),
                 Some(crate::el::Shell::Quit) => event_loop.exit(),
                 Some(crate::el::Shell::Relaunch) => {
-                    let _ = crate::quit::send(crate::quit::Event::Start { ending: false, after: crate::quit::After::Relaunch });
+                    let _ = crate::quit::send(crate::quit::Event::Start { after: crate::quit::After::Relaunch });
                     event_loop.exit();
                 }
                 None => {}
@@ -154,9 +151,6 @@ impl<T: 'static> AnyHost for Overlay<T> {
                 }
                 #[cfg(not(target_os = "macos"))]
                 if self.options.input.resolved(self.interactive) != OverlayInput::None {
-                    #[cfg(target_os = "windows")]
-                    let point = self.native.as_ref().and_then(|p| p.take_click(state.is_pressed()));
-                    #[cfg(not(target_os = "windows"))]
                     let point: Option<(f32, f32)> = None;
                     self.left_button(state.is_pressed(), point);
                 }
@@ -181,11 +175,6 @@ impl<T: 'static> AnyHost for Overlay<T> {
         if let Some(live) = self.surface.live() && let Some(x11) = &self.x11 && let Some((point, desktop)) = x11.take_pointer(live.scale) {
             self.observe_pointer(point.0, point.1);
             self.follow_pointer(_event_loop, desktop);
-        }
-        #[cfg(target_os = "windows")]
-        if self.surface.live().is_some() && let Some(point) = self.native.as_ref().and_then(|p| p.take_pointer()) && self.rt.pointer() != Some(point) {
-            self.observe_pointer(point.0, point.1);
-            if let Some(point) = crate::platform::win32::pointer_position() { self.follow_pointer(_event_loop, point); }
         }
         // Covering or sleeping displays can come without an event the overlay sees.
         #[cfg(target_os = "macos")]

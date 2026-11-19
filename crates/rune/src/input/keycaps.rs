@@ -148,6 +148,7 @@ fn key_label(ev: &KeyEvent) -> (String, bool) {
         Key::Escape => "⎋".into(),
         Key::Tab => "⇥".into(),
         Key::Function(n) => format!("F{n}"),
+        Key::Dead(c) => title(&c.to_string()),
         Key::ContextMenu => "≣".into(),
         // Its own flag is already in `mods`.
         Key::Modifier { modifier: crate::Modifier::Fn, .. } => "fn".into(),
@@ -326,8 +327,7 @@ mod tests {
         k.chord(0.8, &"cmd+space".parse().unwrap());
         k.key(0.9, &KeyEvent { key: Key::Escape, mods: Mods::default() });
         k.key(1.0, &KeyEvent { key: Key::Enter, mods: Mods::default() });
-        let cmd = if cfg!(target_os = "macos") { "⌘" } else { "⌃" };
-        assert_eq!(labels(&mut k, 1.0), [format!("{cmd}␣"), "⎋".into(), "↩".into()]);
+        assert_eq!(labels(&mut k, 1.0), ["⌘␣", "⎋", "↩"], "a shortcut's cmd is Super, ⌘ on every platform");
     }
 
     #[test]

@@ -41,6 +41,14 @@ pub(crate) fn target(windows: &[Candidate]) -> Option<usize> {
         .or_else(|| indexed().find(|(_, w)| w.main).map(|(i, _)| i))
 }
 
+/// The window a later launch brings forward on Linux once the reopen is done: the first shown
+/// main window, else the first shown one.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn focus_target(windows: &[Candidate]) -> Option<usize> {
+    let shown = || windows.iter().enumerate().filter(|(_, w)| w.reopenable && w.visible);
+    shown().find(|(_, w)| w.main).or_else(|| shown().next()).map(|(i, _)| i)
+}
+
 static HIDES: AtomicU64 = AtomicU64::new(0);
 
 /// A number larger than every earlier one, for the order windows hid in.

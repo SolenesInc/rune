@@ -54,8 +54,6 @@ impl<S: 'static> Host<S> {
         let shown = self.life.shown();
         l.first_frame.skipped(Instant::now());
         // Covered by other windows, it still draws what changed, later (`CoveredDraw`).
-        #[cfg(target_os = "windows")]
-        if shown && self.life.covered() && !l.minimized() { l.covered_draw = l.covered_draw.step(CoveredDrawEvent::Asked(Instant::now())); }
         self.land_frame();
         if shown {
             self.rt.set_live_visible(false);
@@ -70,27 +68,13 @@ impl<S: 'static> Host<S> {
     /// Draws a frame. `resizing` draws one for a size the user just dragged the window to, at
     /// once: AppKit shows the new size when the event returns, with or without it.
     pub(super) fn draw(&mut self, resizing: bool) {
-        // Windows: a window still on the CPU renderer draws there (`cpu_frame`).
-        #[cfg(target_os = "windows")]
-        {
-            self.hand_over_if_done();
-            if self.win.as_ref().is_some_and(|w| w.native.mode.cpu_draws()) { return self.draw_cpu(resizing); }
-        }
         let launcher = self.launcher();
         let Some(l) = self.win.as_ref() else { return };
         let hidden = launcher && !self.life.shown();
         let covered = (!launcher && !self.life.uncovered()) || l.minimized();
-        #[cfg(target_os = "windows")]
-        let owed = covered && !l.minimized() && l.covered_draw.drawing();
-        #[cfg(not(target_os = "windows"))]
         let owed = false;
         if covered && !owed {
             // A covered window's clips stop presenting on their layers, as they stop being pulled.
-            #[cfg(target_os = "windows")]
-            if let Some(w) = self.win.as_mut() {
-                let native = &mut w.native;
-                native.video_layers.release(native.mode.handover());
-            }
             return self.covered_frame();
         }
         // A covered window's owed frame shows the settled state, as its first one uncovered does.
@@ -105,15 +89,7 @@ impl<S: 'static> Host<S> {
         if !self.replace_lost_surface() { return; }
         // A clip's layer began or stopped showing: the UI's swap chain composites premultiplied
         // only while one does (`video_layer`), made again before this frame draws.
-        #[cfg(target_os = "windows")]
-        if let Some(premultiplied) = self.win.as_mut().and_then(|w| w.native.video_layers.take_alpha())
-            && let Err(error) = self.rebind_alpha(premultiplied)
-        {
-            eprintln!("rune: the window's swap chain couldn't change its alpha for a clip's layer: {error}");
-        }
         let Some(l) = self.win.as_mut() else { return };
-        #[cfg(target_os = "windows")]
-        if owed { l.covered_draw = l.covered_draw.step(CoveredDrawEvent::Drawn); }
         // The frame a due timer asked for is here, drawing or running covered below.
         l.timer_frame.drawn();
         // Starting the display link for a window that isn't on screen would wait for a tick that
@@ -210,7 +186,7 @@ impl<S: 'static> Host<S> {
             if renderer.srgb_blend() == rt.srgb_blend()
                 && l.presented.as_ref().is_some_and(|p| p.unchanged(rt, &l.config, animating, next_tick, self.comp.as_deref())) {
                 sync_platform(l, rt, &mut self.secure_input, &mut self.ime_allowed, &self.clipboard);
-                l.stop_pacing();
+                l.rest_pacing();
                 self.meter.set_pacing(l.pacing_state(false));
                 self.frame_reports.unchanged(target, &self.rt);
                 return;
@@ -335,15 +311,6 @@ impl<S: 'static> Host<S> {
         renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
         renderer.build_surfaces(&gpu.device, &rt.surfaces, rt.live_notifier());
         // Playing clips on their own layer (`video_layer`): the surfaces this frame punches out.
-        #[cfg(target_os = "windows")]
-        {
-            let premultiplied = l.config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
-            let punch_ready = renderer.surface_punch_ready();
-            let native = &mut l.native;
-            let layers = native.video_layers.frame(&rt.surfaces, native.mode.handover(), premultiplied, punch_ready);
-            renderer.set_punched_surfaces(layers.punched);
-            animating |= layers.again;
-        }
         renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (l.config.width, l.config.height));
         #[cfg(feature = "frame-profile")]
         let fp_uploaded = fp_start.map(|_| crate::frame::live_log::Stamp::now());
@@ -382,16 +349,6 @@ impl<S: 'static> Host<S> {
         #[cfg(not(target_os = "macos"))]
         gpu.queue.present(frame);
         // A swap chain made again on a handed-over window's visual takes over now (`cpu_frame`).
-        #[cfg(target_os = "windows")]
-        if matches!(l.native.mode, super::cpu_frame::SurfaceMode::Rebinding { .. }) {
-            let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
-            if let super::cpu_frame::SurfaceMode::Rebinding { handover } = std::mem::take(&mut l.native.mode) {
-                if let Err(error) = handover.commit() { eprintln!("rune: the window's new swap chain couldn't take over: {error}"); }
-                l.native.mode = super::cpu_frame::SurfaceMode::Handed { handover };
-            }
-        }
-        #[cfg(target_os = "windows")]
-        l.native.video_layers.drawn(|key| renderer.surface_drew_isolated(key));
         crate::marks::presented();
         crate::render::gpu_events::presented();
         #[cfg(feature = "frame-profile")]
@@ -415,16 +372,8 @@ impl<S: 'static> Host<S> {
             && gpu.device.poll(wgpu::PollType::wait_indefinitely()).is_ok() {
             l.first_frame.gpu_done();
             crate::marks::mark("frame.first.gpu_done");
-            #[cfg(target_os = "windows")]
-            crate::platform::win32::unidle_d3d_threads_soon();
         }
         // The window shows once the GPU has finished the frame it presents.
-        #[cfg(target_os = "windows")]
-        if l.native.cloak.held() {
-            let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
-            l.native.cloak.lift(&l.window);
-            crate::marks::mark("window.shown");
-        }
         let submitted = Instant::now();
         self.clock.presented(rt, submitted);
         self.meter.presented();
@@ -457,15 +406,6 @@ impl<S: 'static> Host<S> {
         #[cfg(feature = "frame-profile")]
         #[allow(unused_mut)]
         let mut fp_steady = 0u16;
-        #[cfg(target_os = "windows")]
-        {
-            // A frame the run alone asked for changes nothing unless it draws something new.
-            let changed = !l.steady.held_frame() || (!composed(self.comp.as_deref()) && !l.presented.as_ref().is_some_and(|p| p.same(rt, &l.config)));
-            #[cfg(feature = "frame-profile")]
-            { fp_steady |= u16::from(l.steady.held_frame()) << 8 | u16::from(changed) << 9; }
-            let event = if hidden { SteadyEvent::Ends } else { SteadyEvent::Drew { changed, focused: rt.has_window_focus(), now } };
-            l.steady = l.steady.step(event).0;
-        }
         self.idle = Presented::settle(&mut l.presented, rt, &l.config, animating || FrameMove::moving(&self.frame_move), next_tick, rests);
         // Why the window draws again: each bit is one of `Presented::settle`'s reasons.
         #[cfg(feature = "frame-profile")]
@@ -480,14 +420,6 @@ impl<S: 'static> Host<S> {
                 eprintln!("rune: a window's surface refused its frame latency: {error}");
                 l.surface_ok = false;
             }
-        }
-        #[cfg(target_os = "windows")]
-        if self.idle && !hidden {
-            let (steady, again) = l.steady.step(SteadyEvent::Rests { now });
-            l.steady = steady;
-            if again { l.request_redraw(); }
-            #[cfg(feature = "frame-profile")]
-            if again { fp_steady |= 1 << 10; }
         }
         #[cfg(feature = "frame-profile")]
         if let Some(mut f) = fp_frame {
@@ -505,8 +437,11 @@ impl<S: 'static> Host<S> {
             #[cfg(not(target_os = "macos"))]
             l.request_redraw();
             self.meter.set_pacing(l.pacing_state(true));
-        } else {
+        } else if hidden {
             l.stop_pacing();
+            self.meter.set_pacing(l.pacing_state(false));
+        } else {
+            l.rest_pacing();
             self.meter.set_pacing(l.pacing_state(false));
         }
         // A frame change this frame's commit asked for starts with the layout springs it

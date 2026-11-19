@@ -1,12 +1,11 @@
 name: file size
 
-# The Rust file-size and folder-shape check (scripts/file-size.sh), per pull request and per push
-# to dev: a few seconds on Linux. It ran inside macos-tests.yml until that moved to a schedule.
+# The Rust file-size and folder-shape check (scripts/file-size.sh), on each push to main and on
+# request: a few seconds on Linux.
 on:
   push:
-    branches: [dev]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read

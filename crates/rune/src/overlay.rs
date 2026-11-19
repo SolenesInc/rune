@@ -14,9 +14,7 @@
 //! - macOS: winit's view moved into a non-activating `NSPanel` at status level on every space,
 //!   observing pointer movement even through transparent regions, ordered front without key
 //!   focus unless explicitly requested. Its window number is available for capture filters.
-//! - Windows: a topmost tool window with `WS_EX_NOACTIVATE` (plus `WS_EX_TRANSPARENT` and
-//!   `WS_EX_LAYERED` unless interactive), shown with `SW_SHOWNOACTIVATE`.
-//! - With `release_gpu_when_hidden`, hidden means destroyed on Windows and macOS too.
+//! - With `release_gpu_when_hidden`, hidden means destroyed on macOS too.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -148,8 +146,8 @@ impl<T: 'static> OverlayHandle<T> {
     /// Moves a shown [`DisplayTarget::UnderPointer`] overlay to the display under the pointer
     /// when two calls in a row find it on the same other display; at once, without taking
     /// focus. A caller's own pace
-    /// (a HUD's few checks a second) instead of `follow_pointer`'s pointer watch. Windows and
-    /// X11; elsewhere it does nothing.
+    /// (a HUD's few checks a second) instead of `follow_pointer`'s pointer watch. X11 only;
+    /// elsewhere it does nothing.
     pub fn refollow_pointer(&self) { self.request(|q| q.refollow = true); }
     /// None restores the spec's legacy edge placement.
     pub fn set_placement(&self, placement: Option<OverlayPlacement>) { self.request(|q| q.placement = Some(placement)); }
@@ -194,7 +192,7 @@ impl<T: 'static> OverlayHandle<T> {
         self.request(|q| q.visibility = Some(Visibility::Show(duration)));
     }
 
-    /// Like `hide`, fading the window's alpha out over `duration` on macOS and Windows before
+    /// Like `hide`, fading the window's alpha out over `duration` on macOS before
     /// it goes. Input stops at once, but the overlay keeps drawing until the fade ends, so
     /// motion started in the same turn (an exit transition, a poll stepping its own animation)
     /// plays out during it, and frames still queued for the screen reach it. A GPU surface
@@ -265,7 +263,7 @@ impl<T: 'static> OverlayHandle<T> {
         self.shared.failure.lock().unwrap().clone()
     }
 
-    /// What draws the overlay, such as `Dx12 on Intel(R) UHD Graphics (IntegratedGpu),
+    /// What draws the overlay, such as `Vulkan on Intel(R) UHD Graphics (IntegratedGpu),
     /// PreMultiplied`, once its surface exists; for logs.
     pub fn surface_description(&self) -> Option<String> {
         self.shared.surface.lock().unwrap().clone()
@@ -339,8 +337,6 @@ pub(crate) struct Overlay<T: 'static> {
     /// before the window so the view goes back to it first.
     #[cfg(target_os = "macos")]
     panel: Option<crate::platform::macos::Panel>,
-    #[cfg(target_os = "windows")]
-    native: Option<crate::platform::win32::OverlayWindow>,
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
     x11: Option<crate::platform::x11::overlay::InputWindow>,
     surface: surface::Surface,
@@ -425,8 +421,6 @@ impl<T: 'static> Overlay<T> {
             cursor: None,
             #[cfg(target_os = "macos")]
             panel: None,
-            #[cfg(target_os = "windows")]
-            native: None,
             #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
             x11: None,
             mods: Default::default(),
@@ -544,17 +538,6 @@ impl<T: 'static> Overlay<T> {
             return;
         }
         let _ = fade;
-        #[cfg(target_os = "windows")]
-        {
-            let _ = window;
-            if let Some(native) = &mut self.native {
-                match native.show() {
-                    Ok(()) => if self.shared.failure.lock().unwrap().take().is_some() { self.set_availability(Availability::Available) },
-                    Err(error) => self.fail(error),
-                }
-            }
-        }
-        #[cfg(not(target_os = "windows"))]
         window.set_visible(true);
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         if let Some(x11) = &self.x11 { x11.show(self.options.level); }
@@ -612,18 +595,12 @@ impl<T: 'static> Overlay<T> {
         self.move_to_pointer_display(event_loop, point);
     }
 
-    /// The pointer in desktop pixels, read now, where an overlay may follow it.
-    #[cfg(target_os = "windows")]
-    fn sample_pointer(_: &ActiveEventLoop) -> Option<(i32, i32)> {
-        crate::platform::win32::pointer_position()
-    }
-
     #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
     fn sample_pointer(event_loop: &ActiveEventLoop) -> Option<(i32, i32)> {
         (!crate::window::is_wayland(event_loop)).then(crate::platform::x11::overlay::pointer_position).flatten()
     }
 
-    #[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))))]
+    #[cfg(not(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
     fn sample_pointer(_: &ActiveEventLoop) -> Option<(i32, i32)> {
         None
     }
@@ -681,11 +658,3 @@ mod state_walk_tests;
 #[cfg(all(test, target_os = "macos"))]
 #[path = "overlay/lost_release_tests.rs"]
 mod lost_release_tests;
-
-/// A Windows overlay's alpha (255 opaque) at `now`, fading out linearly over `length` until `end`.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn fade_alpha(end: Instant, length: Duration, now: Instant) -> u8 {
-    if length.is_zero() { return 0; }
-    let left = end.saturating_duration_since(now).as_secs_f64() / length.as_secs_f64();
-    (left.clamp(0.0, 1.0) * 255.0).round() as u8
-}

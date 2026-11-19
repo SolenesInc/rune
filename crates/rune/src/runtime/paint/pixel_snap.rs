@@ -150,6 +150,8 @@ pub(super) struct Glides {
     size: [f32; 2],
     /// A layer's correction still has a visible way to go.
     easing: bool,
+    /// This frame lands every motion (`Runtime::settle_all`): a layer holds where it is, on the grid.
+    settled: bool,
 }
 
 /// Frames a glide outlives its node's last paint (a cached subtree, a removed node).
@@ -222,10 +224,10 @@ fn reach(map: [f32; 4], size: [f32; 2]) -> f32 {
 
 impl Glides {
     /// Called once before each paint pass, at animation time `t`, in a window `size` across
-    /// (device px).
-    pub(super) fn begin_frame(&mut self, t: f64, size: [f32; 2]) {
+    /// (device px), on a frame that lands every motion when `settled`.
+    pub(super) fn begin_frame(&mut self, t: f64, size: [f32; 2], settled: bool) {
         self.frame = self.frame.wrapping_add(1);
-        (self.t, self.size) = (t, size);
+        (self.t, self.size, self.settled) = (t, size, settled);
         self.now.clear();
         self.easing = false;
         let frame = self.frame;
@@ -256,7 +258,10 @@ impl Glides {
             x * x * (3.0 - 2.0 * x)
         };
         let to;
-        if reach(affine(l.rect, cur), size) > 1.0 / 256.0 {
+        if self.settled {
+            (l.rect, l.phase, l.outs) = (cur, LayerPhase::Rest { since: f64::NEG_INFINITY }, [(cur, 0.0); 2]);
+            to = 1.0;
+        } else if reach(affine(l.rect, cur), size) > 1.0 / 256.0 {
             if let LayerPhase::Rest { since } = l.phase {
                 // It drew `f` of this rest's correction, and `1 - f` of what the rests before it
                 // still drew.
@@ -526,7 +531,7 @@ mod layer_tests {
         let (id, frame) = (NodeId(1), 1.0 / 60.0);
         let mut g = Glides::default();
         let paint = |g: &mut Glides, t: f64, r: [f32; 4]| {
-            g.begin_frame(t, [800.0, 600.0]);
+            g.begin_frame(t, [800.0, 600.0], false);
             g.layer(id, (r, r), [0.0; 2], false);
             (g.layers[&id].phase, g.now[0].to)
         };

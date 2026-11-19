@@ -22,7 +22,7 @@ impl Tx {
 
     /// Copy several forms at once: plain text for every app, HTML and RTF for apps that paste
     /// formatting (Mail, Notes, Pages, Google Docs), an image, and files for a file manager.
-    /// macOS writes every form. Windows and Linux write one: the files if there are any, else
+    /// macOS writes every form. Linux writes one: the files if there are any, else
     /// the image, else the HTML beside the text, else the text. The web writes text, HTML and
     /// the image. Forms a platform can't hold are skipped silently.
     ///

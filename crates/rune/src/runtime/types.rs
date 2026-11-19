@@ -33,6 +33,10 @@ pub(crate) struct NodeCold {
     pub(super) scroll: Option<ScrollSpec>,
     pub(super) scroll_axes: crate::el::ScrollAxes,
     pub(super) scroll_edges: crate::el::ScrollEdges,
+    /// Whether the viewport keeps its `El::scroll_room` at its end edge, for a vertical
+    /// overflow, and at its bottom, for a sideways one: the last layout's decision, which the
+    /// next commit's style starts from.
+    pub(super) room_taken: [bool; 2],
     /// `El::sticky_top`, `El::sticky_bottom` and `El::stuck_shadow`.
     pub(super) sticky: Option<Box<crate::el::Sticky>>,
     pub(super) growth: Option<Box<GrowthSpec>>,
@@ -69,7 +73,8 @@ impl crate::cold::Empty for NodeCold {
         above: None,
         scroll: None,
         scroll_axes: crate::el::ScrollAxes::Y,
-        scroll_edges: crate::el::ScrollEdges { fade: 0.0, fade_style: crate::el::FadeStyle::SMOOTH, margin: 0.0, anchor: false },
+        scroll_edges: crate::el::ScrollEdges { fade: 0.0, fade_style: crate::el::FadeStyle::SMOOTH, margin: 0.0, anchor: false, room: 0.0 },
+        room_taken: [false; 2],
         sticky: None,
         growth: None,
         glide: None,
@@ -142,6 +147,8 @@ pub(crate) struct Node {
     pub(super) selection_group: bool,
     pub(super) window_drag: crate::el::WindowDrag,
     pub(super) ime_cursor: bool,
+    /// `El::ime_cursor_at`.
+    pub(super) ime_at: Option<crate::live::Live<[f32; 4]>>,
     /// `El::ime_option_as_alt`.
     pub(super) ime_option_as_alt: bool,
     /// Placeholder left in `self.nodes` after `try_reuse_memo` moves a node into the new pass.
@@ -211,6 +218,7 @@ impl Node {
             selection_group: false,
             window_drag: crate::el::WindowDrag::None,
             ime_cursor: false,
+            ime_at: None,
             ime_option_as_alt: false,
             moved_stub: true,
         }
@@ -521,6 +529,8 @@ pub enum TitlebarAction {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameStats {
     pub commits: u64,
+    /// Frames that painted the window anew; a frame that keeps the last paint adds none.
+    pub paints: u64,
     pub layout_nodes: usize,
     pub glyphs: usize,
     pub shaped: u32,

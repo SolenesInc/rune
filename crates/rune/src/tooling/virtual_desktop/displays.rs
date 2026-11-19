@@ -112,12 +112,11 @@ impl VirtualDesktop {
             DisplayTarget::Native(id) => Some(*id),
             DisplayTarget::Primary | DisplayTarget::UnderPointer => None,
         }.map(|id| match id {
-            NativeDisplayId::MacOS(n) | NativeDisplayId::X11Crtc(n) | NativeDisplayId::X11Output(n) | NativeDisplayId::Wayland(n) => i64::from(n),
-            NativeDisplayId::Windows(n) => n as i64,
+            NativeDisplayId::MacOS(n) | NativeDisplayId::X11Crtc(n) | NativeDisplayId::X11Output(n) | NativeDisplayId::Wayland(n) => n,
         });
         let bounds: Vec<_> = self.displays.iter().map(|d| [d.frame[0], d.frame[1], d.frame[0] + d.frame[2], d.frame[1] + d.frame[3]]).collect();
         let primary = self.displays.iter().position(|d| d.primary);
-        let requested = id.and_then(|id| self.displays.iter().position(|d| i64::from(d.id) == id));
+        let requested = id.and_then(|id| self.displays.iter().position(|d| d.id == id));
         let pointer = self.pointer.filter(|_| request.requested == DisplayTarget::UnderPointer);
         let d = &self.displays[crate::overlay::options::choose_display(&bounds, primary, requested, pointer).unwrap_or(0)];
         let local = crate::overlay::options::local_rect(PlaceRequest::at(size), Some(request.placement), (d.frame[2] as f32, d.frame[3] as f32));

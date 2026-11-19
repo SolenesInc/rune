@@ -10,6 +10,7 @@ thread_local! {
     pub(super) static SENT: RefCell<Vec<Slow>> = const { RefCell::new(Vec::new()) };
     pub(super) static FRAMES: RefCell<Vec<SlowFrame>> = const { RefCell::new(Vec::new()) };
     pub(super) static OVERLOADED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(super) static SLOW_MS: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
 }
 
 fn norm(path: &str, keep: usize) -> String {
@@ -150,8 +151,11 @@ fn a_slow_click_says_whose_time_it_took() {
 
 #[test]
 fn a_fast_click_only_counts() {
+    // Fast against a threshold no click reaches, so a loaded machine's debug frame stays fast.
+    SLOW_MS.set(Some(1000.0));
     let mut rt = runtime(false);
     click(&mut rt, "save-42");
+    SLOW_MS.set(None);
     assert!(SENT.take().is_empty());
     let rolls = rt.interaction_tracker().rollup.take();
     assert_eq!(rolls.len(), 1);

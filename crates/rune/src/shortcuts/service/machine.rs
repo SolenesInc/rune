@@ -1,6 +1,6 @@
 //! The service's state: whether an App has a host, and what its engine holds. These are two
 //! enums because they live in different places. The attachment is read from any thread, while
-//! a macOS or Windows engine never leaves its own, and a Linux engine sits in its own slot, whose
+//! a macOS engine never leaves its own, and a Linux engine sits in its own slot, whose
 //! lock a closing backend holds so that nothing reaches the next engine until its chords are free.
 
 use super::super::{Shortcut, ShortcutError, ShortcutId};

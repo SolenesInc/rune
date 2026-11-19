@@ -60,8 +60,7 @@ impl El {
 
     /// Keeps this element where left-to-right layout puts it inside a right-to-left parent,
     /// unmirrored, as a CSS physical `left` or `right` inset stays put under `dir="rtl"`: room
-    /// kept clear of the window's own controls (Windows' caption buttons stay on the right,
-    /// macOS's traffic lights on the left), or a pin that must not swap sides. Its own subtree
+    /// kept clear of the window's own controls (macOS's traffic lights stay on the left), or a pin that must not swap sides. Its own subtree
     /// still lays out in its direction.
     pub fn unmirrored(mut self) -> Self {
         self.flags.set(ElFlags::UNMIRRORED, true);
@@ -224,7 +223,7 @@ fn first_strong(el: &El) -> Option<Direction> {
 }
 
 /// Mirrors what a right-to-left element draws on its own left and right: corner radii, border
-/// sides, soft clip edges and an angled linear gradient's run.
+/// sides, soft clip edges and their outset, and an angled linear gradient's run.
 pub(crate) fn mirror_visual(vis: &mut Visual) {
     // Uniform corners (most boxes) and no extras: nothing to mirror, nothing touched.
     if vis.radius.is_nan() {
@@ -233,7 +232,8 @@ pub(crate) fn mirror_visual(vis: &mut Visual) {
     }
     let Some(cold) = vis.cold.get() else { return };
     let turns = cold.mirror_rtl && (cold.rotate != 0.0 || cold.icon_turn != 0.0);
-    let flips = turns || cold.border_sides.is_some() || cold.clip.is_some() || cold.clip_corners.is_some()
+    let flips = turns || cold.border_sides.is_some() || cold.clip.is_some() || cold.clip_outset != [0.0; 4]
+        || cold.clip_corners.is_some()
         || cold.radial.as_ref().is_some_and(|r| matches!(r.geometry, GradientGeometry::Linear { .. }));
     if !flips {
         return;
@@ -256,6 +256,8 @@ pub(crate) fn mirror_visual(vis: &mut Visual) {
     if let Some([l, t, r, b]) = cold.clip {
         cold.clip = Some([r, t, l, b]);
     }
+    let [l, t, r, b] = cold.clip_outset;
+    cold.clip_outset = [r, t, l, b];
     if let Some([tl, tr, br, bl]) = cold.clip_corners {
         cold.clip_corners = Some([tr, tl, bl, br]);
     }

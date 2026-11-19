@@ -21,6 +21,8 @@ const ANNOUNCER: AkId = AkId(3);
 /// Bits under an element's id for the nodes it owns: its text's lines and links.
 const SUB: u32 = 16;
 const LINK_BASE: u64 = 0x8000;
+/// The lines an element can own before their ids run into its links'.
+pub(crate) const LINES_MAX: usize = LINK_BASE as usize - 1;
 
 pub(crate) fn element_id(id: NodeId) -> AkId { AkId(id.0 << SUB) }
 pub(crate) fn line_id(id: NodeId, line: usize) -> AkId { AkId((id.0 << SUB) | (1 + line as u64).min(LINK_BASE - 1)) }
@@ -29,6 +31,17 @@ pub(crate) fn link_id(id: NodeId, k: usize) -> AkId { AkId((id.0 << SUB) | (LINK
 /// `1..LINK_BASE`, a link from `LINK_BASE`.
 pub(crate) fn split_id(id: AkId) -> (NodeId, u64) { (NodeId(id.0 >> SUB), id.0 & ((1 << SUB) - 1)) }
 pub(crate) fn sub_link(sub: u64) -> Option<usize> { (sub >= LINK_BASE).then(|| (sub - LINK_BASE) as usize) }
+
+/// An element as assistive technology reads it ([`Runtime::accessible_elements`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct AccessibleElement {
+    /// Its path in [`Runtime::elements`]; a text's link is `"<text's path>#link-<k>"`.
+    pub path: String,
+    /// The AccessKit role, as `"list-box-option"` for an element of role `"option"`.
+    pub role: String,
+    /// What a reader hears it called: its label, its text, or the text inside it.
+    pub name: Option<String>,
+}
 
 /// What a tree update read last time: when none of it moved, nothing it builds can have.
 #[derive(Clone, PartialEq, Default)]
@@ -41,6 +54,7 @@ struct Stamp {
     name: u64,
     tooltip: u64,
     announced: u32,
+    own_text: u64,
 }
 
 /// An activated tree: what the platform adapter holds, to diff the next update against.
@@ -58,17 +72,6 @@ pub(crate) struct A11yTree {
     full: bool,
     /// The root's name when the runtime has no window title (an overlay's name).
     pub(crate) name: String,
-    /// What the last update changed, beyond what AccessKit announces itself.
-    changes: Changes,
-}
-
-/// What an update changed that AccessKit's platform adapters don't announce: nodes added,
-/// removed or reordered, and boxes that moved (a scroll). Windows hosts raise WinEvents for
-/// them, so tools waiting on a reaction to their input see one.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Changes {
-    pub(crate) structure: bool,
-    pub(crate) moved: bool,
 }
 
 struct Sent {
@@ -137,7 +140,14 @@ pub(super) fn rect(r: [f32; 4], shift: [f32; 2]) -> AkRect {
 
 impl RuntimeCore {
     /// An assistive client asked for this surface's tree: the next update holds all of it.
-    pub(crate) fn a11y_activate(&mut self, name: &str) {
+    /// Text an [`crate::El::a11y_text_from`] reads changed without the view running again, as
+    /// a compositor's own drawing does: the next update reads it again.
+    pub fn a11y_text_changed(&mut self) { self.a11y_text_changes = self.a11y_text_changes.wrapping_add(1); }
+
+    /// An assistive client started listening, as the platform adapter hears it: updates
+    /// ([`Self::a11y_update`]) now carry the tree. `name` names the root when the runtime has
+    /// no window title. Tests listen this way to hear what a screen reader is sent.
+    pub fn a11y_activate(&mut self, name: &str) {
         let tree = self.a11y.get_or_insert_with(Default::default);
         tree.full = true;
         tree.stamp = None;
@@ -147,13 +157,9 @@ impl RuntimeCore {
     /// Nobody listens any more: drop the tree and stop building it.
     pub(crate) fn a11y_deactivate(&mut self) { self.a11y = None; }
 
-    /// What the last update changed that AccessKit doesn't announce.
-    #[cfg_attr(not(all(feature = "accessibility", target_os = "windows")), allow(dead_code))]
-    pub(crate) fn a11y_changes(&self) -> Changes { self.a11y.as_ref().map_or_else(Changes::default, |t| t.changes) }
-
     /// The update to send the adapter, when the tree is active and something it shows changed
     /// since the last one. `None` before the first frame has laid anything out.
-    pub(crate) fn a11y_update(&mut self) -> Option<TreeUpdate> {
+    pub fn a11y_update(&mut self) -> Option<TreeUpdate> {
         if self.a11y.is_none() || self.drawn.len() != self.nodes.len() || self.nodes.is_empty() { return None; }
         let stamp = self.a11y_stamp();
         let tree = self.a11y.as_ref()?;
@@ -177,19 +183,15 @@ impl RuntimeCore {
             if let Some(old) = tree.sent.get_mut(&s.id.0) { old.pass = pass; }
         }
         let mut out = Vec::with_capacity(nodes.len());
-        let (mut structure, mut moved) = (false, false);
         for (id, node, print) in nodes {
             // A text's lines and links come and go with it, and carry its fingerprint.
             match tree.sent.get_mut(&id.0) {
                 Some(old) => {
-                    structure |= old.node.children() != node.children();
-                    moved |= old.node.bounds() != node.bounds() || old.node.transform() != node.transform();
                     old.pass = pass;
                     old.print = print;
                     old.node = node.clone();
                 }
                 None => {
-                    structure = true;
                     tree.sent.insert(id.0, Sent { print, pass, node: node.clone() });
                 }
             }
@@ -202,10 +204,7 @@ impl RuntimeCore {
                 if let Some(old) = tree.sent.get_mut(&k) { old.pass = pass; }
             }
         }
-        let before = tree.sent.len();
         tree.sent.retain(|_, s| s.pass == pass);
-        structure |= tree.sent.len() != before;
-        tree.changes = Changes { structure, moved };
         tree.scrollers = found.scrollers;
         #[cfg(test)]
         self.a11y_check_sent();
@@ -247,14 +246,13 @@ impl RuntimeCore {
         let tree = self.a11y.as_mut()?;
         tree.scrollers = scrollers;
         tree.stamp = Some(stamp);
-        tree.changes = Changes { structure: false, moved: !changed.is_empty() };
         let focus = self.a11y_focus_now();
         Some(TreeUpdate { nodes: changed, tree: None, tree_id: TreeId::ROOT, focus })
     }
 
     /// The node holding keyboard focus, when it is in the sent tree.
     fn a11y_focus_now(&self) -> AkId {
-        let Some(i) = self.focused_index() else { return ROOT };
+        let Some(i) = self.focused_index().or_else(|| self.a11y_key_holder()) else { return ROOT };
         let n = &self.nodes[i];
         let id = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
             .map_or(element_id(n.id), |k| link_id(n.id, k));
@@ -277,6 +275,24 @@ impl RuntimeCore {
         crate::a11y::dump::json(&self.accessibility_tree(), false)
     }
 
+    /// Each element in [`Runtime::accessibility_tree`], keyed or not, with the role and name
+    /// [`Runtime::accessibility_json`] prints for it, so a tool that names an element as the
+    /// tree does finds it in [`Runtime::elements`] by its path.
+    pub fn accessible_elements(&self) -> Vec<AccessibleElement> {
+        let tree = self.accessibility_tree();
+        let paths: HashMap<u64, &str> = self.nodes.iter().map(|n| (n.id.0, n.path.as_str())).collect();
+        crate::a11y::dump::roles_and_names(&tree).into_iter().filter_map(|(id, role, name)| {
+            let (node, sub) = split_id(id);
+            let path = paths.get(&node.0)?;
+            let path = match sub_link(sub) {
+                Some(k) => format!("{path}#link-{k}"),
+                None if sub == 0 => (*path).to_owned(),
+                None => return None,
+            };
+            Some(AccessibleElement { path, role, name })
+        }).collect()
+    }
+
     fn a11y_info(&self) -> TreeInfo {
         TreeInfo { root: ROOT, toolkit_name: Some("Rune".into()), toolkit_version: Some(env!("CARGO_PKG_VERSION").into()) }
     }
@@ -296,6 +312,7 @@ impl RuntimeCore {
             name: self.window_title.current().map_or(0, hash_str),
             tooltip: self.help_tooltip().map_or(0, |(t, r)| mix(hash_str(t), r[0].to_bits() as u64 ^ (r[1].to_bits() as u64) << 32)),
             announced: self.announcement.said(),
+            own_text: self.a11y_text_changes,
         }
     }
 
@@ -309,6 +326,7 @@ impl RuntimeCore {
         let mut scrollers = Vec::new();
         let mut focus = ROOT;
         let focused = self.focused_index();
+        let mut holder = None;
         let content = self.a11y_content_prints();
         // Behind an open modal the tree holds only the modal and what contains it.
         let mut holds_modal = Vec::new();
@@ -347,6 +365,7 @@ impl RuntimeCore {
                     focus = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
                         .map_or(id, |k| link_id(n.id, k));
                 }
+                if holder.is_none() && n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) { holder = Some(id); }
                 slots.push(Slot { id, element: Some(i), walk: w, role, print, set_size: None });
                 w.slot = slots.len() - 1;
             }
@@ -364,7 +383,18 @@ impl RuntimeCore {
         for (k, s) in slots.iter_mut().enumerate() {
             s.print = mix(mix(s.print, kid_prints[k]), s.set_size.map_or(0, |n| n as u64 + 1));
         }
+        if focused.is_none() && let Some(holder) = holder { focus = holder; }
         Found { slots, kids, focus, scrollers }
+    }
+
+    /// The first element in the tree that [`El::holds_keys`], which assistive technology
+    /// treats as focused while no element has keyboard focus.
+    fn a11y_key_holder(&self) -> Option<usize> {
+        let sent = self.a11y.as_ref()?;
+        (0..self.nodes.len()).find(|&i| {
+            let n = &self.nodes[i];
+            n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) && sent.sent.contains_key(&element_id(n.id).0)
+        })
     }
 
     /// The nodes of `found` whose `changed` flag is set, built, with their lines and links:

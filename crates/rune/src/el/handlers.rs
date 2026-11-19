@@ -18,6 +18,28 @@ impl El {
         self.handlers.on_press_outside = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
+    /// Runs `f` when a press of any button lands on this element or on anything it holds, once
+    /// the press has moved the focus and before its release, so [`Tx::focus_within`] says
+    /// whether the press left the focus inside the element. The press still goes where it was
+    /// aimed, a handler of an element
+    /// holding this one included, so a pane can take the keyboard for a click on any control
+    /// inside it, as a DOM `mousedown` listener hears what bubbles up. A press on something
+    /// drawn over the element that it doesn't hold, or one a modal keeps from it, doesn't
+    /// reach it. The element is the pane of the selectable text inside it: a press on that
+    /// text goes no further out than the element, so a drag across the text selects it even
+    /// when something holding the element drags.
+    pub fn on_press_within<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.handlers.on_press_within = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
+        self
+    }
+    /// A primary press on this element's own surface, not on a control inside it, runs no
+    /// [`El::on_press_within`] of the elements holding it, as a DOM `pointerdown` that prevents
+    /// its default keeps its `mousedown` from them. A header that drags its pane by its surface
+    /// uses it, so starting a drag doesn't select the pane.
+    pub fn keeps_press_from_within(mut self) -> Self {
+        self.handlers.keeps_press_from_within = true;
+        self
+    }
     /// [`El::on_press_tx`] in place.
     pub fn set_on_press_tx<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> &mut Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
@@ -230,6 +252,7 @@ impl PointerEvent {
 pub(crate) type PointerFn = Rc<dyn Fn(crate::states::States<'_>, PointerEvent, &mut Tx)>;
 pub(crate) type DragFn = Rc<dyn Fn(crate::states::States<'_>, &mut Drag, &mut Tx)>;
 pub(crate) type DragOutFn = Rc<dyn Fn(crate::states::StatesRef<'_>) -> Option<crate::DragItem>>;
+pub(crate) type OwnTextFn = Rc<dyn Fn(crate::states::StatesRef<'_>) -> Option<crate::DrawnText>>;
 pub(crate) type DragEndFn = Rc<dyn Fn(crate::states::States<'_>, crate::DragOutcome, &mut Tx)>;
 
 impl El {

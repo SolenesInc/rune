@@ -9,12 +9,10 @@ pub const PHASES: usize = 6;
 
 /// CPU consumed by this thread, excluding time the scheduler runs other work. Debug builds
 /// time app callbacks with it for `perf_warn`, and interaction timing its input frames.
-/// On Windows it counts the thread's cycles (`QueryThreadCycleTime`), so short phases read
-/// true; `GetThreadTimes` moves in 15.6 ms ticks.
 pub(crate) fn cpu_ms() -> Option<f64> {
-    #[cfg(any(unix, windows))]
-    { Some(super::host_clock::cpu_ns(super::host_clock::thread_cpu()) / 1e6) }
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(unix)]
+    { Some(super::host_clock::thread_cpu() as f64 / 1e6) }
+    #[cfg(not(unix))]
     { None }
 }
 

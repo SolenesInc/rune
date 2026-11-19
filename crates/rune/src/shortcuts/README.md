@@ -37,7 +37,7 @@ title), or a macOS system shortcut ("Spotlight", "Mission Control", "Input Sourc
 "Screenshot", "App Switcher", "macOS" for other enabled symbolic hotkeys), at the chord
 the user remapped it to. The macOS lookup answers only on the main thread. A chord
 another Rune App in the process holds is refused with `Conflict` on every backend. Other apps'
-grabs, Windows, X11 and the portal name nobody, so it returns None. Headless runs
+grabs, X11 and the portal name nobody, so it returns None. Headless runs
 answer only for their own virtual registrations. `ShortcutError::Conflict` itself is
 unchanged.
 
@@ -49,7 +49,7 @@ global Space or ⇧A would take that key from typing in every app. Both the buil
 
 Call runtime registration after the host starts (an `on_window` or queued
 `handle.update` callback works, including one on another window of the same
-`run_windows`). Calls before startup or after shutdown return `NotRunning`. On macOS/Windows other threads may call it, but wait for the app
+`run_windows`). Calls before startup or after shutdown return `NotRunning`. On macOS other threads may call it, but wait for the app
 thread, so the app thread must not join those callers. Linux registration can
 run off-thread. Dropping the host unregisters everything,
 even if other threads retain `AppHandle`s.
@@ -59,11 +59,9 @@ even if other threads retain `AppHandle`s.
 - macOS: Carbon `RegisterEventHotKey`, no Accessibility permission. Command is
   the Super modifier. Hardware key positions follow the US layout; F21–F24 have
   no Carbon key code and return `InvalidAccelerator`.
-- Windows: `RegisterHotKey` on a message-only window owned by the event thread.
-  Repeat is disabled. Windows-reserved combinations may fail registration.
 - X11: checked passive grabs on every root, including CapsLock/NumLock variants.
   A failed variant rolls back the registration. Autorepeat is filtered, so a held
-  chord fires once, as on macOS and Windows. Keys use the current keymap's
+  chord fires once, as on macOS. Keys use the current keymap's
   base keysyms; restart/re-register after changing the keymap.
 - Wayland: xdg-desktop-portal GlobalShortcuts. No portal returns `Unsupported`.
   The portal may ask for permission or let the user choose another trigger;
@@ -76,7 +74,7 @@ Registration is synchronous, including portal consent, with a two-minute bound.
 Register startup shortcuts before showing windows; use a worker thread for
 runtime Wayland binding so a consent dialog does not block the event thread.
 
-Only an actual registration creates native resources: macOS/Windows need no
+Only an actual registration creates native resources: macOS needs no
 listener thread; X11/Wayland each create a listener that is joined on teardown.
 No-shortcut apps never open a shortcut display or portal connection.
 
@@ -225,7 +223,7 @@ Every item has a nil target, so AppKit sends it to the key window's first respon
 
 Without `standard_menus`, an accessory app's keys don't change.
 
-Native Windows/Linux return `MenuError::Unsupported`; startup builders report it
+Native Linux returns `MenuError::Unsupported`; startup builders report it
 through `take_menu_errors()`. Headless virtual menus work on every platform:
 `{"menu":"Open Quick Panel"}` invokes by exact id or unambiguous title. Unknown,
 disabled and ambiguous items fail the script.

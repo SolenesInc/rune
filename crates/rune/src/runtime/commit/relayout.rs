@@ -258,6 +258,12 @@ impl Measurement<'_> {
         layout_diagnostics::collapsed_scrolls(&taffy, &nodes);
 
         self.place(&taffy, &mut nodes);
+        // Room one axis takes can make the other overflow, which takes its own: twice at most.
+        for _ in 0..2 {
+            if !self.take_scroll_room(&mut taffy, &mut nodes) { break; }
+            compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            self.place(&taffy, &mut nodes);
+        }
         if self.fit_anchored(&mut taffy, &nodes) {
             compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
             self.place(&taffy, &mut nodes);

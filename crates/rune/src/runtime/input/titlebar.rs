@@ -1,7 +1,6 @@
 //! Presses that move or zoom the window: `.window_drag()` regions, and the titlebar band
 //! AppKit drags itself when the app leaves window dragging to it. Also the window's chrome
-//! over a custom titlebar (`App::titlebar`): its insets, the Windows caption buttons and the
-//! window menu.
+//! over a custom titlebar (`App::titlebar`) and its insets.
 use crate::machine::Effects;
 
 use super::*;
@@ -14,12 +13,8 @@ pub(super) struct Titlebar {
     pub(super) press: TitlebarPress,
     /// Window points from the top that AppKit drags natively, over the content (0 elsewhere).
     native_band: f32,
-    /// The window menu the shell opens next.
-    window_menu: Option<WindowMenu>,
     /// What `Cx::chrome_insets` reports.
     pub(super) insets: crate::ChromeInsets,
-    /// The Windows caption buttons the view gets drawn over it, with their state.
-    pub(super) caption: Option<crate::titlebar::Caption>,
     /// `Tx::toggle_maximized`, for the shell.
     pub(super) toggle_maximized: bool,
     /// `Tx::toggle_full_screen`, for the shell.
@@ -31,17 +26,6 @@ pub(super) struct Titlebar {
     /// What a run without a window draws for `App::titlebar` (`headless_chrome`), so a new
     /// `Cx::set_titlebar` or `Cx::titlebar_height` draws again.
     headless: Option<(crate::Chrome, crate::Titlebar)>,
-}
-
-/// The window menu (Restore, Move, Size, Minimize, Maximize, Close) a custom titlebar opens
-/// where the native title bar would.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum WindowMenu {
-    /// At the pointer: a secondary click on a bare `.window_drag()` region.
-    Pointer,
-    /// Under the window's top-left corner, from the keyboard: Alt+Space no handler took.
-    Keyboard,
 }
 
 /// A press that may pair with the next one: when it went down and where.
@@ -61,8 +45,7 @@ impl Pair {
     }
 }
 
-/// The titlebar's press: what the next press can pair with, and whether a secondary press on a
-/// bare `.window_drag()` region still owes its release.
+/// The titlebar's press: what the next press can pair with.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum TitlebarPress {
     /// No press is in flight.
@@ -70,14 +53,6 @@ pub(super) enum TitlebarPress {
     Rest,
     /// A press went down where a second one means something.
     Armed(Pair),
-    /// A secondary press began on a bare drag region: its release there opens the window menu.
-    /// `Some` is the primary run it didn't end.
-    SecondaryOnRegion(Option<Pair>),
-}
-
-impl TitlebarPress {
-    /// Whether a secondary press `SecondaryDown` began on a bare region owes its release.
-    pub(super) fn secondary_armed(self) -> bool { matches!(self, TitlebarPress::SecondaryOnRegion(_)) }
 }
 
 /// What the titlebar's press sees.
@@ -87,75 +62,36 @@ pub(super) enum Event {
     /// A primary press that hit nothing; `band` when it is in the native titlebar band, where
     /// the system drags the window itself and only the double click is Rune's.
     Empty { now: f64, point: (f32, f32), interval: f64, band: bool },
-    /// A secondary press; `region` when it landed on a bare drag region of a custom titlebar.
-    SecondaryDown { region: bool },
-    /// A secondary release; `region` when it is over a bare drag region now.
-    SecondaryUp { region: bool },
-    /// Pointer cancellation or stage replacement ends both halves of any pending press.
+    /// Pointer cancellation or stage replacement ends any pending press.
     Clear,
 }
 
-/// What a press asks the window for, in that press event: the shell starts a native drag inside
-/// the press, and the window menu opens where the pointer is.
-pub(super) enum Request {
-    /// Move the window, or the titlebar's double-click action.
-    Action(TitlebarAction),
-    /// Open the window menu at the pointer.
-    Menu,
-}
-
-/// The run a `Region` or `Empty` press carries on with or starts, and whether it was a double.
-fn pair_of(last: Option<Pair>, now: f64, point: (f32, f32), interval: f64) -> (Option<Pair>, bool) {
-    match last {
-        Some(last) if last.second(now, point, interval) => (None, true),
-        _ => (Some(Pair { at: now, point }), false),
+/// The state a `Region` or `Empty` press leaves, and whether it was a double.
+fn pair_of(state: TitlebarPress, now: f64, point: (f32, f32), interval: f64) -> (TitlebarPress, bool) {
+    match state {
+        TitlebarPress::Armed(last) if last.second(now, point, interval) => (TitlebarPress::Rest, true),
+        _ => (TitlebarPress::Armed(Pair { at: now, point }), false),
     }
 }
 
-/// The press run `state` holds, whatever it is doing with a secondary press.
-fn pair(state: &TitlebarPress) -> Option<Pair> {
-    match *state {
-        TitlebarPress::Rest => None,
-        TitlebarPress::Armed(pair) => Some(pair),
-        TitlebarPress::SecondaryOnRegion(pair) => pair,
-    }
-}
-
-fn armed(pair: Option<Pair>) -> TitlebarPress {
-    pair.map_or(TitlebarPress::Rest, TitlebarPress::Armed)
-}
-
-/// The state with its press run replaced, keeping a secondary press that still owes its release.
-fn keep_secondary(state: &TitlebarPress, pair: Option<Pair>) -> TitlebarPress {
-    if state.secondary_armed() { TitlebarPress::SecondaryOnRegion(pair) } else { armed(pair) }
-}
-
-pub(super) fn step(state: &mut TitlebarPress, event: Event) -> Effects<Request> {
+/// Steps the press. What it returns is what the shell does inside that press event: a native
+/// drag, or the titlebar's double-click action.
+pub(super) fn step(state: &mut TitlebarPress, event: Event) -> Effects<TitlebarAction> {
     match event {
         // A press on a drag region always moves the window, unless it is the second of a pair.
         Event::Region { now, point, interval } => {
-            let (next, double) = pair_of(pair(state), now, point, interval);
-            *state = keep_secondary(state, next);
-            Effects::one(Request::Action(if double { TitlebarAction::DoubleClick } else { TitlebarAction::Drag }))
+            let (next, double) = pair_of(*state, now, point, interval);
+            *state = next;
+            Effects::one(if double { TitlebarAction::DoubleClick } else { TitlebarAction::Drag })
         }
         // AppKit drags the band itself and never sees the double click over the content.
         Event::Empty { now, point, interval, band } => {
             if !band { return Effects::none(); }
-            let (next, double) = pair_of(pair(state), now, point, interval);
-            *state = keep_secondary(state, next);
-            if double { Effects::one(Request::Action(TitlebarAction::DoubleClick)) } else { Effects::none() }
-        }
-        Event::SecondaryDown { region } => {
-            *state = if region { TitlebarPress::SecondaryOnRegion(pair(state)) } else { armed(pair(state)) };
-            Effects::none()
-        }
-        Event::SecondaryUp { region } => {
-            let TitlebarPress::SecondaryOnRegion(pair) = *state else { return Effects::none() };
-            *state = armed(pair);
-            if region { Effects::one(Request::Menu) } else { Effects::none() }
+            let (next, double) = pair_of(*state, now, point, interval);
+            *state = next;
+            if double { Effects::one(TitlebarAction::DoubleClick) } else { Effects::none() }
         }
         Event::Clear => {
-            // differs from dev: a cancelled secondary down cannot open a menu on release.
             *state = TitlebarPress::Rest;
             Effects::none()
         }
@@ -179,13 +115,10 @@ impl Titlebar {
         self.act(Event::Clear);
     }
 
-    /// Steps the press and hands its request to the host, where the shell takes it in that press.
+    /// Steps the press and hands its action to the host, where the shell takes it in that press.
     fn act(&mut self, event: Event) {
-        for request in step(&mut self.press, event) {
-            match request {
-                Request::Action(action) => self.action = Some(action),
-                Request::Menu => self.window_menu = Some(WindowMenu::Pointer),
-            }
+        for action in step(&mut self.press, event) {
+            self.action = Some(action);
         }
     }
 }
@@ -217,17 +150,8 @@ impl RuntimeCore {
         self.titlebar.insets
     }
 
-    /// The caption buttons to draw over the view, and their hover and press state; `None`
-    /// draws none. A change re-runs the view.
-    pub(crate) fn set_caption(&mut self, caption: Option<crate::titlebar::Caption>) {
-        if caption == self.titlebar.caption { return; }
-        self.titlebar.caption = caption;
-        self.dirty = true;
-    }
-
     /// What a run without a window reports and draws for `App::titlebar` on this platform, as
-    /// its window would at rest: `Cx::titlebar_inset`, `Cx::chrome_insets` and the caption
-    /// buttons. Returns the frame the headless traffic-light checks see.
+    /// its window would at rest: `Cx::titlebar_inset` and `Cx::chrome_insets`. Returns the frame the headless traffic-light checks see.
     pub(crate) fn headless_chrome(&mut self, chrome: crate::Chrome, titlebar: Option<crate::Titlebar>, borderless: bool) -> crate::Chrome {
         let titlebar = titlebar.filter(|_| !borderless);
         self.titlebar.headless = titlebar.map(|t| (chrome, t));
@@ -238,12 +162,9 @@ impl RuntimeCore {
         };
         let inset = if borderless { 0.0 } else { chrome.titlebar_inset() };
         self.set_titlebar_inset(inset);
-        let caption = titlebar.filter(|_| cfg!(target_os = "windows")).map(|t| crate::titlebar::Caption::new(t.height()));
-        let height = titlebar.filter(|_| cfg!(any(target_os = "macos", target_os = "windows"))).map_or(0.0, |t| t.height());
+        let height = titlebar.filter(|_| cfg!(target_os = "macos")).map_or(0.0, |t| t.height());
         let leading = if cfg!(target_os = "macos") { inset } else { 0.0 };
-        let trailing = caption.map_or(0.0, |c| c.width(self.env.scale));
-        self.set_chrome_insets(crate::ChromeInsets::new(leading, trailing, height));
-        self.set_caption(caption);
+        self.set_chrome_insets(crate::ChromeInsets::new(leading, height));
         chrome
     }
 
@@ -257,18 +178,6 @@ impl RuntimeCore {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn take_toggle_full_screen(&mut self) -> bool {
         std::mem::take(&mut self.titlebar.toggle_full_screen)
-    }
-
-    /// The window menu a secondary click on a drag region or an unclaimed Alt+Space asked for,
-    /// for the shell to open.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) fn take_window_menu(&mut self) -> Option<WindowMenu> {
-        self.titlebar.window_menu.take()
-    }
-
-    /// Alt+Space no handler took opens the window menu (`Unhandled::WindowMenu`).
-    pub(super) fn request_window_menu(&mut self) {
-        self.titlebar.window_menu = Some(WindowMenu::Keyboard);
     }
 
     /// `Cx::set_titlebar` and `Cx::titlebar_height`, as the last view set them; empty keeps
@@ -294,25 +203,8 @@ impl RuntimeCore {
         std::mem::take(&mut self.titlebar.set_changed)
     }
 
-    /// Notes whether a secondary press at (x, y) landed on a bare `.window_drag()` region of a
-    /// custom titlebar, where its release opens the window menu.
-    pub(super) fn secondary_region_down(&mut self, x: f32, y: f32, captured: bool) {
-        let region = !captured && self.titlebar.caption.is_some()
-            && self.primary_target(x, y).is_some_and(|t| self.bare_drag_region(t));
-        self.titlebar.act(Event::SecondaryDown { region });
-    }
-
-    /// A secondary release that ends the press `secondary_region_down` noted on a drag region
-    /// asks the shell for the window menu.
-    pub(super) fn secondary_region_up(&mut self, x: f32, y: f32) {
-        // A release with no press on a region has nothing to ask for, as `take` returned false.
-        if !self.titlebar.press.secondary_armed() { return; }
-        let region = self.primary_target(x, y).is_some_and(|t| self.bare_drag_region(t));
-        self.titlebar.act(Event::SecondaryUp { region });
-    }
-
     /// A `.window_drag()` element with nothing of its own to do with a press: a press there
-    /// moves the window, and a secondary click opens the window menu.
+    /// moves the window.
     pub(super) fn bare_drag_region(&self, t: usize) -> bool {
         let n = &self.nodes[t];
         n.window_drag == crate::el::WindowDrag::Drag && n.handlers.on_press.is_none() && n.handlers.on_double_press.is_none() && n.handlers.on_drag.is_none()

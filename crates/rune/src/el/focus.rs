@@ -6,6 +6,17 @@ use crate::color::Color;
 use crate::el::{El, InputKeyFn, Outline, PressFn, RoleTag, StepFn, StepLimitFn, Tx};
 use crate::states::downcast;
 
+/// How a virtual list finds the selected row it reveals ([`El::reveal_selected`],
+/// [`El::reveal_row`]).
+#[derive(Clone, PartialEq)]
+pub(crate) enum Reveal {
+    Off,
+    /// The built row marked [`El::focus_selected`].
+    Selected,
+    /// The row with this key.
+    Row(Option<String>),
+}
+
 #[derive(Clone)]
 pub(crate) struct FocusSpec {
     pub physical: Option<crate::input::physical_input::Handler>,
@@ -17,7 +28,7 @@ pub(crate) struct FocusSpec {
     pub order: i32,
     pub group: bool,
     pub selected: bool,
-    pub reveal_selected: bool,
+    pub reveal: Reveal,
     pub preserve_on_press: crate::runtime::selectable::OnPress,
     pub ring: Option<Outline>,
     /// `focus_within_ring`: `ring` shows while focus is on this element or inside it, from
@@ -45,6 +56,8 @@ pub(crate) struct FocusSpec {
     pub key_up: Option<InputKeyFn>,
     /// `El::on_key`: keys while this element or one inside it has focus.
     pub key: Option<InputKeyFn>,
+    /// `El::on_blur`.
+    pub blur: Option<PressFn>,
 }
 
 impl crate::cold::Empty for FocusSpec {
@@ -56,7 +69,7 @@ impl crate::cold::Empty for FocusSpec {
         order: 0,
         group: false,
         selected: false,
-        reveal_selected: false,
+        reveal: Reveal::Off,
         preserve_on_press: crate::runtime::selectable::OnPress { focus: false, selection: false },
         ring: None,
         within: false,
@@ -72,6 +85,7 @@ impl crate::cold::Empty for FocusSpec {
         step_limit: None,
         key_up: None,
         key: None,
+        blur: None,
     };
 }
 
@@ -80,6 +94,7 @@ pub(crate) struct ModalSpec {
     pub dismiss: PressFn,
     pub outside: bool,
     pub press_through: bool,
+    pub wheel_closes: bool,
 }
 
 impl El {
@@ -133,8 +148,15 @@ impl El {
     /// Off by default; useful for suggestions controlled by an outside text field.
     pub fn reveal_selected(mut self, enabled: bool) -> Self {
         if enabled || !self.cold.focus.is_empty() {
-            self.cold_mut().focus.reveal_selected = enabled;
+            self.cold_mut().focus.reveal = if enabled { Reveal::Selected } else { Reveal::Off };
         }
+        self
+    }
+    /// [`El::reveal_selected`] for an [`El::virtual_rows`] list, whose rows outside the mounted
+    /// window aren't built, so the list can't find its selected row among them: names the
+    /// selected row by its key, `None` when no row is selected.
+    pub fn reveal_row(mut self, key: Option<impl Into<String>>) -> Self {
+        self.cold_mut().focus.reveal = Reveal::Row(key.map(Into::into));
         self
     }
     /// A press on this element or its descendants leaves focus where it was, a field focused
@@ -169,6 +191,12 @@ impl El {
     /// focus by its fill alone also sets [`El::no_focus_ring`].
     pub fn focus_fill(mut self, color: Color) -> Self {
         self.cold_mut().focus.fill = Some(color);
+        self
+    }
+    /// Focus left this element, as an input's `blur` event: to another element, to none, or
+    /// with the window. It runs in the input that moved focus, so it needs no later frame.
+    pub fn on_blur<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+        self.cold_mut().focus.blur = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self
     }
     /// The window's default button, which Return presses (AppKit's `keyEquivalent = "\r"`).
@@ -215,7 +243,9 @@ impl El {
     }
     /// The control a [`El::modal`] focuses when it opens, as HTML's `autofocus` attribute in a
     /// dialog: a Cancel button, say. Without one the modal focuses its first text field, else
-    /// its first Tab stop, or itself under [`Cx::web_focus`](crate::Cx::web_focus).
+    /// its first Tab stop, or itself under [`Cx::web_focus`](crate::Cx::web_focus). Set on
+    /// the modal itself, it opens focused on itself even when it holds a field, as a web dialog
+    /// whose search box waits for a click or Tab: Tab then enters at its first control.
     pub fn autofocus(mut self) -> Self {
         self.cold_mut().focus.autofocus = true;
         self
@@ -265,14 +295,14 @@ impl El {
     }
     /// Trap focus and make the background inert while mounted. Escape requests dismissal.
     pub fn modal<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
             dismiss: Rc::new(move |s, _| dismiss(downcast::<S>(s))) });
         self
     }
     /// [`El::modal`] whose dismissal gets the change's [`Tx`]: a dialog that closes at once
     /// (`tx.instant()`), say.
     pub fn modal_tx<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false,
+        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
             dismiss: Rc::new(move |s, tx| dismiss(downcast::<S>(s), tx)) });
         self
     }
@@ -286,6 +316,13 @@ impl El {
     /// default, when the press only closes the modal.
     pub fn modal_press_through(mut self, enabled: bool) -> Self {
         if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.press_through = enabled; }
+        self
+    }
+    /// A wheel or trackpad scroll outside where the modal is drawn asks it to close, as a
+    /// press outside does; with [`El::modal_press_through`] the scroll still moves what is
+    /// under it. Off by default, when the wheel leaves the modal open.
+    pub fn modal_wheel_closes(mut self, enabled: bool) -> Self {
+        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.wheel_closes = enabled; }
         self
     }
 }

@@ -114,7 +114,7 @@ impl<S: 'static> Window<S> {
         let own = app.resolve_args(inherited);
         let comp = app.compositor.take();
         let (open, keep_running, on_close, on_focus, on_reopen) = (app.open, app.keep_running, app.on_close, app.on_focus, app.on_reopen);
-        let (on_mods, on_visibility) = (app.on_mods, app.on_visibility);
+        let (on_mods, on_visibility, on_input) = (app.on_mods, app.on_visibility, app.on_input);
         let (on_ime, on_field_key) = (app.on_ime, app.on_field_key);
         let native = std::mem::take(&mut app.macos_window);
         let (modifier_keys, tab_visits_controls, srgb_blend) = (app.modifier_keys, app.tab_visits_controls, app.srgb_blend);
@@ -132,6 +132,7 @@ impl<S: 'static> Window<S> {
         rt.app_mut().on_mods = on_mods;
         rt.app_mut().on_field_key = on_field_key;
         rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_input = on_input;
         rt.app_mut().on_ime = on_ime;
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
@@ -171,7 +172,7 @@ impl<S: 'static> Window<S> {
 
     fn request(&mut self, request: WindowRequest, changes: &mut Changes) {
         match request {
-            WindowRequest::Open(_) | WindowRequest::Show if self.life.finished() => {}
+            WindowRequest::Open(_) | WindowRequest::Show | WindowRequest::ShowKey if self.life.finished() => {}
             WindowRequest::Open(_) => {
                 self.show();
                 changes.front = true;
@@ -182,6 +183,11 @@ impl<S: 'static> Window<S> {
                 changes.front = true;
                 // A launcher takes keys when it shows.
                 changes.keys |= self.launcher;
+            }
+            WindowRequest::ShowKey => {
+                self.show();
+                changes.front = true;
+                changes.keys = true;
             }
             WindowRequest::Hide => self.hide(),
             WindowRequest::Close => self.close(),

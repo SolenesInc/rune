@@ -49,6 +49,8 @@ pub struct Palette {
     pub text_inverse: Color,
     pub text_contrast: Color,
     pub text_accent: Color,
+    /// Ink on a `bg_accent` fill, such as an accent badge's label.
+    pub text_on_accent: Color,
 
     pub icon_base: Color,
     pub icon_muted: Color,
@@ -89,6 +91,8 @@ pub struct Palette {
     pub surface_raised: Color,
     pub surface_raised_base: Color,
     pub surface_raised_hover: Color,
+    /// A standard menu's fill.
+    pub surface_menu: Color,
     pub surface_float: Color,
     pub surface_disabled: Color,
     pub border_weak: Color,
@@ -163,6 +167,11 @@ pub struct Glyphs {
     pub circle_x: &'static Icon,
     /// A short horizontal rule (card title placeholder).
     pub dash: &'static Icon,
+    /// A select's indicator, open or closed, such as [`crate::glyphs::CHEVRON_UP_DOWN`] for a
+    /// macOS pop-up button. `None`: `chevron_down`, turning to `chevron_up` while open.
+    pub select: Option<&'static Icon>,
+    /// The grip of a [`crate::TextArea::resizable`] field.
+    pub resize_grip: &'static Icon,
 }
 
 /// The type scale. Sizes, weights, line heights and tracking in points.
@@ -215,6 +224,35 @@ impl std::hash::Hash for Radius {
     }
 }
 
+/// How a standard [`crate::Menu`] is framed and its rows laid out. It fills with
+/// `c.surface_menu`.
+#[derive(Clone, Copy, Debug)]
+pub struct StandardMenu {
+    /// The edge: `c.std_border` at this opacity.
+    pub edge_alpha: f32,
+    pub radius: f32,
+    /// Between the menu's edge and its rows.
+    pub inset: f32,
+    /// A row's padding, across and down.
+    pub row_padding: (f32, f32),
+    pub row_radius: f32,
+}
+
+/// How a standard menu draws its items' labels: an app whose menus list choices in a quieter
+/// face than the kit's. `focused_ink` is the label's ink on the row the keys or pointer reach.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MenuLabel {
+    pub font: TextStyle,
+    pub ink: Color,
+    pub focused_ink: Color,
+}
+
+impl StandardMenu {
+    /// `@opencode/ui`'s: a half-strength edge, 6 point corners and 4 point rows.
+    pub const OPENCODE: StandardMenu =
+        StandardMenu { edge_alpha: 0.5, radius: 6.0, inset: 4.0, row_padding: (8.0, 4.0), row_radius: 4.0 };
+}
+
 /// Motion tokens. Hover/press overlays use the runtime's own snappy track.
 #[derive(Clone, Copy, Debug)]
 pub struct Motion {
@@ -234,6 +272,10 @@ pub struct Kit {
     pub glyph: Glyphs,
     pub ty: Type,
     pub radius: Radius,
+    pub standard_menu: StandardMenu,
+    /// The text of a standard menu's items. None draws `ty.text_small_medium` in
+    /// `c.text_strong`, focused or not.
+    pub standard_menu_label: Option<MenuLabel>,
     pub motion: Motion,
     /// The surface translucent colours are solved over when the window blends in linear light
     /// (`App::srgb_blend(false)`), so they look as they would blended in sRGB. None leaves
@@ -246,6 +288,9 @@ pub struct Kit {
     /// Invalid inputs also paint their text, placeholder and caret in `c.danger.fg`
     /// (`@opencode/ui`'s look). Otherwise only the outline turns `danger`.
     pub invalid_text: bool,
+    /// Draws one key of a [`crate::Keybind`], and so of a shortcut recorder's value, for an app
+    /// whose keycaps have their own look. None draws the kit's small filled cap.
+    pub keycap: Option<fn(&Kit, String) -> El>,
 }
 
 impl Kit {

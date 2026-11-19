@@ -18,7 +18,12 @@ pub struct Span {
     /// Rounded background behind the span's runs (inline code), padded by `bg_pad` points.
     pub bg: Option<Color>,
     pub bg_pad: f32,
+    /// The background's room above and below in points, as CSS vertical `padding` around the
+    /// font's ascent and descent; `None` balances it on the cap height.
+    pub bg_pad_y: Option<f32>,
     pub underline: Option<Color>,
+    /// Draws the underline in dashes, as a CSS `1px dashed` border does.
+    pub underline_dashed: bool,
     /// The family's italic face, or a synthetic oblique when it has none.
     pub italic: bool,
 }
@@ -66,8 +71,23 @@ impl Span {
         self
     }
 
+    /// Runs the background from the font's ascent to its descent with `pad` points more above
+    /// and below, as CSS draws an inline element's background with vertical `padding`.
+    pub fn bg_pad_y(mut self, pad: f32) -> Span {
+        self.bg_pad_y = Some(pad);
+        self
+    }
+
     pub fn underline(mut self, color: Color) -> Span {
         self.underline = Some(color);
+        self
+    }
+
+    /// An underline in `color` drawn as a CSS `1px dashed` border draws: dashes and gaps three
+    /// times the line's width, starting and ending on a dash.
+    pub fn underline_dashed(mut self, color: Color) -> Span {
+        self.underline = Some(color);
+        self.underline_dashed = true;
         self
     }
 }
@@ -176,9 +196,11 @@ pub(crate) fn flatten_spans(spans: &[Span]) -> Vec<Span> {
             if s.bg.is_some() {
                 m.bg = s.bg;
                 m.bg_pad = s.bg_pad;
+                m.bg_pad_y = s.bg_pad_y;
             }
             if s.underline.is_some() {
                 m.underline = s.underline;
+                m.underline_dashed = s.underline_dashed;
             }
             m.italic |= s.italic;
         }
@@ -191,7 +213,9 @@ pub(crate) fn flatten_spans(spans: &[Span]) -> Vec<Span> {
                 && last.color == m.color
                 && last.bg == m.bg
                 && last.bg_pad == m.bg_pad
+                && last.bg_pad_y == m.bg_pad_y
                 && last.underline == m.underline
+                && last.underline_dashed == m.underline_dashed
                 && last.italic == m.italic
             {
                 last.end = m.end;
@@ -329,6 +353,7 @@ pub struct TextHighlight {
     pub(crate) fg: Option<Color>,
     pub(crate) ring: Option<(Color, f32)>,
     pub(crate) pad: f32,
+    pub(crate) radius: f32,
     pub(crate) key: Option<String>,
 }
 
@@ -342,6 +367,7 @@ impl TextHighlight {
             fg: None,
             ring: None,
             pad: 1.5,
+            radius: 4.0,
             key: None,
         }
     }
@@ -358,6 +384,12 @@ impl TextHighlight {
     /// Horizontal padding around each line's background, in points (`1.5` by default).
     pub fn pad(mut self, pad: f32) -> Self {
         self.pad = pad;
+        self
+    }
+    /// Corner radius of each line's background, in points (`4` by default); `0` paints square
+    /// blocks, as CSS's `::highlight()` does.
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
         self
     }
     /// Optional key for [`Tx::scroll_into_view`](crate::Tx::scroll_into_view),

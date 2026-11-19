@@ -60,9 +60,7 @@ pub(super) struct Win {
     pub(super) native: Native,
     pub(super) first_frame: FirstFrame,
     /// The surface it draws into. None only while `Host::reattach` replaces it: the old surface
-    /// has to go before the new one is made (a DX12 surface takes the window's one
-    /// DirectComposition target, `Dx12SwapchainKind::DxgiFromVisual`) and before the device it
-    /// drew with.
+    /// has to go before the new one is made and before the device it drew with.
     pub(super) surface: Option<wgpu::Surface<'static>>,
     pub(super) config: wgpu::SurfaceConfiguration,
     /// Whether the surface's last configuration took. False after a refused one, and for a lost
@@ -85,12 +83,6 @@ pub(super) struct Win {
     pub(super) timer_frame: TimerFrame,
     /// The last frame presented, while the window rests.
     pub(super) presented: Option<Presented>,
-    /// The window's steady run after a change (`STEADY`).
-    #[cfg(target_os = "windows")]
-    pub(super) steady: Steady,
-    /// A frame asked for while other windows covered it, still to draw (`CoveredDraw`).
-    #[cfg(target_os = "windows")]
-    pub(super) covered_draw: CoveredDraw,
     /// Its next frame (`redraw`).
     pub(super) redraw: std::cell::Cell<Redraw>,
 }
@@ -98,14 +90,14 @@ pub(super) struct Win {
 impl Win {
     /// Asks for a frame: now, or at the turn's end while the window paints (`Redraw`).
     #[cfg_attr(feature = "frame-profile", track_caller)]
-    pub(super) fn request_redraw(&self) { self.redraw_step(RedrawEvent::Ask(Instant::now())); }
+    pub(super) fn request_redraw(&self) { self.redraw_step(RedrawEvent::Ask); }
 
     #[cfg_attr(feature = "frame-profile", track_caller)]
     pub(super) fn redraw_step(&self, event: RedrawEvent) {
         let (next, effect) = self.redraw.get().step(event);
         self.redraw.set(next);
         #[cfg(feature = "frame-profile")]
-        if matches!(event, RedrawEvent::Ask(_)) || effect != RedrawEffect::None { crate::frame::live_log::asked(std::panic::Location::caller()); }
+        if matches!(event, RedrawEvent::Ask) || effect != RedrawEffect::None { crate::frame::live_log::asked(std::panic::Location::caller()); }
         if effect == RedrawEffect::Request { self.window.request_redraw(); }
     }
 
@@ -218,20 +210,28 @@ impl Win {
             if !focus { crate::platform::macos::show_without_focus(&self.window); return; }
         }
         // What it presented before it was hidden is gone, or never was: cloaked until it draws.
-        #[cfg(target_os = "windows")]
-        {
-            self.native.cloak.hold(&self.window, Instant::now() + READY_FALLBACK, false);
-            self.request_redraw();
-        }
         self.window.set_visible(true);
         if focus { self.window.focus_window(); }
     }
 
+    pub(super) fn make_key(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(panel) = &self.native.panel { panel.request_keys(); return; }
+            crate::platform::macos::make_key(&self.window);
+        }
+    }
+
+    /// Moves the window with the pointer, from inside the press that started it. A panel moves
+    /// itself: winit's own window is hidden behind it.
+    pub(super) fn drag(&self) {
+        #[cfg(target_os = "macos")]
+        if let Some(panel) = &self.native.panel { panel.drag(); return; }
+        let _ = self.window.drag_window();
+    }
+
     /// When a cloaked window shows without its frame.
     pub(super) fn cloak_deadline(&self) -> Option<Instant> {
-        #[cfg(target_os = "windows")]
-        return self.native.cloak.deadline();
-        #[cfg(not(target_os = "windows"))]
         None
     }
 
@@ -244,8 +244,6 @@ impl Win {
         if let Some(panel) = &self.native.panel { panel.hide(std::time::Duration::ZERO); return; }
         self.window.set_visible(false);
         // Hidden before its frame: the next show cloaks it again.
-        #[cfg(target_os = "windows")]
-        self.native.cloak.hidden(&self.window);
     }
 
     /// Its last frame is on screen and nothing has asked for another since.
@@ -313,6 +311,40 @@ impl Win {
             Some(panel) => panel.occluded(),
             None => crate::platform::macos::window_occluded(&self.window),
         }
+    }
+
+    /// Whether a display tick draws: when the window `wants` a frame, or one waits for the tick.
+    /// Otherwise the tick passes, and the link stops once the surface rests.
+    pub(super) fn tick_draws(&mut self, wants: bool) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.native.pacing.as_mut().is_none_or(|p| p.tick(wants));
+        #[cfg(not(target_os = "macos"))]
+        { let _ = wants; true }
+    }
+
+    /// After a frame with nothing more to draw: the display link runs on while the user types
+    /// (`DisplayLink::runs_on`), and stops otherwise.
+    pub(super) fn rest_pacing(&mut self) {
+        #[cfg(target_os = "macos")]
+        if self.native.pacing.as_ref().is_some_and(|p| p.running() && p.runs_on(Instant::now())) {
+            self.present_with_transaction(false);
+            return;
+        }
+        self.stop_pacing();
+    }
+
+    /// Whether the window's next frame would wait for a display tick rather than draw at once.
+    pub(super) fn frame_waits(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.native.pacing.as_ref().is_some_and(|p| p.frame_waits(Instant::now()));
+        #[cfg(not(target_os = "macos"))]
+        false
+    }
+
+    /// The user pressed a key in the window.
+    pub(super) fn key_pressed(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(pacing) = &mut self.native.pacing { pacing.key(Instant::now()); }
     }
 
     pub(super) fn stop_pacing(&mut self) {

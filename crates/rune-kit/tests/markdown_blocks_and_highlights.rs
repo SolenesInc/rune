@@ -693,3 +693,31 @@ fn review_two_thousand_matches_add_no_layout_nodes_or_shapes() {
     assert_eq!(rt.elements().iter().filter(|e| e.role == "mark").count(), 2000);
     assert!(rt.find("md-mark-1999").is_some());
 }
+
+#[test]
+fn a_highlight_paints_square_and_flush_with_its_words_when_asked() {
+    type State = Highlight;
+    fn view(hl: &State, _: &mut Cx<State>) -> El {
+        let k = Kit::neutral(true);
+        col().w(520.0).child(Markdown::new("Alpha beta gamma").highlights([(6..10, hl.clone())]).build(&k))
+    }
+    let bg = rune::color::hex("#503811").unwrap();
+    let painted = |hl: Highlight| {
+        let mut rt = Runtime::new(hl.bg(bg), view, (520.0, 200.0), Env::new(true, 2.0));
+        rt.frame(0.0);
+        let rects: Vec<_> = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == rune::render::KIND_RECT && i.fill == bg.premul(1.0))
+            .map(|i| (i.rect, i.radii))
+            .collect();
+        assert_eq!(rects.len(), 1, "one line, one background: {rects:?}");
+        rects[0]
+    };
+    let (rounded, rounded_radii) = painted(Highlight::new());
+    let (square, square_radii) = painted(Highlight::new().pad(0.0).radius(0.0));
+    assert_eq!(rounded_radii, [8.0; 4], "4 points at 2x by default");
+    assert_eq!(square_radii, [0.0; 4]);
+    assert_eq!(square[0] - rounded[0], 3.0, "1.5 points of pad at 2x on the left");
+    assert_eq!(rounded[2] - square[2], 6.0, "and on the right");
+}

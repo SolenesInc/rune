@@ -16,11 +16,11 @@ const CLAMPED_ROLES: [&str; 3] = ["list", "tree", "grid"];
 /// Roles whose pressable elements are Tab stops under `Cx::web_focus`, as HTML's buttons,
 /// links and form controls are, and the items of trees and grids, which a reader moves through
 /// by arrows once their group has focus (`El::focus_group` keeps the group one Tab stop).
-/// Roles F6 cycles between, as a browser's and Windows' pane navigation does.
+/// Roles F6 cycles between, as a browser's pane navigation does.
 const LANDMARK_ROLES: [&str; 6] = ["banner", "navigation", "main", "complementary", "form", "search"];
 const PRESSABLE_ROLES: [&str; 9] = ["button", "link", "tab", "checkbox", "switch", "radio", "combobox", "treeitem", "gridcell"];
 /// The innermost open modal and the nodes input may reach while it shows: its subtree, the
-/// popovers anchored inside it, and the window's caption buttons.
+/// and the popovers anchored inside it.
 pub(super) struct ModalScope {
     index: usize,
     members: Vec<bool>,
@@ -69,7 +69,45 @@ fn sync_input_focus(input: &mut crate::el::InputSpec, states: crate::states::Sta
     changed
 }
 
+/// Pushes focus on `path` into every field's editor and mirrors each editor back.
+fn sync_inputs_to(
+    nodes: &mut [Node],
+    virtual_inputs: &mut HashMap<String, Box<crate::el::InputSpec>>,
+    app: &mut dyn app_side::AppSide,
+    path: Option<&str>,
+) -> bool {
+    let mut changed = false;
+    for n in nodes {
+        if let Some(input) = &mut n.input {
+            changed |= sync_input_focus(input, app.states(), path == Some(n.path.as_str()));
+        }
+    }
+    for (p, input) in virtual_inputs {
+        changed |= sync_input_focus(input, app.states(), path == Some(p.as_str()));
+    }
+    changed
+}
+
+/// A handler's `Tx::blur` and `Tx::focus`. The commit applies both to the tree the handler's
+/// state builds: a field the handler ended is gone from it, so its edit accessor never runs.
+#[derive(Default)]
+pub(super) struct FocusRequest {
+    pub(super) blur: bool,
+    /// `Tx::focus`: the key to focus, and whether its ring shows.
+    pub(super) to: Option<(String, bool, crate::el::FocusAsk)>,
+}
+
 impl RuntimeCore {
+    fn blur_in(&mut self, nodes: &mut Vec<Node>) -> bool {
+        std::mem::swap(&mut self.nodes, nodes);
+        self.nodes_replaced();
+        let changed = self.set_focus(None, self.focus.keyboard());
+        std::mem::swap(&mut self.nodes, nodes);
+        self.nodes_replaced();
+        // An explicit blur is not the temporary pointer-down blur of a scrim.
+        self.focus.step(focus_machine::FocusEvent::Settled);
+        changed
+    }
     pub(super) fn active_modal(&self) -> Option<usize> {
         self.modal_scope.as_ref().map(|m| m.index)
     }
@@ -105,11 +143,7 @@ impl RuntimeCore {
             self.modal_scope = None;
             return;
         };
-        // The Windows caption buttons are the window's, not the view's: a modal in the view
-        // leaves them to the pointer and assistive technology, as the native ones are.
-        let caption = |n: &Node| n.key.as_deref() == Some(crate::titlebar::BUTTONS_KEY)
-            && n.parent.is_some_and(|p| self.nodes[p].key.as_deref() == Some(crate::titlebar::FRAME_KEY));
-        let mut members: Vec<bool> = self.nodes.iter().enumerate().map(|(i, n)| i >= index || caption(n)).collect();
+        let mut members: Vec<bool> = (0..self.nodes.len()).map(|i| i >= index).collect();
         // Portals are root siblings. Follow their anchor ownership, including chained
         // popovers, rather than requiring their layout parent to be the modal.
         loop {
@@ -293,14 +327,7 @@ impl RuntimeCore {
             self.clear_text_selection();
         }
         let mut changed = moved && self.physical_focus_lost();
-        for n in &mut self.nodes {
-            if let Some(input) = &mut n.input {
-                changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(n.path.as_str()));
-            }
-        }
-        for (p, input) in &mut self.virtual_inputs {
-            changed |= sync_input_focus(input, self.app.states(), path.as_deref() == Some(p.as_str()));
-        }
+        changed |= sync_inputs_to(&mut self.nodes, &mut self.virtual_inputs, self.app.as_mut(), path.as_deref());
         for effect in self.focus.step(focus_machine::FocusEvent::Set { path, keyboard }) {
             match effect {
                 focus_machine::FocusEffect::Moved => {
@@ -321,8 +348,20 @@ impl RuntimeCore {
         }
         changed
     }
+    /// Mirrors the runtime's focus into `nodes`, measured again after `sync_requested_focus`
+    /// synced the ones before them: a reused `memo` holds each field as it was built, before
+    /// focus moved.
+    pub(super) fn sync_measured_inputs(&mut self, nodes: &mut [Node]) {
+        let path = self.focus.path().map(str::to_owned);
+        sync_inputs_to(nodes, &mut self.virtual_inputs, self.app.as_mut(), path.as_deref());
+    }
     pub(super) fn sync_requested_focus(&mut self, nodes: &mut Vec<Node>) -> bool {
-        let asked = self.focus_request.take();
+        let unmounted = self.focus.path()
+            .filter(|p| !nodes.iter().any(|n| n.path == *p))
+            .and_then(|p| self.nodes.iter().position(|n| n.path == p))
+            .and_then(|at| self.nodes[at].focus.blur.clone().map(|blur| (at, blur)));
+        let FocusRequest { blur, to: asked } = std::mem::take(&mut self.focus_request);
+        let blurred = blur && self.blur_in(nodes);
         for old in &self.nodes {
             if let Some(input) = &old.input
                 && input.edit.focused
@@ -414,7 +453,7 @@ impl RuntimeCore {
         self.focus_returned = matches!(&asked, Some((p, _, crate::el::FocusAsk::Return)) if next.as_deref() == Some(p.as_str()));
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
-        let changed = self.set_focus(next, keyboard);
+        let changed = self.set_focus(next, keyboard) | blurred;
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
         if self.input_click.dragging_path().is_some_and(|p| !nodes.iter().any(|n| n.path == p && !n.inert && n.input.is_some())) {
@@ -428,7 +467,13 @@ impl RuntimeCore {
                 && !nodes.iter().any(|n| n.input.as_ref().is_some_and(|i| i.edit.matches_history(w)))
                 && !self.virtual_inputs.values().any(|i| i.edit.matches_history(w))
         });
-        changed
+        let remounted = |at: usize| self.nodes[at].input.as_ref().is_some_and(|old| {
+            nodes.iter().any(|n| self.focus.is(&n.path) && n.input.as_ref().is_some_and(|i| i.edit.same_model(&old.edit)))
+        });
+        match unmounted {
+            Some((at, blur)) if !remounted(at) => self.blur_unmounted(blur) | changed,
+            _ => changed,
+        }
     }
     /// Where focus goes when the element holding it leaves the tree or can't hold it anymore (a
     /// deleted row, a closed tab, a decided prompt, a pane closed under it) and nothing else
@@ -605,10 +650,11 @@ impl RuntimeCore {
                 Some(match ev.key {
                     Key::Home => 0, Key::End => items.len() - 1,
                     Key::PageUp | Key::PageDown => self.page_item(&items, pos, ev.key == Key::PageDown),
-                    // A highlight the user cannot see yet appears where it is (a popup's checked
-                    // item, else the first) before arrows move it; Up from nothing is the last.
-                    _ if self.nodes[i].focus.highlight.is_some() && !shown =>
-                        if backward && !self.nodes[i].focus.selected { items.len() - 1 } else { pos },
+                    // A highlight the user cannot see yet appears on the first item before arrows
+                    // move it; Up from nothing is the last. On a popup's checked item, which its
+                    // check mark already shows, arrows move at once (NSPopUpButton).
+                    _ if self.nodes[i].focus.highlight.is_some() && !shown && !self.nodes[i].focus.selected =>
+                        if backward { items.len() - 1 } else { pos },
                     _ if CLAMPED_ROLES.contains(&self.nodes[g].role) =>
                         if backward { pos.saturating_sub(1) } else { (pos + 1).min(items.len() - 1) },
                     _ if backward => (pos + items.len() - 1) % items.len(),
@@ -1054,11 +1100,11 @@ mod tests {
     }
 
     #[test]
-    fn a_hidden_highlight_appears_on_the_checked_item_or_from_the_end() {
+    fn arrows_move_from_a_checked_item_at_once_and_into_an_unchecked_menu_from_the_end() {
         let mut rt = menu_runtime(Menu { open: true, checked: Some(2), ..Default::default() });
         assert_eq!(focused(&rt), "Bravo", "a popup opens on its checked item");
         press(&mut rt, Key::Up);
-        assert_eq!(focused(&rt), "Bravo");
+        assert_eq!(focused(&rt), "Beta", "its check mark shows where Up starts");
         let mut rt = menu_runtime(Menu { open: true, ..Default::default() });
         press(&mut rt, Key::Up);
         assert_eq!(focused(&rt), "Charlie", "Up into an unchecked menu starts from the bottom");

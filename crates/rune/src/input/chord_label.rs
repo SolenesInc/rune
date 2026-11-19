@@ -6,7 +6,7 @@ use super::chord::{Chord, ChordKey, ChordMod, KeyPlatform};
 use crate::Key;
 
 /// Each modifier's names, the canonical one first, and its keycap on macOS and elsewhere, in
-/// the order `Display` writes them. Super's keycap reads "Win" on Windows.
+/// the order `Display` writes them.
 const MODS: &[(ChordMod, &[&str], &str, &str)] = &[
     (ChordMod::Primary, &["mod", "primary"], "⌘", "Ctrl"),
     (ChordMod::Ctrl, &["ctrl", "control"], "⌃", "Ctrl"),
@@ -65,7 +65,7 @@ pub(super) fn named(key: &Key) -> Option<ChordKey> {
 }
 
 impl Chord {
-    /// How the chord reads here: "⇧⌘T" on macOS, "Ctrl+Shift+T" on Windows and Linux.
+    /// How the chord reads here: "⇧⌘T" on macOS, "Ctrl+Shift+T" on Linux.
     pub fn label(&self) -> String { self.label_on(KeyPlatform::current()) }
 
     /// How the chord reads on `platform`: macOS glyphs run together in Apple's order
@@ -79,11 +79,7 @@ impl Chord {
         let mac = platform == KeyPlatform::Mac;
         let mut caps: Vec<String> = self.mods_on(platform).into_iter().map(|m| {
             let &(_, _, glyph, word) = MODS.iter().find(|row| row.0 == m).expect("every modifier has a row");
-            match (m, platform) {
-                (_, KeyPlatform::Mac) => glyph,
-                (ChordMod::Super, KeyPlatform::Windows) => "Win",
-                _ => word,
-            }.to_owned()
+            if mac { glyph } else { word }.to_owned()
         }).collect();
         caps.push(match self.key() {
             ChordKey::Char(' ') => "Space".into(),

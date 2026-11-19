@@ -30,6 +30,8 @@ pub struct ElementInfo {
     /// Additive blur culling margin in logical points, including scaled ancestor sigmas.
     /// Three times this value bounds filter support; it is not the equivalent Gaussian sigma.
     pub blur: f32,
+    /// How much it blurs what is drawn behind it ([`El::backdrop_blur`](crate::El::backdrop_blur)).
+    pub backdrop_blur: f32,
     pub radius: f32,
     pub fill: Color,
     pub text_color: Option<Color>,
@@ -75,6 +77,9 @@ pub struct ElementInfo {
     /// where scrolling put it this frame, in points: down for a stuck header, up for a stuck
     /// footer, right for a stuck left element, 0 when it isn't stuck. `rect` already includes it.
     pub stuck: f32,
+    /// For an element that draws pixels ([`El::pixels`](crate::El::pixels)), the size of the
+    /// sharpest level they hold ([`Pixels::sharpest`](crate::Pixels::sharpest)).
+    pub picture: Option<(u32, u32)>,
 }
 
 /// An element [`Runtime::element_at`] found.
@@ -171,7 +176,7 @@ impl RuntimeCore {
                 && v.fill.a == 0.0 && (v.border_width() == 0.0 || v.border().a == 0.0 && v.border_bottom.is_none_or(|c| c.a == 0.0))
                 && v.shadows.is_empty() && v.surface.is_none() && v.icon.is_none() && v.gradient.is_none() && v.radial.is_none()
                 && v.outline.is_none() && v.shape.is_none() && v.pixels.is_none() && v.effect.is_none()
-                && v.hover().a == 0.0 && v.press().a == 0.0
+                && !v.hovers() && v.press().a == 0.0
         }).map(|(_, n)| n.path.as_str()).collect()
     }
 
@@ -254,7 +259,7 @@ impl RuntimeCore {
                 if let Some(gi) = up(Some(i)).find(|&j| self.nodes[j].vis.group_opacity.is_some()) {
                     let group = up(self.nodes[gi].parent)
                         .map(|pi| &self.nodes[pi])
-                        .find(|g| g.vis.hover().a > 0.0 || g.vis_flags.hover_group());
+                        .find(|g| g.vis.hovers() || g.vis_flags.hover_group());
                     if group.and_then(|g| g.hover_motion()).is_some_and(|(e, x)| [e, x].iter().any(|a| matches!(a.curve, rune_motion::Curve::Instant))) {
                         live_intent |= 4 | 16;
                     }
@@ -300,7 +305,7 @@ impl RuntimeCore {
                     trace_name: n.trace_name,
                     trace_namespace: n.trace_namespace,
                     loop_phase: self.loops.get(&n.id).map(|l| {
-                        if self.reduced_motion && !matches!(n.looping.as_ref().map(|s| s.kind), Some(rune_motion::LoopKind::Sequence(_))) { 0.0 }
+                        if self.reduced_motion && !l.finite() { 0.0 }
                         else { l.phase(self.scene.store().node_time(n.id)) }
                     }),
                     focusable: self.can_focus(i),
@@ -322,6 +327,7 @@ impl RuntimeCore {
                     opacity: flight.map_or_else(|| self.inh_scratch.get(i).map_or(p.opacity, |h| h.opacity), |f| f.target_alpha),
                     scale: if flight.is_some() { 1.0 } else { self.inh_scratch.get(i).map_or(p.transform.scale.x, |h| h.scale) },
                     blur: if flight.is_some() { 0.0 } else { self.inh_scratch.get(i).map_or(p.blur, |h| h.blur) },
+                    backdrop_blur: n.vis.backdrop_blur,
                     radius: p.radius.0[0],
                     fill: self.color(n.id, P_FILL, n.vis.fill),
                     text_color: paint_tracks::text_color(n)
@@ -349,6 +355,7 @@ impl RuntimeCore {
                     expanded: n.a11y.expanded,
                     item_selected: n.focus.selected,
                     stuck: self.stuck.get(i).copied().unwrap_or(0.0),
+                    picture: n.vis.pixels.as_ref().and_then(crate::pixels::Pixels::sharpest),
                     virtual_extent: self.virtuals.contains_key(&n.path) && n.vis.fill.a == 0.0
                         && n.vis.border_width() == 0.0 && n.vis.shadows.is_empty() && n.text.is_none() && n.vis.icon.is_none(),
                 })
@@ -366,12 +373,12 @@ impl RuntimeCore {
                 focusable: false, focused: false, focus_visible: false, inert: true, exiting: false,
                 key: Some(path.clone()), path, role: "text", label: None, text: None,
                 rect: [r.x, r.y, r.w, r.h], target: [t.x, t.y, t.w, t.h],
-                opacity: f.source_alpha, scale: 1.0, blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None, strikes: Vec::new(),
+                opacity: f.source_alpha, scale: 1.0, blur: 0.0, backdrop_blur: 0.0, radius: 0.0, fill: Color::TRANSPARENT, text_color: None, strikes: Vec::new(),
                 hover: 0.0, press: 0.0, moving: true, parent: None,
                 visible: [r.x.max(c[0]), r.y.max(c[1]), (r.edges()[2].min(c[2]) - r.x.max(c[0])).max(0.0),
                     (r.edges()[3].min(c[3]) - r.y.max(c[1])).max(0.0)],
                 revealing: true, in_growing_row: false, scrolling: false, scrolled: [0.0; 2], virtual_extent: false, live_intent: 0, caret: None, drag_out: false,
-                help: None, selected: None, level: None, expanded: None, item_selected: false, stuck: 0.0,
+                help: None, selected: None, level: None, expanded: None, item_selected: false, stuck: 0.0, picture: None,
             });
         }
         self.link_elements(&mut elements);
@@ -480,16 +487,17 @@ impl RuntimeCore {
     }
 
     /// Whether window point (`x`, `y`), in points, is inside the drawn, clipped and turned box
-    /// of the element keyed `key`, whatever is drawn above it and whether or not it has handlers.
-    /// False when there is no such element, it is exiting or fully transparent. Same geometry
-    /// as [`Runtime::element_at`].
+    /// of the element `key` names, as [`Tx::scroll_into_view`](crate::Tx::scroll_into_view)
+    /// does (a key, a key path or a full path), whatever is drawn above it and whether or not it
+    /// has handlers. False when there is no such element, it is exiting or fully transparent.
+    /// Same geometry as [`Runtime::element_at`].
     pub fn contains(&self, key: &str, x: f32, y: f32) -> bool {
         self.contains_with(key, x, y, Pick::default())
     }
 
     /// [`Runtime::contains`] with options, as [`Runtime::element_at_with`].
     pub fn contains_with(&self, key: &str, x: f32, y: f32, pick: Pick) -> bool {
-        self.nodes.iter().position(|n| crate::flight::selects(key, &n.path, n.key.as_deref())).is_some_and(|i| self.pickable(i, x, y, pick))
+        self.nodes.iter().position(|n| n.path == key || crate::flight::selects(key, &n.path, n.key.as_deref())).is_some_and(|i| self.pickable(i, x, y, pick))
     }
 
     fn pickable(&self, i: usize, x: f32, y: f32, pick: Pick) -> bool {

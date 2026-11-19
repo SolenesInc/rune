@@ -198,6 +198,33 @@ fn ui_monospace_with_no_mono_font_falls_back_to_sans() {
     assert_eq!(names("monospace", &[]), ["Monospace"], "only ui-monospace falls back");
 }
 
+/// A named CSS list whose families are not installed falls back through its generic
+/// `monospace` or `ui-monospace` to the monospace font `Family::SystemMono` shapes with, not to
+/// the sans; a terminal's stack of mono fonts keeps a monospace cell on a machine with none of
+/// them.
+#[test]
+fn a_named_lists_generic_monospace_shapes_with_the_system_monospace_font() {
+    let font = |ts: &mut TextSystem, family| {
+        let mut ids = Vec::new();
+        runs(ts, "M", &[], TextStyle::new(14.0, 400.0).family(family), |_, font| ids.push((font.data.as_ptr() as usize, font.offset)));
+        ids
+    };
+    let mut ts = TextSystem::default();
+    if ts.system_mono().is_empty() {
+        eprintln!("skipping: no monospace font installed");
+        return;
+    }
+    let mono = font(&mut ts, Family::SystemMono);
+    let sans = font(&mut ts, Family::Sans);
+    assert_ne!(mono, sans);
+    for list in ["No Such Mono, \"Also Missing\", monospace", "No Such Mono, ui-monospace"] {
+        assert_eq!(font(&mut ts, Family::Named(list)), mono, "{list}");
+    }
+    let mut fresh = TextSystem::default();
+    let first = font(&mut fresh, Family::Named("No Such Mono, monospace"));
+    assert_eq!(first, font(&mut fresh, Family::SystemMono), "before anything else loads the system mono");
+}
+
 /// Each glyph run of `text` with the font it shaped with.
 fn runs(ts: &mut TextSystem, text: &str, spans: &[Span], style: TextStyle, mut f: impl FnMut(&parley::GlyphRun<'_, Ink>, FontRef<'_>)) {
     let layout = ts.layout_rich(text, spans, style, 2.0, None);
@@ -260,6 +287,7 @@ fn scripts_load_their_system_fonts_on_first_use() {
     ts.layout_rich("Hello, “café” — naïve…", &[], TextStyle::new(13.0, 400.0), 2.0, None);
     assert_eq!(ts.scripts, 0, "Latin text must not load script fallbacks");
     let samples = ["שלום עולם", "مرحبا بالعالم", "नमस्ते दुनिया", "ওহে বিশ্ব", "สวัสดีชาวโลก"];
+    let mut installed = 0;
     for (fonts, sample) in fallback::SCRIPT_FONTS.iter().zip(samples) {
         assert!(sample.chars().any(|ch| fonts.covers(ch)), "{sample} is not {:?}", fonts.script);
         if system_font_files(fonts.files).is_empty() {
@@ -268,8 +296,9 @@ fn scripts_load_their_system_fonts_on_first_use() {
         }
         let glyphs = faces(&mut ts, &format!("a {sample}"), &[], TextStyle::new(13.0, 400.0));
         assert!(glyphs.iter().all(|(_, id)| *id != 0), "tofu in {sample}: {glyphs:?}");
+        installed += 1;
     }
-    assert_eq!(ts.scripts.count_ones() as usize, fallback::SCRIPT_FONTS.len());
+    assert_eq!(ts.scripts.count_ones(), installed);
 }
 
 /// Fonts fontconfig knows outside the scanned directories (NixOS keeps them in its store) are
@@ -527,4 +556,27 @@ fn run_lookups_off_a_grapheme_start_find_nothing() {
     let mut rt = Runtime::new((), view, (200.0, 100.0), Env::new(true, 2.0));
     rt.frame(0.0);
     assert_eq!(rt.instances.iter().filter(|i| i.params[1] == crate::render::KIND_GLYPH).count(), 2);
+}
+
+/// A symbol whose default presentation is text (`⏺ ⏸`, Claude Code's bullet among them) takes
+/// a text font that has it, as Core Text gives AppKit and WebKit one, not the colour emoji
+/// font, which draws it untinted.
+#[test]
+fn text_default_symbols_take_a_text_font_before_the_colour_emoji_font() {
+    let mut ts = TextSystem::default();
+    ts.load_symbol_fonts();
+    let Some(emoji) = ts.emoji else {
+        eprintln!("skipping: no colour emoji font installed");
+        return;
+    };
+    if system_font_files(fallback::MATH_FONT_FILES).is_empty() {
+        eprintln!("skipping: no math font installed");
+        return;
+    }
+    for style in [TextStyle::new(13.0, 400.0), TextStyle::new(13.0, 400.0).mono()] {
+        for (family, id) in faces(&mut ts, "\u{23FA}\u{23F8}", &[], style) {
+            assert_ne!(id, 0, "missing symbol");
+            assert_ne!(family, emoji, "a text-default symbol drew from the colour emoji font");
+        }
+    }
 }

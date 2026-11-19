@@ -350,7 +350,7 @@ fn overlay_backoff_matches_dev_for_every_sequence() {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Platform { Mac, Windows, X11, Wayland }
+enum Platform { Mac, X11, Wayland }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind { Window, Layer }
@@ -440,7 +440,7 @@ impl DevSurface {
             }
             SurfaceOp::Park => {
                 if !matches!(self.live, Some((_, Kind::Window))) { return; }
-                if matches!(c.platform, Platform::Mac | Platform::Windows) {
+                if c.platform == Platform::Mac {
                     self.release();
                 } else {
                     let Some(live) = self.live.take() else { return };
@@ -529,7 +529,7 @@ impl Ours {
             }
             SurfaceOp::Park => {
                 if !matches!(self.surface.live(), Some((_, Kind::Window))) { return; }
-                if matches!(c.platform, Platform::Mac | Platform::Windows) {
+                if c.platform == Platform::Mac {
                     self.release();
                 } else {
                     let Some(live) = self.surface.take_live() else { return };
@@ -592,7 +592,7 @@ fn surface_matches_dev_for_every_sequence() {
     // Each failure leaves a different state, so the walk must reach all of them.
     let (mut parked_after_attach, mut live_after_rescale) = (0, 0);
     let (mut released_live, mut released_parked) = (0, 0);
-    for platform in [Platform::Mac, Platform::Windows, Platform::X11, Platform::Wayland] {
+    for platform in [Platform::Mac, Platform::X11, Platform::Wayland] {
         for (defers, callback) in [(false, false), (false, true), (true, false), (true, true)] {
             let c = Config { platform, defers, callback };
             walk(&alphabet, 5, |seq| {

@@ -34,6 +34,7 @@ pub struct Select {
     options: Vec<(Option<String>, String)>,
     details: Vec<Option<String>>,
     width: f32,
+    height: f32,
     current: Option<String>,
     placeholder: String,
     name: Option<String>,
@@ -55,6 +56,7 @@ impl Select {
             options: options.iter().map(|o| (None, o.as_ref().to_owned())).collect(),
             details: Vec::new(),
             width: 280.0,
+            height: 28.0,
             current: None,
             placeholder: String::new(),
             name: None,
@@ -83,6 +85,11 @@ impl Select {
     /// The field trigger's width in points (default 280).
     pub fn width(mut self, w: f32) -> Self {
         self.width = w;
+        self
+    }
+    /// The field trigger's height in points (default 28).
+    pub fn height(mut self, h: f32) -> Self {
+        self.height = h;
         self
     }
     pub fn current(mut self, c: Option<&str>) -> Self {
@@ -209,9 +216,9 @@ impl Select {
                 item = item.description(d);
             }
             if self.highlighted.as_deref() == Some(o.as_str()) {
-                item = item.fill(c.hover);
+                item = item.fill(c.surface_raised_hover);
             } else {
-                item = item.focus_highlight(c.hover);
+                item = item.focus_highlight(c.surface_raised_hover);
             }
             if let Some(f) = &self.choose {
                 item = f(o)(item);
@@ -251,7 +258,11 @@ impl Select {
             Some(v) => (v.clone(), if red { c.danger.fg } else { c.text_base }),
             None => (self.placeholder.clone(), if red { c.danger.fg } else { c.text_faint }),
         };
-        let chevron: &'static Icon = if self.open { k.glyph.chevron_up } else { k.glyph.chevron_down };
+        let chevron: &'static Icon = match k.glyph.select {
+            Some(indicator) => indicator,
+            None if self.open => k.glyph.chevron_up,
+            None => k.glyph.chevron_down,
+        };
         // Named for what it chooses, its value the chosen option; the text and chevron inside
         // show the same.
         let name = self.name.clone().unwrap_or_else(|| self.placeholder.clone());
@@ -288,7 +299,7 @@ impl Select {
             SelectAppearance::Field => {
                 let mut t = trigger
                     .w(self.width)
-                    .h(28.0)
+                    .h(self.height)
                     .pr(6.0)
                     .gap(8.0)
                     .radius(k.radius.md)

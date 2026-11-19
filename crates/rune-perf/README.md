@@ -27,8 +27,9 @@ state, writes files, takes a drawable, or asks for a frame. Full queues drop
 samples and count them. All directory creation, locking, sampling and JSON runs
 on one background thread. Drop is nonblocking; `shutdown` joins off-UI. A
 replacement waits for the previous writer's directory lock, and cancellation
-also interrupts this wait. Samples queued before cancellation can be lost if the
-writer has not acquired the lock; an active writer drains on shutdown.
+also interrupts this wait. Samples queued while a replacement waits are lost when
+it is cancelled; a writer that holds the lock, or takes it uncontended, drains on
+shutdown and writes `perf.json` when it recorded a frame.
 
 ## Hook contract
 
@@ -60,7 +61,9 @@ static ALLOCATOR: procwatch::alloc::Counting = procwatch::alloc::Counting::syste
 ```
 
 Use `procwatch::alloc::Counting::new(inner)` to wrap an allocator the binary
-already has. Pass `rune_perf::take_allocated_bytes()` with each report from the
+already has. A binary that records only on some runs installs
+`Counting::dormant(std::alloc::System)` and calls `ALLOCATOR.start()` before it
+starts the recorder, so other runs pay one relaxed load per allocation. Pass `rune_perf::take_allocated_bytes()` with each report from the
 UI thread. It returns the bytes this thread requested since its previous call:
 `None` without the counting allocator, and `None` on a thread's first call, which
 only sets the baseline. There is no per-thread enable. Traffic includes
@@ -73,7 +76,7 @@ other threads, native and GPU allocation, and does not mean retained heap.
 | --- | --- |
 | Pending samples | 256 fixed-size records |
 | Rolling history | 60 seconds and 600 reports |
-| Snapshot | Atomic `perf.json`, with each write of incidents, and at shutdown when the run wrote anything, 256 KiB max |
+| Snapshot | Atomic `perf.json`, with each write of incidents, and at shutdown when the run recorded a frame or wrote anything, 256 KiB max |
 | Anomaly logs | `perf.log` + `perf.log.1`, 4 MiB each, kept open for appending; ten frame lines/second, held in memory and written once 2 seconds pass with no new finding (and at shutdown) |
 | Process log | A line every 30 seconds while frames arrive, kept in memory (the last 20) and written only beside a finding |
 | Incidents | 16 reusable `perf-incident-NN.json` slots, 256 KiB each |

@@ -7,6 +7,10 @@
 //! static ALLOC: procwatch::alloc::Counting = procwatch::alloc::Counting::system();
 //! ```
 //!
+//! A binary that counts only on some runs installs it [`Counting::dormant`] and calls
+//! [`Counting::start`] on the runs that read the counters; until then each call is one relaxed
+//! load on the way to the inner allocator.
+//!
 //! Tags attribute heap to threads: `procwatch::alloc::tag_thread("audio")` at a thread's start
 //! counts what that thread allocates minus what it frees. A producer whose buffer is freed
 //! elsewhere still shows; that's the point.
@@ -15,12 +19,9 @@
 //! allocates nothing while other tests run in parallel. [`thread_allocated_bytes`] counts the
 //! bytes they asked for, for a per-frame allocation figure.
 
-#[cfg(feature = "alloc-sites")]
-pub mod sites;
-
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
-use std::sync::atomic::{AtomicI64, AtomicPtr, AtomicU64, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicPtr, AtomicU64, AtomicUsize, Ordering::{Acquire, Relaxed, Release}};
 
 /// A block at least this big counts as "big": a buffer worth naming in a warning.
 pub const BIG: usize = 64 << 20;
@@ -67,17 +68,34 @@ pub fn thread_allocated_bytes() -> Option<u64> {
 
 pub struct Counting<A = System> {
     inner: A,
+    counting: AtomicBool,
 }
 
 impl Counting<System> {
     pub const fn system() -> Self {
-        Counting { inner: System }
+        Counting::new(System)
     }
 }
 
 impl<A> Counting<A> {
     pub const fn new(inner: A) -> Self {
-        Counting { inner }
+        Counting { inner, counting: AtomicBool::new(true) }
+    }
+
+    /// Counts nothing until [`Counting::start`]: the counters read as unknown, as with no
+    /// counting allocator installed.
+    pub const fn dormant(inner: A) -> Self {
+        Counting { inner, counting: AtomicBool::new(false) }
+    }
+
+    /// Counts every request from now on. Heap figures then net out frees of blocks allocated
+    /// before, so `live` can read below what the process holds; traffic counts are exact.
+    pub fn start(&self) {
+        self.counting.store(true, Relaxed);
+    }
+
+    fn counts(&self) -> bool {
+        self.counting.load(Relaxed)
     }
 }
 
@@ -121,46 +139,44 @@ fn shrank(size: usize) {
 // SAFETY: every call goes straight to `inner`; the counters never touch the heap.
 unsafe impl<A: GlobalAlloc> GlobalAlloc for Counting<A> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.counts() {
+            return unsafe { self.inner.alloc(layout) };
+        }
         installed();
         let p = unsafe { self.inner.alloc(layout) };
         if !p.is_null() {
             counted(layout.size());
             grew(layout.size());
-            #[cfg(feature = "alloc-sites")]
-            sites::allocated(p, layout.size());
         }
         p
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        if !self.counts() {
+            return unsafe { self.inner.alloc_zeroed(layout) };
+        }
         installed();
         let p = unsafe { self.inner.alloc_zeroed(layout) };
         if !p.is_null() {
             counted(layout.size());
             grew(layout.size());
-            #[cfg(feature = "alloc-sites")]
-            sites::allocated(p, layout.size());
         }
         p
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        #[cfg(feature = "alloc-sites")]
-        sites::freed(ptr);
         unsafe { self.inner.dealloc(ptr, layout) };
-        shrank(layout.size());
+        if self.counts() {
+            shrank(layout.size());
+        }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        #[cfg(feature = "alloc-sites")]
-        sites::freed(ptr);
         let p = unsafe { self.inner.realloc(ptr, layout, new_size) };
-        if !p.is_null() {
+        if !p.is_null() && self.counts() {
             counted(new_size);
             shrank(layout.size());
             grew(new_size);
-            #[cfg(feature = "alloc-sites")]
-            sites::allocated(p, new_size);
         }
         p
     }

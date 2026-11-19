@@ -32,6 +32,9 @@ pub struct VisualCold {
     /// Soft clip of children to this rect: fade widths left, top, right, bottom. A negative
     /// width ramps linearly (`El::clip_fade_linear`).
     pub clip: Option<[f32; 4]>,
+    /// How far past the box the clip and its fades sit, left, top, right, bottom, in points
+    /// (`El::clip_outset`).
+    pub(crate) clip_outset: [f32; 4],
     /// Rounded clip of this element and its subtree, applied after subtree filters.
     pub clip_radius: Option<f32>,
     /// Per-corner clip radii override (`[tl, tr, br, bl]`, in points).
@@ -129,6 +132,7 @@ impl Empty for VisualCold {
         shadows: Vec::new(),
         blur_motion: None,
         clip: None,
+        clip_outset: [0.0; 4],
         clip_radius: None,
         clip_corners: None,
         cutout: None,
@@ -179,6 +183,7 @@ impl Empty for VisualCold {
 pub(crate) struct VisualBox {
     pub(crate) border: Color,
     pub(crate) hover: Color,
+    pub(crate) hover_border: Color,
     pub(crate) press: Color,
     /// Per-corner radii `[tl, tr, br, bl]`, read when `Visual::radius` is NaN.
     pub(crate) corners: [f32; 4],
@@ -189,6 +194,7 @@ impl Empty for VisualBox {
     const EMPTY: &'static Self = &VisualBox {
         border: Color::TRANSPARENT,
         hover: Color::TRANSPARENT,
+        hover_border: Color::TRANSPARENT,
         press: Color::TRANSPARENT,
         corners: [0.0; 4],
         border_width: 0.0,
@@ -250,6 +256,17 @@ impl Visual {
     }
 
     #[inline]
+    pub(crate) fn hover_border(&self) -> Color {
+        self.box_paint.hover_border
+    }
+
+    /// Whether the box changes its look under the pointer, so it owns a hover track.
+    #[inline]
+    pub(crate) fn hovers(&self) -> bool {
+        self.box_paint.hover.a > 0.0 || self.box_paint.hover_border.a > 0.0
+    }
+
+    #[inline]
     pub(crate) fn press(&self) -> Color {
         self.box_paint.press
     }
@@ -259,6 +276,14 @@ impl Visual {
     pub(crate) fn set_hover(&mut self, c: Color) {
         if c != Color::TRANSPARENT || !self.box_paint.is_empty() {
             self.box_paint_mut().hover = c;
+        }
+    }
+
+    /// Sets the hover border colour, allocating `box_paint` only for one that isn't the default.
+    #[inline]
+    pub(crate) fn set_hover_border(&mut self, c: Color) {
+        if c != Color::TRANSPARENT || !self.box_paint.is_empty() {
+            self.box_paint_mut().hover_border = c;
         }
     }
 
@@ -286,6 +311,15 @@ impl Visual {
             b.border_width = width;
             b.border = c;
         }
+    }
+}
+
+impl Visual {
+    /// The rectangle this element's clip covers: its box `r` (edges, device px) grown by its
+    /// [`El::clip_outset`](crate::El::clip_outset), at `k` device px per point.
+    pub(crate) fn clip_rect(&self, r: [f32; 4], k: f32) -> [f32; 4] {
+        let [l, t, rr, b] = self.clip_outset.map(|v| v * k);
+        [r[0] - l, r[1] - t, r[2] + rr, r[3] + b]
     }
 }
 

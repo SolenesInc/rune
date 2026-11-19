@@ -421,22 +421,272 @@ fn help_describes_unless_it_repeats_the_name_and_rows_point_at_their_active_desc
     assert_eq!(bad.invalid(), Some(accesskit::Invalid::True));
 }
 
+fn nested(_: &(), _: &mut Cx<()>) -> El {
+    let inner = col()
+        .key("inner")
+        .h(60.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().h(200.0))
+        .child(text("Deep").key("deep").h(20.0));
+    col()
+        .key("outer")
+        .h(200.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().h(600.0))
+        .child(inner)
+}
+
 #[test]
-fn updates_report_structure_and_motion_beyond_accesskit_events() {
-    let mut rt = Runtime::new(List { rows: 200 }, list, (300.0, 200.0), Env::new(true, 1.0));
+fn scroll_into_view_reveals_through_every_scroll_view_around_the_element() {
+    let mut rt = Runtime::new((), nested, (300.0, 200.0), Env::new(true, 1.0));
     for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_activate("List");
-    rt.a11y_update();
-    rt.update(|s, _| s.rows = 3);
+    let shown = |rt: &Runtime<()>| {
+        let e = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("deep")).unwrap();
+        e.visible[3]
+    };
+    assert_eq!(shown(&rt), 0.0, "the row starts out of view");
+
+    assert!(rt.accessibility_action("deep", Ak::ScrollIntoView, None));
     for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_update();
-    assert!(rt.a11y_changes().structure, "rows went");
-    rt.pointer_move(50.0, 50.0);
-    rt.update(|s, _| s.rows = 200);
+
+    assert_eq!(shown(&rt), 20.0, "the whole row shows in the window");
+}
+
+fn picker(_: &(), _: &mut Cx<()>) -> El {
+    col()
+        .key("roots")
+        .role("listbox")
+        .child(row().role("option").focusable(true).on_press(|_: &mut ()| {}).child(text("Notebook")))
+        .child(row().role("option").focusable(true).on_press(|_: &mut ()| {}).child(text("A")))
+}
+
+#[test]
+fn accessible_elements_name_an_unkeyed_element_by_the_role_and_name_the_tree_prints() {
+    let mut rt = Runtime::new((), picker, (300.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+
+    let option = rt.accessible_elements().into_iter()
+        .find(|e| e.role == "list-box-option" && e.name.as_deref() == Some("Notebook"))
+        .expect("the option, as the tree names it");
+
+    let element = rt.elements().into_iter().find(|e| e.path == option.path).expect("its element");
+    assert_eq!((element.role, element.key), ("option", None));
+}
+
+fn tall_section(_: &(), _: &mut Cx<()>) -> El {
+    col()
+        .h(200.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(col().key("section").child(col().h(600.0)).child(row().role("button").h(20.0).child(text("Save"))))
+}
+
+#[test]
+fn an_action_at_a_path_scrolls_an_unkeyed_element_into_view_inside_a_keyed_section_taller_than_its_scroll_view() {
+    let mut rt = Runtime::new((), tall_section, (300.0, 200.0), Env::new(true, 1.0));
     for _ in 0..4 { rt.frame(0.0); }
-    rt.a11y_update();
-    rt.wheel_event(crate::WheelEvent::new(0.0, -30.0).precise(true).at(50.0, 50.0));
-    rt.frame(1.0 / 60.0);
-    assert!(rt.a11y_update().is_some(), "a scroll sends its viewport");
-    assert!(rt.a11y_changes().moved, "a scroll moves boxes");
+    let save = rt.accessible_elements().into_iter()
+        .find(|e| e.role == "button" && e.name.as_deref() == Some("Save"))
+        .expect("the button")
+        .path;
+    let shown = |rt: &Runtime<()>| rt.elements().into_iter().find(|e| e.path == save).unwrap().visible[3];
+    assert_eq!(shown(&rt), 0.0, "the button starts out of view");
+
+    assert!(rt.accessibility_action_at(&save, Ak::ScrollIntoView, None));
+    for _ in 0..4 { rt.frame(0.0); }
+
+    assert_eq!(shown(&rt), 20.0, "the whole button shows");
+}
+
+#[test]
+fn an_action_at_a_link_s_path_reaches_the_link() {
+    let mut rt = Runtime::new(false, |_: &bool, _: &mut Cx<bool>| {
+        text("Continue from the receipt.")
+            .link(crate::Link::new(14..25, "s-receipt"))
+            .on_link(|followed: &mut bool, _: &str, _: &mut crate::Tx| *followed = true)
+    }, (300.0, 40.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let link = rt.accessible_elements().into_iter().find(|e| e.role == "link").expect("the link");
+    assert_eq!(link.name.as_deref(), Some("the receipt"));
+    assert!(rt.elements().iter().any(|e| e.path == link.path), "{} is an element", link.path);
+
+    assert!(rt.accessibility_action_at(&link.path, Ak::Click, None));
+    rt.frame(0.016);
+    assert!(*rt.state(), "the link was followed");
+}
+
+#[test]
+fn contains_names_an_unkeyed_element_by_its_path() {
+    let mut rt = Runtime::new((), tall_section, (300.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let spacer = rt.elements().into_iter().find(|e| e.key.is_none() && e.rect[3] == 600.0).expect("the spacer");
+
+    assert!(rt.contains(&spacer.path, 10.0, 10.0));
+    assert!(!rt.contains(&spacer.path, 10.0, 250.0), "outside the window's clip");
+}
+
+#[test]
+fn an_element_that_holds_keys_is_the_focus_while_nothing_has_keyboard_focus() {
+    struct S { doc: bool, field: TextEdit }
+    let mut rt = Runtime::new(S { doc: true, field: TextEdit::new("") }, |s: &S, _: &mut Cx<S>| {
+        col()
+            .child(col().key("doc").role("document").label("Plan").holds_keys(s.doc).active_descendant("p2")
+                .child(text("One").key("p1"))
+                .child(text("Two").key("p2")))
+            .child(text_input(&s.field, crate::tok::type_::BODY).key("field").label("Find").on_edit(|s: &mut S| &mut s.field))
+    }, (400.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let focus = |rt: &mut Runtime<S>| {
+        let id = rt.a11y_update().expect("the focus moved").focus;
+        let tree = rt.accessibility_tree();
+        tree.nodes.iter().find(|(n, _)| *n == id).and_then(|(_, n)| n.author_id().map(str::to_owned))
+    };
+    let tree = rt.accessibility_json();
+    assert!(states(find(&tree, "doc").unwrap()).contains(&"focused"), "{tree}");
+    assert_eq!(find(&tree, "doc").unwrap()["activeDescendant"], "p2");
+    rt.a11y_activate("Window");
+    assert_eq!(focus(&mut rt).as_deref(), Some("doc"));
+
+    rt.update(|s, _| s.field.focused = true);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt).as_deref(), Some("field"), "keyboard focus comes first");
+
+    rt.update(|s, _| s.field.focused = false);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt).as_deref(), Some("doc"));
+
+    rt.update(|s, _| s.doc = false);
+    rt.frame(0.0);
+    assert_eq!(focus(&mut rt), None, "the window itself, once nothing holds keys");
+}
+
+#[test]
+fn an_editor_that_draws_its_own_text_is_a_text_area_with_lines_and_a_caret() {
+    struct Doc { text: String, caret: usize }
+    let mut rt = Runtime::new(Doc { text: "# Plan\nship it\n".into(), caret: 2 }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret, Vec::new())
+            .child(text(s.text.lines().next().unwrap_or("")).key("row")))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let editor = |rt: &Runtime<Doc>| {
+        let tree = rt.accessibility_tree();
+        let (_, n) = tree.nodes.iter().find(|(_, n)| n.author_id() == Some("editor")).expect("the editor is in the tree").clone();
+        let runs: Vec<(accesskit::NodeId, String, usize, Vec<u8>)> = n.children().iter().filter_map(|c| tree.nodes.iter().find(|(id, _)| id == c))
+            .filter(|(_, r)| r.role() == Role::TextRun)
+            .map(|(id, r)| (*id, r.value().unwrap_or("").to_owned(), r.character_lengths().len(), r.word_starts().to_vec())).collect();
+        (n, runs)
+    };
+    let (node, runs) = editor(&rt);
+    assert_eq!(node.role(), Role::MultilineTextInput);
+    assert_eq!(node.label(), Some("Note"));
+    assert_eq!(node.value(), Some("# Plan\nship it\n"));
+    assert_eq!(runs.iter().map(|r| (r.1.as_str(), r.2)).collect::<Vec<_>>(), [("# Plan\n", 7), ("ship it\n", 8), ("", 0)]);
+    assert_eq!(runs[1].3, [0, 5], "words start at each letter after a non-letter");
+    let at = |sel: &accesskit::TextSelection| (sel.focus.node, sel.focus.character_index);
+    assert_eq!(at(node.text_selection().expect("a caret")), (runs[0].0, 2));
+
+    rt.update(|s, _| s.caret = 12);
+    rt.frame(0.0);
+    let (node, runs) = editor(&rt);
+    assert_eq!(at(node.text_selection().unwrap()), (runs[1].0, 5), "the caret moved to the second line");
+
+    rt.update(|s, _| { s.text.push('x'); s.caret = s.text.len(); });
+    rt.frame(0.0);
+    let (node, runs) = editor(&rt);
+    assert_eq!(node.value(), Some("# Plan\nship it\nx"), "typing reaches the value");
+    assert_eq!(at(node.text_selection().unwrap()), (runs[2].0, 1));
+}
+
+/// The line and the word around the caret of the element keyed `key`, as a screen reader's
+/// adapter reads them from the tree.
+fn line_and_word_at_caret<S: 'static>(rt: &Runtime<S>, key: &str) -> (String, String) {
+    let tree = accesskit_consumer::Tree::new(rt.accessibility_tree(), true);
+    let state = tree.state();
+    fn keyed<'a>(n: accesskit_consumer::NodeRef<'a>, key: &str) -> Option<accesskit_consumer::NodeRef<'a>> {
+        if n.author_id() == Some(key) { return Some(n); }
+        n.children().find_map(|c| keyed(c, key))
+    }
+    let node = keyed(state.root(), key).expect("keyed node");
+    let caret = node.text_selection_focus().expect("a caret");
+    let line = node.line_range_from_index(caret.to_line_index()).expect("the caret's line").text();
+    let mut word = node.document_range();
+    word.set_end(caret.forward_to_word_end());
+    word.set_start(caret.backward_to_word_start());
+    (line, word.text().trim_end().to_owned())
+}
+
+#[test]
+fn an_editor_that_draws_its_own_text_reads_each_wrapped_line_as_a_line() {
+    struct Doc { caret: usize }
+    let mut rt = Runtime::new(Doc { caret: 2 }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text("alpha beta gamma\ndelta", s.caret, s.caret, vec![6, 11]))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor").0, "alpha ");
+    rt.update(|s, _| s.caret = 8);
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor"), ("beta ".to_owned(), "beta".to_owned()), "the caret's drawn line, not its paragraph");
+    rt.update(|s, _| s.caret = 11);
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor").0, "gamma\n", "a caret at a wrap stands at the start of the line after it");
+}
+
+#[test]
+fn a_word_past_a_line_s_255th_character_is_read_as_that_word() {
+    let words: Vec<String> = (0..100).map(|k| format!("w{k:03}")).collect();
+    let line = words.join(" ");
+    let caret = line.find("w070").unwrap() + 2;
+    assert!(caret > 255);
+
+    struct Doc { text: String, caret: usize }
+    let mut rt = Runtime::new(Doc { text: line.clone(), caret }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret, Vec::new()))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor"), (line.clone(), "w070".to_owned()), "drawn text");
+
+    let mut edit = TextEdit::new(line.as_str());
+    edit.focused = true;
+    edit.set_caret(caret);
+    let mut rt = Runtime::new(Field { edit }, |s: &Field, _: &mut Cx<Field>| {
+        col().child(text_input(&s.edit, crate::tok::type_::BODY).key("note").single_line().w(4000.0).on_edit(|s: &mut Field| &mut s.edit))
+    }, (4200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "note"), (line, "w070".to_owned()), "a field");
+}
+
+#[test]
+fn a_terminal_reads_its_screen_only_while_the_tree_is_read_and_again_when_it_says_it_changed() {
+    struct Term { screen: String, reads: std::cell::Cell<u32> }
+    let mut rt = Runtime::new(Term { screen: "$ ".into(), reads: Default::default() }, |_: &Term, _: &mut Cx<Term>| {
+        col().child(crate::el().key("term").role("terminal").label("Shell").holds_keys(true).size(200.0, 100.0)
+            .a11y_text_from(|s: &Term| {
+                s.reads.set(s.reads.get() + 1);
+                Some(crate::DrawnText { text: s.screen.clone(), anchor: s.screen.len(), focus: s.screen.len(), wraps: Vec::new() })
+            }))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(rt.state().reads.get(), 0, "no client, no screen text");
+
+    rt.a11y_activate("Window");
+    let full = rt.a11y_update().expect("first update after activation");
+    let term = full.nodes.iter().find(|(_, n)| n.author_id() == Some("term")).map(|(_, n)| n.clone()).expect("the terminal is in the tree");
+    assert_eq!(term.role(), Role::Terminal);
+    assert_eq!(term.value(), Some("$ "));
+    assert_eq!(full.nodes.iter().find(|(id, _)| *id == full.focus).and_then(|(_, n)| n.author_id()), Some("term"), "the terminal holds the keys");
+
+    let commits = rt.stats.commits;
+    rt.state_mut().screen.push_str("echo hello\nhello\n$ ");
+    rt.a11y_text_changed();
+    rt.frame(1.0);
+    assert_eq!(rt.stats.commits, commits, "output does not run the view");
+    let update = rt.a11y_update().expect("the screen changed");
+    let term = update.nodes.iter().find(|(_, n)| n.author_id() == Some("term")).map(|(_, n)| n.clone()).expect("the terminal is sent again");
+    assert_eq!(term.value(), Some("$ echo hello\nhello\n$ "));
+    let lines: Vec<&str> = update.nodes.iter().filter(|(_, n)| n.role() == Role::TextRun).filter_map(|(_, n)| n.value()).collect();
+    assert_eq!(lines, ["$ echo hello\n", "hello\n", "$ "]);
+
+    let reads = rt.state().reads.get();
+    rt.frame(2.0);
+    assert!(rt.a11y_update().is_none(), "nothing changed");
+    assert_eq!(rt.state().reads.get(), reads, "an idle frame reads no screen text");
 }

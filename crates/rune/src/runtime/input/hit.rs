@@ -167,7 +167,7 @@ impl RuntimeCore {
         let mut p = n.parent;
         while let Some(a) = p {
             if self.subtree_exiting(a) || !self.pointer_allowed(a) || self.nodes[a].handlers.modal.is_some() { break; }
-            if handles(&self.nodes[a]) { return Some(a); }
+            if handles(&self.nodes[a]) || self.nodes[a].handlers.get().is_some_and(|h| h.on_press_within.is_some()) { return Some(a); }
             p = self.nodes[a].parent;
         }
         Some(i)

@@ -242,13 +242,6 @@ impl<T: 'static> Overlay<T> {
         let (mut config, translucent) = crate::window::surface_config(&surface, &gpu.adapter, (w, h), self.rt.srgb_blend())?;
         match translucent {
             Some(mode) => config.alpha_mode = mode,
-            // Windows composites an overlay's pixels only through DirectComposition; drawn
-            // opaque on its window they never show.
-            None if cfg!(target_os = "windows") => {
-                let info = gpu.adapter.get_info();
-                self.fail(format!("{:?} on {} can't composite transparent pixels; Windows overlays need DX12 with DirectComposition", info.backend, info.name));
-                return None;
-            }
             None => eprintln!("transparency unavailable for overlay {}; drawing it opaque", self.name),
         }
         let info = gpu.adapter.get_info();
@@ -360,8 +353,6 @@ impl<T: 'static> Overlay<T> {
         };
         #[cfg(target_os = "macos")]
         self.panel.take();
-        #[cfg(target_os = "windows")]
-        self.native.take();
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         self.x11.take();
         drop(backing);

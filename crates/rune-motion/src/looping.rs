@@ -6,7 +6,8 @@ pub enum LoopKind {
     Opacity { low: f32, high: f32 },
     /// Piecewise-linear, wall-clock opacity with a bounded frame rate.
     OpacityCycle(Cycle),
-    /// Finite opacity/scale choreography; holds its last pose at rest.
+    /// Opacity/scale choreography. A one-shot sequence holds its last pose at rest; a
+    /// repeating one is periodic.
     Sequence(Sequence),
     Rotation,
     /// An eased one-way sweep that wraps, in fractions of the node's own size (an
@@ -76,9 +77,9 @@ impl LoopTrack {
         Self { spec, phase: Phase::Playing { since: now + spec.delay }, phase0: 0.0,
             amplitude: Animated::new(1.0).with_class(PropClass::Opacity) }
     }
-    /// Whether this track has an end: a finite sequence plays once and then rests.
-    fn finite(&self) -> bool {
-        matches!(self.spec.kind, LoopKind::Sequence(_))
+    /// Whether this track has an end: a one-shot sequence plays once and then rests.
+    pub fn finite(&self) -> bool {
+        matches!(self.spec.kind, LoopKind::Sequence(s) if !s.repeats)
     }
     pub fn phase(&self, now: f64) -> f64 {
         let since = match self.phase {
@@ -95,7 +96,7 @@ impl LoopTrack {
     pub fn retime(&mut self, spec: LoopSpec, now: f64) {
         assert!(spec.period.is_finite() && spec.period > 0.0);
         if self.spec == spec { return; }
-        if self.finite() || matches!(spec.kind, LoopKind::Sequence(_)) {
+        if self.finite() || matches!(spec.kind, LoopKind::Sequence(s) if !s.repeats) {
             *self = Self::new(spec, now);
             return;
         }
@@ -183,6 +184,11 @@ impl LoopTrack {
     }
     pub fn pose(&self, now: f64, reduced: bool) -> Option<Beat> {
         let LoopKind::Sequence(frames) = self.spec.kind else { return None };
+        if frames.repeats {
+            let beat = frames.sample(if reduced { 0.0 } else { self.phase(now) * frames.duration() });
+            let a = self.amplitude.sample(now);
+            return Some(Beat { opacity: 1.0 + (beat.opacity - 1.0) * a, scale: 1.0 + (beat.scale - 1.0) * a, ..beat });
+        }
         let at = if reduced || self.phase == Phase::Done { frames.duration() } else { self.phase(now) * frames.duration() };
         Some(frames.sample(at))
     }
@@ -215,6 +221,38 @@ mod tests {
         assert!(!track.active(4.35));
         assert_eq!(track.pending_start(4.0), None);
         assert_eq!(track.pose(4.35, false).unwrap().scale, 1.0);
+    }
+    #[test]
+    fn a_repeating_sequence_plays_again_from_its_first_pose_holds_it_reduced_and_cools_to_rest() {
+        const BOUNCE: &[Beat] = &[
+            Beat::new(0.0).opacity(0.5).scale(0.6),
+            Beat::new(0.56).easing(Easing::LINEAR),
+            Beat::new(1.12).opacity(0.5).scale(0.6).easing(Easing::LINEAR),
+            Beat::new(1.4).opacity(0.5).scale(0.6),
+        ];
+        let spec = LoopSpec::sequence(Sequence::new(BOUNCE).delay(0.32).repeat());
+        let mut t = LoopTrack::new(spec, 0.0);
+        assert_eq!(t.pending_start(0.0), Some(0.32));
+        let at = |t: &LoopTrack, now: f64| t.pose(now, false).unwrap();
+        assert!((at(&t, 0.32 + 0.56).scale - 1.0).abs() < 1e-5, "peaks 40% in");
+        assert!((at(&t, 0.32 + 0.28).scale - 0.8).abs() < 1e-5);
+        for lap in 1..4 {
+            let now = 0.32 + lap as f64 * 1.4 + 0.28;
+            assert!((at(&t, now).scale - 0.8).abs() < 1e-4, "lap {lap} plays the same poses");
+            assert!((at(&t, now).opacity - 0.75).abs() < 1e-4);
+            assert!(t.active(now), "and keeps asking for frames");
+        }
+        t.finish();
+        assert!(t.active(10.0), "settling leaves a repeating sequence playing");
+        assert_eq!(t.pose(10.0, true).unwrap().scale, 0.6, "reduced motion holds the first pose");
+        t.retime(spec, 10.0);
+        let before = at(&t, 10.0);
+        t.enabled(true, 10.0);
+        assert_eq!(at(&t, 10.0), before, "rebuilding the same element keeps its place");
+        t.enabled(false, 10.0);
+        assert!(!t.active(20.0));
+        let rest = at(&t, 20.0);
+        assert!((rest.scale - 1.0).abs() < 1e-4 && (rest.opacity - 1.0).abs() < 1e-4, "cooled to rest: {rest:?}");
     }
     #[test]
     fn a_finished_sequence_rests_until_cooled_and_enabled_again() {

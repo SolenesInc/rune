@@ -226,6 +226,11 @@ impl RuntimeCore {
         matches!(self.help.state, Tip::Waiting { since, .. } if self.clock + 1e-6 < since + self.help_delays().open) || self.tooltip_fading()
     }
 
+    /// A tooltip waits to open, which only a paint does, or fades in or out.
+    pub(super) fn tooltip_unsettled(&self) -> bool {
+        matches!(self.help.state, Tip::Waiting { .. }) || self.tooltip_fading()
+    }
+
     /// The open tooltip fades in, or a closed one fades out, so frames keep coming.
     fn tooltip_fading(&self) -> bool {
         let look = self.help_look();

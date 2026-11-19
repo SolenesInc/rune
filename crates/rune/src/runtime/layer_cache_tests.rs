@@ -839,6 +839,7 @@ fn live_scale_zoom_sweep_buckets_during_motion_and_settles_crisp() {
     }
     let zoom = Live::new(1.0);
     let mut rt = Runtime::new(zoom.clone(), view, (300.0, 120.0), Env::new(true, 2.0));
+    rt.set_font_smoothing(crate::FontSmoothing::On);
     rt.frame(0.0);
     let per_size = rt.text.atlas.rasterized();
     assert!(per_size >= 10);

@@ -65,3 +65,15 @@ fn a_missing_window_is_created() {
     assert_eq!(effects(Reveal::Show, Found::Missing), [ReadSystem, Create]);
     assert_eq!(effects(Reveal::Open, Found::Missing), [ReadSystem, Create]);
 }
+
+#[test]
+fn show_key_shows_as_show_does_then_takes_the_keys_without_activating() {
+    for found in [HIDDEN, SHOWN, COVERED, MINIMIZED] {
+        let show = effects(Reveal::Show, found);
+        let key = effects(Reveal::Key, found);
+        let (redraw, before) = show.split_last().unwrap();
+        assert_eq!(key, [before, &[MakeKey, *redraw]].concat(), "{found:?}");
+        assert!(!key.contains(&Focus), "only open activates the app: {found:?}");
+    }
+    assert_eq!(effects(Reveal::Key, Found::Missing), [ReadSystem, Create, MakeKey]);
+}

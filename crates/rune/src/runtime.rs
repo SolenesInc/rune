@@ -84,6 +84,8 @@ mod drag_out_host;
 mod exit_mask;
 #[path = "runtime/paint/raster_check.rs"]
 mod raster_check;
+#[path = "runtime/paint/kept_paint.rs"]
+mod kept_paint;
 #[path = "runtime/font_families.rs"]
 mod font_families;
 #[path = "runtime/key_index.rs"]
@@ -106,7 +108,7 @@ mod focus_machine;
 mod modal_focus;
 #[path = "runtime/input/physical.rs"]
 mod physical_dispatch;
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(unused_imports))]
+#[cfg_attr(not(target_os = "macos"), allow(unused_imports))]
 pub(crate) use physical_dispatch::Unhandled;
 #[path = "runtime/input/modifier_keys.rs"]
 mod modifier_keys;
@@ -223,7 +225,6 @@ mod press_run;
 mod press_repeat;
 #[path = "runtime/input/titlebar.rs"]
 mod titlebar;
-pub(crate) use titlebar::WindowMenu;
 #[path = "runtime/window_requests.rs"]
 mod window_requests;
 #[path = "runtime/paint/tracks.rs"]
@@ -253,6 +254,9 @@ pub(crate) use scroll_offset::ScrollRequest;
 pub(crate) use reveal::ScrollReveal;
 pub use selectable::{SelectedText, SelectionChange, TextSelection};
 #[cfg(test)]
+#[path = "runtime/clip_outset_tests.rs"]
+mod clip_outset_tests;
+#[cfg(test)]
 #[path = "runtime/timer_wake_tests.rs"]
 mod timer_wake_tests;
 #[cfg(test)]
@@ -270,6 +274,9 @@ mod aspect_fit_tests;
 #[cfg(test)]
 #[path = "runtime/anchor_fit_tests.rs"]
 mod anchor_fit_tests;
+#[cfg(test)]
+#[path = "runtime/anchor_over_tests.rs"]
+mod anchor_over_tests;
 #[cfg(test)]
 #[path = "drop_tests.rs"]
 mod drop_tests;
@@ -320,10 +327,14 @@ use text_layout::*;
 #[path = "runtime/commit/flatten.rs"]
 mod flatten;
 use flatten::*;
+#[path = "runtime/commit/scroll_room.rs"]
+mod scroll_room;
 #[path = "runtime/commit/memo_reuse.rs"]
 pub(crate) mod memo_reuse;
 #[path = "runtime/commit/measure.rs"]
 mod measure;
+#[path = "runtime/commit/on_measure.rs"]
+mod on_measure;
 #[path = "runtime/commit/apply.rs"]
 mod apply;
 #[path = "runtime/commit/apply_scratch.rs"]
@@ -351,6 +362,7 @@ mod content_slide;
 mod elements;
 #[path = "a11y/tree.rs"]
 pub(crate) mod a11y_tree;
+pub use a11y_tree::AccessibleElement;
 #[path = "a11y/node.rs"]
 mod a11y_node;
 #[path = "a11y/text.rs"]
@@ -376,6 +388,8 @@ mod paint_content;
 mod hit;
 #[path = "runtime/paint/build.rs"]
 mod build;
+#[path = "runtime/input/heard.rs"]
+mod heard;
 #[path = "runtime/input/keys.rs"]
 mod keys;
 #[path = "runtime/input/pointer.rs"]
@@ -480,6 +494,10 @@ pub struct RuntimeCore {
     secondary: capture::Secondary,
     drag_data: f32,
     pub instances: Vec<Instance>,
+    /// The paths of the backdrop blurs (`El::backdrop_blur`) the last frame painted inside an
+    /// ancestor drawn as one layer, or under an ancestor whose opacity is moving, which a fade
+    /// draws as one: each blurs only what that layer has drawn, not the window behind it.
+    pub layered_backdrop_blurs: Vec<String>,
     /// Per instance, the `El::mark` of its nearest marked node (0 for none). Filled only while
     /// `track_marks` is set (a compositor is attached).
     pub marks: Vec<u32>,
@@ -624,8 +642,8 @@ pub struct RuntimeCore {
     /// Focus when the running commit began, before a new view's focus request applied: what a
     /// modal that opens in this commit returns focus to.
     focus_before_commit: Option<String>,
-    /// `Tx::focus`: the key the next commit focuses, and whether its ring shows.
-    focus_request: Option<(String, bool, crate::el::FocusAsk)>,
+    /// `Tx::blur` and `Tx::focus`, which the next commit applies to the tree its state builds.
+    focus_request: focus::FocusRequest,
     /// This commit's focus is a `Tx::return_focus` hand-back, which a modal opening in it
     /// doesn't take as where focus was.
     focus_returned: bool,
@@ -662,6 +680,9 @@ pub struct RuntimeCore {
     pub ime_area: Option<[f32; 4]>,
     /// The `El::ime_cursor` that has the input method asks for Option as Alt (`El::ime_option_as_alt`).
     pub(crate) ime_option_as_alt: bool,
+    /// The `El::ime_cursor_at` element that has the input method: its drawn rect in device
+    /// pixels and the caret within it, which a frame that keeps its paint places again.
+    ime_anchor: Option<([f32; 4], crate::live::Live<[f32; 4]>)>,
     /// The focused field's caret (path, window rect) the next view sees through `Cx::caret`.
     caret: Option<(String, [f32; 4])>,
     /// The last view read the caret, so it re-runs when the caret moves.
@@ -670,6 +691,9 @@ pub struct RuntimeCore {
     layout_seen: layout_read::LayoutSeen,
     /// Rect last sent to each element's `El::on_layout`.
     layout_fired: HashMap<NodeId, [f32; 4]>,
+    /// Rect last sent to each element's `El::on_measure`, by path: a commit's passes run it
+    /// before their nodes have the ids the scene gives them.
+    measure_fired: HashMap<String, [f32; 4]>,
     /// Rect last sent to each element's `El::on_screen_layout`.
     screen_fired: HashMap<NodeId, [f32; 4]>,
     /// (Drawn rect, laid-out rect) last sent to each element's `El::on_drawn_layout`.
@@ -738,6 +762,8 @@ pub struct RuntimeCore {
     pub(crate) window_title: window_requests::Title,
     /// `Tx::announce`'s last words, for the accessibility tree's live region.
     pub(crate) announcement: crate::a11y::Announcement,
+    /// Counts `Runtime::a11y_text_changed`, for the accessibility tree's stamp.
+    pub(crate) a11y_text_changes: u64,
     /// The window's height follows the root's natural height (`App::fit_content_height`).
     pub(crate) fit_height: bool,
     /// The height a window that fits its content last asked for, and the frame its move
@@ -756,6 +782,8 @@ pub struct RuntimeCore {
     pub animating: bool,
     /// Why the last frame was animating, as [`AnimSource`] bits, for traces.
     pub(crate) anim_sources: u16,
+    /// The last paint and what it was built from: a frame at rest that changes nothing keeps it.
+    pub(crate) last_paint: kept_paint::LastPaint,
     /// Why this frame committed, as [`commit_why::CommitWhy`] bits, until the frame log takes them.
     pub(crate) commit_why: u16,
     /// Each node's place in the paint order, kept by the frame build while `Some` (the motion
@@ -889,6 +917,7 @@ impl RuntimeCore {
             secondary: Default::default(),
             drag_data: 0.0,
             instances: Vec::new(),
+            layered_backdrop_blurs: Vec::new(),
             marks: Vec::new(),
             track_marks: false,
             surfaces: Vec::new(),
@@ -973,7 +1002,7 @@ impl RuntimeCore {
             tab_visits_controls: false,
             modal_focus: modal_focus::ModalFocus::Closed,
             focus_before_commit: None,
-            focus_request: None,
+            focus_request: focus::FocusRequest::default(),
             focus_returned: false,
             unmounted_focused: Vec::new(),
             modal_scope: None,
@@ -993,10 +1022,12 @@ impl RuntimeCore {
             file_drag: Default::default(),
             ime_area: None,
             ime_option_as_alt: false,
+            ime_anchor: None,
             caret: None,
             caret_watch: false,
             layout_seen: Default::default(),
             layout_fired: HashMap::default(),
+            measure_fired: HashMap::default(),
             screen_fired: HashMap::default(),
             drawn_fired: HashMap::default(),
             visible_fired: HashMap::default(),
@@ -1033,6 +1064,7 @@ impl RuntimeCore {
             window_frame: None,
             window_title: Default::default(),
             announcement: Default::default(),
+            a11y_text_changes: 0,
             fit_height: false,
             fit: Default::default(),
             page: None,
@@ -1041,6 +1073,7 @@ impl RuntimeCore {
             motion_needs_cause: false,
             animating: false,
             anim_sources: 0,
+            last_paint: Default::default(),
             commit_why: 0,
             paint_rank: None,
             icon_aprons: Vec::new(),

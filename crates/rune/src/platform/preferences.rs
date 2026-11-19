@@ -14,14 +14,6 @@ pub(crate) fn reduced_motion() -> bool {
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) fn reduced_motion() -> bool {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETCLIENTAREAANIMATION};
-    let mut animations: i32 = 1;
-    // SAFETY: this SPI writes one BOOL to a valid, aligned local variable.
-    unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&mut animations as *mut i32).cast(), 0) != 0 && animations == 0 }
-}
-
 #[cfg(target_os = "linux")]
 pub(crate) fn reduced_motion() -> bool {
     // KDE exposes animation duration in kdeglobals; zero disables animation.
@@ -69,7 +61,7 @@ unsafe fn gnome_animations() -> Option<bool> {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub(crate) fn reduced_motion() -> bool { false }
 
 /// The desktop's light or dark preference where winit reports none (Linux: the XDG desktop
@@ -98,7 +90,7 @@ pub(crate) fn window_dark(window: &std::sync::Arc<winit::window::Window>, theme:
 }
 
 /// macOS "Keyboard navigation" (Full Keyboard Access): when off, Tab visits only text fields
-/// and lists, as in AppKit. Windows and Linux always Tab through every control.
+/// and lists, as in AppKit. Linux always Tabs through every control.
 #[cfg(target_os = "macos")]
 pub(crate) fn full_keyboard_access() -> bool {
     use objc2::{class, msg_send};

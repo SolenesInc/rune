@@ -33,6 +33,7 @@ impl RuntimeCore {
             keyed: n.key.is_some(),
             has_text: text.is_some_and(|t| !t.source_text().trim().is_empty() || t.redacted),
             image: n.vis.pixels.is_some() || n.vis.surface.is_some(),
+            drawn_text: handlers.is_some_and(|h| h.own_text.is_some()),
         };
         // A control the keyboard reaches is always in the tree, whatever its role says.
         roles::map(n.role, &cx).or_else(|| (input.is_some() || self.can_focus(i)).then_some(Role::Group))
@@ -59,6 +60,7 @@ impl RuntimeCore {
             if let Some(r) = m.range { [r.value, r.min, r.max, r.step.unwrap_or(f64::NAN)].map(f64::to_bits).hash(&mut h); }
             self.a11y_active_descendant(i).map(|j| self.nodes[j].id.0).hash(&mut h);
         }
+        self.a11y_own_text(i).hash(&mut h);
         n.text_cut(self.env.scale).hash(&mut h);
         let secure = n.is_secure();
         secure.hash(&mut h);
@@ -169,6 +171,7 @@ impl RuntimeCore {
             if m.busy { node.set_busy(); }
         }
         if let Some(v) = more.and_then(|m| m.value.as_deref()) { node.set_value(v); }
+        if let Some(d) = self.a11y_own_text(i) { node.set_value(d.text); }
         if let Some(r) = more.and_then(|m| m.range) {
             node.set_numeric_value(r.value);
             node.set_min_numeric_value(r.min);

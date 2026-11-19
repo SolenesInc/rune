@@ -55,8 +55,6 @@ pub(super) struct Measurement<'a> {
     pub(super) system_reduced_motion: bool,
     pub(super) titlebar_inset: f32,
     pub(super) chrome: crate::ChromeInsets,
-    /// Caption buttons drawn over the view's root.
-    pub(super) caption: Option<crate::titlebar::Caption>,
     pub(super) system_accent: crate::SystemAccent,
     pub(super) system_scroll_bars: crate::platform::scroll_bars::SystemScrollBars,
     pub(super) reduced_motion: bool,
@@ -146,15 +144,18 @@ impl RuntimeCore {
         self.focus_before_commit = self.focus.owned();
         // Settle layout reads first so a field that mounts once a rect is known is in `nodes`.
         measured = self.settle_layout_reads(measured, tx);
+        measured = self.settle_measures(measured, tx);
         if self.sync_requested_focus(&mut measured.nodes) {
             self.discard_measured(measured);
             measured = self.measure(tx);
             measured = self.settle_layout_reads(measured, tx);
+            self.sync_measured_inputs(&mut measured.nodes);
         }
         if measured.caret_read && self.caret_moved(Some(&measured.nodes)) {
             self.discard_measured(measured);
             measured = self.measure(tx);
             measured = self.settle_layout_reads(measured, tx);
+            self.sync_measured_inputs(&mut measured.nodes);
         }
         self.apply(measured, tx);
         self.scene.keep_flights(false);

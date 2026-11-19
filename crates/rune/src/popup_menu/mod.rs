@@ -5,9 +5,6 @@
 //!
 //! - macOS: an `NSMenu` popped up in the window's view, overlays included. Rune keeps drawing
 //!   while the menu tracks: frames, display-link pacing and animations keep running.
-//! - Windows: a `TrackPopupMenuEx` menu owned by the window, light or dark as the window's
-//!   content is. It drops down below an element anchor, as Windows menus do, and Rune keeps
-//!   drawing while it tracks: frames, wakes, timers and overlays.
 //! - Other platforms: [`popup_menu_supported`] is false and the callback gets `None` at once.
 //! - Headless runs: the menu stays open in `--tree` (`popupMenu`) until a script's
 //!   `{"type": "menu-pick", "id": "dark"}` or `{"type": "menu-cancel"}` answers it.
@@ -26,15 +23,9 @@ use crate::{PointerPress, Runtime, Shortcut, Tx};
 mod macos;
 #[cfg(target_os = "macos")]
 use macos as host;
-#[cfg(target_os = "windows")]
-mod win32;
-#[cfg(target_os = "windows")]
-use win32 as host;
-#[cfg(target_os = "windows")]
-pub(crate) use win32::{layout, turns};
 
 /// Platforms without native menus: nothing opens, so every request answers `None` at once.
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(target_os = "macos"))]
 mod host {
     use super::{Arc, Rc, Session, Show, Waker, Window};
     pub(super) const SUPPORTED: bool = false;
@@ -45,7 +36,7 @@ mod host {
     pub(super) fn start(_: Waker) {}
 }
 
-/// Whether this platform shows native pop-up menus (macOS and Windows). Where it doesn't,
+/// Whether this platform shows native pop-up menus (macOS). Where it doesn't,
 /// [`Tx::popup_menu`] calls back with `None` straight away, so an app can draw its own menu
 /// instead.
 pub fn popup_menu_supported() -> bool { host::SUPPORTED }
@@ -74,8 +65,7 @@ impl PopupItem {
     pub fn checked(mut self, checked: bool) -> Self { self.checked = checked; self }
     /// The shortcut shown beside the title. It is a hint: the menu doesn't register it.
     pub fn key_equivalent(mut self, shortcut: Shortcut) -> Self { self.key_equivalent = Some(shortcut); self }
-    /// An SF Symbol shown before the title on macOS 11 and later, e.g. `"moon"`. Windows shows
-    /// no symbol.
+    /// An SF Symbol shown before the title on macOS 11 and later, e.g. `"moon"`.
     pub fn symbol(mut self, name: impl Into<String>) -> Self { self.symbol = Some(name.into()); self }
 
     pub fn id(&self) -> &str { &self.id }
@@ -282,7 +272,7 @@ pub(crate) struct Show {
     pub at: (f32, f32),
     pub positioned: Option<String>,
     pub min_width: f32,
-    #[cfg_attr(not(any(target_os = "windows", target_os = "macos")), allow(dead_code))]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub element: Option<[f32; 4]>,
 }
 
@@ -309,7 +299,7 @@ impl Show {
 /// `Resolved` with its answer, or `Cancelled` when its window goes away first. A cancelled
 /// menu never opens (or stops tracking), and its answer is dropped.
 #[derive(Default)]
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) enum Phase {
     #[default]
     Opening,
@@ -327,8 +317,8 @@ pub(crate) struct Session {
     phase: RefCell<Phase>,
 }
 
-// Only macOS and Windows open menus; elsewhere every request answers `None` before a session.
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+// Only macOS opens menus; elsewhere every request answers `None` before a session.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 impl Session {
     /// `Opening` → `Open`, as the menu comes up. False when it was cancelled first.
     pub(crate) fn begin(&self) -> bool {

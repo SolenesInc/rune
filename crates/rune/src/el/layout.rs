@@ -132,6 +132,24 @@ impl El {
         self.style.set_grow(g);
         self
     }
+    /// Start a row's child at `basis` points, take a `g` share of the free space, and shrink
+    /// below the basis when the line is narrower (CSS `flex: g 1 basis; min-width: 0`). In a
+    /// wrapping row the basis decides when the child moves to a line of its own, and there it
+    /// fits that line however narrow, where `.grow(g).min_w(basis)` would run past it.
+    #[inline]
+    pub fn grow_from(mut self, g: f32, basis: f32) -> Self {
+        self.set_grow_from(g, basis);
+        self
+    }
+    /// [`El::grow_from`] in place.
+    #[inline]
+    pub fn set_grow_from(&mut self, g: f32, basis: f32) -> &mut Self {
+        self.style.set_flex_grow(g);
+        self.style.set_flex_shrink(1.0);
+        self.style.set_flex_basis(length(basis));
+        self.style.set_min_width(length(0.0));
+        self
+    }
     #[inline]
     pub fn padding(mut self, p: f32) -> Self {
         self.set_padding(p);
@@ -463,6 +481,20 @@ impl El {
         self.style.set_max_width(length(w));
         self
     }
+    /// Widest it may be, as a fraction of the parent's (CSS `max-width: 100%` is
+    /// `.max_w_frac(1.0)`). An item that a column does not stretch takes its content's width,
+    /// which can run past the column; this holds it inside and lets its children shrink.
+    #[inline]
+    pub fn max_w_frac(mut self, f: f32) -> Self {
+        self.set_max_w_frac(f);
+        self
+    }
+    /// [`El::max_w_frac`] in place.
+    #[inline]
+    pub fn set_max_w_frac(&mut self, f: f32) -> &mut Self {
+        self.style.set_max_width(percent(f));
+        self
+    }
     /// Minimum height in points.
     ///
     /// Flex items default to a minimum of their content height (CSS `min-height: auto`), so a
@@ -626,6 +658,15 @@ impl El {
     /// and a focused secure field keeps the input method off.
     pub fn ime_cursor(mut self) -> Self {
         self.flags.set(ElFlags::IME_CURSOR, true);
+        self
+    }
+    /// [`Self::ime_cursor`] for a caret that moves within this element without the view running:
+    /// `at` is the caret's rect, [x, y, width, height] in this element's points. The element
+    /// stays put and draws nothing for the caret, so moving it never paints the window again: a
+    /// frame that keeps its paint places the candidate window at `at`'s latest value.
+    pub fn ime_cursor_at(mut self, at: &crate::live::Live<[f32; 4]>) -> Self {
+        self.flags.set(ElFlags::IME_CURSOR, true);
+        self.cold_mut().ime_at = Some(at.clone());
         self
     }
     /// With [`Self::ime_cursor`]: on macOS, while this caret has the input method, Option is the

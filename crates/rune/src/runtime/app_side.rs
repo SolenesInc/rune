@@ -13,7 +13,7 @@ pub(crate) type CxAny = Cx<()>;
 
 /// The app hooks the core asks about before it calls them.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Hook { Poll, Key, FieldKey, Focus, Mods, Visibility, Ime }
+pub(crate) enum Hook { Poll, Key, FieldKey, Focus, Mods, Visibility, Input, Ime }
 
 /// What the core needs of the app's state, view and hooks, whatever the state's type.
 pub(crate) trait AppSide: Any {
@@ -31,6 +31,7 @@ pub(crate) trait AppSide: Any {
     fn key(&mut self, field: bool, ev: &KeyEvent, tx: &mut Tx) -> bool;
     fn focus(&mut self, focused: bool, tx: &mut Tx);
     fn visibility(&mut self, visible: bool, tx: &mut Tx);
+    fn input(&mut self, tx: &mut Tx);
     /// False when the playground shows a story with its own state.
     fn mods(&mut self, mods: crate::Mods, tx: &mut Tx) -> bool;
     fn ime(&mut self, ev: &Ime, tx: &mut Tx) -> bool;
@@ -147,6 +148,7 @@ pub struct Typed<S: 'static> {
     pub(crate) on_focus: Option<fn(&mut S, bool, &mut Tx)>,
     pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
     pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
+    pub(crate) on_input: Option<fn(&mut S, &mut Tx)>,
     pub(crate) on_ime: Option<fn(&mut S, &Ime, &mut Tx) -> bool>,
     /// `App::playground`, when this run shows it.
     pub(crate) playground: Option<Box<dyn LiveApp<S>>>,
@@ -197,6 +199,7 @@ impl<S: 'static> AppSide for Typed<S> {
             Hook::Focus => self.on_focus.is_some(),
             Hook::Mods => self.on_mods.is_some(),
             Hook::Visibility => self.on_visibility.is_some(),
+            Hook::Input => self.on_input.is_some(),
             Hook::Ime => self.on_ime.is_some(),
         }
     }
@@ -217,6 +220,10 @@ impl<S: 'static> AppSide for Typed<S> {
 
     fn visibility(&mut self, visible: bool, tx: &mut Tx) {
         if let Some(f) = self.on_visibility { f(&mut self.state, visible, tx); }
+    }
+
+    fn input(&mut self, tx: &mut Tx) {
+        if let Some(f) = self.on_input { f(&mut self.state, tx); }
     }
 
     fn mods(&mut self, mods: crate::Mods, tx: &mut Tx) -> bool {
@@ -267,7 +274,7 @@ impl<S: 'static> Runtime<S> {
     }
 
     pub fn with_text(state: S, view: fn(&S, &mut Cx<S>) -> El, viewport: (f32, f32), env: Env, text: TextSystem) -> Self {
-        let app = Typed { state, view, poll: None, on_key: None, on_field_key: None, on_focus: None, on_mods: None, on_visibility: None, on_ime: None, playground: None };
+        let app = Typed { state, view, poll: None, on_key: None, on_field_key: None, on_focus: None, on_mods: None, on_visibility: None, on_input: None, on_ime: None, playground: None };
         Runtime { core: RuntimeCore::with_app(Box::new(app), viewport, env, text), _s: PhantomData }
     }
 

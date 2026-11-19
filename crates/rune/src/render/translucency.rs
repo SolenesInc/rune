@@ -1,17 +1,9 @@
-//! Picking a GPU that composites translucent pixels on a surface. Some surfaces are opaque only:
-//! a Win32 Vulkan surface on AMD's integrated GPUs, and any DXGI swapchain made from an HWND. A
-//! transparent window or overlay drawn there shows black where it should be clear. Rune makes
-//! DX12 surfaces through DirectComposition (`Gpu::instance`), which composites alpha on every
-//! GPU, and gives a translucent surface the lowest-power adapter that composites it.
-//!
-//! On Windows only that DirectComposition swapchain composites alpha. A Vulkan surface there is
-//! a swapchain on the HWND, whatever alpha modes its driver reports: a transparent window,
-//! which has no redirection bitmap, shows it black or not at all (Hex #499, #510, on hybrid
-//! laptops whose integrated GPU's Vulkan driver claimed premultiplied alpha).
+//! Picking a GPU that composites translucent pixels on a surface. Some surfaces are opaque only,
+//! and a transparent window or overlay drawn there shows black where it should be clear. Rune
+//! gives a translucent surface the lowest-power adapter that composites it.
 
 /// The alpha mode that composites translucent pixels on `surface` through `adapter`, if any.
 pub(crate) fn mode(surface: &wgpu::Surface<'_>, adapter: &wgpu::Adapter) -> Option<wgpu::CompositeAlphaMode> {
-    if cfg!(target_os = "windows") && adapter.get_info().backend != wgpu::Backend::Dx12 { return None; }
     let caps = surface.get_capabilities(adapter);
     [wgpu::CompositeAlphaMode::PreMultiplied, wgpu::CompositeAlphaMode::PostMultiplied, wgpu::CompositeAlphaMode::Inherit]
         .into_iter()

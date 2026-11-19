@@ -6,10 +6,10 @@ use crate::{Align, Cx, El, OverlaySpec, ScreenEdge};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayId(pub(crate) winit::monitor::MonitorHandle, Option<NativeDisplayId>);
 
-/// Native display identity. Windows handles retain their full pointer width.
+/// Native display identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NativeDisplayId {
-    MacOS(u32), Windows(isize),
+    MacOS(u32),
     /// winit identifies X11 monitors by RandR CRTC. Output IDs can also be targeted below.
     X11Crtc(u32), X11Output(u32),
     /// Registry-global wl_output name, not a client-local protocol object ID.
@@ -22,8 +22,6 @@ impl DisplayId {
     pub(crate) fn from_monitor(monitor: winit::monitor::MonitorHandle, _wayland: bool) -> Self {
         #[cfg(target_os = "macos")]
         let native = { use winit::platform::macos::MonitorHandleExtMacOS; Some(NativeDisplayId::MacOS(monitor.native_id())) };
-        #[cfg(target_os = "windows")]
-        let native = { use winit::platform::windows::MonitorHandleExtWindows; Some(NativeDisplayId::Windows(monitor.hmonitor())) };
         #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
         let native = Some(if _wayland {
             use winit::platform::wayland::MonitorHandleExtWayland;
@@ -200,13 +198,12 @@ impl<T: 'static> ConfiguredOverlay<T> {
     /// surface, and each hide drops it. Away from macOS, the GPU device and renderer then wait
     /// five minutes for the next surface (a window's or overlay's) before they go, so an overlay
     /// shown often (a HUD on each dictation) keeps one device rather than making one per show
-    /// (hex#1268). On Windows and macOS the window comes and goes with the surface, and a
-    /// prewarmed one makes nothing at startup, so a hidden overlay there has no window at all
-    /// (NVIDIA's Instant Replay took a hidden display-sized window for a game on Windows, and
-    /// macOS 27's Mission Control lost its Space thumbnails to hidden screen-sized panels). On X11
+    /// (hex#1268). On macOS the window comes and goes with the surface, and a prewarmed one
+    /// makes nothing at startup, so a hidden overlay there has no window at all (macOS 27's
+    /// Mission Control lost its Space thumbnails to hidden screen-sized panels). On X11
     /// a prewarmed one makes only its window at startup and keeps it. A show then waits for the
     /// surface (a few milliseconds), and with no device to take, for a new device and its
-    /// pipelines too (over half a second on some Windows PCs). For overlays that show rarely and
+    /// pipelines too. For overlays that show rarely and
     /// cover a display, such as a drawing layer or a picker: hidden, their swapchains hold tens
     /// of megabytes. By default a prewarmed overlay makes its surface at startup and keeps it,
     /// so it shows at once.

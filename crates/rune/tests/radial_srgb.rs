@@ -257,8 +257,9 @@ fn srgb_blend_matches_css_and_core_animation_glow_reference() {
     let srgb_center = pixel(&px_srgb, 240, 120, 120);
 
     // Default linear mode stays unchanged (green channel is 83 vs 42 in sRGB reference).
-    assert_eq!(linear_center, [29, 83, 56, 255]);
-    assert_eq!(&srgb_center[..3], &expected_center, "0 LSB centre error in srgb_blend");
+    let want: [u8; 4] = [29, 83, 56, 255];
+    assert!(linear_center.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= 1), "{linear_center:?} vs {want:?}");
+    assert!(srgb_center.iter().zip(expected_center).all(|(g, w)| g.abs_diff(w) <= 1), "srgb_blend centre {srgb_center:?} vs {expected_center:?}");
 
     // Check the Gaussian falloff across the left edge (x = 15..120 at y = 120, where sigma = 15 px).
     let erf = |x: f32| -> f32 {

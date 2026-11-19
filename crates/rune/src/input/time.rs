@@ -21,12 +21,21 @@ pub(crate) fn current() -> Option<Instant> { CURRENT.with(Cell::get) }
 
 /// Holds an arrival time until dropped, then restores the one before it.
 #[must_use]
-pub(crate) struct Scope(Option<Instant>);
+pub struct InputArrival(Option<Instant>);
 
 /// Dispatch with `at` as the input's arrival time (`None` for work no input caused).
-pub(crate) fn scope(at: Option<Instant>) -> Scope { Scope(CURRENT.with(|c| c.replace(at))) }
+pub(crate) fn scope(at: Option<Instant>) -> InputArrival { InputArrival(CURRENT.with(|c| c.replace(at))) }
 
-impl Drop for Scope {
+/// Feeds the input a program hands a `Runtime` itself (`Runtime::key` and kin) as input that
+/// arrived from the platform `ago` before now, until the returned guard drops: its handlers see
+/// that moment as `Tx::input_time`, as a window's handlers see the platform's event time. For
+/// headless runs and tests of what an app does with an input's age.
+pub fn input_arrived(ago: std::time::Duration) -> InputArrival {
+    let now = Instant::now();
+    scope(Some(now.checked_sub(ago).unwrap_or(now)))
+}
+
+impl Drop for InputArrival {
     fn drop(&mut self) { CURRENT.with(|c| c.set(self.0)); }
 }
 
@@ -58,7 +67,7 @@ impl Kind {
 
 /// A scope for dispatching `event` when it is input, holding when it arrived: on macOS the
 /// timestamp of the `NSEvent` AppKit is dispatching, when it is that kind of event; else now.
-pub(crate) fn arrived(event: &winit::event::WindowEvent) -> Option<Scope> {
+pub(crate) fn arrived(event: &winit::event::WindowEvent) -> Option<InputArrival> {
     let kind = Kind::of(event)?;
     LAST.with(|c| c.set(Some(Instant::now())));
     Some(scope(Some(native(kind).unwrap_or_else(Instant::now))))

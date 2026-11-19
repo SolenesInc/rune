@@ -2,8 +2,8 @@
 //! `Cold<Handlers>`, so elements without callbacks pay one pointer.
 use crate::cold::Empty;
 use crate::el::{
-    AtBottomFn, Cursor, DragEndFn, DragFn, DragOutFn, DropSpec, LanguagesFn, LayoutFn, LayoutTxFn, ModalSpec,
-    PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy, VisibleRowsFn,
+    AtBottomFn, Cursor, DragEndFn, DragFn, DragOutFn, DropSpec, LayoutFn, LayoutTxFn, ModalSpec,
+    OwnTextFn, PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy, VisibleRowsFn,
     WindowFocusFn,
 };
 
@@ -13,12 +13,14 @@ pub(crate) struct Handlers {
     pub on_window_focus: Option<WindowFocusFn>,
     /// `El::on_spellcheck`: the app's spell checking setting and what flips it.
     pub on_spellcheck: Option<(bool, WindowFocusFn)>,
-    /// `El::on_spellcheck_languages`: keeps the dictionaries a field's menu chose.
-    pub on_spellcheck_languages: Option<LanguagesFn>,
     pub modal: Option<ModalSpec>,
     pub on_press: Option<PressFn>,
     /// `El::on_press_outside`: a primary press landed outside where the element is drawn.
     pub on_press_outside: Option<PressFn>,
+    /// `El::on_press_within`: a press landed on the element or on something it holds.
+    pub on_press_within: Option<PressFn>,
+    /// `El::keeps_press_from_within`.
+    pub keeps_press_from_within: bool,
     pub on_double_press: Option<PressFn>,
     pub on_secondary_press: Option<PointerFn>,
     pub on_hover: Option<PressFn>,
@@ -30,6 +32,8 @@ pub(crate) struct Handlers {
     pub gestures: Option<Box<crate::input::canvas_input::CanvasInput>>,
     pub on_drag: Option<DragFn>,
     pub drag_out: Option<DragOutFn>,
+    /// `El::a11y_text` and `El::a11y_text_from`: the text the element draws itself.
+    pub own_text: Option<OwnTextFn>,
     pub drag_threshold: Option<f32>,
     pub on_drag_start: Option<PressFn>,
     pub on_drag_end: Option<DragEndFn>,
@@ -40,6 +44,7 @@ pub(crate) struct Handlers {
     pub on_far_from_bottom: Option<(f32, Option<std::rc::Rc<str>>, AtBottomFn)>,
     pub on_visible_rows: Option<VisibleRowsFn>,
     pub on_layout: Option<LayoutTxFn>,
+    pub on_measure: Option<LayoutFn>,
     pub on_screen_layout: Option<LayoutFn>,
     pub on_drawn_layout: Option<LayoutTxFn>,
     /// `El::on_visible`: the element came on screen (`true`) or left it.
@@ -86,6 +91,8 @@ impl Handlers {
     pub(crate) fn takes_hit(&self) -> bool {
         self.on_pointer_move.is_some()
             || self.on_press.is_some()
+            || self.on_press_within.is_some()
+            || self.keeps_press_from_within
             || self.on_double_press.is_some()
             || self.on_secondary_press.is_some()
             || self.on_hover.is_some()
@@ -102,10 +109,11 @@ impl Empty for Handlers {
         on_paste: None,
         on_window_focus: None,
         on_spellcheck: None,
-        on_spellcheck_languages: None,
         modal: None,
         on_press: None,
         on_press_outside: None,
+        on_press_within: None,
+        keeps_press_from_within: false,
         on_double_press: None,
         on_secondary_press: None,
         on_hover: None,
@@ -115,6 +123,7 @@ impl Empty for Handlers {
         gestures: None,
         on_drag: None,
         drag_out: None,
+        own_text: None,
         drag_threshold: None,
         on_drag_start: None,
         on_drag_end: None,
@@ -123,6 +132,7 @@ impl Empty for Handlers {
         on_far_from_bottom: None,
         on_visible_rows: None,
         on_layout: None,
+        on_measure: None,
         on_screen_layout: None,
         on_drawn_layout: None,
         on_visible: None,

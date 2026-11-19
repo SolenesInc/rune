@@ -1,6 +1,5 @@
 //! What a window holds per OS: on macOS its display link, present hook, panel and native
-//! views; on Linux desktops its activation helper; on Windows its first-frame cloak; elsewhere
-//! nothing.
+//! views; on Linux desktops its activation helper; elsewhere nothing.
 
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
@@ -69,33 +68,6 @@ pub(super) struct Native {
     pub(super) activator: Option<crate::platform::activation::Activator>,
 }
 
-#[cfg(target_os = "windows")]
-#[derive(Default)]
-pub(super) struct Native {
-    /// Holds a window that's just been shown off screen until its frame lands.
-    pub(super) cloak: crate::platform::win32::Cloak,
-    /// The frame without a title bar a window with `App::titlebar` has.
-    pub(super) frame: Option<crate::platform::win32::CustomFrame>,
-    /// Hears other windows cover it whole (`WakeEvent::Covered`).
-    pub(super) _occlusion: Option<crate::platform::win32::occlusion::Tracked>,
-    /// Whether the CPU renderer or the GPU draws its frames (`cpu_frame`).
-    pub(super) mode: super::cpu_frame::SurfaceMode,
-    /// Whether its accessibility adapter waits for the first frame (`Host::a11y_after_frame`).
-    pub(super) a11y_start: A11yStart,
-    /// Playing clips shown on their own layer under the UI (`video_layer`).
-    pub(super) video_layers: super::video_layer::VideoLayers,
-}
-
-/// When a window's UI Automation adapter is made: with the window (a screen reader is running),
-/// or on the loop's first idle turn after the first frame.
-#[cfg(target_os = "windows")]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum A11yStart {
-    #[default]
-    Made,
-    AfterFirstFrame,
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "ios"), not(target_os = "android")))))]
+#[cfg(not(any(target_os = "macos", all(unix, not(target_os = "ios"), not(target_os = "android")))))]
 #[derive(Default)]
 pub(super) struct Native;

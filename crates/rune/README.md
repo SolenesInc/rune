@@ -110,12 +110,6 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
     smoothing off. Apple's pipeline without the dilation
     (`ApplePipeline::UNSMOOTHED`); lighter than `On`. Coverage takes an exponent keyed to the
     ink's luminance, the curve of Skia's grayscale text gamma.
-  - `DirectWrite`: Chromium's text on Windows. DirectWrite rasterises each
-    glyph as Skia's `SkScalerContext_DW` asks it to (the rendering mode the `gasp` table picks,
-    grid fitting on, grayscale antialiasing, the face at the run's variation coordinates, read in
-    place from Parley's bytes), pens sit on Skia's quarter pixels, and Skia's gamma tables
-    (sRGB, contrast 1, eight luminance buckets) weigh each mask by its ink
-    (`text/windows/`). Off Windows it draws as `Off`.
   - `Windfoil`: Rune's own text with CoreText's weight, the same
     on every OS. Each glyph's exact pixel coverage from its outline, Windfoil's closed-form box filter over
     xy-monotone quadratics (DesLauriers 2026), with CoreText's dilation (times `TEXT_WEIGHT`,
@@ -137,11 +131,10 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
     `outline.wgsl`), the outline after skrifa's light autohint, and that autohinted outline on
     whole-pixel pens, which is Chromium's text on Linux. `FontSmoothing::ALL` lists every mode and
     `FontSmoothing::support` says whether this machine draws one as named (`text/support.rs`).
-  - `WindfoilRgb` and `ClearType` (Windows): subpixel text. Masks hold three coverages a pixel
-    (Windfoil's box about each subpixel, or DirectWrite's `CLEARTYPE_3x1`), and the window draws
-    them with a dual-source pipeline that blends each channel by its own (`render/variant.rs`,
-    `Lcd`). Layers draw them grayscale; without dual-source blending they draw as
-    `WindfoilChromium` and `DirectWrite`.
+  - `WindfoilRgb`: subpixel text. Masks hold three coverages a pixel (Windfoil's box about each
+    subpixel), and the window draws them with a dual-source pipeline that blends each channel by
+    its own (`render/variant.rs`, `Lcd`). Layers draw them grayscale; without dual-source
+    blending they draw as `WindfoilChromium`.
   `On` and `Off` work on every OS, since they are arithmetic on outlines. Blending is separate
   (`srgb_blend`).
   `cargo run -p rune --example coretext_compare [-- --smoothing on|off]` measures
@@ -180,7 +173,7 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
   selects on the first click and opens on the second, as in AppKit; there's no delay to wait
   out a possible second click. A third press starts a new pair, and a press anywhere else breaks
   one. Only clicks pair: a press that travels more than 4 pt, or is held past the interval, is
-  neither half of one. The interval is the system setting on macOS and Windows and 0.5 s
+  neither half of one. The interval is the system setting on macOS and 0.5 s
   elsewhere. Headless runs use the virtual clock, so a script's `double-click` (or two `click`s inside 0.5 s) is
   deterministic. Pointer only: the keyboard runs `on_press` (Space, and Return on a row).
 - **Click count in a drag**: `Drag::clicks` says which click of a run an `on_drag` press is, on
@@ -294,14 +287,14 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
   origin.
 
   `Mods::cmd` is the primary shortcut modifier, reported with its key: ⌘ on macOS (with
-  `logo`), Ctrl elsewhere (with `ctrl`). So Ctrl+W on Windows is `{ cmd, ctrl }`, and a test
+  `logo`), Ctrl elsewhere (with `ctrl`). So Ctrl+W on Linux is `{ cmd, ctrl }`, and a test
   such as `cmd && !ctrl` never passes there. Bind shortcuts with a `Chord` instead, which
   resolves both sides to the keys held on the platform:
 
   ```rust
   let reopen = Chord::parse("mod+shift+t")?;          // ⇧⌘T on macOS, Ctrl+Shift+T elsewhere
   let next = Chord::parse("ctrl+tab")?;               // ⌃⇥ on macOS (a literal Control), Ctrl+Tab elsewhere
-  let home = Keybind::new("mod+b").on(KeyPlatform::Windows, "alt+home");
+  let home = Keybind::new("mod+b").on(KeyPlatform::Linux, "alt+home");
   if reopen.matches_tx(ev, tx) { /* … */ }
   reopen.label();                                     // "⇧⌘T" or "Ctrl+Shift+T"
   ```
@@ -319,7 +312,6 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
 
   A text field's edit commands (copy, cut, paste, select all, undo, redo, and Ctrl+Y redo
   off macOS) take only the plain chord: Ctrl+Alt+V, Ctrl+Shift+V or ⌃⌘C reach `on_key`.
-  On Windows, Left Ctrl + Left Alt is AltGr, so a character typed with both inserts, and
   Home and End move to the line's edge in a multi-line field (Ctrl+Home and Ctrl+End to
   the text's ends).
 - **Periodic motion**: `.looping(rune_motion::LoopSpec::opacity(..))` or `LoopSpec::rotation(period)`
@@ -398,7 +390,7 @@ policy changes are applied in the same mutation phase.
   keeps its axis wherever the pointer ends up, as AppKit latches a gesture to the view it began on.
   Without phases, a mouse wheel tick wholly on the other axis picks afresh, so Shift + wheel and
   then the plain wheel each scroll at once. Shift with a mouse wheel scrolls horizontally on
-  Windows, Linux and the web; macOS turns the delta itself. `tx.scroll_into_view(key)` scrolls both
+  Linux and the web; macOS turns the delta itself. `tx.scroll_into_view(key)` scrolls both
   axes, `.scroll_edge_fade(w)` fades the left and right edges, `tx.scroll_to(key, x, y)` glides a
   viewport to an offset (clamped, rechecked as virtual rows measure, taken over by the wheel),
   `tx.scroll_to_with(key, x, y, spring)` glides there on the app's spring, and
@@ -417,7 +409,7 @@ policy changes are applied in the same mutation phase.
   Returning true takes the delta, and the element then hears the rest of that gesture, its
   momentum included, wherever the pointer goes; false lets it scroll, and a gesture that
   scrolled stays a scroll. `.on_magnify(|s, e: MagnifyEvent, tx| -> bool)` hears trackpad
-  pinches (scale by `1 + delta`) at the pointer: macOS reports them, and on Windows, Linux and
+  pinches (scale by `1 + delta`) at the pointer: macOS reports them, and on Linux and
   the web a pinch arrives as Ctrl + wheel, which goes to `on_magnify` (`-dy / 200` per point)
   when one is under the pointer. `.on_rotate` and `.on_smart_magnify` (a two-finger double tap)
   are macOS only. `.pointer_buttons([PointerButton::Middle])` lets the middle (or back,
@@ -447,7 +439,9 @@ policy changes are applied in the same mutation phase.
   growing row and the word-fade duration. `.reveal(word_fade)` fades appended words in, staggered from
   20 ms down to 5.5 ms as a backlog builds.
 - **Settling** (`Tx::settle()`): no animation, every track lands, and removed nodes unmount at once.
-  Opening a session lands at the bottom on its first frame with nothing animating in.
+  Opening a session lands at the bottom on its first frame with nothing animating in. A
+  `stick_bottom` viewport lands at its end only when it follows it or glides there; one a hand or
+  an app moved off its end keeps its place.
 - **Turn actions**: a transcript view can reserve a stable tail and crossfades Working into the
   Desktop copy icon over .34 s, without removing and re-adding the tail's height. `Tx::copy(text)`
   requests a shell clipboard write. Requests follow handler order; headless runs never write the
@@ -470,7 +464,7 @@ policy changes are applied in the same mutation phase.
   the side (`Modifier::AltRight.side() == Some(KeySide::Right)`). `mods` hold the state after
   the change, as AppKit's flagsChanged does. Off by default; they never type, select, move focus
   or fire shortcuts, and a chord still arrives as before. Fn reaches macOS windows and overlays
-  only: Windows and Linux keyboards handle Fn in firmware and never report it.
+  only: Linux keyboards handle Fn in firmware and never report it.
 - **Tooling**: scripts gain `type`, `key`, `paste`, `scroll` (`dy`, and `dx` for a horizontal
   swipe) and `fling` (`v`, and `vx`). Traces carry motion-trace
   intents (settle cuts, growing rows, word reveals) and clipped visible rects.
@@ -600,13 +594,13 @@ app.run();
 - The `Runtime` (state, scene, text, scroll offsets) belongs to the app, so a reopened window
   shows the same UI, settled on its first frame. The GPU device and renderer stay too, unless
   `release_gpu_when_closed` (then closing destroys the window and device everywhere).
-- Closing hides the window on macOS, Windows and X11, and destroys it on Wayland (no hidden
+- Closing hides the window on macOS and X11, and destroys it on Wayland (no hidden
   toplevel exists there); `open` recreates it with the same app id (`set_app_id`).
 - Activation: the first window takes the launcher's `XDG_ACTIVATION_TOKEN`/`DESKTOP_STARTUP_ID`
   and clears them from the environment. A new window gets a forwarded token through winit's
   `with_activation_token`. An open Wayland window is activated with `xdg_activation_v1` bound on
   winit's own display (`platform/activation.rs`), since winit 0.30 can't. Without a token Wayland can only
-  request attention (most compositors mark it urgent); X11, macOS and Windows use `focus_window`.
+  request attention (most compositors mark it urgent); X11 and macOS use `focus_window`.
 - Headless tooling runs ignore window requests and apply updates before each frame.
 - `AppHandle::is_visible()` reports whether the window is on screen; `AppHandle::window_error()`
   says why it couldn't be created (no display, no GPU adapter or device). A failed creation is
@@ -671,17 +665,7 @@ app.run();
   MyApp.app`); then `open 'myapp://x'` launches or reaches the app. A bare `cargo run` binary has
   no bundle and gets no links. iOS isn't wired yet (winit owns the scene delegate), and Linux
   passes a link to a new process as a launch argument, so the hook never runs there.
-- Links and relaunches on Windows: Windows starts a new process for each launch, passing a link
-  as an argument. The hook receives the links among the first process's arguments
-  (`scheme://…`) like the launching link on macOS. Call `rune::single_instance("com.example.myapp")`
-  first thing in `main` to keep one process: a later launch hands its arguments to the running
-  process over a per-user named pipe and lets it take the foreground, and `single_instance`
-  returns false so `main` returns without opening a window. Its links reach the hook; a launch
-  without links reopens the app (`App::on_reopen`, then the default, which also brings the front
-  window forward, restored). Register the scheme for the user, usually at install:
-  `HKEY_CURRENT_USER\Software\Classes\myapp` with an empty `URL Protocol` value and
-  `shell\open\command` set to `"C:\path\to\myapp.exe" "%1"`.
-  `scripts/mac-app --scheme myapp` writes that entry and registers the bundle for you (see
+  `scripts/mac-app --scheme myapp` registers the bundle for you (see
   "Relaunching a Mac app" below).
 - Edge overlays (HUDs): see `App::overlay` below.
 
@@ -1012,7 +996,7 @@ rune::App::new(spec).fit_content_height().run();
   resize mid-flight keeps its speed. Dragging the window mid-flight wins: it stays where the
   user puts it and the size carries on from there. Hiding or minimising it lands the frame.
   Reduced motion jumps.
-- Windows and Linux resize at once with `request_inner_size`. Wayland can't see or set a
+- Linux resizes at once with `request_inner_size`. Wayland can't see or set a
   window's position, so it resizes without being kept on screen and ignores centring.
 - Headless runs move the viewport on the virtual clock, so `--tree` and scripts see each
   step; frames keep the launch canvas size, and centring does nothing.
@@ -1032,20 +1016,14 @@ rune::App::new(spec).fit_content_height().run();
   macOS, `full_size_content` gives a transparent titlebar with content under it, and
   `traffic_lights: Some((x, y))` places the close button's top-left at `x, y` points (Electron's
   `trafficLightPosition`). Rune places the buttons again after every resize, scale change, focus change
-  and un-occlusion. On Windows and Linux both options do nothing; the system titlebar stays.
+  and un-occlusion. On Linux both options do nothing; the system titlebar stays.
 - **`App::titlebar` / `WindowSpec::titlebar`** (`Titlebar::new(height)`): the app draws its own
   titlebar `height` points tall and the window keeps its controls over it. macOS gets a full-size
   content view with drag regions and the traffic lights centred in the band (unless
-  `Chrome::traffic_lights` places them). Windows loses its native title bar but keeps resize edges,
-  Aero Snap, the snap layouts flyout over maximize, the window menu (Alt+Space, or a right-click on a
-  `.window_drag()` region) and its animations; Rune draws the caption buttons over the trailing edge
-  (Electron's `titleBarOverlay`: 46 points wide, close turns red), as elements named Minimize,
-  Maximize or Restore, and Close for assistive technology, still in reach while the view holds a
-  modal. A window that isn't resizable never maximizes: its maximize button is dimmed, with no snap
-  layouts. `Cx::chrome_insets()` says what the controls take (`leading`, `trailing`, `height`; zero
-  where the native frame stays, as on Linux; memos rebuild when it changes), `Cx::caption_color(c)`
-  colours the caption symbols for an app theme, `Cx::titlebar_height(h)` changes the band's height
-  as the app runs (a UI zoom), and `Tx::toggle_maximized()` maximizes or restores.
+  `Chrome::traffic_lights` places them). On Linux the system titlebar stays and the insets are
+  zero. `Cx::chrome_insets()` says what the controls take (`leading` and `height`; memos rebuild
+  when it changes), `Cx::titlebar_height(h)` changes the band's height as the app runs (a UI
+  zoom), and `Tx::toggle_maximized()` maximizes or restores.
   `cargo run -p rune --example custom_titlebar` shows it.
 - **`AppSpec::new(title, size, init, view)`** fills every other field with its default; literals
   that set a few more end with `..AppSpec::new(..)`. Window chrome lives on the builders, keeping
@@ -1181,7 +1159,7 @@ ranges, carets and copies are unchanged; elsewhere a tab is one space wide.
 
 `.family(Family::SystemMono)` uses the platform's monospaced UI font without bundling it:
 SF Mono on macOS (the face AppKit's `monospacedSystemFont` returns, matched to within
-0.05 pt per glyph at 8 to 34 pt), Cascadia Mono, then Consolas, on Windows, and whatever
+0.05 pt per glyph at 8 to 34 pt), and whatever
 fontconfig resolves `monospace` to on Linux (then DejaVu Sans Mono, Liberation Mono, Noto
 Sans Mono). Its files load the first time a text asks for it. Where none is installed it
 falls back to the mono slot. SF Mono has no `trak` table, so it is untracked, as in AppKit;
@@ -1226,8 +1204,7 @@ ignore it.
 Native hosts populate `cx.system_reduced_motion()` at creation and refresh it on
 window focus changes. Rune uses it by default; `cx.reduced_motion(value)` overrides
 it **for the current commit only**. Call it each time the view runs to keep an
-override; otherwise the next commit uses the host preference. macOS reads the accessibility preference, Windows reads client
-area animation, and Linux reads KDE's duration factor or GNOME's enable-animations
+override; otherwise the next commit uses the host preference. macOS reads the accessibility preference, and Linux reads KDE's duration factor or GNOME's enable-animations
 setting when available. The preference lives on Runtime/Cx, so existing
 `Env { system_dark, scale }` literals remain valid. Headless runtimes default to
 false; tests can call `rt.set_system_reduced_motion(value)` and inspect
@@ -1328,10 +1305,9 @@ out text itself passes `RichLayoutOptions::new().wrap_anywhere()` to
 
 `tx.copy_secret(text, Duration::from_secs(30))` writes with the platform's clipboard
 history-exclusion marker and expires on Rune's shared clipboard worker. Expiry
-compares the current text and, on macOS/Windows, the clipboard revision; copying
+compares the current text and, on macOS, the clipboard revision; copying
 something else cancels the old expiry. Linux's portable API exposes no revision,
 so it compares text. Clipboard managers must honor the platform marker themselves.
-On Windows, locking the session (Win+L) clears a secret still on the clipboard at once.
 
 Put `.on_paste(|s: &mut State, text: &str, tx| { ... })` on the view root (or modal
 root) to handle Cmd/Ctrl-V when no field is focused. `tx.request_paste()` requests
@@ -1381,7 +1357,6 @@ to hand a web view as is. RTF is passed through untouched.
 | Platform | Copy | Paste | Pasted image |
 | --- | --- | --- | --- |
 | macOS | text, `public.html`, `public.rtf` in one pasteboard change | HTML; else RTF converted to HTML (TextEdit, Notes, Pages); else text | `public.png` as is, else `public.tiff` converted to PNG |
-| Windows | text and CF_HTML (`HTML Format`); no RTF | CF_HTML fragment, else text | `PNG`, else `CF_DIBV5`, through arboard, encoded as PNG |
 | Linux (X11, Wayland data-control) | text and `text/html`; no RTF | `text/html`, else text | `image/png` through arboard, decoded and encoded again |
 | Web | `text/plain` and `text/html` through the async Clipboard API; no RTF | `text/html` from the paste event or `navigator.clipboard.read()`, else text | `image/png` from the paste event's files or `navigator.clipboard.read()` |
 
@@ -1413,7 +1388,7 @@ newline on `Shift+Return` and pastes plain text. The mark and block methods work
   (following AppKit's rules: never extending backwards from the start of a link or code mark's
   run). `edit.toggle_mark(mark)`, `set_mark`, `remove_mark` and `set_link(Some(url))` apply or
   remove marks on a selection, or arm a pending typing style when the selection is empty (cleared
-  when the caret moves). In a rich field `⌘B`, `⌘I` and `⌘U` (`Ctrl` on Windows/Linux) toggle
+  when the caret moves). In a rich field `⌘B`, `⌘I` and `⌘U` (`Ctrl` on Linux) toggle
   bold, italic and underline. Query `edit.has_mark(&Mark::Bold)`, `edit.active_marks()` and `edit.active_link()` to
   drive a formatting bar's pressed state.
 - **Paragraph block attributes** (`Block::Paragraph`, `Bullet(level)`, `Numbered(level)`, `Quote`,
@@ -1576,9 +1551,8 @@ moved, so scrolling a list doesn't restart a still toolbar button's tooltip. Ele
 modal register nothing, and the parts of an element under something drawn over it (a popover)
 are left out. The delay, look and placement are the system's. Overlays draw theirs on every
 platform: AppKit shows tooltips only in the active app, and most overlays are non-activating
-panels. Elsewhere Rune draws it: Windows' tooltip control and GTK's would need
-to own the window procedure or toolkit that winit already owns, and Linux and the web have no
-toolkit-free tooltip API. The drawn tooltip waits 0.5 s (the double-click time on Windows; set
+panels. Elsewhere Rune draws it: Linux and the web have no
+toolkit-free tooltip API. The drawn tooltip waits 0.5 s (set
 `Runtime::help_delay` to change it), sits under the element or above it when there's no room,
 stays inside the window, and follows the theme's light or dark appearance. Headless runs always
 draw it, so `--snap` shows it and `--tree` has a top-level `tooltip` object.
@@ -1589,7 +1563,7 @@ draw it, so `--snap` shows it and `--tree` has a top-level `tooltip` object.
 Enable Rune's `native-file-dialog` feature and inject `FileDialogs::native()` in the shell.
 `dialogs.open(options).await`, `dialogs.save(options).await` and
 `dialogs.open_folder(options).await` return an optional path (None means cancelled). `FileDialogOptions` carries title, directory, suggested filename and
-`.filter("Audio", &["wav", "flac"])`. rfd handles macOS and Windows; on Linux Rune calls the
+`.filter("Audio", &["wav", "flac"])`. rfd handles macOS; on Linux Rune calls the
 XDG desktop portal's FileChooser itself over zbus, parented to the focused X11 window, and
 returns an error when the desktop has no portal. Poll these futures on the app's async executor
 and wake Rune when the result arrives.
@@ -1613,8 +1587,8 @@ Or ask from a handler, with no executor or waker to wire up:
 })
 ```
 
-- The window shows the dialog once the handler's frame is done (a sheet on macOS, owned by
-  the window on Windows, the portal's chooser on Linux) and keeps drawing while it's up. The
+- The window shows the dialog once the handler's frame is done (a sheet on macOS, the portal's
+  chooser on Linux) and keeps drawing while it's up. The
   answer runs the callback on a later frame, as `tx.read_clipboard` does. `tx.save_file` is
   the same for a Save dialog, and `tx.open_folder` for an Open dialog that picks a folder
   (`FileDialogKind::Folder`, `"kind": "folder"` in `--tree`; filters and file name don't apply;
@@ -1700,9 +1674,9 @@ winit 0.30 reports a file drag without its position, and no pointer moves arrive
 drag lasts. So the window samples the system pointer when the drag enters, about every 16 ms
 while it's over the window (drawing a frame only when that changes the target), and when it
 drops. On macOS that's
-`NSWindow.mouseLocationOutsideOfEventStream`, on Windows `GetCursorPos` and on X11
+`NSWindow.mouseLocationOutsideOfEventStream` and on X11
 `QueryPointer`. Where no sample is possible it uses the last pointer position, else the root.
-macOS, Windows and X11. Wayland reports no file drags in winit 0.30, and the web build has no
+macOS and X11. Wayland reports no file drags in winit 0.30, and the web build has no
 paths to give.
 
 Headless scripts drag and drop files at a point or an element's centre:
@@ -1748,15 +1722,7 @@ row().key("theme").child(text(theme_title(&s.theme)))
 - **Platforms**: macOS uses `NSMenu`'s `popUpMenuPositioningItem:atLocation:inView:` in windows
   and overlay panels. The menu tracks from a run-loop block outside winit's handler, so frames,
   springs, the display link and `AppHandle::update` keep running while it's open. The pointer's
-  press, capture and hover are released before it opens. Windows uses `TrackPopupMenuEx`, opened
-  from a message posted to the window after winit's handler returns, so Rune keeps drawing
-  there too: frames, wakes, `wake_after` timers and overlays. It follows Windows placement: the
-  menu drops down below an element anchor (flipping up clear of it near the screen's bottom
-  edge) whether or not an item is `selected`, opens with its top-left at a point, and sizes
-  itself to its items; `.symbol` doesn't show. Menus are dark or light as the window's content
-  is (Windows 10 1903 and later), whatever the system's appearance. Keyboard navigation and
-  dismissal by a click outside (answered `None`) are the system's, overlays included. A click
-  right after the menu closes lands where the pointer is, moved or not. Elsewhere
+  press, capture and hover are released before it opens. Elsewhere
   `popup_menu_supported()` is false and `on_pick` gets `None` on the next frame, so keep an
   in-app fallback for those platforms. `cargo run -p rune --example popup_menu` shows both kinds.
 - **Headless**: `--tree` has a `popupMenu` object (items, anchor, `selected`, `queued`) while a
@@ -1874,7 +1840,10 @@ let photo = cache.url("https://example.com/p.avif", 96.0, scale); // web: the br
 ```
 
 `cache.file` treats `.svg` and `.svgz` paths (or SVG content) as vectors and decodes other
-files like `load`. On web, `cache.file` and `cache.url` fetch the URL (relative to the page) and
+files like `load`, keeping only the mips that fill the square it was asked for, so a 5K
+screenshot shown as a 132 pt thumbnail holds about a megabyte instead of 80; `load_mime` and
+`url` do the same, and `Image::size` stays the image's own. Ask again with a larger size when
+it draws larger: that is a separate entry, decoded anew. `load` keeps every level. On web, `cache.file` and `cache.url` fetch the URL (relative to the page) and
 let the browser decode it off the main thread, so WebP and AVIF work there; SVG still rasterizes
 through resvg. On native `cache.url` takes a path or `file:` URL only: Rune has no HTTP client,
 so fetch remote bytes yourself and call `load`. `cache.load` recognises SVG by its content and rasterizes it at twice its
@@ -1909,7 +1878,7 @@ The ratio comes from the view (`Image::size`, `Player::natural_size`), so it wor
 `video` or a box with children too. In a column with no bounded height, `max_h` sets the room.
 
 `cache.app_icon(path, size_pt)` rasterizes a platform icon on the same worker, keyed by path,
-size and scale: Finder's icon on macOS, an executable's or `.ico`'s first icon on Windows, and
+size and scale: Finder's icon on macOS, and
 on Linux a `.desktop` entry's `Icon=` from the hicolor theme (closest size at or above, then
 scalable SVG) or `pixmaps`. Paths without an icon resolve to `Image::error`, so callers keep
 their own fallback. Keep the handle: the cache only shares live handles.
@@ -1999,25 +1968,6 @@ tap.play();
   follows the virtual clock of the runtime on the thread that made it, as a video's does
   (pause, seek, rate, loop, and the end, which wakes the clip's waker), with no sound. `--tree` adds a `video` object (`kind`, `state`, `time`,
   `duration`, `size`, `rate`, `looping`, `muted`, `error`) to video elements.
-- **Windows**: Media Foundation's source reader decodes each clip on a thread of its own, with
-  the GPU's decoder (DXVA, through a D3D11 device on the adapter Rune draws with) where it has
-  one and in software otherwise. The source resolves while that device comes up. Each picture
-  is copied on the GPU into a small ring of shared NV12 textures, made as pictures need them (a
-  paused clip makes one), that Rune's D3D12 device samples in place, ordered by fences, with the
-  draw's bind group kept per texture: no CPU copy, and
-  the UI thread only swaps the picture for the refresh the frame presents at (read from DWM's
-  timing). A playing clip asks for the next frame when its next picture is due, not every
-  refresh. A clip nobody draws stops decoding (its queue fills); a muted one picks up at its
-  picture when drawn again, and after 3 s undrawn its decoder lets go of everything but the
-  picture on screen. Loops seek back while the last pictures still wait, so there's no gap.
-  Sound plays on the default output through WASAPI, following the playback clock. Media
-  Foundation, D3D11 and WASAPI load on the first clip, through `GetProcAddress`: nothing at
-  launch, nothing in the import table. Formats are what Media Foundation reads: mp4/mov/m4v
-  (H.264; HEVC, VP9 and AV1 with their system extensions), WebM, mp3, m4a/AAC, wav, flac. A
-  Windows N edition without the Media Feature Pack fails every clip with a message saying so.
-  `RUNE_VIDEO_LOG=1` prints each open's steps in microseconds (`frames` adds every picture);
-  `RUNE_VIDEO_DECODE=software` skips the GPU decoder. Request headers aren't sent on Windows
-  yet: such a clip fails with a message.
 - **Other platforms**: every clip reports `Failed("video playback isn't supported on this
   platform yet")` (or the audio equivalent), and video draws a neutral grey placeholder.
 
@@ -2077,7 +2027,7 @@ let clip = rune::Player::audio(note.path);
   `samples(rate, vec)` and `wav(path)` choose the input; `.permission(p)`, `.answers(p)` and
   `.unplug_after(secs)` exercise denial and interruption. `.install()` sets it for the thread,
   or `Recorder::fake(mic)` for one recorder.
-- **Other platforms** (Linux, Windows, the web): `start` ends in `Failed("recording isn't
+- **Other platforms** (Linux, the web): `start` ends in `Failed("recording isn't
   supported on this platform")`.
 
 ### Edge overlays (`App::overlay`, `overlay.rs`, `platform/layer_shell.rs`)
@@ -2100,11 +2050,8 @@ of the primary display, centred or `inset` points from a side. Clicks pass throu
   `NSPanel` (`NonactivatingPanel`, `becomesKeyOnlyIfNeeded`) at status level (25) on every
   Space incl. full-screen ones, ordered front with `orderFrontRegardless`; it ignores the mouse
   unless interactive. Clicks still reach Rune through winit's view (`platform/macos.rs`).
-- Windows: a topmost tool window with `WS_EX_NOACTIVATE` (plus `WS_EX_TRANSPARENT|WS_EX_LAYERED`
-  unless interactive), shown with `SW_SHOWNOACTIVATE`; a bottom overlay sits above the taskbar
-  (`platform/win32.rs`).
 - Checked under headless sway (layer shell, and Xwayland for X11) and on macOS (panel level,
-  bounds, hide and reshow). Windows builds are checked with `cargo xwin clippy` only.
+  bounds, hide and reshow).
 - `Tx::copy` works in overlays (a meeting capsule's Copy button).
 - Unsupported: interactive overlays on Wayland, hover in a non-key macOS panel (mouse-moved events
   go to the key window), per-monitor placement.
@@ -2377,8 +2324,7 @@ frosted bottom bar.
 ## Accessibility
 
 Every window and overlay exposes its elements to the OS accessibility API through
-[AccessKit](https://accesskit.dev): UI Automation on Windows (Narrator, NVDA, JAWS, Voice
-Access), NSAccessibility on macOS (VoiceOver, Voice Control), AT-SPI on Linux (Orca). The same
+[AccessKit](https://accesskit.dev): NSAccessibility on macOS (VoiceOver, Voice Control), AT-SPI on Linux (Orca). The same
 tree is what automation and testing tools drive. It comes with the default `accessibility`
 feature (`crate::a11y`, `runtime/a11y`).
 

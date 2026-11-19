@@ -3,7 +3,7 @@
 //!
 //! Off macOS every helper is a no-op: `remember_frame` returns true (so a `poll` that waits on it
 //! stops), `saved_size` returns `None`, `is_full_screen` returns false, and `toggle_full_screen`,
-//! `launch` and `busy` do nothing. `notify` is `rune-notify`, which also posts on Windows.
+//! `launch` and `busy` do nothing. `notify` is `rune-notify`.
 
 pub use rune_notify as notify;
 mod quiet;

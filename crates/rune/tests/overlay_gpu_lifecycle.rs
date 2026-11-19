@@ -1,6 +1,5 @@
 //! A prewarmed overlay with `release_gpu_when_hidden` makes its window at startup on X11, and
-//! nothing on Windows, and no GPU surface, nor device, until it shows; each hide gives the
-//! surface back (and on Windows the window), and `release_gpu_after` does so once the overlay
+//! no GPU surface, nor device, until it shows; each hide gives the surface back, and `release_gpu_after` does so once the overlay
 //! stayed hidden that long. The device waits for the next show, which takes it rather than
 //! making another (hex#1268). Prints
 //! how long each show waits for its first present, and the process's private memory along the
@@ -55,23 +54,6 @@ mod lazy {
         }
     }
 
-    #[cfg(target_os = "windows")]
-    fn private_mb() -> f64 {
-        #[repr(C)]
-        #[derive(Default)]
-        struct Counters { cb: u32, faults: u32, peak_ws: usize, ws: usize, qpp: usize, qp: usize, qnpp: usize, qnp: usize, pagefile: usize, peak_pagefile: usize, private: usize }
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn GetCurrentProcess() -> isize;
-            fn K32GetProcessMemoryInfo(process: isize, counters: *mut Counters, cb: u32) -> i32;
-        }
-        let mut c = Counters { cb: std::mem::size_of::<Counters>() as u32, ..Default::default() };
-        // SAFETY: fills `c`, whose `cb` names PROCESS_MEMORY_COUNTERS_EX.
-        unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };
-        c.private as f64 / 1e6
-    }
-
-    #[cfg(not(target_os = "windows"))]
     fn private_mb() -> f64 { 0.0 }
 
     pub fn main() {
@@ -96,15 +78,10 @@ mod lazy {
         std::thread::spawn(move || {
             let run = std::panic::catch_unwind(move || {
                 let mut r = Vec::new();
-                if cfg!(target_os = "windows") {
-                    std::thread::sleep(Duration::from_millis(1500));
-                    assert_eq!(created.load(Ordering::SeqCst), 0, "a hidden overlay has no window on Windows");
-                } else {
-                    wait(Duration::from_secs(10), || full.availability() == Availability::Available).expect("the prewarmed window");
-                    // Let startup make the prewarmed window.
-                    std::thread::sleep(Duration::from_millis(1500));
-                    assert_eq!(created.load(Ordering::SeqCst), 1, "on_created runs at startup");
-                }
+                wait(Duration::from_secs(10), || full.availability() == Availability::Available).expect("the prewarmed window");
+                // Let startup make the prewarmed window.
+                std::thread::sleep(Duration::from_millis(1500));
+                assert_eq!(created.load(Ordering::SeqCst), 1, "on_created runs at startup");
                 assert!(full.surface_description().is_none(), "a hidden prewarmed overlay has no surface");
                 assert_eq!(STARTS.load(Ordering::SeqCst), 0, "nothing shown, no GPU device");
                 let idle = private_mb();

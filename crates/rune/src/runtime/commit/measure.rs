@@ -1,5 +1,5 @@
 use super::*;
-use crate::el::ElFlags;
+use crate::el::{ElFlags, Reveal};
 
 pub(super) fn collect_virtual_inputs(el: &El, parent: &str, index: usize, inert: bool, inputs: &mut HashMap<String, Box<InputSpec>>) {
     // Most offscreen rows hold no focused field; find that out before building any paths.
@@ -56,7 +56,6 @@ impl RuntimeCore {
             // The window's controls are in its points; the view's are over the zoom.
             titlebar_inset: self.titlebar_inset / self.zoom.k,
             chrome: self.titlebar.insets.zoomed(self.zoom.k),
-            caption: self.titlebar.caption,
             system_accent: self.system_accent,
             system_scroll_bars: self.scroll_bars.state,
             reduced_motion: self.reduced_motion,
@@ -127,7 +126,7 @@ impl Measurement<'_> {
             v.top = (nodes[ci].target[1] - scroll.target[1]).max(0.0);
             let st = self.scrolls.get_mut(&scroll.id);
             let sticky = scroll.scroll.unwrap().stick_bottom;
-            let pinned = (settle && sticky) || st.as_ref().map_or(sticky, |s| s.pinned());
+            let pinned = st.as_ref().map_or(sticky, |s| s.follows_after(settle, sticky));
             let offset = if let Some(st) = st {
                 if !pinned { st.offset = (st.offset + f64::from(v.anchor_delta())).max(0.0); }
                 st.offset as f32
@@ -167,23 +166,14 @@ impl Measurement<'_> {
     /// The app's view, or with the playground attached, the view it composes (the bar, or the
     /// playground around its stage).
     fn root_view(&self, cx: app_side::CxAny) -> (El, app_side::CxAny) {
-        let (root, cx) = self.app.root_view(cx, self.viewport);
-        // The Windows caption buttons go over everything the view drew, in a frame around it.
-        let Some(caption) = &self.caption else { return (root, cx) };
-        let symbol = cx.caption_color.unwrap_or(if self.env.system_dark { Color::WHITE } else { Color::BLACK });
-        // At the height this run sets (`Cx::titlebar_height`, a zoom's), in this commit: the
-        // window's frame takes it after, and drawing the old one first would spring the buttons
-        // to the new one, at launch and on every zoom step.
-        let height = cx.titlebar.height.or(cx.titlebar.titlebar.map(|t| t.height())).unwrap_or(caption.height);
-        let caption = crate::titlebar::Caption { height, ..*caption };
-        (crate::titlebar::frame(root, &caption, symbol, (self.env.scale, self.zoom), self.fit_height), cx)
+        self.app.root_view(cx, self.viewport)
     }
 
     /// What a memo scope hashes of the window's controls (`Cx::titlebar_inset`,
     /// `Cx::chrome_insets`), so memos that read them rebuild when they change.
-    pub(super) fn chrome_bits(&self) -> [u32; 4] {
-        let [leading, trailing, height] = self.chrome.bits();
-        [self.titlebar_inset.to_bits(), leading, trailing, height]
+    pub(super) fn chrome_bits(&self) -> [u32; 3] {
+        let [leading, height] = self.chrome.bits();
+        [self.titlebar_inset.to_bits(), leading, height]
     }
 
     pub(super) fn finish(self, tx: &Tx) -> Measured {
@@ -252,7 +242,7 @@ impl Measurement<'_> {
             assert!(el.cold.growth.is_some(), "`.virtualize(..)` at {path:?} needs `.growth(GrowthSpec)` on the same element");
             let (scroll_path, sticky, scroll_bound) = scroll.expect("virtual stack must be inside a scroll viewport");
             let old_scroll = self.path_ids.get(scroll_path).and_then(|id| self.scrolls.get(id));
-            let pinned = (tx.commit.lands() && sticky) || old_scroll.map_or(sticky, |s| s.pinned());
+            let pinned = old_scroll.map_or(sticky, |s| s.follows_after(tx.commit.lands(), sticky));
             let mut offset = old_scroll.map_or(0.0, |s| s.offset as f32);
             // A new viewport has no height yet: its bound from the tree, else the window's.
             let first = if scroll_bound.is_finite() { scroll_bound } else { self.viewport.1 };
@@ -375,7 +365,6 @@ impl Measurement<'_> {
             env: this.env,
             titlebar_inset: this.titlebar_inset,
             chrome: this.chrome,
-            caption_color: None,
             titlebar: Default::default(),
             system_accent: this.system_accent,
             system_scroll_bars: this.system_scroll_bars,
@@ -495,6 +484,15 @@ impl Measurement<'_> {
         // Dev's order: the rows kept from the last commit go before any builder runs, so a row
         // holding a resource doesn't keep it through building its replacement.
         v.selection.stored.clear();
+        let selected = match &el.cold.focus.reveal {
+            Reveal::Off => None,
+            Reveal::Selected => Some(el.children.iter().find(|c| c.cold.focus.selected).and_then(|c| c.key.clone())),
+            Reveal::Row(key) => Some(key.clone()),
+        };
+        if let Some(selected) = selected && self.pass.reveals() && selected != v.selected_row {
+            v.reveal_selected = selected.clone();
+            v.selected_row = selected;
+        }
         if let Some(rows) = source {
             let quiet: Vec<bool> = v.range.clone().map(|i| v.mounts_quietly(i, self.commits)).collect();
             let key_warnings = &mut *self.key_warnings;
@@ -543,13 +541,6 @@ impl Measurement<'_> {
             }).collect();
             v.selection.pins.set_source(selectable::virtual_selection::Source::Rebuild(rows));
         } else {
-            if self.pass.reveals() && el.cold.focus.reveal_selected {
-                let selected = el.children.iter().find(|c| c.cold.focus.selected).and_then(|c| c.key.clone());
-                if selected != v.selected_row {
-                    v.reveal_selected = selected.clone();
-                    v.selected_row = selected;
-                }
-            }
             #[cfg(debug_assertions)]
             crate::tooling::perf_warn::overbuilt(path, el.cold.virtual_source, el.children.len(), v.range.len());
             let pinned: Vec<usize> = v.selection.pins.rows().iter()

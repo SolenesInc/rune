@@ -189,7 +189,7 @@ fn opt_box_eq<T: PartialEq>(a: &Option<Box<T>>, b: &Option<Box<T>>) -> bool {
 fn same_visual_cold(a: &crate::el::VisualCold, b: &crate::el::VisualCold) -> bool {
     let crate::el::VisualCold {
         surface, surface_place, border_bottom, border_sides, border_layout, border_dash, border_dash_phase, shadows, blur_motion,
-        clip, clip_radius, clip_corners, cutout, icon, icon_inked, icon_one_color, gradient, radial, outline, shape,
+        clip, clip_outset, clip_radius, clip_corners, cutout, icon, icon_inked, icon_one_color, gradient, radial, outline, shape,
         pixels, pixels_fit, effect, backdrop_blur, hover_motion, hover_within,
         group_opacity, group_color, hover_alone, hover_share, icon_turn, cache_key, offset_motion, scale_motion,
         origin, rotate_motion, child_exit, enter_delay, motion_intent, instant_motion, clip_to_content, flight_crop,
@@ -201,7 +201,7 @@ fn same_visual_cold(a: &crate::el::VisualCold, b: &crate::el::VisualCold) -> boo
         _ => false,
     }) && a.surface_place == *surface_place && a.border_bottom == *border_bottom && a.border_sides == *border_sides && a.border_layout == *border_layout && a.border_dash == *border_dash
         && a.border_dash_phase == *border_dash_phase && a.shadows == *shadows
-        && opt_box_eq(&a.blur_motion, blur_motion) && a.clip == *clip
+        && opt_box_eq(&a.blur_motion, blur_motion) && a.clip == *clip && a.clip_outset == *clip_outset
         && a.clip_radius == *clip_radius && a.clip_corners == *clip_corners && a.cutout == *cutout
         && match (&a.icon, icon) {
             (None, None) => true,
@@ -241,7 +241,7 @@ pub(super) fn same_visual(a: &Visual, b: &Visual) -> bool {
 fn same_el_cold(a: &crate::el::ElCold, b: &crate::el::ElCold) -> bool {
     let crate::el::ElCold {
         focus, looping, trace_name, trace_namespace, role, label, live, above, motion, opacity_motion, lead,
-        animated_changes, option_as_alt, transition, matched, scroll, scroll_axes, sticky, scroll_edges, growth, virtual_estimate, virtual_rows,
+        animated_changes, option_as_alt, ime_at, transition, matched, scroll, scroll_axes, sticky, scroll_edges, growth, virtual_estimate, virtual_rows,
         virtual_rows_version, glide, input, time_scale, help, help_cut, help_side, material, aspect_fit, a11y,
         #[cfg(debug_assertions)]
         scroll_source: _,
@@ -262,6 +262,7 @@ fn same_el_cold(a: &crate::el::ElCold, b: &crate::el::ElCold) -> bool {
         && a.lead == *lead
         && a.animated_changes == *animated_changes
         && a.option_as_alt == *option_as_alt
+        && a.ime_at.as_ref().map(|l| std::sync::Arc::as_ptr(&l.source)) == ime_at.as_ref().map(|l| std::sync::Arc::as_ptr(&l.source))
         && opt_box_eq(&a.transition, transition)
         && a.matched == *matched
         && a.scroll == *scroll
@@ -330,10 +331,11 @@ fn same_handlers(
         on_paste,
         on_window_focus,
         on_spellcheck,
-        on_spellcheck_languages,
         modal,
         on_press,
         on_press_outside,
+        on_press_within,
+        keeps_press_from_within,
         on_double_press,
         on_secondary_press,
         on_hover,
@@ -343,6 +345,7 @@ fn same_handlers(
         gestures,
         on_drag,
         drag_out,
+        own_text,
         drag_threshold,
         on_drag_start,
         on_drag_end,
@@ -351,6 +354,7 @@ fn same_handlers(
         on_far_from_bottom,
         on_visible_rows,
         on_layout,
+        on_measure,
         on_screen_layout,
         on_drawn_layout,
         on_visible,
@@ -376,9 +380,10 @@ fn same_handlers(
             (Some((on_a, fa)), Some((on_b, fb))) => on_a == on_b && Rc::ptr_eq(fa, fb),
             _ => false,
         }
-        && opt_rc_eq(&a.on_spellcheck_languages, on_spellcheck_languages)
         && opt_rc_eq(&a.on_press, on_press)
         && opt_rc_eq(&a.on_press_outside, on_press_outside)
+        && opt_rc_eq(&a.on_press_within, on_press_within)
+        && a.keeps_press_from_within == *keeps_press_from_within
         && opt_rc_eq(&a.on_double_press, on_double_press)
         && opt_rc_eq(&a.on_secondary_press, on_secondary_press)
         && opt_rc_eq(&a.on_hover, on_hover)
@@ -388,6 +393,7 @@ fn same_handlers(
         && same_gestures(&a.gestures, gestures)
         && opt_rc_eq(&a.on_drag, on_drag)
         && opt_rc_eq(&a.drag_out, drag_out)
+        && opt_rc_eq(&a.own_text, own_text)
         && a.drag_threshold == *drag_threshold
         && opt_rc_eq(&a.on_drag_start, on_drag_start)
         && opt_rc_eq(&a.on_drag_end, on_drag_end)
@@ -400,6 +406,7 @@ fn same_handlers(
         }
         && opt_rc_eq(&a.on_visible_rows, on_visible_rows)
         && opt_rc_eq(&a.on_layout, on_layout)
+        && opt_rc_eq(&a.on_measure, on_measure)
         && opt_rc_eq(&a.on_screen_layout, on_screen_layout)
         && opt_rc_eq(&a.on_drawn_layout, on_drawn_layout)
         && opt_rc_eq(&a.on_visible, on_visible)

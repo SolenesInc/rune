@@ -2,7 +2,7 @@
 //! colour for each instance kind `cpu_boot` draws. The names are the shader's, so a change there
 //! has one obvious place to land here.
 
-use crate::render::{CONTINUOUS_K, Instance, unpack_clip_radii};
+use crate::render::{CONTINUOUS_K, Instance, unpack_clip_radii, unpack_fade};
 
 fn clamp01(x: f32) -> f32 { x.clamp(0.0, 1.0) }
 
@@ -51,15 +51,8 @@ pub(super) struct Clip {
 
 impl Clip {
     pub(super) fn of(i: &Instance) -> Clip {
-        let f = i.fade;
-        let half = |w: u32, hi: bool| half::f16::from_bits((if hi { w >> 16 } else { w }) as u16).to_f32();
-        Clip {
-            rect: i.clip,
-            fade: [half(f[0], false), half(f[0], true), half(f[1], false), half(f[1], true)],
-            // `unpack4x8unorm`.
-            offset: std::array::from_fn(|e| ((f[2] >> (e * 8)) & 255) as f32 / 255.0),
-            radii: (f[3] != 0).then(|| unpack_clip_radii(f[3])),
-        }
+        let (fade, offset) = unpack_fade(i.fade);
+        Clip { rect: i.clip, fade, offset, radii: (i.fade[3] != 0).then(|| unpack_clip_radii(i.fade[3])) }
     }
 
     /// `clip_alpha`.

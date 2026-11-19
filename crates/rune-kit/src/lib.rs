@@ -56,6 +56,7 @@ mod shortcut_recorder;
 mod switch;
 pub mod syntax;
 mod table;
+mod text_area;
 mod text_input;
 mod toast;
 pub mod toast_stack;
@@ -99,6 +100,7 @@ pub use kit::Kit;
 pub use kit::Motion;
 pub use kit::Palette;
 pub use kit::Radius;
+pub use kit::{MenuLabel, StandardMenu};
 pub use kit::StateColors;
 pub use kit::Type;
 pub use list::List;
@@ -113,6 +115,8 @@ pub use markdown::DiagramFrame;
 pub use markdown::Highlight;
 #[cfg(feature = "markdown")]
 pub use markdown::ImageFrame;
+#[cfg(feature = "markdown")]
+pub use markdown::MissingImage;
 #[cfg(feature = "markdown")]
 pub use markdown::Markdown;
 #[cfg(feature = "markdown")]
@@ -165,7 +169,7 @@ pub use table::Table;
 pub use table::TableColumn;
 pub use table::TableState;
 pub use table::TableStyle;
-pub use text_input::TextArea;
+pub use text_area::TextArea;
 pub use text_input::TextField;
 pub use text_input::TextInput;
 pub use toast::Toast;

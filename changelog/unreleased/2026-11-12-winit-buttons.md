@@ -1,1 +1,0 @@
-- **Windows: a new window's frame is set up once, not twice (~1,000 µs before its first frame).** The vendored winit makes the window with the minimize and maximize boxes it asks for; it used to add them just after, which rewrote the window's styles and changed its frame again.

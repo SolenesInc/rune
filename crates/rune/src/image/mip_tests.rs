@@ -87,7 +87,7 @@ fn a_mip_chain_built_in_slices_matches_one_built_whole() {
         let src = synthetic(w, h);
         let whole = mip_chain(w, h, &src).unwrap().mips;
         for budget in [1, 7, 100, 5000] {
-            let mut steps = mips::MipSteps::new(w, h, &src).unwrap();
+            let mut steps = mips::MipSteps::new(w, h, &src, mips::Fill::ALL).unwrap();
             let mut slices = 1;
             while !steps.step(budget) { slices += 1; }
             let sliced = steps.finish().mips;

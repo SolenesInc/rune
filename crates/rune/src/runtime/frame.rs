@@ -57,9 +57,6 @@ impl RuntimeCore {
         changed
     }
 
-    /// Whether the window has the keyboard focus, as its last focus event said.
-    pub(crate) fn has_window_focus(&self) -> bool { self.window_focused == Some(true) }
-
     /// Queue a native focus transition. Repeated notifications do not repeat the callback.
     /// Losing focus is also `keys_lost`.
     pub fn window_focus(&mut self, focused: bool) {
@@ -119,9 +116,10 @@ impl RuntimeCore {
         self.dirty || self.pending.frame_work() || self.patch_pending()
     }
 
-    /// The last frame no longer shows the window: state, its size or queued input changed since.
+    /// The last frame no longer shows the window: state, its size, queued input or the
+    /// selection changed since.
     pub(crate) fn stale(&self) -> bool {
-        self.needs_commit() || self.relayout || !self.queue.is_empty()
+        self.needs_commit() || self.relayout || !self.queue.is_empty() || !self.selection_heard()
     }
 
     /// A live-edit patch arrived that the next frame hasn't rebuilt the view with yet.
@@ -168,7 +166,7 @@ impl RuntimeCore {
         if std::mem::take(&mut tx.minimize) { self.minimize_step(crate::window::MinimizeEvent::Asked); }
         self.titlebar.toggle_maximized |= std::mem::take(&mut tx.toggle_maximized);
         self.titlebar.toggle_full_screen |= std::mem::take(&mut tx.toggle_full_screen);
-        for ev in std::mem::take(&mut tx.keys) { self.key(ev); }
+        for ev in std::mem::take(&mut tx.keys) { self.queue_key(ev, false); }
         self.latch_playground(tx);
         for prefix in std::mem::take(&mut tx.evict_memos) { self.invalidate_memos_by_prefix(&prefix); }
         if !tx.open_urls.is_empty() { self.open_urls(std::mem::take(&mut tx.open_urls)); }
@@ -207,15 +205,16 @@ impl RuntimeCore {
         if let Some(srgb) = tx.srgb_blend.take() { self.set_srgb_blend(srgb); }
         if let Some(rewind) = tx.rewind.take() { self.rewind = rewind; }
         if std::mem::take(&mut tx.blur) {
+            self.focus_request.to = None;
             if self.focus.path().is_some() {
-                self.set_focus(None, self.focus.keyboard());
+                self.focus_request.blur = true;
                 self.dirty = true;
+            } else {
+                self.focus.step(focus_machine::FocusEvent::Settled);
             }
-            // An explicit blur is not the temporary pointer-down blur of a scrim.
-            self.focus.step(focus_machine::FocusEvent::Settled);
         }
         if let Some(request) = tx.focus_to.take() {
-            self.focus_request = Some(request);
+            self.focus_request.to = Some(request);
             self.dirty = true;
         }
         if let Some(title) = tx.title.take() { self.window_title.set(title); }
@@ -398,6 +397,7 @@ impl RuntimeCore {
     pub(super) fn frame_step(&mut self, elapsed: f64, catch_up: f64, dt: f64) -> bool {
         // Each queued action runs with its own input's arrival time; nothing else has one.
         let _input = crate::input::time::scope(None);
+        let rested = self.rested();
         self.interaction_frame_begins();
         let mut live_woke = self.take_live_wake();
         // Another window may have switched the font families since this one's last frame.
@@ -449,7 +449,7 @@ impl RuntimeCore {
         self.fire_press_repeat();
         // Marks are paint's (`paint::content`), and this frame paints: a pause that ends or words
         // the checker brought back show without the view running again.
-        let (wake, _marked) = crate::spell::pause::tick(&mut self.spell_watch, self.clock);
+        let (wake, marked) = crate::spell::pause::tick(&mut self.spell_watch, self.clock);
         if let Some(at) = wake { self.schedule_wakes([std::time::Duration::from_secs_f64((at - self.clock).max(0.0))]); }
         if self.app.has(app_side::Hook::Poll) && !polled {
             let mut one = self.transaction();
@@ -480,6 +480,7 @@ impl RuntimeCore {
         let ended: Vec<_> = self.drag_ends.borrow_mut().drain(..).collect();
         let queue = order_drag_ends(std::mem::take(&mut self.queue), ended, &mut self.drags_open);
         let queue = self.hold_files(queue, ran || self.dirty);
+        let acted = !queue.is_empty();
         // Something besides a checked live-only event wants this frame's commit, so a change
         // it makes isn't the live-only handler's.
         #[cfg(debug_assertions)]
@@ -496,26 +497,26 @@ impl RuntimeCore {
             let routed = matches!(&action, Action::Key { .. } | Action::KeyUp(_) | Action::Physical(..) | Action::Ime(_) | Action::FinishIme | Action::Paste(..) | Action::Files(_));
             // So is a playground an earlier handler opened or moved.
             if routed { self.latch_playground(&mut tx); }
-            if (ran || self.dirty || !tx.scroll_to.is_empty()) && routed {
-                if ran || self.dirty {
-                    self.capture_flights(&mut tx);
-                    if self.settle { tx.settle(); }
-                    self.settled |= tx.commit.lands();
-                    #[cfg(debug_assertions)]
-                    if ran_other || self.dirty || ran_layout { self.live_check = None; }
-                    self.capture_keeps(&mut tx);
-                    tx.unprompted = self.motion_needs_cause && why & CommitWhy::INPUT == 0 && !tx.asked_motion;
-                    self.commit_for(&tx, std::mem::take(&mut why) | CommitWhy::ROUTE | if self.dirty { CommitWhy::DIRTY } else { 0 });
-                    #[cfg(debug_assertions)]
-                    { let check = self.live_check.take(); self.compare_live_check(check); ran_other = false; }
-                    self.apply_keeps();
-                    ran = false;
-                }
-                if !tx.scroll_to.is_empty() {
-                    self.drop_scroll_holds();
-                    for r in std::mem::take(&mut tx.scroll_to) {
-                        self.reveal_row(&r, tx.commit.snaps());
-                    }
+            // A focus change or a press on a field reaches fields' state through the tree, so
+            // it too waits for a field an earlier handler ended to leave it.
+            if (ran || self.dirty) && (routed || reaches_fields(&action)) {
+                self.capture_flights(&mut tx);
+                if self.settle { tx.settle(); }
+                self.settled |= tx.commit.lands();
+                #[cfg(debug_assertions)]
+                if ran_other || self.dirty || ran_layout { self.live_check = None; }
+                self.capture_keeps(&mut tx);
+                tx.unprompted = self.motion_needs_cause && why & CommitWhy::INPUT == 0 && !tx.asked_motion;
+                self.commit_for(&tx, std::mem::take(&mut why) | CommitWhy::ROUTE | if self.dirty { CommitWhy::DIRTY } else { 0 });
+                #[cfg(debug_assertions)]
+                { let check = self.live_check.take(); self.compare_live_check(check); ran_other = false; }
+                self.apply_keeps();
+                ran = false;
+            }
+            if routed && !tx.scroll_to.is_empty() {
+                self.drop_scroll_holds();
+                for r in std::mem::take(&mut tx.scroll_to) {
+                    self.reveal_row(&r, tx.commit.snaps());
                 }
             }
             // A selection an earlier handler asked for is what this key copies.
@@ -640,20 +641,37 @@ impl RuntimeCore {
         // What the commit or a `Tx::select_text` changed is heard next frame.
         let changes = self.selection_changes();
         self.queue.extend(changes);
-        self.update_interaction(None);
+        let unchanged = rested && due == 0 && !polled && !ran && !acted && !marked && catch_up <= 0.0 && !self.settle
+            && scroll_to.is_empty() && !destination && !follow && self.queue.is_empty()
+            && self.paints_as_before();
+        if !unchanged || self.last_paint.checked { self.update_interaction(None); }
         #[cfg(test)]
         if let Some(publish) = tests::MID_FRAME.with(|hook| hook.borrow_mut().take()) { publish(); }
         // Poll and input can publish after the initial wake read without committing. Sample
         // those values now, but retain the wake: a picture may still need next frame's layout.
         let live_pending = live_woke || self.live_pending();
         let live_animating = self.latch_live(live_pending);
+        let keeps_paint = unchanged && !live_pending && !live_animating;
         if let Some(trace) = tx.trace.take() {
             for event in trace.events { self.trace_event(event); }
             for (name, kind, value) in trace.channels { self.trace_channel(name, kind, value); }
         }
         let dt = if self.fit_frame_holds() { 0.0 } else { dt };
         let instant_scroll = tx.commit.snaps() || self.settled;
-        let animating = self.step_motion(dt, instant_scroll) || live_animating;
+        let animating = if keeps_paint && !self.last_paint.checked {
+            self.step_clock(dt);
+            self.place_ime_anchor();
+            false
+        } else {
+            let kept = keeps_paint.then(|| {
+                self.place_ime_anchor();
+                (self.instances.clone(), self.ime_area)
+            });
+            if !keeps_paint { self.stats.paints += 1; }
+            let animating = self.step_motion(dt, instant_scroll) && self.time_scale > 0.0;
+            if let Some((kept, ime)) = kept { kept_paint::check(&kept, &self.instances, animating, (ime, self.ime_area)); }
+            animating
+        } || live_animating;
         self.stats.shaped = self.text.shaped - shaped0;
         let filling = self.virtual_filling();
         if live_animating { self.anim_sources |= AnimSource::LIVE; }
@@ -692,13 +710,50 @@ impl RuntimeCore {
         self.step_scroll(step as f32);
     }
 
-    pub(super) fn step_motion(&mut self, dt: f64, instant_scroll: bool) -> bool {
+    /// The last frame came to rest on a paint that repeated the one before it: nothing moves,
+    /// and no delayed start, tooltip, held hover or fling waits for a frame.
+    fn rested(&self) -> bool {
+        self.last_paint.repeated && !self.animating && self.loop_wake.is_none() && !self.dirty && !self.relayout
+            && !self.tooltip_unsettled() && !self.hover_hold.held() && !self.scrolls.values().any(ScrollState::owes_motion)
+    }
+
+    /// Nothing the last paint was built from changed: no commit, no state outside commits that
+    /// paints (`paint_state_hash`), nothing hover follows (the pointer and what it holds), not
+    /// the page's scroll, and not the tooltip, which a wheel dismisses at once.
+    fn paints_as_before(&self) -> bool {
+        self.last_paint.inputs == Some(self.paint_inputs())
+    }
+
+    fn paint_inputs(&self) -> (u64, u64) {
+        use std::hash::{Hash, Hasher};
+        let mut h = rune_motion::Fx::default();
+        h.write_u64(self.paint_state_hash(&self.selection_ranges(), &self.mark_ranges()));
+        self.pointer.map(|(x, y)| (x.to_bits(), y.to_bits())).hash(&mut h);
+        (self.press.path(), self.press.inside(), self.secondary.path(), self.hover_paused).hash(&mut h);
+        self.page.map(|p| [p.scroll, p.top, p.band, p.view].map(f32::to_bits)).hash(&mut h);
+        self.help_tooltip().map(|(text, rect)| (text, rect.map(f32::to_bits))).hash(&mut h);
+        (self.commit_gen, h.finish())
+    }
+
+    /// Paints each frame that keeps the last paint anyway, and panics when the paint differs:
+    /// for an app's tests, so every frame they drive proves a kept paint right.
+    pub fn check_kept_paint(&mut self) {
+        self.last_paint.checked = true;
+    }
+
+    /// Moves animation time on by `dt`; returns the step in animation time.
+    fn step_clock(&mut self, dt: f64) -> f64 {
         self.loops_stepped();
         let step = dt * self.time_scale as f64;
         self.slack_dt = std::mem::take(&mut self.caught_up) + step as f32;
         self.last_dt = step;
         self.t += step;
         self.scene.set_time(self.t);
+        step
+    }
+
+    pub(super) fn step_motion(&mut self, dt: f64, instant_scroll: bool) -> bool {
+        let step = self.step_clock(dt);
         if self.scene.tracing() {
             for node in &self.nodes {
                 self.scene.trace_name(node.id, node.trace_name);
@@ -790,6 +845,8 @@ impl RuntimeCore {
             self.marks.resize(self.instances.len(), 0);
         }
         self.anim_sources = sources;
+        let inputs = self.paint_inputs();
+        self.last_paint.follow(inputs, &self.instances);
         animating
     }
 

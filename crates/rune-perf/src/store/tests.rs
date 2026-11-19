@@ -91,6 +91,30 @@ fn replacement_acquires_after_old_owner_releases() {
 }
 
 #[test]
+fn shutdown_after_only_quick_frames_writes_their_distribution() {
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = Recorder::start(Config::new(dir.path(), "quiet")).unwrap();
+    for n in 1..=100 {
+        recorder.record(Frame::new(0, n, Outcome::Drawn).update_ms(n as f64 / 10.0).render_ms(0.0));
+    }
+    recorder.shutdown().unwrap();
+    let snapshot: Value = serde_json::from_slice(&std::fs::read(dir.path().join("perf.json")).unwrap()).unwrap();
+    assert_eq!(snapshot["incidents"], 0);
+    assert_eq!(snapshot["frames"]["total"], 100);
+    assert_eq!(snapshot["frames"]["work_ms"]["p50"], 5.0);
+    assert_eq!(snapshot["frames"]["work_ms"]["p99"], 9.9);
+    assert_eq!(snapshot["frames"]["work_ms"]["max"], 10.0);
+}
+
+#[test]
+fn shutdown_with_no_frames_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = Recorder::start(Config::new(dir.path(), "idle")).unwrap();
+    recorder.shutdown().unwrap();
+    assert!(!dir.path().join("perf.json").exists());
+}
+
+#[test]
 fn dropped_recorder_cancels_lock_wait() {
     let dir = tempfile::tempdir().unwrap();
     let lock = OpenOptions::new().create(true).truncate(false).read(true).write(true).open(dir.path().join(".perf.lock")).unwrap();

@@ -32,6 +32,13 @@ pub(crate) fn json(update: &TreeUpdate, runs: bool) -> Value {
     tree.node(root, [0.0, 0.0], true).unwrap_or(Value::Null)
 }
 
+/// Each node of `update` with the role and name [`json`] prints for it.
+pub(crate) fn roles_and_names(update: &TreeUpdate) -> Vec<(NodeId, String, Option<String>)> {
+    let nodes = update.nodes.iter().map(|(id, n)| (id.0, n)).collect();
+    let tree = Tree { nodes, focus: update.focus, runs: false };
+    update.nodes.iter().map(|(id, n)| (*id, super::roles::name(n.role()), tree.name(n))).collect()
+}
+
 fn super_root(update: &TreeUpdate) -> NodeId {
     update.nodes.first().map_or(NodeId(1), |(id, _)| *id)
 }

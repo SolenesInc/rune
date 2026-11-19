@@ -5,7 +5,7 @@
 use accesskit::{Action as Ak, ActionData, ActionRequest, ScrollUnit};
 
 use super::*;
-use super::a11y_tree::{ROOT, split_id, sub_link};
+use super::a11y_tree::{ROOT, element_id, link_id, split_id, sub_link};
 
 /// An action request resolved against the tree it named, run at the next frame.
 #[derive(Debug)]
@@ -124,6 +124,21 @@ impl RuntimeCore {
         self.a11y_action(&ActionRequest { action, target_tree: accesskit::TreeId::ROOT, target_node, data })
     }
 
+    /// [`Self::accessibility_action`] for the element at `path`, keyed or not, as
+    /// [`Self::elements`] and [`Self::accessible_elements`] list it.
+    pub fn accessibility_action_at(&mut self, path: &str, action: accesskit::Action, data: Option<ActionData>) -> bool {
+        let (node, link) = match path.split_once("#link-") {
+            Some((text, k)) => match k.parse() {
+                Ok(k) => (text, Some(k)),
+                Err(_) => return false,
+            },
+            None => (path, None),
+        };
+        let Some(id) = self.nodes.iter().find(|n| n.path == node).map(|n| n.id) else { return false };
+        let target_node = link.map_or(element_id(id), |k| link_id(id, k));
+        self.a11y_action(&ActionRequest { action, target_tree: accesskit::TreeId::ROOT, target_node, data })
+    }
+
     /// Runs a queued accessibility action in its frame.
     pub(super) fn run_a11y(&mut self, path: String, act: A11yAct, tx: &mut Tx) -> bool {
         match act {
@@ -151,7 +166,12 @@ impl RuntimeCore {
                 crate::edit::EditOutcome::default()
             }),
             A11yAct::ScrollIntoView => {
+                let viewports: Vec<String> = self.nodes.iter().position(|n| n.path == path).into_iter()
+                    .flat_map(|i| std::iter::successors(self.viewport_of(i), |&v| self.viewport_of(v)))
+                    .map(|v| self.nodes[v].path.clone())
+                    .collect();
                 tx.scroll_into_view(path);
+                for viewport in viewports { tx.scroll_into_view(viewport); }
                 true
             }
             A11yAct::Scroll { x, y, pages } => {

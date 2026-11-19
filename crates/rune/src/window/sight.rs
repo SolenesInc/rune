@@ -1,8 +1,6 @@
 //! Whether a shown window can be seen. The system says so (macOS's occlusion state, which
 //! winit sends as `WindowEvent::Occluded`); a drawable refused as occluded says it until its
-//! retry looks again; on Windows, other windows over the whole of it, minimising it or another
-//! virtual desktop say it (`platform::win32::occlusion`, after Chromium's occlusion tracker).
-//! Any one covers it, and it shows again once none does. A covered window draws nothing and
+//! retry looks again. Either one covers it, and it shows again once none does. A covered window draws nothing and
 //! runs no motion: `poll`, due timers and queued input still run (`covered_step`), and
 //! `App::on_visibility` hears it go and come back, as a page's `visibilitychange` does.
 
@@ -17,9 +15,6 @@ pub(crate) enum Cover {
     System = 1,
     /// A drawable refused as occluded, before any notification said so.
     Surface = 2,
-    /// Windows: other windows cover it whole, it's minimised, or it's on another virtual desktop.
-    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-    Windows = 4,
 }
 
 /// A shown window's sight.
@@ -66,8 +61,6 @@ impl<S: 'static> Host<S> {
             return;
         }
         // Its first frame uncovered draws what a covered one owed.
-        #[cfg(target_os = "windows")]
-        { l.covered_draw = l.covered_draw.step(CoveredDrawEvent::Drawn); }
         sync_chrome(&mut self.rt, l, self.chrome, self.titlebar);
         // A window opened while the displays slept has no display link yet.
         #[cfg(target_os = "macos")]

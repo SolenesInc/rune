@@ -82,7 +82,7 @@ impl TextSystem {
             let m = line.metrics();
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(gr) = item else { continue };
-                let ink = gr.style().brush.0 & !super::synthetic_bold::SYNTHETIC_BOLD;
+                let ink = gr.style().brush.0;
                 if ink == 0 {
                     continue;
                 }
@@ -96,11 +96,16 @@ impl TextSystem {
                         .find(|&&(ra, rb, _, rw)| rw > 0.0 && ra < s.end && s.start < rb)
                         .map(|&(_, _, c, rw)| (c, rw * scale));
                     let pad = s.bg_pad * scale;
-                    // Balanced on the cap height (not a mono face's tall line box), on whole device pixels.
-                    let cap = gr.run().font_metrics().cap_height.unwrap_or(gr.run().font_size() * 0.7);
+                    let fm = gr.run().font_metrics();
                     let base = origin[1] + m.baseline;
-                    let top = (base - cap * 1.35).round();
-                    let bot = (base + cap * 0.55).round();
+                    let (top, bot) = match s.bg_pad_y {
+                        Some(py) => ((base - fm.ascent - py * scale).round(), (base + fm.descent.abs() + py * scale).round()),
+                        // Balanced on the cap height (not a mono face's tall line box), on whole device pixels.
+                        None => {
+                            let cap = fm.cap_height.unwrap_or(gr.run().font_size() * 0.7);
+                            ((base - cap * 1.35).round(), (base + cap * 0.55).round())
+                        }
+                    };
                     let (l, r) = ((x0 - pad).round(), (x0 + w + pad).round());
                     let rect = [l, top, r - l, bot - top];
                     // Touching runs with the same background and ring on one line (a span split by
@@ -131,7 +136,14 @@ impl TextSystem {
                 if let Some(uc) = s.underline.filter(|c| c.a > 0.0) {
                     let y = (origin[1] + m.baseline + 2.0 * scale).round();
                     let (l, r) = underline_edges(&line, origin[0], gr.offset(), gr.offset() + w);
-                    out.push(D::new(Deco { rect: [l, y, r - l, scale.max(1.0)], color: uc, radius: 0.0 }, None, 0));
+                    let h = scale.max(1.0);
+                    if s.underline_dashed {
+                        for (x, w) in dashes(l, r, h) {
+                            out.push(D::new(Deco { rect: [x, y, w, h], color: uc, radius: 0.0 }, None, 0));
+                        }
+                    } else {
+                        out.push(D::new(Deco { rect: [l, y, r - l, h], color: uc, radius: 0.0 }, None, 0));
+                    }
                 }
             }
         }
@@ -204,8 +216,8 @@ impl TextSystem {
         if highlights.is_empty() {
             return;
         }
-        let radius = 4.0 * scale;
         for h in highlights {
+            let radius = h.radius * scale;
             let (a, b) = ((h.start as usize).min(len), (h.end as usize).min(len));
             if a >= b || (h.bg.a <= 0.0 && h.ring.is_none()) {
                 continue;
@@ -253,4 +265,19 @@ impl TextSystem {
             }
         }
     }
+}
+
+/// The dashes of a `width` line from `l` to `r` (device px) as `(x, width)`, as a browser draws a
+/// `dashed` border: dashes three widths long with gaps near that, stretched so the line starts
+/// and ends on a dash, each on whole pixels.
+fn dashes(l: f32, r: f32, width: f32) -> impl Iterator<Item = (f32, f32)> {
+    let dash = 3.0 * width;
+    let room = r - l;
+    let n = (((room + dash) / (2.0 * dash)).floor() as usize).max(1);
+    let gap = if n > 1 { (room - n as f32 * dash) / (n - 1) as f32 } else { 0.0 };
+    (0..n).map(move |i| {
+        let x0 = (l + i as f32 * (dash + gap)).round();
+        let x1 = (l + i as f32 * (dash + gap) + dash).min(r).round();
+        (x0, x1 - x0)
+    })
 }

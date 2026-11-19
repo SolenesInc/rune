@@ -292,7 +292,7 @@ impl RuntimeCore {
     /// `shared`: the `hover_group_shared` keys the pointer is over.
     fn hover_flip(&self, i: usize, captured: Option<&str>, alone: Option<usize>, shared: &[Rc<str>]) -> Option<Flip> {
         let n = &self.nodes[i];
-        if !(n.vis.hover().a > 0.0 || n.vis_flags.hover_group()) || self.is_exiting(n.id) { return None; }
+        if !(n.vis.hovers() || n.vis_flags.hover_group()) || self.is_exiting(n.id) { return None; }
         let inside = self.pointer.is_some_and(|(x, y)| self.node_contains(i, x, y))
             || n.vis.hover_share.as_ref().is_some_and(|k| shared.contains(k))
             || (n.vis_flags.hover_group() && self.keyboard_within(i));
@@ -328,13 +328,17 @@ impl RuntimeCore {
         let captured = self.press.path().or(self.secondary.path());
         let alone = self.hovered_alone();
         let shared = self.shared_hovered();
+        let lands = self.settled;
         for i in 0..self.nodes.len() {
             let n = &self.nodes[i];
             let press_scale = n.handlers.get().and_then(|h| h.press_scale);
-            if n.vis.hover().a <= 0.0 && !n.vis_flags.hover_group() && n.vis.press().a <= 0.0 && press_scale.is_none() { continue; }
+            if !n.vis.hovers() && !n.vis_flags.hover_group() && n.vis.press().a <= 0.0 && press_scale.is_none() { continue; }
             if self.is_exiting(n.id) { continue; }
             match self.hover_flip(i, captured, alone, &shared) {
                 Some(f) if f.changed => flips.push(f),
+                Some(f) if lands && self.scene.store().is_animating(f.id, P_HOVER) => {
+                    self.scene.set(f.id, P_HOVER, f.on as u8 as f32);
+                }
                 // Default hover animations inherit velocity and have no completion token.
                 // An unchanged target preserves its trajectory in the store already; avoid
                 // dirtying the scene node for that no-op. Custom animations may carry an
@@ -379,7 +383,7 @@ impl RuntimeCore {
         for f in flips.drain(..) {
             if held && !f.now { continue; }
             if paint_tracks::ready_from_rest(&mut self.scene, f.id, P_HOVER, 0.0, f.on as u8 as f32) {
-                if unseen.get_or_insert_with(|| self.drew_nothing()).get(f.i).copied().unwrap_or(false) {
+                if lands || unseen.get_or_insert_with(|| self.drew_nothing()).get(f.i).copied().unwrap_or(false) {
                     self.scene.set(f.id, P_HOVER, f.on as u8 as f32);
                 } else {
                     self.scene.animate(f.id, P_HOVER, f.on as u8 as f32, f.anim);

@@ -9,11 +9,11 @@ pub(super) struct Fallback { key: KeyEvent, base: Option<char>, unhandled: Optio
 /// opens the window menu.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone)]
-pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>), WindowMenu }
+pub(crate) enum Unhandled { Close, Minimize, Menu(std::sync::Arc<dyn Fn() + Send + Sync>), Compose(crate::Ime) }
 
 impl std::fmt::Debug for Unhandled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu", Self::WindowMenu => "WindowMenu" })
+        f.write_str(match self { Self::Close => "Close", Self::Minimize => "Minimize", Self::Menu(_) => "Menu", Self::Compose(_) => "Compose" })
     }
 }
 
@@ -30,6 +30,7 @@ impl RuntimeCore {
     /// Queue physical input without a logical fallback (also useful for headless drivers).
     /// A modifier key still gets its `Key::Modifier` when modifier keys are on.
     pub fn physical_input(&mut self, event: PhysicalInput) {
+        if !matches!(event, PhysicalInput::FocusLost) { self.heard_input(); }
         self.observe_mods(&event);
         if self.cancel_drag_key(&event) { return; }
         self.queue.push(Action::Physical(event, None));
@@ -56,17 +57,18 @@ impl RuntimeCore {
         self.physical_then(event, Some(key), base, None);
     }
     /// Return whether the native host needs to request a frame for this event.
-    #[cfg_attr(any(target_os = "windows", target_os = "ios", target_os = "android"), allow(dead_code))]
+    #[cfg_attr(any(target_os = "ios", target_os = "android"), allow(dead_code))]
     pub(crate) fn physical_with_fallback(&mut self, event: PhysicalInput, key: Option<KeyEvent>) -> bool {
         self.physical_then(event, key, None, None)
     }
     /// `physical_with_fallback`, with the key's unmodified character (`Tx::key_base`), and
     /// `unhandled` happens when no handler takes the logical key.
     pub(crate) fn physical_then(&mut self, event: PhysicalInput, key: Option<KeyEvent>, base: Option<char>, unhandled: Option<Unhandled>) -> bool {
-        if self.cancel_drag_key(&event) { return true; }
         if key.is_none() && matches!(event, PhysicalInput::Modifiers(_) | PhysicalInput::Key { pressed: false, .. }) {
             return self.physical_observation(event);
         }
+        self.heard_input();
+        if self.cancel_drag_key(&event) { return true; }
         if !matches!(event, PhysicalInput::Key { pressed: false, .. }) { self.dismiss_help(); }
         self.queue.push(Action::Physical(event, key.map(|key| Fallback { key, base, unhandled })));
         true
@@ -75,6 +77,7 @@ impl RuntimeCore {
     /// its requested frame will process this observation in order after clicks/keys.
     /// At rest, only a consuming handler invalidates the view and requests a frame.
     pub(crate) fn physical_observation(&mut self, event: PhysicalInput) -> bool {
+        self.heard_input();
         let busy = !self.queue.is_empty();
         self.observe_mods(&event);
         // The release of a modifier key the app hears needs a frame, in order like a press.
@@ -161,14 +164,16 @@ impl RuntimeCore {
                 } else {
                     let mut one = Tx { physical_key: code, key_base: base, ..self.transaction() };
                     let ran = self.route_key(&key, repeat, &mut one);
+                    // A dead key a handler took leaves no accent in the input method.
+                    if ran && matches!(unhandled, Some(Unhandled::Compose(_))) { self.ime_reset = true; }
                     // A held key repeats a menu item, as AppKit's own equivalents do, but closes once.
                     let unhandled = unhandled.filter(|u| !ran && (!repeat || matches!(u, Unhandled::Menu(_))));
-                    let fell = unhandled.is_some();
+                    let mut fell = unhandled.is_some();
                     match unhandled {
                         Some(Unhandled::Close) => one.close_window(),
                         Some(Unhandled::Minimize) => one.minimize(),
                         Some(Unhandled::Menu(run)) => run(),
-                        Some(Unhandled::WindowMenu) => self.request_window_menu(),
+                        Some(Unhandled::Compose(preedit)) => fell = self.run_ime(preedit, &mut one),
                         None => {}
                     }
                     fold_live(&mut live, ran || fell, &one);
@@ -179,8 +184,9 @@ impl RuntimeCore {
             None => false,
         };
         let ran = self.dispatch_mods(tx, &mut live) || ran;
-        tx.live_only = ran && live == Some(true);
-        ran
+        let blurred = matches!(event, PhysicalInput::FocusLost) && self.blur_focused(tx);
+        tx.live_only = ran && !blurred && live == Some(true);
+        ran || blurred
     }
     /// `App::on_modifiers`, when the held modifiers changed since it last heard them.
     fn dispatch_mods(&mut self, tx: &mut Tx, live: &mut Option<bool>) -> bool {
@@ -202,14 +208,30 @@ impl RuntimeCore {
         merge(tx, one);
         consumed
     }
-    /// Focus moving off an element inside the window: its handler hears `FocusLost`, and
-    /// modifier keys stay held.
+    /// Focus moving off an element inside the window: its handler hears `FocusLost`, its
+    /// `on_blur` runs, and modifier keys stay held.
     pub(super) fn physical_focus_lost(&mut self) -> bool {
         let mut tx = self.transaction();
-        let changed = self.offer_physical(&PhysicalInput::FocusLost, &mut tx, &mut None);
+        let changed = self.offer_physical(&PhysicalInput::FocusLost, &mut tx, &mut None) | self.blur_focused(&mut tx);
         self.latch_requests(&mut tx);
         merge(&mut self.pending, tx);
         changed
+    }
+    /// Runs the `on_blur` of the focused element a rebuild removed.
+    pub(super) fn blur_unmounted(&mut self, blur: crate::el::PressFn) -> bool {
+        let mut tx = self.transaction();
+        blur(self.app.states(), &mut tx);
+        self.latch_requests(&mut tx);
+        merge(&mut self.pending, tx);
+        true
+    }
+    /// Runs the focused element's `on_blur`; whether it had one.
+    fn blur_focused(&mut self, tx: &mut Tx) -> bool {
+        let Some(handler) = self.focus.path().and_then(|p| self.node(p)).and_then(|n| n.focus.blur.clone()) else { return false };
+        let mut one = self.transaction();
+        handler(self.app.states(), &mut one);
+        merge(tx, one);
+        true
     }
 }
 

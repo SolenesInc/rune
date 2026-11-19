@@ -72,6 +72,7 @@ pub struct App<S: 'static> {
     pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
     pub(crate) on_field_key: Option<fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool>,
     pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
+    pub(crate) on_input: Option<fn(&mut S, &mut Tx)>,
     pub(crate) on_ime: Option<fn(&mut S, &crate::Ime, &mut Tx) -> bool>,
     pub(crate) on_reopen: Option<fn(&mut S, bool, &mut Tx) -> bool>,
     pub(crate) on_open_url: Option<crate::open_url::incoming::OnOpenUrl<S>>,
@@ -132,6 +133,7 @@ impl<S: 'static> App<S> {
             on_mods: None,
             on_field_key: None,
             on_visibility: None,
+            on_input: None,
             on_ime: None,
             on_reopen: None,
             on_open_url: None,
@@ -192,7 +194,7 @@ impl<S: 'static> App<S> {
 
     /// Draw this window's titlebar in the view, `Titlebar::height` points tall, with the
     /// window's own controls over it (see [`crate::Titlebar`]): macOS keeps its traffic lights,
-    /// Windows gets caption buttons Rune draws, and `Cx::chrome_insets` says what they take.
+    /// and `Cx::chrome_insets` says what they take.
     /// Mark the band `.window_drag()`.
     pub fn titlebar(mut self, titlebar: crate::Titlebar) -> Self {
         self.titlebar = Some(titlebar);
@@ -226,7 +228,7 @@ impl<S: 'static> App<S> {
 
     /// The window's first open shows it without taking focus or activating the app, so the
     /// window the user works in keeps its keys and a press it holds. A later `open` or `focus`
-    /// activates it. macOS and Windows; elsewhere the window manager decides.
+    /// activates it. macOS; elsewhere the window manager decides.
     pub fn open_inactive(mut self) -> Self {
         self.open_inactive = true;
         self
@@ -240,7 +242,7 @@ impl<S: 'static> App<S> {
     }
 
     /// Open the window full screen, as a window saved full screen reopens (Electron's
-    /// `setFullScreen(true)`): borderless over the display it opens on, on Windows and Linux.
+    /// `setFullScreen(true)`): borderless over the display it opens on, on Linux.
     /// Leaving full screen returns to the frame it opened at, maximized if `maximized` is on too.
     pub fn full_screen(mut self, full_screen: bool) -> Self {
         self.open_as = self.open_as.full_screen(full_screen);
@@ -305,6 +307,17 @@ impl<S: 'static> App<S> {
     /// frame. Native windows only.
     pub fn on_visibility(mut self, f: fn(&mut S, bool, &mut Tx)) -> Self {
         self.on_visibility = Some(f);
+        self
+    }
+
+    /// Hears each input the window takes from the person (a key, IME text, a pointer move,
+    /// press or release, a wheel, a gesture or a touch) before anything handles it and whether
+    /// or not anything does, as a web page's capture-phase listeners on `window` hear it: for
+    /// work that follows whether someone is at the window, such as telling a server how long
+    /// they have been idle. It can't take the input, and what it changes rebuilds no view; a
+    /// pointer move calls it too, so keep it cheap.
+    pub fn on_input(mut self, f: fn(&mut S, &mut Tx)) -> Self {
+        self.on_input = Some(f);
         self
     }
 
@@ -389,6 +402,12 @@ impl<S: 'static> App<S> {
         self
     }
 
+    /// Whether closing the window keeps its state (`keep_running`, `windowless`), so a harness
+    /// that drives the app's runtime headless can close it as the native host would.
+    pub fn keeps_running(&self) -> bool {
+        self.keep_running
+    }
+
     /// Closing the window also releases the GPU device and renderer (and destroys the window
     /// everywhere), so an app idling without a window holds no UI GPU memory. Reopening
     /// recreates them, which costs a device creation.
@@ -446,13 +465,10 @@ impl<S: 'static> App<S> {
 
     /// Runs once in every open window when the app starts to quit, before any window closes
     /// for it: `Tx::quit` or `AppHandle::quit` from any window, the last window closing (in the
-    /// windows still open), macOS Quit (⌘Q, the Dock, logout, restart and shutdown), and a
-    /// Windows logoff or shutdown (`WM_QUERYENDSESSION`, or `WM_ENDSESSION` when no query came
-    /// first), as Electron's `before-quit` and `session-end` do between them. Save what must
-    /// survive the quit here, synchronously: a Windows session may end the process once the
-    /// hooks returned. From then on [`crate::quitting`] holds, so an `on_close` that follows
-    /// (macOS, the end of a Windows session) can tell the app ending from its window closing
-    /// alone. A Windows shutdown another app refuses clears it, and a later quit runs this again.
+    /// windows still open), and macOS Quit (⌘Q, the Dock, logout, restart and shutdown), as
+    /// Electron's `before-quit` does. Save what must survive the quit here, synchronously. From
+    /// then on [`crate::quitting`] holds, so an `on_close` that follows (macOS) can tell the app
+    /// ending from its window closing alone.
     /// What it asks of its `Tx` beyond state is moot once the loop ends. Native windows only.
     /// An app sets it once: a second call panics, since replacing the first hook would silently
     /// lose what it saves at the quit.
@@ -483,10 +499,7 @@ impl<S: 'static> App<S> {
     /// hid last (closed with `keep_running`, or hidden), else the main window. It never brings
     /// back a launcher or other nonactivating panel, a window that closed for good, or anything
     /// in an accessory app. With several windows, every window's hook runs, in window order,
-    /// and any true skips the default. Windows: runs when the app is launched again without a
-    /// link while it runs, once `rune::single_instance` made it the app's one process; the
-    /// default then also brings the front window forward, restored. Never called on other
-    /// platforms. Headless scripts deliver it with `{"reopen": true}`.
+    /// and any true skips the default. Never called on other platforms. Headless scripts deliver it with `{"reopen": true}`.
     pub fn on_reopen(mut self, f: fn(&mut S, bool, &mut Tx) -> bool) -> Self {
         self.on_reopen = Some(f);
         self
@@ -500,13 +513,8 @@ impl<S: 'static> App<S> {
     /// validate it before acting on it. Bringing a window forward is up to the app
     /// (`AppHandle::open`). The app's bundle must declare the scheme (`CFBundleURLTypes`, see
     /// the README). With several windows whose apps have the hook, the first still running
-    /// receives links.
-    ///
-    /// Windows: the links among the launch arguments (`scheme://…`), as Windows passes a link to
-    /// the process it starts, and with `rune::single_instance` the links of every later launch,
-    /// which that launch hands to this process instead of opening a window. The app registers its
-    /// scheme itself (`HKEY_CURRENT_USER\Software\Classes\<scheme>`, usually at install). Never
-    /// called on other platforms (Linux passes links to a new process as arguments).
+    /// receives links. Never called on other platforms (Linux passes links to a new process as
+    /// arguments).
     pub fn on_open_url(mut self, f: fn(&mut S, &str, &mut Tx)) -> Self {
         self.on_open_url = Some(f);
         self
@@ -818,6 +826,9 @@ pub(crate) enum WindowRequest {
     /// Show and focus, with an activation token when one was forwarded.
     Open(Option<String>),
     Show,
+    /// Show in front of the app's other windows with its keys, leaving the app's activation
+    /// alone (`WindowHandle::show_key`).
+    ShowKey,
     Hide,
     Close,
 }
@@ -977,6 +988,13 @@ mod tests {
         fn save(_: &mut u32, _: &mut Tx) {}
         fn tidy(_: &mut u32, _: &mut Tx) {}
         let _ = App::new(spec()).on_quit(save).on_quit(tidy);
+    }
+
+    #[test]
+    fn an_app_says_whether_closing_its_window_keeps_its_state() {
+        assert!(!App::new(spec()).keeps_running());
+        assert!(App::new(spec()).keep_running().keeps_running());
+        assert!(App::new(spec()).windowless().keeps_running());
     }
 
     #[test]
