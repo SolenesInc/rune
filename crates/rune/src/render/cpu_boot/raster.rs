@@ -142,12 +142,14 @@ pub(super) fn f16(v: f32, r: HalfRounding) -> f32 {
     }
 }
 
-/// `f16` on four values at once: F16C's conversion where the CPU has it.
+/// `f16` on four values at once: F16C's conversion where the CPU has it and the OS keeps the AVX
+/// state its VEX instructions use. CPUID can list F16C without that state (a VM); `avx` is
+/// detected only with it.
 #[inline]
 pub(super) fn f16x4(v: [f32; 4], r: HalfRounding) -> [f32; 4] {
     #[cfg(target_arch = "x86_64")]
-    if std::arch::is_x86_feature_detected!("f16c") {
-        // SAFETY: the CPU has F16C (checked).
+    if std::arch::is_x86_feature_detected!("f16c") && std::arch::is_x86_feature_detected!("avx") {
+        // SAFETY: the CPU has F16C and the OS keeps the AVX state (checked).
         return unsafe { f16x4_f16c(v, r) };
     }
     v.map(|x| f16(x, r))

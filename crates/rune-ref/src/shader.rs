@@ -338,7 +338,7 @@ fn clip_coverage(i: &Primitive, screen: [f32; 2]) -> f32 {
     let p = screen;
     let hard = [p[0] - i.clip[0], p[1] - i.clip[1], i.clip[2] - p[0], i.clip[3] - p[1]];
     (0..4).map(|edge| {
-        let width = half::f16::from_f32(i.fade[edge].clamp(-65504.0, 65504.0)).to_f32();
+        let width = half::f16::from_f32_const(i.fade[edge].clamp(-65504.0, 65504.0)).to_f32_const();
         let distance = if edge < 2 { i.clip[edge] - origin[edge] } else { origin[edge] - i.clip[edge] };
         let w = i.fade[edge].abs();
         let offset = if w > 0.0 { (distance / w).clamp(0.0, 1.0) } else { 0.0 };

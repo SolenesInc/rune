@@ -221,9 +221,11 @@ pub struct Instance {
 
 const _: () = assert!(std::mem::size_of::<Instance>() == 128);
 
+/// Converts in software (`half`'s `_const` forms): `half`'s other forms take F16C wherever CPUID
+/// lists it, and its VEX instructions fault where the OS keeps the AVX state off.
 pub fn pack_fade(width: [f32; 4], origin: [f32; 4], clip: [f32; 4]) -> [u32; 4] {
     // A negative width is a linear ramp of that width (`El::clip_fade_linear`).
-    let halves = width.map(|w| half::f16::from_f32(w.clamp(-65504.0, 65504.0)).to_bits() as u32);
+    let halves = width.map(|w| half::f16::from_f32_const(w.clamp(-65504.0, 65504.0)).to_bits() as u32);
     let mut offsets = 0;
     for edge in 0..4 {
         let distance = if edge < 2 { clip[edge] - origin[edge] } else { origin[edge] - clip[edge] };
@@ -237,7 +239,7 @@ pub fn pack_fade(width: [f32; 4], origin: [f32; 4], clip: [f32; 4]) -> [u32; 4] 
 /// Decode widths and normalized origin offsets for tools inspecting the instance stream. A
 /// negative width is a linear ramp.
 pub fn unpack_fade(fade: [u32; 4]) -> ([f32; 4], [f32; 4]) {
-    (std::array::from_fn(|e| half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32()),
+    (std::array::from_fn(|e| half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32_const()),
      std::array::from_fn(|e| ((fade[2] >> (e * 8)) & 255) as f32 / 255.0))
 }
 
@@ -1110,6 +1112,10 @@ pub fn write_png(path: &std::path::Path, width: u32, height: u32, rgba: &[u8]) -
 
 #[cfg(test)]
 mod backdrop_tests;
+
+#[cfg(test)]
+#[path = "render/f16_tests.rs"]
+mod f16_tests;
 
 #[cfg(test)]
 #[path = "render/warm_tests.rs"]
