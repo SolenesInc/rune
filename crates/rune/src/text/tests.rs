@@ -198,6 +198,33 @@ fn ui_monospace_with_no_mono_font_falls_back_to_sans() {
     assert_eq!(names("monospace", &[]), ["Monospace"], "only ui-monospace falls back");
 }
 
+/// A named CSS list whose families are not installed falls back through its generic
+/// `monospace` or `ui-monospace` to the monospace font `Family::SystemMono` shapes with, not to
+/// the sans; a terminal's stack of mono fonts keeps a monospace cell on a machine with none of
+/// them.
+#[test]
+fn a_named_lists_generic_monospace_shapes_with_the_system_monospace_font() {
+    let font = |ts: &mut TextSystem, family| {
+        let mut ids = Vec::new();
+        runs(ts, "M", &[], TextStyle::new(14.0, 400.0).family(family), |_, font| ids.push((font.data.as_ptr() as usize, font.offset)));
+        ids
+    };
+    let mut ts = TextSystem::default();
+    if ts.system_mono().is_empty() {
+        eprintln!("skipping: no monospace font installed");
+        return;
+    }
+    let mono = font(&mut ts, Family::SystemMono);
+    let sans = font(&mut ts, Family::Sans);
+    assert_ne!(mono, sans);
+    for list in ["No Such Mono, \"Also Missing\", monospace", "No Such Mono, ui-monospace"] {
+        assert_eq!(font(&mut ts, Family::Named(list)), mono, "{list}");
+    }
+    let mut fresh = TextSystem::default();
+    let first = font(&mut fresh, Family::Named("No Such Mono, monospace"));
+    assert_eq!(first, font(&mut fresh, Family::SystemMono), "before anything else loads the system mono");
+}
+
 /// Each glyph run of `text` with the font it shaped with.
 fn runs(ts: &mut TextSystem, text: &str, spans: &[Span], style: TextStyle, mut f: impl FnMut(&parley::GlyphRun<'_, Ink>, FontRef<'_>)) {
     let layout = ts.layout_rich(text, spans, style, 2.0, None);

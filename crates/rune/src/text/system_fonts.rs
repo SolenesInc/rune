@@ -386,6 +386,24 @@ fn slot_resolves(collection: &mut Collection, list: &str) -> bool {
         || named_list(list).iter().any(|f| matches!(f, FontFamilyName::Named(name) if collection.family_id(name).is_some()))
 }
 
+/// Whether `Family::Named`'s `list` names the generic `monospace` or `ui-monospace`.
+pub(super) fn names_generic_mono(list: &str) -> bool {
+    named_list(list).iter().any(is_generic_mono)
+}
+
+/// `Family::Named`'s families, with a generic `monospace` or `ui-monospace` in a CSS list
+/// standing for `system_mono`, the installed families `Family::SystemMono` takes.
+pub(super) fn named_families<'a>(list: &'a str, system_mono: &'a [String]) -> Vec<FontFamilyName<'a>> {
+    named_list(list)
+        .into_iter()
+        .flat_map(|f| if is_generic_mono(&f) { system_mono.iter().map(|name| FontFamilyName::named(name)).collect() } else { vec![f] })
+        .collect()
+}
+
+fn is_generic_mono(f: &FontFamilyName<'_>) -> bool {
+    matches!(f, FontFamilyName::Generic(parley::GenericFamily::Monospace | parley::GenericFamily::UiMonospace))
+}
+
 /// `Family::Named`'s families: one literal name, or a CSS list when it has a comma.
 pub(super) fn named_list(list: &str) -> Vec<FontFamilyName<'_>> {
     if list.contains(',') {
