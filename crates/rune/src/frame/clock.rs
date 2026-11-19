@@ -69,6 +69,8 @@ pub(crate) struct FrameClock {
     phase: Phase,
     /// Recycle the allocation between frames. Only Stepped owns pending starts.
     spare: Vec<TrackId>,
+    /// Motion a frame that drew nothing started, which the next drawn frame starts as its own.
+    undrawn: Vec<TrackId>,
 }
 
 #[derive(Debug)]
@@ -91,7 +93,7 @@ enum Effect<'a> {
 
 impl FrameClock {
     pub(crate) fn new(now: Instant) -> Self {
-        Self { phase: Phase::Idle { last: now }, spare: Vec::new() }
+        Self { phase: Phase::Idle { last: now }, spare: Vec::new(), undrawn: Vec::new() }
     }
 
     /// The target time of the last frame the clock stepped to.
@@ -155,11 +157,27 @@ impl FrameClock {
     /// compositor's own animation was still running after the previous frame. Returns whether
     /// anything still animates and the seconds stepped.
     pub(crate) fn advance<S: 'static>(&mut self, rt: &mut Runtime<S>, at: Instant, compositing: bool) -> (bool, f64) {
+        let mut undrawn = std::mem::take(&mut self.undrawn);
         let (step, starts) = self.begin(at, rt.animating || compositing);
         rt.frame_target = Some(at);
+        if !undrawn.is_empty() {
+            let core: &mut crate::runtime::RuntimeCore = &mut **rt;
+            let scale = f64::from(core.time_scale);
+            core.scene.store_mut().delay(&mut undrawn, step.catch_up * scale);
+        }
         let animating = rt.frame_split(step.catch_up, step.dt);
         starts.extend_from_slice(rt.scene.store().started());
+        starts.extend_from_slice(&undrawn);
+        undrawn.clear();
+        self.undrawn = undrawn;
         (animating, step.total())
+    }
+
+    /// Motion that a frame drawing nothing started, for input that could not wait for the next
+    /// tick: the next drawn frame starts it as its own, one small step from its first pose,
+    /// rather than charging it the gap since the frame drawn before.
+    pub(crate) fn started_undrawn<S: 'static>(&mut self, rt: &Runtime<S>) {
+        self.undrawn.extend_from_slice(rt.scene.store().started());
     }
 
     /// The frame last stepped to finished at `done`. When that's past its target, the motion it
@@ -283,6 +301,30 @@ mod tests {
         let long = first_pose(Duration::from_secs(2));
         assert!(short > 12.0 && short < 20.0, "the first frame shows one step of motion: {short}");
         assert!((long - short).abs() < 0.001, "idle time must not age motion that starts after it: {long} vs {short}");
+    }
+
+    #[test]
+    fn motion_a_key_starts_in_a_frame_that_draws_nothing_takes_one_small_step_when_drawn() {
+        let first_pose = |undrawn: bool, gap: Duration| {
+            let start = Instant::now();
+            let mut clock = FrameClock::new(start);
+            let mut rt = runtime();
+            clock.advance(&mut rt, start, false);
+            clock.advance(&mut rt, start + FRAME, false);
+            rt.update(|s, _| s.a = 212.0);
+            if undrawn {
+                rt.frame(0.0);
+                clock.started_undrawn(&rt);
+            }
+            clock.advance(&mut rt, start + FRAME + gap, false);
+            width(&rt, "a")
+        };
+        for gap in [FRAME, Duration::from_millis(40), Duration::from_millis(100)] {
+            let drawn = first_pose(false, gap);
+            let routed = first_pose(true, gap);
+            assert!(drawn > 12.0 && drawn < 20.0, "one step of motion: {drawn}");
+            assert!((routed - drawn).abs() < 0.01, "after {gap:?}: {routed} where a drawn start shows {drawn}");
+        }
     }
 
     #[test]

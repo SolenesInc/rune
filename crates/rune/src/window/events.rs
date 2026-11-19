@@ -31,12 +31,14 @@ impl<S: 'static> Host<S> {
         self.shell(event_loop);
     }
 
-    /// A key pressed while the window's next frame waits for a display tick reaches its handler
-    /// now, in a frame that draws nothing, as a hidden window's does: a terminal sends it to its
-    /// program at once, and the tick draws the echo that comes back meanwhile.
+    /// A key pressed or text an input method committed while the window's next frame waits for
+    /// a display tick reaches its handler now, in a frame that draws nothing, as a hidden
+    /// window's does: a terminal sends it to its program at once, and the tick draws the echo
+    /// that comes back meanwhile. Motion it starts begins in the drawn frame.
     fn route_keys_now(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.rt.keys_queued() { return; }
+        if !self.rt.has_pending_input() { return; }
         self.rt.hidden_timer_frame();
+        self.clock.started_undrawn(&self.rt);
         self.clipboard.flush(&mut self.rt);
         self.shell(event_loop);
     }
@@ -389,16 +391,18 @@ impl<S: 'static> Host<S> {
                 if pressed && redraw && l.frame_waits() { self.route_keys_now(event_loop); }
             }
             WindowEvent::Ime(ime) => {
+                let mut committed = false;
                 match ime {
                     WIme::Preedit(s, cur) => match crate::platform::ime::dead_key_press() {
                         Some((key, mods, base)) => rt.dead_key(key, mods, base, Ime::Preedit(s, cur)),
                         None => rt.ime(Ime::Preedit(s, cur)),
                     },
-                    WIme::Commit(s) => rt.ime(Ime::Commit(s)),
+                    WIme::Commit(s) => { l.key_pressed(); committed = true; rt.ime(Ime::Commit(s)) }
                     WIme::Enabled => rt.ime(Ime::Enabled),
                     WIme::Disabled => rt.ime(Ime::Disabled),
                 }
                 l.request_redraw();
+                if committed && l.frame_waits() { self.route_keys_now(event_loop); }
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
                 let shift = crate::runtime::SHIFT_TURNS_WHEEL && self.mods.shift_key();
