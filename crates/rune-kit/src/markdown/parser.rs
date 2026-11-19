@@ -135,6 +135,26 @@ pub(super) struct Builder {
     /// A table's header row is being read.
     in_head: bool,
     tail: Tail,
+    /// The footnotes defined so far, in the source's order.
+    footnotes: Vec<Footnote>,
+    /// The labels of the footnotes referred to, in the order of their first marks: a
+    /// footnote's number is its place here.
+    noted: Vec<String>,
+}
+
+/// A footnote's definition (`[^label]: text`): what it says, with the code sources and list
+/// items inside it, which are drawn after the document's own.
+struct Footnote {
+    label: String,
+    blocks: Vec<Block>,
+    maps: Vec<BlockMap>,
+    sources: Vec<Source>,
+    tasks: Vec<Option<(bool, usize)>>,
+}
+
+/// `n` in superscript digits, a footnote's mark.
+fn superscript(n: usize) -> String {
+    n.to_string().bytes().map(|d| ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'][usize::from(d - b'0')]).collect()
 }
 
 /// What the source ends inside, from the last block-level start the walk met.
@@ -215,6 +235,9 @@ enum Container {
     /// A `<details>` block: its summary, whether it says `open`, and the source byte its tag
     /// starts at.
     Details(Inline, bool, usize),
+    /// A footnote's definition: its label, and the document's code sources and list items
+    /// read before it, set aside while it gathers its own.
+    Footnote(String, Vec<Source>, Vec<Option<(bool, usize)>>),
 }
 
 #[derive(Clone, Copy)]
@@ -357,6 +380,10 @@ impl Builder {
                 self.push(Block::Table(t), BlockMap::Table { head, rows });
             }
             Container::Details(summary, open, at) => self.push(Block::Details { summary, open, body: blocks }, BlockMap::Details { at, body: maps }),
+            Container::Footnote(label, sources, tasks) => {
+                let (sources, tasks) = (std::mem::replace(&mut self.sources, sources), std::mem::replace(&mut self.tasks, tasks));
+                self.footnotes.push(Footnote { label, blocks, maps, sources, tasks });
+            }
             Container::Root => {}
         }
     }
@@ -524,8 +551,10 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
         cell_images: Vec::new(),
         in_head: false,
         tail: Tail::None,
+        footnotes: Vec::new(),
+        noted: Vec::new(),
     };
-    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
+    let opts = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS | Options::ENABLE_FOOTNOTES;
     let parser = Parser::new_ext(src, opts);
     let mut defs: Vec<(&str, &str, Option<&str>)> = parser.reference_definitions().iter().map(|(label, d)| (label, &*d.dest, d.title.as_deref())).collect();
     defs.sort_unstable();
@@ -609,6 +638,11 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
                     });
                     b.stack.push((Container::Quote(alert), Vec::new(), Vec::new()));
                 }
+                Tag::FootnoteDefinition(label) => {
+                    b.flush_inline();
+                    let (sources, tasks) = (std::mem::take(&mut b.sources), std::mem::take(&mut b.tasks));
+                    b.stack.push((Container::Footnote(label.into_string(), sources, tasks), Vec::new(), Vec::new()));
+                }
                 Tag::List(start) => {
                     b.flush_inline();
                     b.stack.push((Container::List(start, Vec::new(), Vec::new()), Vec::new(), Vec::new()));
@@ -685,7 +719,7 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
                         super::html::block(&mut b, &html, at);
                     }
                 }
-                TagEnd::BlockQuote(_) | TagEnd::Item | TagEnd::List(_) | TagEnd::Table => b.pop_container(),
+                TagEnd::BlockQuote(_) | TagEnd::Item | TagEnd::List(_) | TagEnd::Table | TagEnd::FootnoteDefinition => b.pop_container(),
                 TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough | TagEnd::Link => close(&mut b),
                 TagEnd::Image => {
                     if let Some(start) = b.image_starts.pop() {
@@ -748,6 +782,13 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
                 inl.3.push(range, start..inl.1.text.len());
             }
             Event::HardBreak => push_text(&mut b, "\n", range),
+            Event::FootnoteReference(label) => {
+                let n = b.noted.iter().position(|l| **l == *label).unwrap_or_else(|| {
+                    b.noted.push(label.into_string());
+                    b.noted.len() - 1
+                });
+                push_text(&mut b, &superscript(n + 1), range);
+            }
             Event::InlineHtml(html) => super::html::inline(&mut b, &html, range),
             Event::Html(html) => {
                 if let Some((text, _)) = &mut b.html {
@@ -787,6 +828,31 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
     {
         *blocks.last_mut().unwrap() = Block::Table(t);
         *maps.last_mut().unwrap() = map;
+    }
+    // Footnotes stand under a rule at the end, numbered by their first marks; one nothing
+    // refers to comes after those. Their numbers and their place depend on the whole
+    // source, as reference definitions' links do, so `defs` covers them.
+    let mut defs = defs;
+    if !b.footnotes.is_empty() {
+        let labels: Vec<&str> = b.footnotes.iter().map(|f| &*f.label).collect();
+        defs = Some(hash_of(&(defs, &b.noted, labels)));
+        let place = |f: &Footnote| b.noted.iter().position(|l| *l == f.label).unwrap_or(usize::MAX);
+        let mut notes = std::mem::take(&mut b.footnotes);
+        notes.sort_by_key(place);
+        let (mut items, mut item_maps) = (Vec::new(), Vec::new());
+        for f in notes {
+            // A list item takes a place among the tasks, as `Tag::Item` gives each.
+            b.tasks.push(None);
+            b.tasks.extend(f.tasks);
+            b.sources.extend(f.sources);
+            items.push(f.blocks);
+            item_maps.push(f.maps);
+        }
+        for (block, map) in [(Block::Rule, BlockMap::None), (Block::List { start: Some(1), items }, BlockMap::List(item_maps))] {
+            blocks.push(block);
+            maps.push(map);
+            b.block_starts.push(src.len());
+        }
     }
     // Front matter that has not closed yet would read as a rule and text from any later cut.
     if src.lines().next().is_some_and(|l| l.trim_end() == "---") && !matches!(blocks.first(), Some(Block::FrontMatter(_))) {

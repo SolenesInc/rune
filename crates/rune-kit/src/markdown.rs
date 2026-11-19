@@ -24,6 +24,12 @@
 //! source and the style, as long as nothing of the app's is in it (no handler, frame, image
 //! source, highlighter or highlight). With any of those, every block builds each time.
 //!
+//! **Footnotes.** A mark (`[^label]`) draws as its number in superscript digits, numbered by
+//! where each footnote is first referred to, and the definitions (`[^label]: text`) parse to
+//! a [`Block::Rule`] and a numbered [`Block::List`] at the end of the document, wherever the
+//! source has them. A mark with no definition stays as written. A source with a footnote
+//! parses whole each time it grows, as one with a reference definition does.
+//!
 //! **Keys.** Top-level blocks are keyed `b{index}` (or by [`Markdown::block_keys`]), list items
 //! `i{index}` and their blocks by `b{index}` inside the item. Appending to a stream only ever
 //! changes the last block or adds blocks after it, so earlier blocks keep their keys and never

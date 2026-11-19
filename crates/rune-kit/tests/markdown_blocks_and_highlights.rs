@@ -614,7 +614,8 @@ fn review_highlight_mapping_edges_and_streaming() {
         ("> `one\n> two three four five`", "three", "three"),
         ("- `one\n  two three four five`", "three", "three"),
         ("https://example.org/needle", "needle", "needle"),
-        ("reference [^needle]\n\n[^needle]: text", "needle", "needle"),
+        // A footnote's mark draws as its number, which a highlight in its label lands on.
+        ("reference [^needle]\n\n[^needle]: text", "needle", "¹"),
     ] {
         let start = src.find(needle).unwrap();
         let mut rt = Runtime::new((src.into(), vec![(start..start + needle.len(), Highlight::new())]), view, (480.0, 200.0), Env::new(true, 1.0));
