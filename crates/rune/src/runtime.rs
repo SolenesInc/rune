@@ -647,6 +647,8 @@ pub struct RuntimeCore {
     /// This commit's focus is a `Tx::return_focus` hand-back, which a modal opening in it
     /// doesn't take as where focus was.
     focus_returned: bool,
+    /// This commit's `Tx::blur` left nothing focused, which a modal closing in it keeps.
+    focus_blurred: bool,
     /// Focused text fields that unmounted without being blurred: while another field holds focus,
     /// remounting one with its old `focused = true` flag does not steal focus back.
     unmounted_focused: Vec<std::sync::Weak<crate::edit::History>>,
@@ -1004,6 +1006,7 @@ impl RuntimeCore {
             focus_before_commit: None,
             focus_request: focus::FocusRequest::default(),
             focus_returned: false,
+            focus_blurred: false,
             unmounted_focused: Vec::new(),
             modal_scope: None,
             loops: HashMap::default(),

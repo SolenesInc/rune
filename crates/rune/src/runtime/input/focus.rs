@@ -451,6 +451,7 @@ impl RuntimeCore {
             _ => self.focus.keyboard(),
         };
         self.focus_returned = matches!(&asked, Some((p, _, crate::el::FocusAsk::Return)) if next.as_deref() == Some(p.as_str()));
+        self.focus_blurred = blur && next.is_none();
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
         let changed = self.set_focus(next, keyboard) | blurred;
@@ -956,6 +957,31 @@ mod tests {
             assert!(!rt.state().open);
             assert_eq!(now(&rt).as_deref(), Some("opener"), "closing (escape: {escape}) returns focus to the opener");
             if escape { assert!(!rt.state().field.focused, "Escape blurs the field before it goes"); }
+        }
+    }
+
+    #[test]
+    fn closing_a_modal_keeps_a_blur_its_press_asked_for_and_otherwise_returns_to_the_opener() {
+        fn view(s: &State, _: &mut Cx<State>) -> El {
+            col().key("root").size(300.0, 300.0)
+                .child(button("opener").on_press(|s: &mut State| s.open = true))
+                .children(s.open.then(|| col().key("sheet").absolute(100.0, 100.0).size(150.0, 100.0)
+                    .modal(true, |s: &mut State| s.open = false)
+                    .child(button("away").on_press_tx(|s: &mut State, tx: &mut Tx| { s.open = false; tx.blur(); }))
+                    .child(button("close").on_press(|s: &mut State| s.open = false))))
+        }
+        for (control, after) in [("away", None), ("close", Some("opener"))] {
+            let mut rt = Runtime::new(State::default(), view, (300.0, 300.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            key(&mut rt, Key::Tab, false);
+            assert_eq!(focused(&rt), "opener");
+            key(&mut rt, Key::Text(" ".into()), false);
+            assert!(rt.state().open);
+            while focused(&rt) != control { key(&mut rt, Key::Tab, false); }
+            key(&mut rt, Key::Text(" ".into()), false);
+            assert!(!rt.state().open);
+            let now = rt.elements().into_iter().find(|e| e.focused).and_then(|e| e.key);
+            assert_eq!(now.as_deref(), after, "{control} closes the modal");
         }
     }
 
