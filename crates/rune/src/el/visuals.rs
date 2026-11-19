@@ -433,12 +433,14 @@ impl El {
     }
     /// A scroll area's wrapper passes its clip to the viewport, beside which it draws the bar.
     fn set_clip(&mut self, clip: [f32; 4]) {
-        if self.vis.clip_to_content
-            && let Some(viewport) = self.children.first_mut()
-        {
-            viewport.vis.cold_mut().clip = Some(clip);
+        self.clipped_visual().cold_mut().clip = Some(clip);
+    }
+    /// Where this element's clip lives: its own visual, or a scroll area's viewport's.
+    fn clipped_visual(&mut self) -> &mut crate::el::Visual {
+        if self.vis.clip_to_content && !self.children.is_empty() {
+            &mut self.children[0].vis
         } else {
-            self.vis.cold_mut().clip = Some(clip);
+            &mut self.vis
         }
     }
     /// Clip children to this box with soft gradient edges (never a hard crop).
@@ -494,9 +496,11 @@ impl El {
     }
     /// Move this element's clip, and its fades with it, out past its box by these points on each
     /// side (left, top, right, bottom), as paint alone: layout doesn't change. A cell that fades
-    /// its overflow keeps whole what reaches out of it, such as a control's focus ring.
+    /// its overflow keeps whole what reaches out of it, such as a control's focus ring. Right to
+    /// left, the sides mirror with the fades; on a scroll area's wrapper, the outset goes to the
+    /// viewport with the clip. A rounded clip ([`Self::clip_rounded`]) stays at the box.
     pub fn clip_outset(mut self, left: f32, top: f32, right: f32, bottom: f32) -> Self {
-        self.vis.cold_mut().clip_outset = [left, top, right, bottom].map(|v| v.max(0.0));
+        self.clipped_visual().cold_mut().clip_outset = [left, top, right, bottom].map(|v| v.max(0.0));
         self
     }
     /// [`Self::clip_fade`] with linear ramps: alpha falls in proportion to distance, from whole

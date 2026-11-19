@@ -223,7 +223,7 @@ fn first_strong(el: &El) -> Option<Direction> {
 }
 
 /// Mirrors what a right-to-left element draws on its own left and right: corner radii, border
-/// sides, soft clip edges and an angled linear gradient's run.
+/// sides, soft clip edges and their outset, and an angled linear gradient's run.
 pub(crate) fn mirror_visual(vis: &mut Visual) {
     // Uniform corners (most boxes) and no extras: nothing to mirror, nothing touched.
     if vis.radius.is_nan() {
@@ -254,6 +254,8 @@ pub(crate) fn mirror_visual(vis: &mut Visual) {
     }
     if let Some([l, t, r, b]) = cold.clip {
         cold.clip = Some([r, t, l, b]);
+        let [l, t, r, b] = cold.clip_outset;
+        cold.clip_outset = [r, t, l, b];
     }
     if let Some([tl, tr, br, bl]) = cold.clip_corners {
         cold.clip_corners = Some([tr, tl, bl, br]);
