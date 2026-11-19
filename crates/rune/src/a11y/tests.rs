@@ -653,3 +653,40 @@ fn a_word_past_a_line_s_255th_character_is_read_as_that_word() {
     rt.frame(0.0);
     assert_eq!(line_and_word_at_caret(&rt, "note"), (line, "w070".to_owned()), "a field");
 }
+
+#[test]
+fn a_terminal_reads_its_screen_only_while_the_tree_is_read_and_again_when_it_says_it_changed() {
+    struct Term { screen: String, reads: std::cell::Cell<u32> }
+    let mut rt = Runtime::new(Term { screen: "$ ".into(), reads: Default::default() }, |_: &Term, _: &mut Cx<Term>| {
+        col().child(crate::el().key("term").role("terminal").label("Shell").holds_keys(true).size(200.0, 100.0)
+            .a11y_text_from(|s: &Term| {
+                s.reads.set(s.reads.get() + 1);
+                Some(crate::DrawnText { text: s.screen.clone(), anchor: s.screen.len(), focus: s.screen.len(), wraps: Vec::new() })
+            }))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(rt.state().reads.get(), 0, "no client, no screen text");
+
+    rt.a11y_activate("Window");
+    let full = rt.a11y_update().expect("first update after activation");
+    let term = full.nodes.iter().find(|(_, n)| n.author_id() == Some("term")).map(|(_, n)| n.clone()).expect("the terminal is in the tree");
+    assert_eq!(term.role(), Role::Terminal);
+    assert_eq!(term.value(), Some("$ "));
+    assert_eq!(full.nodes.iter().find(|(id, _)| *id == full.focus).and_then(|(_, n)| n.author_id()), Some("term"), "the terminal holds the keys");
+
+    let commits = rt.stats.commits;
+    rt.state_mut().screen.push_str("echo hello\nhello\n$ ");
+    rt.a11y_text_changed();
+    rt.frame(1.0);
+    assert_eq!(rt.stats.commits, commits, "output does not run the view");
+    let update = rt.a11y_update().expect("the screen changed");
+    let term = update.nodes.iter().find(|(_, n)| n.author_id() == Some("term")).map(|(_, n)| n.clone()).expect("the terminal is sent again");
+    assert_eq!(term.value(), Some("$ echo hello\nhello\n$ "));
+    let lines: Vec<&str> = update.nodes.iter().filter(|(_, n)| n.role() == Role::TextRun).filter_map(|(_, n)| n.value()).collect();
+    assert_eq!(lines, ["$ echo hello\n", "hello\n", "$ "]);
+
+    let reads = rt.state().reads.get();
+    rt.frame(2.0);
+    assert!(rt.a11y_update().is_none(), "nothing changed");
+    assert_eq!(rt.state().reads.get(), reads, "an idle frame reads no screen text");
+}

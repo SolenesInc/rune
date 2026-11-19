@@ -3,7 +3,7 @@
 use crate::cold::Empty;
 use crate::el::{
     AtBottomFn, Cursor, DragEndFn, DragFn, DragOutFn, DropSpec, LayoutFn, LayoutTxFn, ModalSpec,
-    PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy, VisibleRowsFn,
+    OwnTextFn, PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy, VisibleRowsFn,
     WindowFocusFn,
 };
 
@@ -32,6 +32,8 @@ pub(crate) struct Handlers {
     pub gestures: Option<Box<crate::input::canvas_input::CanvasInput>>,
     pub on_drag: Option<DragFn>,
     pub drag_out: Option<DragOutFn>,
+    /// `El::a11y_text` and `El::a11y_text_from`: the text the element draws itself.
+    pub own_text: Option<OwnTextFn>,
     pub drag_threshold: Option<f32>,
     pub on_drag_start: Option<PressFn>,
     pub on_drag_end: Option<DragEndFn>,
@@ -121,6 +123,7 @@ impl Empty for Handlers {
         gestures: None,
         on_drag: None,
         drag_out: None,
+        own_text: None,
         drag_threshold: None,
         on_drag_start: None,
         on_drag_end: None,

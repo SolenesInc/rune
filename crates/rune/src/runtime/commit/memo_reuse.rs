@@ -345,6 +345,7 @@ fn same_handlers(
         gestures,
         on_drag,
         drag_out,
+        own_text,
         drag_threshold,
         on_drag_start,
         on_drag_end,
@@ -392,6 +393,7 @@ fn same_handlers(
         && same_gestures(&a.gestures, gestures)
         && opt_rc_eq(&a.on_drag, on_drag)
         && opt_rc_eq(&a.drag_out, drag_out)
+        && opt_rc_eq(&a.own_text, own_text)
         && a.drag_threshold == *drag_threshold
         && opt_rc_eq(&a.on_drag_start, on_drag_start)
         && opt_rc_eq(&a.on_drag_end, on_drag_end)

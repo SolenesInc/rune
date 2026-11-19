@@ -50,7 +50,8 @@ mod visual;
 mod visuals;
 
 pub use a11y::LiveRegion;
-pub(crate) use a11y::{A11y, Checked, DrawnText};
+pub(crate) use a11y::{A11y, Checked};
+pub use a11y::DrawnText;
 pub use anchor::{Anchor, Side, anchor_rect};
 pub(crate) use crate::clipboard::tx::{ClipboardRead, ReadFn};
 pub use crate::cursor::{Cursor, CursorImage};
@@ -62,7 +63,7 @@ pub(crate) use focus::ModalSpec;
 pub(crate) use focus::Reveal;
 pub(crate) use handler_set::Handlers;
 pub use handlers::{Drag, Phase, PointerEvent, PointerPress};
-pub(crate) use handlers::{DragEndFn, DragFn, DragOutFn, InputKeyFn, PointerFn, PressFn, StepFn, StepLimitFn, WindowDrag};
+pub(crate) use handlers::{DragEndFn, DragFn, DragOutFn, InputKeyFn, OwnTextFn, PointerFn, PressFn, StepFn, StepLimitFn, WindowDrag};
 pub(crate) use help::{HELP_KEY, HELP_ROW, help_words};
 pub use input::{InputSpec, auto_grow, edit_access, text_input};
 pub use pills::InlineIcon;

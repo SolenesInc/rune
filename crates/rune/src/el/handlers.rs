@@ -252,6 +252,7 @@ impl PointerEvent {
 pub(crate) type PointerFn = Rc<dyn Fn(crate::states::States<'_>, PointerEvent, &mut Tx)>;
 pub(crate) type DragFn = Rc<dyn Fn(crate::states::States<'_>, &mut Drag, &mut Tx)>;
 pub(crate) type DragOutFn = Rc<dyn Fn(crate::states::StatesRef<'_>) -> Option<crate::DragItem>>;
+pub(crate) type OwnTextFn = Rc<dyn Fn(crate::states::StatesRef<'_>) -> Option<crate::DrawnText>>;
 pub(crate) type DragEndFn = Rc<dyn Fn(crate::states::States<'_>, crate::DragOutcome, &mut Tx)>;
 
 impl El {

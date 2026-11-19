@@ -753,6 +753,8 @@ pub struct RuntimeCore {
     pub(crate) window_title: window_requests::Title,
     /// `Tx::announce`'s last words, for the accessibility tree's live region.
     pub(crate) announcement: crate::a11y::Announcement,
+    /// Counts `Runtime::a11y_text_changed`, for the accessibility tree's stamp.
+    pub(crate) a11y_text_changes: u64,
     /// The window's height follows the root's natural height (`App::fit_content_height`).
     pub(crate) fit_height: bool,
     /// The height a window that fits its content last asked for, and the frame its move
@@ -1052,6 +1054,7 @@ impl RuntimeCore {
             window_frame: None,
             window_title: Default::default(),
             announcement: Default::default(),
+            a11y_text_changes: 0,
             fit_height: false,
             fit: Default::default(),
             page: None,

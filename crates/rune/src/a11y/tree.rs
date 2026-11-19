@@ -54,6 +54,7 @@ struct Stamp {
     name: u64,
     tooltip: u64,
     announced: u32,
+    own_text: u64,
 }
 
 /// An activated tree: what the platform adapter holds, to diff the next update against.
@@ -139,7 +140,14 @@ pub(super) fn rect(r: [f32; 4], shift: [f32; 2]) -> AkRect {
 
 impl RuntimeCore {
     /// An assistive client asked for this surface's tree: the next update holds all of it.
-    pub(crate) fn a11y_activate(&mut self, name: &str) {
+    /// Text an [`crate::El::a11y_text_from`] reads changed without the view running again, as
+    /// a compositor's own drawing does: the next update reads it again.
+    pub fn a11y_text_changed(&mut self) { self.a11y_text_changes = self.a11y_text_changes.wrapping_add(1); }
+
+    /// An assistive client started listening, as the platform adapter hears it: updates
+    /// ([`Self::a11y_update`]) now carry the tree. `name` names the root when the runtime has
+    /// no window title. Tests listen this way to hear what a screen reader is sent.
+    pub fn a11y_activate(&mut self, name: &str) {
         let tree = self.a11y.get_or_insert_with(Default::default);
         tree.full = true;
         tree.stamp = None;
@@ -151,7 +159,7 @@ impl RuntimeCore {
 
     /// The update to send the adapter, when the tree is active and something it shows changed
     /// since the last one. `None` before the first frame has laid anything out.
-    pub(crate) fn a11y_update(&mut self) -> Option<TreeUpdate> {
+    pub fn a11y_update(&mut self) -> Option<TreeUpdate> {
         if self.a11y.is_none() || self.drawn.len() != self.nodes.len() || self.nodes.is_empty() { return None; }
         let stamp = self.a11y_stamp();
         let tree = self.a11y.as_ref()?;
@@ -304,6 +312,7 @@ impl RuntimeCore {
             name: self.window_title.current().map_or(0, hash_str),
             tooltip: self.help_tooltip().map_or(0, |(t, r)| mix(hash_str(t), r[0].to_bits() as u64 ^ (r[1].to_bits() as u64) << 32)),
             announced: self.announcement.said(),
+            own_text: self.a11y_text_changes,
         }
     }
 

@@ -204,8 +204,8 @@ impl RuntimeCore {
     /// links of any text, pushed after it as its children.
     pub(super) fn a11y_text_nodes(&self, i: usize, w: &a11y_tree::Walk, out: &mut Vec<(AkId, AkNode)>) {
         let n = &self.nodes[i];
-        if let Some(drawn) = n.a11y.more.as_deref().and_then(|m| m.drawn_text.as_ref()) {
-            drawn_runs(n.id, drawn, out);
+        if let Some(drawn) = self.a11y_own_text(i) {
+            drawn_runs(n.id, &drawn, out);
             return;
         }
         let Some(spec) = n.text.as_deref() else { return };
@@ -255,6 +255,12 @@ impl RuntimeCore {
             out[me].1.push_child(id);
             out.push((id, link));
         }
+    }
+
+    /// The text node `i` draws itself ([`crate::El::a11y_text_from`]), read from the state now.
+    pub(super) fn a11y_own_text(&self, i: usize) -> Option<crate::DrawnText> {
+        let own = self.nodes[i].handlers.get()?.own_text.as_ref()?;
+        own(self.app.states_ref())
     }
 
     /// What node `i` draws as text: a field's display text (its mask when secure), else its

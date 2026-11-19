@@ -101,6 +101,7 @@ pub(crate) fn map(role: &str, cx: &RoleCtx) -> Option<Role> {
         "blockquote" => Role::Blockquote,
         // An editor that draws its own text is the text area.
         "textbox" if cx.drawn_text => Role::MultilineTextInput,
+        "terminal" => Role::Terminal,
         // A box around a field that only routes its presses to the editor: the editor is the
         // text box. Kept as a group when keyed, so drivers still find it by key.
         "textbox" | "searchbox" => if cx.keyed { Role::Group } else { return None },
@@ -188,6 +189,7 @@ mod tests {
         assert_eq!(map("textbox", &RoleCtx { secure: true, ..field }), Some(Role::PasswordInput));
         assert_eq!(map("textbox", &RoleCtx { keyed: true, ..cx() }), Some(Role::Group));
         assert_eq!(map("textbox", &RoleCtx { keyed: true, drawn_text: true, ..cx() }), Some(Role::MultilineTextInput));
+        assert_eq!(map("terminal", &cx()), Some(Role::Terminal));
     }
 
     #[test]
