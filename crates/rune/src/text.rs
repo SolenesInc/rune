@@ -123,7 +123,7 @@ use atlas::{MAX_OVERFLOW_PAGES, MAX_STEADY_PAGES};
 pub(crate) use glyph_emit::GLIDE_PHASES;
 use line_break::break_lines_with_blocks;
 use span::PILL_BOX;
-use system_fonts::{LoadedFiles, family_list, load_installed, load_system_mono, named_list, names_system_mono, register_cjk_fallbacks};
+use system_fonts::{LoadedFiles, family_list, load_installed, load_system_mono, named_families, names_generic_mono, names_system_mono, register_cjk_fallbacks};
 #[cfg(any(test, not(target_arch = "wasm32")))]
 use system_fonts::system_font_files;
 #[cfg(test)]
@@ -384,7 +384,7 @@ impl TextSystem {
 
     /// The font text in `family` at `weight` shapes with first.
     fn primary_font(&mut self, family: Family, weight: f32, italic: bool) -> Option<parley::fontique::QueryFont> {
-        if family == Family::SystemMono || self.slot_system_mono {
+        if family == Family::SystemMono || self.slot_system_mono || matches!(family, Family::Named(list) if names_generic_mono(list)) {
             self.system_mono();
         }
         if let Family::Named(list) = family {
@@ -400,7 +400,7 @@ impl TextSystem {
         let names = match family {
             Family::Sans => named(&self.sans),
             Family::Mono => named(&self.mono),
-            Family::Named(list) => named_list(list).into_iter().filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None }).chain(named(&self.sans)).collect(),
+            Family::Named(list) => named_families(list, system).into_iter().filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None }).chain(named(&self.sans)).collect(),
             Family::SystemMono => system.iter().cloned().chain(named(&self.mono)).collect(),
         };
         let mut query = self.font_cx.collection.query(&mut self.font_cx.source_cache);
@@ -667,7 +667,7 @@ impl TextSystem {
             settings.extend(extra);
             settings
         };
-        if style.family == Family::SystemMono || self.slot_system_mono {
+        if style.family == Family::SystemMono || self.slot_system_mono || matches!(style.family, Family::Named(list) if names_generic_mono(list)) {
             self.system_mono();
         }
         if let Family::Named(list) = style.family {
@@ -689,7 +689,7 @@ impl TextSystem {
             Family::Mono => with_symbols(self.mono.as_str(), mono_scripts),
             Family::Named(list) => {
                 let mut families = with_symbols(self.sans.as_str(), &[]);
-                families.splice(0..0, named_list(list));
+                families.splice(0..0, named_families(list, system));
                 families
             }
             Family::SystemMono => {
