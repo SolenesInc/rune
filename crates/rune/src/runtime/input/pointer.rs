@@ -5,7 +5,10 @@ use super::*;
 pub(super) const CLICK_SLOP: f32 = 4.0;
 
 impl RuntimeCore {
-    pub fn pointer_move(&mut self, x: f32, y: f32) { self.move_pointer(x, y, true); }
+    pub fn pointer_move(&mut self, x: f32, y: f32) {
+        self.heard_input();
+        self.move_pointer(x, y, true);
+    }
 
     /// `drag_move` false keeps a held drag from getting a `Phase::Move`: a release at the
     /// point the drag last saw has nothing new to report, and its instant transaction would
@@ -223,6 +226,7 @@ impl RuntimeCore {
     }
 
     pub fn pointer_down(&mut self, x: f32, y: f32) {
+        self.heard_input();
         let other_button_held = self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary);
         self.press_down(x, y);
         if !other_button_held { self.queue_presses_within(x, y, crate::PointerButton::Primary); }
@@ -358,6 +362,7 @@ impl RuntimeCore {
     }
 
     pub fn pointer_up(&mut self, x: f32, y: f32) {
+        self.heard_input();
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
             return;
@@ -536,6 +541,7 @@ impl RuntimeCore {
     /// negative deltaY). Applied 1:1: the platform supplies its own momentum phases. It scrolls the
     /// innermost viewport under the pointer with room to move that way.
     pub fn wheel(&mut self, x: f32, y: f32, dy: f32) {
+        self.heard_input();
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();

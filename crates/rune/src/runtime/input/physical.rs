@@ -30,6 +30,7 @@ impl RuntimeCore {
     /// Queue physical input without a logical fallback (also useful for headless drivers).
     /// A modifier key still gets its `Key::Modifier` when modifier keys are on.
     pub fn physical_input(&mut self, event: PhysicalInput) {
+        if !matches!(event, PhysicalInput::FocusLost) { self.heard_input(); }
         self.observe_mods(&event);
         if self.cancel_drag_key(&event) { return; }
         self.queue.push(Action::Physical(event, None));
@@ -63,10 +64,11 @@ impl RuntimeCore {
     /// `physical_with_fallback`, with the key's unmodified character (`Tx::key_base`), and
     /// `unhandled` happens when no handler takes the logical key.
     pub(crate) fn physical_then(&mut self, event: PhysicalInput, key: Option<KeyEvent>, base: Option<char>, unhandled: Option<Unhandled>) -> bool {
-        if self.cancel_drag_key(&event) { return true; }
         if key.is_none() && matches!(event, PhysicalInput::Modifiers(_) | PhysicalInput::Key { pressed: false, .. }) {
             return self.physical_observation(event);
         }
+        self.heard_input();
+        if self.cancel_drag_key(&event) { return true; }
         if !matches!(event, PhysicalInput::Key { pressed: false, .. }) { self.dismiss_help(); }
         self.queue.push(Action::Physical(event, key.map(|key| Fallback { key, base, unhandled })));
         true
@@ -75,6 +77,7 @@ impl RuntimeCore {
     /// its requested frame will process this observation in order after clicks/keys.
     /// At rest, only a consuming handler invalidates the view and requests a frame.
     pub(crate) fn physical_observation(&mut self, event: PhysicalInput) -> bool {
+        self.heard_input();
         let busy = !self.queue.is_empty();
         self.observe_mods(&event);
         // The release of a modifier key the app hears needs a frame, in order like a press.

@@ -7,14 +7,14 @@ use crate::{App, ElementInfo, Env, Runtime, RuntimeCore};
 impl<S: 'static> App<S> {
     /// A runtime for this app with no window, as a headless render builds it: the state from
     /// `AppSpec::init` (or [`App::init`]'s closure), `AppSpec::setup` given a waker that does
-    /// nothing, the app's fonts, `poll` and `on_key`, and its [`App::playground`] attached,
+    /// nothing, the app's fonts, `poll`, its key, focus, visibility and input hooks, and its [`App::playground`] attached,
     /// closed, if it's enabled (by default, in debug builds, so in `cargo test`). Nothing is
     /// read from the command line. Call [`Runtime::frame`] to build the first frame.
     pub fn headless_runtime(mut self, size: (f32, f32), env: Env) -> Runtime<S> {
         let playground = self.playground.take();
         let (chrome, titlebar, borderless) = (self.chrome, self.titlebar, self.window_options.borderless);
         let (on_focus, on_ime, on_mods, modifier_keys, tab_visits_controls, srgb_blend) = (self.on_focus, self.on_ime, self.on_mods, self.modifier_keys, self.tab_visits_controls, self.srgb_blend);
-        let on_field_key = self.on_field_key;
+        let (on_field_key, on_visibility, on_input) = (self.on_field_key, self.on_visibility, self.on_input);
         let (spec, state, _) = self.into_parts(None);
         let mut rt = crate::tooling::runtime_for(&spec, state, size, env, std::sync::Arc::new(|| {}));
         if let Some(playground) = playground.filter(Playground::is_enabled) {
@@ -25,6 +25,8 @@ impl<S: 'static> App<S> {
         rt.app_mut().on_ime = on_ime;
         rt.app_mut().on_mods = on_mods;
         rt.app_mut().on_field_key = on_field_key;
+        rt.app_mut().on_visibility = on_visibility;
+        rt.app_mut().on_input = on_input;
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
         rt.set_srgb_blend(srgb_blend);

@@ -72,6 +72,7 @@ pub struct App<S: 'static> {
     pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
     pub(crate) on_field_key: Option<fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool>,
     pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
+    pub(crate) on_input: Option<fn(&mut S, &mut Tx)>,
     pub(crate) on_ime: Option<fn(&mut S, &crate::Ime, &mut Tx) -> bool>,
     pub(crate) on_reopen: Option<fn(&mut S, bool, &mut Tx) -> bool>,
     pub(crate) on_open_url: Option<crate::open_url::incoming::OnOpenUrl<S>>,
@@ -132,6 +133,7 @@ impl<S: 'static> App<S> {
             on_mods: None,
             on_field_key: None,
             on_visibility: None,
+            on_input: None,
             on_ime: None,
             on_reopen: None,
             on_open_url: None,
@@ -305,6 +307,17 @@ impl<S: 'static> App<S> {
     /// frame. Native windows only.
     pub fn on_visibility(mut self, f: fn(&mut S, bool, &mut Tx)) -> Self {
         self.on_visibility = Some(f);
+        self
+    }
+
+    /// Hears each input the window takes from the person (a key, IME text, a pointer move,
+    /// press or release, a wheel, a gesture or a touch) before anything handles it and whether
+    /// or not anything does, as a web page's capture-phase listeners on `window` hear it: for
+    /// work that follows whether someone is at the window, such as telling a server how long
+    /// they have been idle. It can't take the input, and what it changes rebuilds no view; a
+    /// pointer move calls it too, so keep it cheap.
+    pub fn on_input(mut self, f: fn(&mut S, &mut Tx)) -> Self {
+        self.on_input = Some(f);
         self
     }
 

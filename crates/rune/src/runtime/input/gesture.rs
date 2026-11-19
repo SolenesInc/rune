@@ -23,6 +23,7 @@ impl RuntimeCore {
     /// phase. The innermost [`El::on_wheel`] handler there hears it first, up to the nearest
     /// scroll view; what none takes scrolls as [`Self::wheel_xy`] does.
     pub fn wheel_event(&mut self, ev: WheelEvent) {
+        self.heard_input();
         if ev.phase == GesturePhase::Began { self.wheel_began(); }
         let moved = ev.dx != 0.0 || ev.dy != 0.0;
         if moved {
@@ -92,18 +93,21 @@ impl RuntimeCore {
     /// A trackpad pinch at window point (`ev.x`, `ev.y`) for the [`El::on_magnify`] handlers
     /// there, innermost first.
     pub fn magnify_event(&mut self, ev: MagnifyEvent) {
+        self.heard_input();
         self.offer_gesture(ev.x, ev.y, |g| g.magnify.is_some(), Gesture::Magnify(ev));
     }
 
     /// A two-finger rotation at window point (`ev.x`, `ev.y`) for the [`El::on_rotate`]
     /// handlers there, innermost first.
     pub fn rotate_event(&mut self, ev: RotateEvent) {
+        self.heard_input();
         self.offer_gesture(ev.x, ev.y, |g| g.rotate.is_some(), Gesture::Rotate(ev));
     }
 
     /// A two-finger double tap at window point (x, y) for the [`El::on_smart_magnify`]
     /// handlers there, innermost first.
     pub fn smart_magnify(&mut self, x: f32, y: f32) {
+        self.heard_input();
         self.offer_gesture(x, y, |g| g.smart_magnify.is_some(), Gesture::SmartMagnify(x, y));
     }
 

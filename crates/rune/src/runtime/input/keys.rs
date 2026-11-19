@@ -259,6 +259,7 @@ impl RuntimeCore {
     }
 
     pub fn key(&mut self, ev: KeyEvent) {
+        self.heard_input();
         self.queue_key(ev, false);
     }
 
@@ -277,6 +278,7 @@ impl RuntimeCore {
     }
 
     pub fn ime(&mut self, ev: Ime) {
+        self.heard_input();
         self.queue.push(Action::Ime(ev));
     }
 
