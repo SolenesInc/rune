@@ -492,6 +492,13 @@ impl El {
         self.set_clip([left, top, right, bottom].map(|w| w.max(0.0)));
         self
     }
+    /// Move this element's clip, and its fades with it, out past its box by these points on each
+    /// side (left, top, right, bottom), as paint alone: layout doesn't change. A cell that fades
+    /// its overflow keeps whole what reaches out of it, such as a control's focus ring.
+    pub fn clip_outset(mut self, left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        self.vis.cold_mut().clip_outset = [left, top, right, bottom].map(|v| v.max(0.0));
+        self
+    }
     /// [`Self::clip_fade`] with linear ramps: alpha falls in proportion to distance, from whole
     /// `width` in from each side to nothing at it, rather than easing at both ends. A mask that
     /// runs straight into an edge, such as a transcript fading into the top of a composer.

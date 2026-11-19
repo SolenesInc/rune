@@ -81,3 +81,73 @@ fn a_label_that_fits_its_layout_never_fades_while_its_box_grows_to_it() {
         assert!(grew, "{scale}x: the box should spring wider over frames");
     }
 }
+
+/// A single-line field `width` wide, 40 points in from the window's edge.
+fn field(s: &crate::TextEdit, _: &mut Cx<crate::TextEdit>) -> El {
+    row().w(300.0).h(40.0).child(el().w(40.0).h(1.0)).child(
+        crate::text_input(s, TextStyle::new(13.0, 400.0)).single_line().key("field").w(120.0).h(28.0)
+            .truncate_fade().on_edit(|s: &mut crate::TextEdit| s),
+    )
+}
+
+/// The widest left and right fades on a field's glyphs, in device px.
+fn side_fades<T>(rt: &Runtime<T>) -> (f32, f32) {
+    rt.instances.iter()
+        .filter(|i| i.params[1] == crate::render::KIND_GLYPH)
+        .map(|i| crate::render::unpack_fade(i.fade).0)
+        .fold((0.0, 0.0), |(l, r), f| (f32::max(l, f[0]), f32::max(r, f[2])))
+}
+
+const LONG: &str = "A value far too long for the field it was typed into";
+
+fn field_runtime(text: &str, focused: bool, scale: f32) -> Runtime<crate::TextEdit> {
+    let mut edit = crate::TextEdit::new(text);
+    edit.focused = focused;
+    let mut rt = Runtime::new(edit, field, (300.0, 40.0), Env::new(true, scale));
+    rt.frame(0.0);
+    rt
+}
+
+#[test]
+fn a_field_that_fits_its_value_never_fades() {
+    for scale in [1.0, 2.0] {
+        for focused in [false, true] {
+            let rt = field_runtime("Short", focused, scale);
+            assert_eq!(side_fades(&rt), (0.0, 0.0), "{scale}x, focused {focused}");
+        }
+    }
+}
+
+#[test]
+fn a_long_value_at_rest_fades_at_its_end_only() {
+    for scale in [1.0, 2.0] {
+        let (left, right) = side_fades(&field_runtime(LONG, false, scale));
+        assert!(left == 0.0 && right > 0.0, "{scale}x: fades left {left}, right {right}");
+    }
+}
+
+#[test]
+fn a_field_scrolled_to_its_caret_at_the_end_fades_its_start_and_keeps_its_end_whole() {
+    for scale in [1.0, 2.0] {
+        let mut rt = field_runtime(LONG, true, scale);
+        rt.key(crate::KeyEvent { key: crate::Key::End, mods: Default::default() });
+        rt.frame(0.0);
+        let (left, right) = side_fades(&rt);
+        assert!(left > 0.0 && right == 0.0, "{scale}x: fades left {left}, right {right}");
+    }
+}
+
+#[test]
+fn a_field_scrolled_to_a_caret_in_the_middle_fades_both_sides() {
+    for scale in [1.0, 2.0] {
+        let mut rt = field_runtime(LONG, true, scale);
+        rt.key(crate::KeyEvent { key: crate::Key::Home, mods: Default::default() });
+        rt.frame(0.0);
+        for _ in 0..30 {
+            rt.key(crate::KeyEvent { key: crate::Key::Right, mods: Default::default() });
+            rt.frame(0.0);
+        }
+        let (left, right) = side_fades(&rt);
+        assert!(left > 0.0 && right > 0.0, "{scale}x: fades left {left}, right {right}");
+    }
+}
