@@ -563,7 +563,7 @@ fn an_element_that_holds_keys_is_the_focus_while_nothing_has_keyboard_focus() {
 fn an_editor_that_draws_its_own_text_is_a_text_area_with_lines_and_a_caret() {
     struct Doc { text: String, caret: usize }
     let mut rt = Runtime::new(Doc { text: "# Plan\nship it\n".into(), caret: 2 }, |s: &Doc, _: &mut Cx<Doc>| {
-        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret)
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret, Vec::new())
             .child(text(s.text.lines().next().unwrap_or("")).key("row")))
     }, (400.0, 200.0), Env::new(true, 1.0));
     rt.frame(0.0);
@@ -594,4 +594,62 @@ fn an_editor_that_draws_its_own_text_is_a_text_area_with_lines_and_a_caret() {
     let (node, runs) = editor(&rt);
     assert_eq!(node.value(), Some("# Plan\nship it\nx"), "typing reaches the value");
     assert_eq!(at(node.text_selection().unwrap()), (runs[2].0, 1));
+}
+
+/// The line and the word around the caret of the element keyed `key`, as a screen reader's
+/// adapter reads them from the tree.
+fn line_and_word_at_caret<S: 'static>(rt: &Runtime<S>, key: &str) -> (String, String) {
+    let tree = accesskit_consumer::Tree::new(rt.accessibility_tree(), true);
+    let state = tree.state();
+    fn keyed<'a>(n: accesskit_consumer::NodeRef<'a>, key: &str) -> Option<accesskit_consumer::NodeRef<'a>> {
+        if n.author_id() == Some(key) { return Some(n); }
+        n.children().find_map(|c| keyed(c, key))
+    }
+    let node = keyed(state.root(), key).expect("keyed node");
+    let caret = node.text_selection_focus().expect("a caret");
+    let line = node.line_range_from_index(caret.to_line_index()).expect("the caret's line").text();
+    let mut word = node.document_range();
+    word.set_end(caret.forward_to_word_end());
+    word.set_start(caret.backward_to_word_start());
+    (line, word.text().trim_end().to_owned())
+}
+
+#[test]
+fn an_editor_that_draws_its_own_text_reads_each_wrapped_line_as_a_line() {
+    struct Doc { caret: usize }
+    let mut rt = Runtime::new(Doc { caret: 2 }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text("alpha beta gamma\ndelta", s.caret, s.caret, vec![6, 11]))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor").0, "alpha ");
+    rt.update(|s, _| s.caret = 8);
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor"), ("beta ".to_owned(), "beta".to_owned()), "the caret's drawn line, not its paragraph");
+    rt.update(|s, _| s.caret = 11);
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor").0, "gamma\n", "a caret at a wrap stands at the start of the line after it");
+}
+
+#[test]
+fn a_word_past_a_line_s_255th_character_is_read_as_that_word() {
+    let words: Vec<String> = (0..100).map(|k| format!("w{k:03}")).collect();
+    let line = words.join(" ");
+    let caret = line.find("w070").unwrap() + 2;
+    assert!(caret > 255);
+
+    struct Doc { text: String, caret: usize }
+    let mut rt = Runtime::new(Doc { text: line.clone(), caret }, |s: &Doc, _: &mut Cx<Doc>| {
+        col().child(col().key("editor").role("textbox").label("Note").focusable(true).a11y_text(s.text.as_str(), s.caret, s.caret, Vec::new()))
+    }, (400.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "editor"), (line.clone(), "w070".to_owned()), "drawn text");
+
+    let mut edit = TextEdit::new(line.as_str());
+    edit.focused = true;
+    edit.set_caret(caret);
+    let mut rt = Runtime::new(Field { edit }, |s: &Field, _: &mut Cx<Field>| {
+        col().child(text_input(&s.edit, crate::tok::type_::BODY).key("note").single_line().w(4000.0).on_edit(|s: &mut Field| &mut s.edit))
+    }, (4200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    assert_eq!(line_and_word_at_caret(&rt, "note"), (line, "w070".to_owned()), "a field");
 }

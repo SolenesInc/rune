@@ -63,13 +63,14 @@ pub(crate) struct A11yMore {
     pub drawn_text: Option<DrawnText>,
 }
 
-/// Text an element draws itself ([`El::a11y_text`]): what it says, and the caret or selection
-/// as byte offsets into it.
+/// Text an element draws itself ([`El::a11y_text`]): what it says, the caret or selection as
+/// byte offsets into it, and the byte offsets where a drawn line wraps, ascending.
 #[derive(Clone, Debug, Default, PartialEq, Hash)]
 pub(crate) struct DrawnText {
     pub text: String,
     pub anchor: usize,
     pub focus: usize,
+    pub wraps: Vec<usize>,
 }
 
 /// Accessibility state beyond role and label (`El::level`, `El::expanded`, `El::secure`, and
@@ -190,10 +191,12 @@ impl El {
     }
     /// Text this element draws itself, as an app's own editor does, for assistive technology to
     /// read line by line and follow the caret: `anchor` and `focus` are byte offsets into
-    /// `text`, equal for a caret. A `"textbox"` with it is an editable text area, which a screen
-    /// reader reads the line or word the caret moves to in, and echoes typing into.
-    pub fn a11y_text(mut self, text: impl Into<String>, anchor: usize, focus: usize) -> Self {
-        self.cold_mut().a11y.more().drawn_text = Some(DrawnText { text: text.into(), anchor, focus });
+    /// `text`, equal for a caret, and `wraps` the ascending byte offsets where a drawn line
+    /// wraps without a newline, so a line is the line the reader sees. A `"textbox"` with it is
+    /// an editable text area, which a screen reader reads the line or word the caret moves to
+    /// in, and echoes typing into.
+    pub fn a11y_text(mut self, text: impl Into<String>, anchor: usize, focus: usize, wraps: Vec<usize>) -> Self {
+        self.cold_mut().a11y.more().drawn_text = Some(DrawnText { text: text.into(), anchor, focus, wraps });
         self
     }
     /// A slider's or progress bar's number, between `min` and `max` (ARIA `aria-valuenow`,
