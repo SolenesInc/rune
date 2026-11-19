@@ -5,6 +5,8 @@
 //!   already styled: its closers are added at the end for the parse. Only an opener at a word's
 //!   start counts (`2 * 3` and `snake_case` stay text), `~` counts only as `~~`, and a parse
 //!   that would still show a marker falls back to the source as written.
+//! - A tag still arriving (`<kbd`, `</b`, `<a href="x`) draws nothing, as it will whole, and a
+//!   backslash that ends the text waits for what it escapes.
 //! - A link still arriving draws as a link: `[text` and `[text](https://ex` are parsed with their
 //!   `](…)` or `)` added, so its brackets never show; `[text][lab`, a reference whose label is
 //!   still arriving, draws its text as a link and no label. A `[` that turns out not to start a link
@@ -120,7 +122,12 @@ struct Patch {
 struct Open {
     at: usize,
     ch: u8,
+    /// How much of the run is still unpaired.
     n: usize,
+    /// How long the run was, and whether it could close a span as well as open one: what
+    /// CommonMark's rule of three pairs it by.
+    len: usize,
+    both: bool,
 }
 
 /// What ends `run`, the source from byte `base` of the inline text the stream ends in: nothing
@@ -134,6 +141,8 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
     let mut stack: Vec<Open> = Vec::new();
     let mut code = None;
     let mut cut = run.len();
+    // The last run of markers that opened nothing and closed nothing.
+    let mut loose = None;
     let mut i = 0;
     while i < b.len() {
         match b[i] {
@@ -163,7 +172,7 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
             }
             b'[' if word_start(run[..i].chars().next_back()) => {
                 let at = if i > 0 && b[i - 1] == b'!' { i - 1 } else { i };
-                stack.push(Open { at, ch: b'[', n: i + 1 - at });
+                stack.push(Open { at, ch: b'[', n: i + 1 - at, len: i + 1 - at, both: false });
                 i += 1;
             }
             b']' => {
@@ -211,6 +220,16 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
                     }
                 }
             }
+            b'<' => match angle(b, i) {
+                Angle::Whole(end) => i = end,
+                // Hidden while it may still become a tag, which draws nothing. A name right
+                // after a word is a comparison or a generic type (`x<y`, `Vec<T`).
+                Angle::Open if !(b.get(i + 1).is_some_and(u8::is_ascii_alphabetic) && run[..i].chars().next_back().is_some_and(char::is_alphanumeric)) => {
+                    cut = i;
+                    break;
+                }
+                _ => i += 1,
+            },
             b'h' | b'w' if url_at(run, i) => i += run[i..].find(char::is_whitespace).unwrap_or(run.len() - i),
             ch @ (b'*' | b'_' | b'~') => {
                 let n = run_len(b, i);
@@ -224,14 +243,19 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
                     break;
                 };
                 if ch == b'~' && n != 2 {
+                    loose = Some((i, i + n));
                     i += n;
                     continue;
                 }
-                let (opens, closes) = flanks(ch, before, after);
+                let (opens, closes, both) = flanks(ch, before, after);
                 let mut left = n;
                 if closes {
+                    // The rule of three: when either run could both open and close, runs whose
+                    // lengths sum to a multiple of three pair only if each is one (`**2*3`'s
+                    // second run closes nothing, and the first stays open).
+                    let pairs = |o: &Open| o.ch == ch && !(ch != b'~' && (o.both || both) && (o.len + n) % 3 == 0 && (o.len % 3 != 0 || n % 3 != 0));
                     while left > 0 {
-                        let Some(p) = stack.iter().rposition(|o| o.ch == ch) else { break };
+                        let Some(p) = stack.iter().rposition(pairs) else { break };
                         let used = stack[p].n.min(left);
                         stack[p].n -= used;
                         left -= used;
@@ -239,7 +263,9 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
                     }
                 }
                 if left > 0 && opens {
-                    stack.push(Open { at: i + n - left, ch, n: left });
+                    stack.push(Open { at: i + n - left, ch, n: left, len: n, both });
+                } else if left == n {
+                    loose = Some((i, i + n));
                 }
                 i += n;
             }
@@ -254,6 +280,23 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
         } else {
             cut = content;
         }
+    }
+    // A backslash that ends the text is left out while it may still escape what follows: a
+    // closer after it would be the character it escapes.
+    if code.is_none() {
+        let kept = run[..cut].trim_end();
+        if kept.bytes().rev().take_while(|&c| c == b'\\').count() % 2 == 1 {
+            cut = kept.len() - 1;
+        }
+    }
+    // Markers that pair with nothing and end the text would run into the closers and take
+    // them: they wait for the text after them (`**a * ` closes as `**a**`).
+    if let Some((at, end)) = loose
+        && code.is_none()
+        && !stack.is_empty()
+        && run[..cut].trim_end().len() == end
+    {
+        cut = at;
     }
     // An opener with nothing after it yet is left out with what follows, as is a `[x` that may
     // be a task's box.
@@ -287,6 +330,57 @@ fn close_tail(run: &str, base: usize, scope: Scope) -> Option<Patch> {
         markers.push(base + o.at..base + o.at + o.n);
     }
     (cut < run.len() || !closers.is_empty()).then_some(Patch { cut: base + cut, closers, markers, code: code.is_some() })
+}
+
+/// What a `<` starts.
+enum Angle {
+    /// Text.
+    No,
+    /// A tag or a comment that ends before this byte.
+    Whole(usize),
+    /// What may still become a tag or a comment: nothing in it rules that out, and its `>`
+    /// hasn't come.
+    Open,
+}
+
+/// What the `<` at `b[i]` starts, reading to the end of its line: a tag is a name, then
+/// attributes, whose quoted values hold anything.
+fn angle(b: &[u8], i: usize) -> Angle {
+    let rest = &b[i + 1..];
+    if let Some(comment) = rest.strip_prefix(b"!--") {
+        return match comment.windows(3).position(|w| w == b"-->") {
+            Some(j) => Angle::Whole(i + 4 + j + 3),
+            None if comment.contains(&b'\n') => Angle::No,
+            None => Angle::Open,
+        };
+    }
+    if !rest.is_empty() && b"!--".starts_with(rest) {
+        return Angle::Open;
+    }
+    let mut j = usize::from(rest.first() == Some(&b'/'));
+    match rest.get(j) {
+        None => return Angle::Open,
+        Some(c) if c.is_ascii_alphabetic() => {}
+        Some(_) => return Angle::No,
+    }
+    j += rest[j..].iter().take_while(|c| c.is_ascii_alphanumeric() || **c == b'-').count();
+    if rest.get(j).is_some_and(|c| !c.is_ascii_whitespace() && !b"/>".contains(c)) {
+        return Angle::No;
+    }
+    loop {
+        match rest.get(j) {
+            None => return Angle::Open,
+            Some(b'>') => return Angle::Whole(i + 1 + j + 1),
+            Some(b'\n') => return Angle::No,
+            Some(&q @ (b'"' | b'\'')) => match rest[j + 1..].iter().position(|&c| c == q || c == b'\n') {
+                Some(k) if rest[j + 1 + k] == q => j += k + 2,
+                Some(_) => return Angle::No,
+                None => return Angle::Open,
+            },
+            Some(c) if c.is_ascii_whitespace() || c.is_ascii_alphanumeric() || b"_:.-=/".contains(c) => j += 1,
+            Some(_) => return Angle::No,
+        }
+    }
 }
 
 fn run_len(b: &[u8], i: usize) -> usize {
@@ -328,15 +422,19 @@ fn word_start(before: Option<char>) -> bool {
     space(before) || punct(before)
 }
 
-/// Whether a run of `ch` between `before` and `after` can open and can close a span: the
-/// CommonMark flanking rules, with openers held to a word's start.
-fn flanks(ch: u8, before: Option<char>, after: char) -> (bool, bool) {
+/// Whether a run of `ch` between `before` and `after` can open a span, can close one, and
+/// could do both to the parser: the CommonMark flanking rules, with openers held to a word's
+/// start.
+fn flanks(ch: u8, before: Option<char>, after: char) -> (bool, bool, bool) {
     let after = Some(after);
     let left = !space(after) && (!punct(after) || word_start(before));
     let right = !space(before) && (!punct(before) || word_start(after));
     match ch {
-        b'_' => (left && (!right || punct(before)), right && (!left || punct(after))),
-        _ => (left && word_start(before), right),
+        b'_' => {
+            let (opens, closes) = (left && (!right || punct(before)), right && (!left || punct(after)));
+            (opens, closes, opens && closes)
+        }
+        _ => (left && word_start(before), right, left && right),
     }
 }
 

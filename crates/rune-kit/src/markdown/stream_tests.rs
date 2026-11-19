@@ -59,6 +59,8 @@ fn an_open_span_never_shows_its_markers() {
         "| a | **b** |\n|---|---|\n| `c` | *d* |",
         "See [the **docs**](https://example.com/a_b \"t\") and ![a chart](x.png), then *[more](y)*.",
         "- [ ] todo\n- [x] done",
+        "In bold **2*3 = 6** and **a * b** too, then snake\\_case and a \\* star in *em\\_ph*.",
+        "Press <kbd>Ctrl</kbd> + <kbd class=\"k\">C</kbd>, a <br/> break, **bold <b>tag</b>** and <!-- a note --> more.",
     ] {
         // An image becomes its own block when its URL arrives; compare the characters,
         // not the whitespace around that block.
@@ -181,4 +183,40 @@ fn a_reference_shows_its_text_while_its_label_arrives() {
     // Whole, it is what its definition makes it: a link with one, its source without.
     assert_eq!(shown(&stream("[pierre]: https://example.com\n\nKeep exploring [Pierre][pierre] now")), "Keep exploring Pierre now");
     assert_eq!(shown(&stream("Keep exploring [Pierre][pierre] now")), "Keep exploring [Pierre][pierre] now");
+}
+
+/// A `<` is left out only while it may still become a tag.
+#[test]
+fn only_what_may_become_a_tag_is_left_out() {
+    for (src, text) in [
+        ("Press <kb", "Press"),
+        ("Press </kb", "Press"),
+        ("a <a href=\"x > y", "a"),
+        ("see <!-", "see"),
+        ("**bold <b", "bold"),
+        ("Press <kbd>Ctrl<", "Press Ctrl"),
+        ("Press <kbd>Ctrl</k", "Press Ctrl"),
+        // A comparison, a generic type, and bytes no tag holds.
+        ("if a < b", "if a < b"),
+        ("if a <1", "if a <1"),
+        ("x<y and", "x<y and"),
+        ("Vec<int and", "Vec<int and"),
+        ("if x <y, then", "if x <y, then"),
+        // A tag on an earlier line doesn't hide this one.
+        ("a <b\nc", "a <b c"),
+    ] {
+        assert_eq!(shown(&stream(src)), text, "{src:?}");
+    }
+    // A whole tag's attributes hold no markers.
+    assert_eq!(shown(&stream("a <b c=\"*\">d and *em")), "a d and em");
+}
+
+/// Markers the parser would not pair stay text, and the span around them still closes.
+#[test]
+fn a_run_that_pairs_with_nothing_leaves_the_span_around_it_open() {
+    for (src, text, bold) in [("**2*3", "2*3", "2*3"), ("**a * ", "a", "a"), ("**a * b", "a * b", "a * b"), ("**a\\", "a", "a"), ("**snake\\_ca", "snake_ca", "snake_ca")] {
+        let blocks = stream(src);
+        assert_eq!(shown(&blocks), text, "{src:?}");
+        assert_eq!(styled(&blocks, Style::Strong), [bold], "{src:?}");
+    }
 }
