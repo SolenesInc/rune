@@ -621,10 +621,10 @@ fn run(case: &str, tag: u32, kb: usize, file: Option<&str>, meta: &mut Vec<Strin
             })).collect()
         }
         "md-parse" => (0..200).map(|_| {
-            let cpu0 = rune::thread_cpu_ms();
+            let (allocs0, bytes0, cpu0) = (probe::allocations(), probe::allocated_bytes(), rune::thread_cpu_ms());
             std::hint::black_box(rune_kit::markdown::parse(std::hint::black_box(&src)));
             let mut v = vec![0.0; METRICS.len()];
-            v[0] = rune::thread_cpu_ms() - cpu0;
+            (v[0], v[7], v[8]) = (rune::thread_cpu_ms() - cpu0, (probe::allocations() - allocs0) as f64, (probe::allocated_bytes() - bytes0) as f64);
             v
         }).collect(),
         "md-stream-parse" => {
