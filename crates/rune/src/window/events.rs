@@ -383,7 +383,7 @@ impl<S: 'static> Host<S> {
                         Some((key, mods, base)) => rt.dead_key(key, mods, base, Ime::Preedit(s, cur)),
                         None => rt.ime(Ime::Preedit(s, cur)),
                     },
-                    WIme::Commit(s) => rt.ime(Ime::Commit(s)),
+                    WIme::Commit(s) => { l.key_pressed(); rt.ime(Ime::Commit(s)) }
                     WIme::Enabled => rt.ime(Ime::Enabled),
                     WIme::Disabled => rt.ime(Ime::Disabled),
                 }
