@@ -42,7 +42,10 @@ pub struct Tracked<T> {
 
 impl<T> Tracked<T> {
     pub fn new(value: T) -> Self {
-        Tracked { id: NEXT.fetch_add(1, Ordering::Relaxed), value }
+        Tracked {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
+            value,
+        }
     }
 
     // These are associated functions (`Tracked::touch(&field)`), as `Rc`'s are, so they never
@@ -70,7 +73,6 @@ impl<T> Tracked<T> {
     pub fn version(this: &Self) -> u64 {
         version(this.id)
     }
-
 }
 
 impl<T> std::ops::Deref for Tracked<T> {
@@ -78,7 +80,11 @@ impl<T> std::ops::Deref for Tracked<T> {
     #[inline]
     fn deref(&self) -> &T {
         if RECORDING.get() > 0 {
-            READS.with_borrow_mut(|r| if let Some(frame) = r.last_mut() { frame.push(self.id) });
+            READS.with_borrow_mut(|r| {
+                if let Some(frame) = r.last_mut() {
+                    frame.push(self.id)
+                }
+            });
         }
         &self.value
     }
@@ -148,7 +154,10 @@ impl<A, T: FromIterator<A>> FromIterator<A> for Tracked<T> {
 }
 
 /// `for x in &tracked`: iterates the value, recording a read.
-impl<'a, T> IntoIterator for &'a Tracked<T> where &'a T: IntoIterator {
+impl<'a, T> IntoIterator for &'a Tracked<T>
+where
+    &'a T: IntoIterator,
+{
     type Item = <&'a T as IntoIterator>::Item;
     type IntoIter = <&'a T as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
@@ -157,7 +166,10 @@ impl<'a, T> IntoIterator for &'a Tracked<T> where &'a T: IntoIterator {
 }
 
 /// `for x in &mut tracked`: iterates the value, counting as a write.
-impl<'a, T> IntoIterator for &'a mut Tracked<T> where &'a mut T: IntoIterator {
+impl<'a, T> IntoIterator for &'a mut Tracked<T>
+where
+    &'a mut T: IntoIterator,
+{
     type Item = <&'a mut T as IntoIterator>::Item;
     type IntoIter = <&'a mut T as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
@@ -220,5 +232,9 @@ pub(crate) fn end() -> Vec<(u32, u64)> {
     let mut ids = READS.with_borrow_mut(|r| r.pop()).unwrap_or_default();
     ids.sort_unstable();
     ids.dedup();
-    VERSIONS.with_borrow(|v| ids.into_iter().map(|id| (id, v.get(id as usize).copied().unwrap_or(0))).collect())
+    VERSIONS.with_borrow(|v| {
+        ids.into_iter()
+            .map(|id| (id, v.get(id as usize).copied().unwrap_or(0)))
+            .collect()
+    })
 }

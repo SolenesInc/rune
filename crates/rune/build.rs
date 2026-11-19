@@ -20,30 +20,57 @@ fn main() {
         std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"))
     };
     let classic = format!("{}\n{}", read("src/clip.wgsl"), read("src/shader.wgsl"));
-    assert!(classic.matches(GLYPH_BRANCH).count() == 1,
-        "src/shader.wgsl must hold Windfoil's anchor `{GLYPH_BRANCH}` exactly once (build.rs puts outline.wgsl's glyph branch before it)");
-    let windfoil = format!("{}\n{}", classic.replacen(GLYPH_BRANCH, OUTLINE_BRANCH, 1), read("src/outline.wgsl"));
-    let (classic_hash, windfoil_hash) = (blake3::hash(classic.as_bytes()).to_hex(), blake3::hash(windfoil.as_bytes()).to_hex());
+    assert!(
+        classic.matches(GLYPH_BRANCH).count() == 1,
+        "src/shader.wgsl must hold Windfoil's anchor `{GLYPH_BRANCH}` exactly once (build.rs puts outline.wgsl's glyph branch before it)"
+    );
+    let windfoil = format!(
+        "{}\n{}",
+        classic.replacen(GLYPH_BRANCH, OUTLINE_BRANCH, 1),
+        read("src/outline.wgsl")
+    );
+    let (classic_hash, windfoil_hash) = (
+        blake3::hash(classic.as_bytes()).to_hex(),
+        blake3::hash(windfoil.as_bytes()).to_hex(),
+    );
 
     let recorded = |path: &str, name: &str| {
         let file = read(path);
-        let at = file.find(&format!("{name}: &str = \"")).unwrap_or_else(|| panic!("{path} records no {name}"));
+        let at = file
+            .find(&format!("{name}: &str = \""))
+            .unwrap_or_else(|| panic!("{path} records no {name}"));
         file[at..].split('"').nth(1).unwrap_or_default().to_owned()
     };
-    let stale = |what: &str, recorded: String, now: &str, fix: &str| if recorded != now {
-        println!("cargo::warning={what} was built from other WGSL (blake3 {recorded}, the sources now hash {now}), so it isn't used: run {fix}");
+    let stale = |what: &str, recorded: String, now: &str, fix: &str| {
+        if recorded != now {
+            println!(
+                "cargo::warning={what} was built from other WGSL (blake3 {recorded}, the sources now hash {now}), so it isn't used: run {fix}"
+            );
+        }
     };
-    stale("The precompiled Metal uber shader (uber.metallib)", recorded("src/render/uber/metallib_hash.rs", "UBER_WGSL_BLAKE3"),
-        &classic_hash, "scripts/precompile-metal-shaders.sh on a Mac");
-    stale("The precompiled Metal Windfoil shader (uber_windfoil.metallib)", recorded("src/render/uber/windfoil_hash.rs", "WINDFOIL_WGSL_BLAKE3"),
-        &windfoil_hash, "scripts/precompile-metal-shaders.sh on a Mac");
+    stale(
+        "The precompiled Metal uber shader (uber.metallib)",
+        recorded("src/render/uber/metallib_hash.rs", "UBER_WGSL_BLAKE3"),
+        &classic_hash,
+        "scripts/precompile-metal-shaders.sh on a Mac",
+    );
+    stale(
+        "The precompiled Metal Windfoil shader (uber_windfoil.metallib)",
+        recorded("src/render/uber/windfoil_hash.rs", "WINDFOIL_WGSL_BLAKE3"),
+        &windfoil_hash,
+        "scripts/precompile-metal-shaders.sh on a Mac",
+    );
 
     let out = Path::new(&std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR")).to_owned();
-    let write = |name: &str, text: &str| std::fs::write(out.join(name), text).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let write = |name: &str, text: &str| {
+        std::fs::write(out.join(name), text).unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
     write("uber_classic.wgsl", &classic);
     write("uber_windfoil.wgsl", &windfoil);
-    write("uber_wgsl.rs", &format!(
-        "/// clip.wgsl and shader.wgsl.\n\
+    write(
+        "uber_wgsl.rs",
+        &format!(
+            "/// clip.wgsl and shader.wgsl.\n\
          pub(crate) const CLASSIC: &str = include_str!(concat!(env!(\"OUT_DIR\"), \"/uber_classic.wgsl\"));\n\
          /// BLAKE3 of [`CLASSIC`], which only macOS ships a library for.\n\
          #[cfg_attr(not(target_os = \"macos\"), allow(dead_code))]\n\
@@ -52,5 +79,7 @@ fn main() {
          pub(crate) const WINDFOIL: &str = include_str!(concat!(env!(\"OUT_DIR\"), \"/uber_windfoil.wgsl\"));\n\
          /// BLAKE3 of [`WINDFOIL`], which only macOS ships a library for.\n\
          #[cfg_attr(not(target_os = \"macos\"), allow(dead_code))]\n\
-         pub(crate) const WINDFOIL_BLAKE3: &str = \"{windfoil_hash}\";\n"));
+         pub(crate) const WINDFOIL_BLAKE3: &str = \"{windfoil_hash}\";\n"
+        ),
+    );
 }

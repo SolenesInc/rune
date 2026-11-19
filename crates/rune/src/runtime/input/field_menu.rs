@@ -21,16 +21,29 @@ pub(crate) struct FieldMenu {
 impl RuntimeCore {
     /// Opens field `path`'s menu at window point `at`, pressed at `local` in the field (points
     /// from its text's top-left), or from the keyboard (`None`).
-    pub(super) fn field_menu(&mut self, path: String, at: (f32, f32), local: Option<(f32, f32)>, one: &mut Tx) -> bool {
-        let Some(i) = self.live(&path) else { return false };
-        let Some(input) = self.nodes[i].input.as_deref() else { return false };
-        let Some(access) = input.access.clone() else { return false };
+    pub(super) fn field_menu(
+        &mut self,
+        path: String,
+        at: (f32, f32),
+        local: Option<(f32, f32)>,
+        one: &mut Tx,
+    ) -> bool {
+        let Some(i) = self.live(&path) else {
+            return false;
+        };
+        let Some(input) = self.nodes[i].input.as_deref() else {
+            return false;
+        };
+        let Some(access) = input.access.clone() else {
+            return false;
+        };
         let (single, secure) = (input.single_line, input.edit.is_secure());
         let spell = input.spellcheck && !secure;
         let layout = self.nodes[i].text_layout.clone();
         let scroll = self.input_scroll.get(&path).copied().unwrap_or(0.0);
         let s = self.env.scale;
-        let toggle = std::iter::successors(Some(i), |&j| self.nodes[j].parent).find_map(|j| self.nodes[j].handlers.on_spellcheck.clone());
+        let toggle = std::iter::successors(Some(i), |&j| self.nodes[j].parent)
+            .find_map(|j| self.nodes[j].handlers.on_spellcheck.clone());
         if self.focus.path() != Some(path.as_str()) {
             self.set_focus(Some(path.clone()), false);
         }
@@ -44,7 +57,10 @@ impl RuntimeCore {
             // A press in the selection keeps it for Cut and Copy. Elsewhere it moves the caret
             // there, and on a misspelled word selects the word, as Chromium does.
             if a == b || caret < a || caret > b {
-                match spell.then(|| crate::spell::misspelled_at(&e.text, caret)).flatten() {
+                match spell
+                    .then(|| crate::spell::misspelled_at(&e.text, caret))
+                    .flatten()
+                {
                     Some((wa, wb)) => e.set_selection(wa, wb),
                     None => e.set_caret(caret),
                 }
@@ -55,14 +71,29 @@ impl RuntimeCore {
             .then(|| crate::spell::misspelled(&e.text))
             .filter(|found| found.contains(&(a, b)))
             .map(|_| (a, b, e.text[a..b].to_owned()));
-        let suggestions = word.as_ref().map(|w| crate::spell::suggest(&w.2)).unwrap_or_default();
+        let suggestions = word
+            .as_ref()
+            .map(|w| crate::spell::suggest(&w.2))
+            .unwrap_or_default();
         let mut menu = PopupMenu::new();
         if word.is_some() {
             if suggestions.is_empty() {
-                menu = menu.item(PopupItem::new("no-guesses", label(Label::NoGuesses)).enabled(false));
+                menu =
+                    menu.item(PopupItem::new("no-guesses", label(Label::NoGuesses)).enabled(false));
             }
-            menu = menu.items(suggestions.iter().enumerate().map(|(n, s)| PopupItem::new(format!("suggestion-{n}"), s.clone())));
-            menu = menu.separator().item(PopupItem::new("learn-spelling", label(Label::LearnSpelling))).separator();
+            menu = menu.items(
+                suggestions
+                    .iter()
+                    .enumerate()
+                    .map(|(n, s)| PopupItem::new(format!("suggestion-{n}"), s.clone())),
+            );
+            menu = menu
+                .separator()
+                .item(PopupItem::new(
+                    "learn-spelling",
+                    label(Label::LearnSpelling),
+                ))
+                .separator();
         }
         let selected = a != b && !secure;
         menu = menu
@@ -73,7 +104,9 @@ impl RuntimeCore {
             menu = menu.item(PopupItem::new("select-all", label(Label::SelectAll)));
         }
         if let Some((on, _)) = &toggle {
-            menu = menu.separator().item(PopupItem::new("spellcheck", label(Label::Spellcheck)).checked(*on));
+            menu = menu
+                .separator()
+                .item(PopupItem::new("spellcheck", label(Label::Spellcheck)).checked(*on));
         }
         one.commit = one.commit.instant();
         log_event!(self, "field menu {path}");
@@ -81,7 +114,12 @@ impl RuntimeCore {
             menu,
             anchor: PopupAnchor::Point(at.0, at.1),
             on_pick: Box::new(|_, _, _| {}),
-            field: Some(Box::new(FieldMenu { path, word, suggestions, toggle })),
+            field: Some(Box::new(FieldMenu {
+                path,
+                word,
+                suggestions,
+                toggle,
+            })),
         });
         true
     }
@@ -91,7 +129,14 @@ impl RuntimeCore {
         if self.focus.path() != Some(menu.path.as_str()) && self.live(&menu.path).is_some() {
             self.set_focus(Some(menu.path.clone()), false);
         }
-        let command = |c| KeyEvent { key: Key::Command(c), mods: Mods { cmd: true, ctrl: !cfg!(target_os = "macos"), ..Mods::default() } };
+        let command = |c| KeyEvent {
+            key: Key::Command(c),
+            mods: Mods {
+                cmd: true,
+                ctrl: !cfg!(target_os = "macos"),
+                ..Mods::default()
+            },
+        };
         match picked {
             "cut" | "copy" | "select-all" => {
                 let ev = command(match picked {
@@ -100,7 +145,10 @@ impl RuntimeCore {
                     _ => 'a',
                 });
                 let layout = self.focused_layout();
-                self.with_focused(|e| e.key_in(&ev, layout.as_ref().map(TextLayout::view)), one);
+                self.with_focused(
+                    |e| e.key_in(&ev, layout.as_ref().map(TextLayout::view)),
+                    one,
+                );
             }
             "paste" => one.request_paste(),
             "learn-spelling" => {
@@ -115,8 +163,12 @@ impl RuntimeCore {
                 }
             }
             id => {
-                let n = id.strip_prefix("suggestion-").and_then(|n| n.parse::<usize>().ok());
-                if let (Some((a, b, _)), Some(suggestion)) = (menu.word, n.and_then(|n| menu.suggestions.get(n).cloned())) {
+                let n = id
+                    .strip_prefix("suggestion-")
+                    .and_then(|n| n.parse::<usize>().ok());
+                if let (Some((a, b, _)), Some(suggestion)) =
+                    (menu.word, n.and_then(|n| menu.suggestions.get(n).cloned()))
+                {
                     self.with_focused(
                         |e| {
                             e.set_selection(a, b);

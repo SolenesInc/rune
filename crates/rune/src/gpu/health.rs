@@ -30,7 +30,9 @@ pub(crate) struct ErrorLog {
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 impl ErrorLog {
     pub(crate) fn note(&mut self, message: &str) -> Note {
-        if self.seen.len() > DIFFERENT || self.seen.iter().any(|m| m == message) { return Note::Quiet; }
+        if self.seen.len() > DIFFERENT || self.seen.iter().any(|m| m == message) {
+            return Note::Quiet;
+        }
         self.seen.push(message.to_owned());
         match self.seen.len() {
             1 => Note::First,

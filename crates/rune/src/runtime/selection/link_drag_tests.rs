@@ -1,19 +1,29 @@
 use crate::{Cx, El, Env, Link, Runtime, TextStyle, col, text};
 
 #[derive(Default)]
-struct S { pressed: Vec<String> }
+struct S {
+    pressed: Vec<String>,
+}
 
 fn view(_: &S, _: &mut Cx<S>) -> El {
-    col().w_full().padding(10.0).child(text("open this passage now").key("t").font(TextStyle::new(14.0, 400.0)).w(400.0).selectable(true)
-        .link(Link::new(5..17, "mark").drag_selects())
-        .on_link(|s: &mut S, id, _| s.pressed.push(id.to_owned())))
+    col().w_full().padding(10.0).child(
+        text("open this passage now")
+            .key("t")
+            .font(TextStyle::new(14.0, 400.0))
+            .w(400.0)
+            .selectable(true)
+            .link(Link::new(5..17, "mark").drag_selects())
+            .on_link(|s: &mut S, id, _| s.pressed.push(id.to_owned())),
+    )
 }
 
 #[test]
 fn a_drag_from_a_drag_selects_link_selects_and_a_click_on_it_presses_it() {
     let mut rt = Runtime::new(S::default(), view, (500.0, 100.0), Env::new(true, 1.0));
     rt.frame(0.0);
-    let mut glyphs: Vec<(f32, f32)> = rt.instances.iter()
+    let mut glyphs: Vec<(f32, f32)> = rt
+        .instances
+        .iter()
         .filter(|i| i.params[1] == crate::render::KIND_GLYPH)
         .map(|i| (i.rect[0] + i.rect[2] / 2.0, i.rect[1] + i.rect[3] / 2.0))
         .collect();
@@ -37,6 +47,10 @@ fn a_drag_from_a_drag_selects_link_selects_and_a_click_on_it_presses_it() {
     }
     rt.pointer_up(x1, y0);
     rt.frame(2.0);
-    assert!(rt.selected_text().is_some_and(|t| t.contains("passage")), "a drag from the link selects: {:?}", rt.selected_text());
+    assert!(
+        rt.selected_text().is_some_and(|t| t.contains("passage")),
+        "a drag from the link selects: {:?}",
+        rt.selected_text()
+    );
     assert_eq!(rt.state().pressed, ["mark"], "and presses nothing");
 }

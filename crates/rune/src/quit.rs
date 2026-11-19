@@ -69,8 +69,12 @@ pub(crate) fn step(state: State, event: Event) -> (State, Vec<Effect>) {
         (Quitting(_, After::Relaunch), Exited) => (Done, vec![Relaunch]),
         (_, Exited) => (Done, vec![]),
         (Running, Start { after }) => (Quitting(Hooks::Owed, after), vec![RunHooks]),
-        (Quitting(Hooks::Owed, was), Start { after }) => (Quitting(Hooks::Owed, was.max(after)), vec![RunHooks]),
-        (Quitting(Hooks::Ran, was), Start { after }) => (Quitting(Hooks::Ran, was.max(after)), vec![]),
+        (Quitting(Hooks::Owed, was), Start { after }) => {
+            (Quitting(Hooks::Owed, was.max(after)), vec![RunHooks])
+        }
+        (Quitting(Hooks::Ran, was), Start { after }) => {
+            (Quitting(Hooks::Ran, was.max(after)), vec![])
+        }
         (Quitting(_, after), HooksRan) => (Quitting(Hooks::Ran, after), vec![]),
         (Running, HooksRan) => (Running, vec![]),
     }
@@ -117,7 +121,9 @@ fn end_process() -> ! {
     crate::marks::mark("quit.end");
     #[cfg(unix)]
     // SAFETY: `_exit` ends the process without running anything of this process's.
-    unsafe { libc::_exit(0) }
+    unsafe {
+        libc::_exit(0)
+    }
     #[allow(unreachable_code)]
     std::process::exit(0)
 }
@@ -143,10 +149,18 @@ const QUIT_REPORT_EVERY: std::time::Duration = std::time::Duration::from_secs(3)
 #[cfg(not(target_arch = "wasm32"))]
 fn watch_quit() {
     let started = std::time::Instant::now();
-    let _ = std::thread::Builder::new().name("rune-quit-watch".into()).spawn(move || loop {
-        std::thread::sleep(QUIT_REPORT_EVERY);
-        eprintln!("rune: still quitting {} ms after the quit started: {}", started.elapsed().as_millis(), where_the_quit_is());
-    });
+    let _ = std::thread::Builder::new()
+        .name("rune-quit-watch".into())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(QUIT_REPORT_EVERY);
+                eprintln!(
+                    "rune: still quitting {} ms after the quit started: {}",
+                    started.elapsed().as_millis(),
+                    where_the_quit_is()
+                );
+            }
+        });
 }
 
 /// Ends the process `after` from now if it's still alive then, saying on stderr what it was
@@ -166,11 +180,16 @@ pub fn exit_deadline(after: std::time::Duration) {
 /// The quit's last step reached and how long ago.
 #[cfg(not(target_arch = "wasm32"))]
 fn where_the_quit_is() -> String {
-    let last = crate::marks::marks().into_iter().last().map_or_else(|| "no step".to_owned(), |(name, at)| format!("last step {name}, {} ms ago", at.elapsed().as_millis()));
+    let last = crate::marks::marks().into_iter().last().map_or_else(
+        || "no step".to_owned(),
+        |(name, at)| format!("last step {name}, {} ms ago", at.elapsed().as_millis()),
+    );
     last
 }
 
-pub(crate) fn state() -> State { *STATE.lock().unwrap_or_else(|e| e.into_inner()) }
+pub(crate) fn state() -> State {
+    *STATE.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// Whether the app is quitting: a quit started. A window's
 /// `on_close` that runs while this holds closes because the app ends, so it keeps what it would

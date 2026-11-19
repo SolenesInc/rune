@@ -41,7 +41,9 @@ pub(crate) enum MinimizeEffect {
 
 impl Minimize {
     /// Whether an ask waits at all, held or not.
-    pub(crate) fn latched(self) -> bool { !matches!(self, Minimize::None) }
+    pub(crate) fn latched(self) -> bool {
+        !matches!(self, Minimize::None)
+    }
 
     /// What waits for a shell now, dev's `minimize_request`. An ask a hidden poll holds is out
     /// of it until that poll's shell is done.
@@ -62,21 +64,51 @@ pub(crate) fn step(state: &mut Minimize, event: MinimizeEvent) -> Effects<Minimi
     use Minimize as M;
     use MinimizeEvent as E;
     match (*state, event) {
-        (M::None, E::Asked) => { *state = M::Asked; Effects::none() }
+        (M::None, E::Asked) => {
+            *state = M::Asked;
+            Effects::none()
+        }
         (M::None, _) => Effects::none(),
         (M::Asked, E::Asked) => Effects::none(),
-        (M::Asked, E::HeldForShow) => { *state = M::Held { field: false }; Effects::none() }
+        (M::Asked, E::HeldForShow) => {
+            *state = M::Held { field: false };
+            Effects::none()
+        }
         // A second poll in the turn would take the field again, and hold what it finds.
-        (M::Held { field: true }, E::HeldForShow) => { *state = M::Held { field: false }; Effects::none() }
-        (M::Held { field: false }, E::HeldForShow) => { *state = M::None; Effects::none() }
-        (M::Held { field }, E::Asked) => { *state = M::Held { field: true }; Effects::none() }
-        (M::Asked, E::Taken) => { *state = M::None; Effects::one(MinimizeEffect::Minimize) }
-        (M::Held { field: true }, E::Taken) => { *state = M::Held { field: false }; Effects::one(MinimizeEffect::Minimize) }
+        (M::Held { field: true }, E::HeldForShow) => {
+            *state = M::Held { field: false };
+            Effects::none()
+        }
+        (M::Held { field: false }, E::HeldForShow) => {
+            *state = M::None;
+            Effects::none()
+        }
+        (M::Held { field }, E::Asked) => {
+            *state = M::Held { field: true };
+            Effects::none()
+        }
+        (M::Asked, E::Taken) => {
+            *state = M::None;
+            Effects::one(MinimizeEffect::Minimize)
+        }
+        (M::Held { field: true }, E::Taken) => {
+            *state = M::Held { field: false };
+            Effects::one(MinimizeEffect::Minimize)
+        }
         (M::Held { field: false }, E::Taken) => Effects::none(),
-        (M::Held { .. }, E::Returned) => { *state = M::Asked; Effects::none() }
+        (M::Held { .. }, E::Returned) => {
+            *state = M::Asked;
+            Effects::none()
+        }
         (M::Asked | M::None, E::Returned) => Effects::none(),
-        (M::Asked, E::Lost) => { *state = M::None; Effects::none() }
-        (M::Held { .. }, E::Lost) => { *state = M::Held { field: false }; Effects::none() }
+        (M::Asked, E::Lost) => {
+            *state = M::None;
+            Effects::none()
+        }
+        (M::Held { .. }, E::Lost) => {
+            *state = M::Held { field: false };
+            Effects::none()
+        }
     }
 }
 
@@ -87,7 +119,9 @@ impl crate::runtime::RuntimeCore {
         let mut state = self.minimize;
         let effects = step(&mut state, event);
         self.minimize = state;
-        effects.into_iter().any(|effect| effect == MinimizeEffect::Minimize)
+        effects
+            .into_iter()
+            .any(|effect| effect == MinimizeEffect::Minimize)
     }
 }
 
@@ -100,17 +134,23 @@ pub(crate) struct HiddenPoll {
 }
 
 impl HiddenPoll {
-    pub(crate) fn new(shows: bool) -> Self { Self { shows } }
+    pub(crate) fn new(shows: bool) -> Self {
+        Self { shows }
+    }
 
     /// Before its shell: the ask is out of the shell's hands; only an ask that arrives during
     /// the shell (a pop-up's callback) is in them.
     pub(crate) fn enter<S>(&self, rt: &mut Runtime<S>) {
-        if self.shows { rt.minimize_step(MinimizeEvent::HeldForShow); }
+        if self.shows {
+            rt.minimize_step(MinimizeEvent::HeldForShow);
+        }
     }
 
     /// After it: the held ask is due again, so the shell after the show takes it.
     pub(crate) fn leave<S>(&self, rt: &mut Runtime<S>) {
-        if self.shows { rt.minimize_step(MinimizeEvent::Returned); }
+        if self.shows {
+            rt.minimize_step(MinimizeEvent::Returned);
+        }
     }
 }
 

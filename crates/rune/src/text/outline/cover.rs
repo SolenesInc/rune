@@ -11,7 +11,15 @@ use super::store::OutlineStore;
 /// px and hinted by record `hint` (0: none).
 // The CPU renderer's glyphs drawn straight from outlines use this (render/cpu_boot, IB-2).
 #[allow(dead_code)]
-pub(crate) fn coverage(store: &OutlineStore, rec: u32, hint: u32, local: [f32; 2], scale: f32, r: f32, hw: f32) -> f32 {
+pub(crate) fn coverage(
+    store: &OutlineStore,
+    rec: u32,
+    hint: u32,
+    local: [f32; 2],
+    scale: f32,
+    r: f32,
+    hw: f32,
+) -> f32 {
     let t = |i: u32| store.texel(i);
     let f = f32::from_bits;
     let head = t(rec);
@@ -22,25 +30,41 @@ pub(crate) fn coverage(store: &OutlineStore, rec: u32, hint: u32, local: [f32; 2
     let (b0, b1) = if count > 1 {
         let last = (count - 1) as f32;
         let band = |u: f32| ((u / scale - y0) * inv_h).floor().clamp(0.0, last) as u32;
-        (band(local[1] - hw - 2.0 * r - reach), band(local[1] + hw + reach))
+        (
+            band(local[1] - hw - 2.0 * r - reach),
+            band(local[1] + hw + reach),
+        )
     } else {
         (0, 0)
     };
     let mut acc = 0.0f32;
     for band in b0..=b1 {
-        let (e0, e1) = if count > 1 { ((y0 + band as f32 / inv_h) * scale, (y0 + (band + 1) as f32 / inv_h) * scale) } else { (-3.0e38, 3.0e38) };
+        let (e0, e1) = if count > 1 {
+            (
+                (y0 + band as f32 / inv_h) * scale,
+                (y0 + (band + 1) as f32 / inv_h) * scale,
+            )
+        } else {
+            (-3.0e38, 3.0e38)
+        };
         let entry = t(head[0] + band);
         let sorted = entry[1] > super::build::SORT_MIN as u32;
         for k in 0..entry[1] {
             let (t0, t1) = (t(entry[0] + 2 * k), t(entry[0] + 2 * k + 1));
             if f(t1[3]) * scale + r - local[0] <= -hw {
-                if sorted { break; }
+                if sorted {
+                    break;
+                }
                 continue;
             }
             let code = t1[2];
             let (oa, ob) = (moved(code & 15, r), moved((code >> 4) & 15, r));
             let at = |x: u32, y: u32, o: [f32; 2]| [f(x) * scale + o[0], f(y) * scale + o[1]];
-            let (mut p0, mut p1, mut p2) = (at(t0[0], t0[1], oa), at(t0[2], t0[3], oa), at(t1[0], t1[1], ob));
+            let (mut p0, mut p1, mut p2) = (
+                at(t0[0], t0[1], oa),
+                at(t0[2], t0[3], oa),
+                at(t1[0], t1[1], ob),
+            );
             let (mut wlo, mut whi) = (-hw, hw);
             let (be0, be1) = (hy(e0 + oa[1]), hy(e1 + oa[1]));
             (p0[1], p1[1], p2[1]) = (hy(p0[1]), hy(p1[1]), hy(p2[1]));
@@ -73,10 +97,18 @@ pub(super) fn moved(code: u32, r: f32) -> [f32; 2] {
 }
 
 pub(super) fn hint_y(y: f32, a: [f32; 4], b: [f32; 4], c: [f32; 4]) -> f32 {
-    if y < a[1] { return y; }
-    if y <= a[2] { return (y - a[1]) * c[0] + a[1]; }
-    if y <= b[0] { return (y - a[2]) * c[1] + a[3]; }
-    if y <= b[2] { return y + (b[1] - b[0]); }
+    if y < a[1] {
+        return y;
+    }
+    if y <= a[2] {
+        return (y - a[1]) * c[0] + a[1];
+    }
+    if y <= b[0] {
+        return (y - a[2]) * c[1] + a[3];
+    }
+    if y <= b[2] {
+        return y + (b[1] - b[0]);
+    }
     (y - b[2]) * c[2] + b[3]
 }
 
@@ -93,7 +125,10 @@ pub(super) fn y_lanes_on<L: Lanes>(q1: L, q2: L, q3: L, lo: L, hi: L) -> [L; 2] 
     let (a2, a1) = (q1 - two * q2 + q3, two * (q2 - q1));
     let rising = q3.ge(q1);
     let (v0, v1) = (L::select(rising, lo, hi), L::select(rising, hi, lo));
-    [lane(a2, a1, q1, q3, v0, rising), lane(a2, a1, q1, q3, v1, rising)]
+    [
+        lane(a2, a1, q1, q3, v0, rising),
+        lane(a2, a1, q1, q3, v1, rising),
+    ]
 }
 
 /// One lane of `outline_integrate`: where the quadratic `a2 t^2 + a1 t + q1` reaches `v`.
@@ -109,7 +144,11 @@ fn lane<L: Lanes>(a2: L, a1: L, q1: L, q3: L, v: L, rising: L::Mask) -> L {
     let use_r1 = L::same(a1.lt(zero), rising);
     let (num, den) = (L::select(use_r1, qq, c), L::select(use_r1, a2, qq));
     let valid = den.ne(zero);
-    let t_raw = L::select(valid, (num / L::select(valid, den, one)).clamp(zero, one), zero);
+    let t_raw = L::select(
+        valid,
+        (num / L::select(valid, den, one)).clamp(zero, one),
+        zero,
+    );
     L::select(sat0, zero, L::select(sat1, one, t_raw))
 }
 
@@ -121,7 +160,10 @@ pub(super) fn integrate_x<L: Lanes>(q1: [L; 2], q2: [L; 2], q3: [L; 2], t: [L; 2
     let a2 = [q1[0] - two * q2[0] + q3[0], q1[1] - two * q2[1] + q3[1]];
     let a1 = [two * (q2[0] - q1[0]), two * (q2[1] - q1[1])];
     let x_rising = q3[0].ge(q1[0]);
-    let tx = [lane(a2[0], a1[0], q1[0], q3[0], -hx, x_rising), lane(a2[0], a1[0], q1[0], q3[0], hx, x_rising)];
+    let tx = [
+        lane(a2[0], a1[0], q1[0], q3[0], -hx, x_rising),
+        lane(a2[0], a1[0], q1[0], q3[0], hx, x_rising),
+    ];
     let tc = [tx[0].clamp(t[0], t[1]), tx[1].clamp(t[0], t[1])];
     let t1 = L::select(x_rising, tc[0], tc[1]);
     let t2 = L::select(x_rising, tc[1], tc[0]).max(t1);
@@ -131,7 +173,8 @@ pub(super) fn integrate_x<L: Lanes>(q1: [L; 2], q2: [L; 2], q3: [L; 2], t: [L; 2
         let d = half * (t2 - t1);
         let x_mid = (a2[0] * tm + a1[0]) * tm + q1[0] + hx;
         let dmid = [two * a2[0] * tm + a1[0], two * a2[1] * tm + a1[1]];
-        let v = two * d * x_mid * dmid[1] + (two * d * d * d / L::splat(3.0)) * (a2[0] * dmid[1] + two * a2[1] * dmid[0]);
+        let v = two * d * x_mid * dmid[1]
+            + (two * d * d * d / L::splat(3.0)) * (a2[0] * dmid[1] + two * a2[1] * dmid[0]);
         L::select(t2.le(t1), zero, v)
     };
     let rab = [L::select(x_rising, t2, t[0]), L::select(x_rising, t[1], t1)];

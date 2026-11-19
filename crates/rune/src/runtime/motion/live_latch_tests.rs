@@ -17,11 +17,17 @@ struct DevWake {
 
 impl DevWake {
     fn new(fired: Arc<AtomicUsize>) -> Self {
-        Self { pending: AtomicBool::new(false), visible: AtomicBool::new(true), fired }
+        Self {
+            pending: AtomicBool::new(false),
+            visible: AtomicBool::new(true),
+            fired,
+        }
     }
     fn visible(&self, visible: bool) {
         let was = self.visible.swap(visible, Ordering::AcqRel);
-        if visible && !was && self.pending.load(Ordering::Acquire) { self.fired.fetch_add(1, Ordering::SeqCst); }
+        if visible && !was && self.pending.load(Ordering::Acquire) {
+            self.fired.fetch_add(1, Ordering::SeqCst);
+        }
     }
     fn notify(&self) {
         if !self.pending.swap(true, Ordering::AcqRel) && self.visible.load(Ordering::Acquire) {
@@ -40,25 +46,44 @@ struct Dev {
 
 impl Dev {
     fn new(fired: Arc<AtomicUsize>) -> Self {
-        Self { visible: true, dirty: false, subs: true, wake: DevWake::new(fired) }
+        Self {
+            visible: true,
+            dirty: false,
+            subs: true,
+            wake: DevWake::new(fired),
+        }
     }
     fn set_visible(&mut self, visible: bool) {
         self.wake.visible(visible);
         self.visible = visible;
     }
-    fn publish(&self) { self.wake.notify(); }
-    fn pending(&self) -> bool { self.visible && (self.dirty || self.wake.pending.load(Ordering::Acquire)) }
-    fn subscribe(&mut self, sampled: bool) { self.dirty = sampled; }
+    fn publish(&self) {
+        self.wake.notify();
+    }
+    fn pending(&self) -> bool {
+        self.visible && (self.dirty || self.wake.pending.load(Ordering::Acquire))
+    }
+    fn subscribe(&mut self, sampled: bool) {
+        self.dirty = sampled;
+    }
     fn prune(&mut self, sampled: bool) {
         let dirty = self.dirty;
         self.subscribe(sampled);
         self.dirty &= dirty;
     }
-    fn set(&mut self) { self.dirty = true; }
-    fn take(&mut self) -> bool { self.visible && self.wake.pending.swap(false, Ordering::AcqRel) }
+    fn set(&mut self) {
+        self.dirty = true;
+    }
+    fn take(&mut self) -> bool {
+        self.visible && self.wake.pending.swap(false, Ordering::AcqRel)
+    }
     fn latch_begin(&mut self, pending: bool) -> bool {
-        if !self.visible || !self.subs { return false; }
-        if !pending && !self.dirty { return false; }
+        if !self.visible || !self.subs {
+            return false;
+        }
+        if !pending && !self.dirty {
+            return false;
+        }
         self.dirty = false;
         true
     }
@@ -89,16 +114,34 @@ fn walk(events: &[Ev]) {
     let mut dev = Dev::new(fired_dev.clone());
     let mut new = LiveLane::new({
         let fired = fired_new.clone();
-        Arc::new(move || { fired.fetch_add(1, Ordering::SeqCst); })
+        Arc::new(move || {
+            fired.fetch_add(1, Ordering::SeqCst);
+        })
     });
     let (mut woke_dev, mut woke_new) = (false, false);
     let (mut reading_dev, mut reading_new) = (false, false);
     for (i, &event) in events.iter().enumerate() {
         let (answer_dev, answer_new) = match event {
-            Ev::Publish => { dev.publish(); new.publish(); (None, None) }
-            Ev::Show => { dev.set_visible(true); new.set_visible(true); (None, None) }
-            Ev::Hide => { dev.set_visible(false); new.set_visible(false); (None, None) }
-            Ev::Subscribe(sampled) => { dev.subscribe(sampled); new.subscribed(sampled); (None, None) }
+            Ev::Publish => {
+                dev.publish();
+                new.publish();
+                (None, None)
+            }
+            Ev::Show => {
+                dev.set_visible(true);
+                new.set_visible(true);
+                (None, None)
+            }
+            Ev::Hide => {
+                dev.set_visible(false);
+                new.set_visible(false);
+                (None, None)
+            }
+            Ev::Subscribe(sampled) => {
+                dev.subscribe(sampled);
+                new.subscribed(sampled);
+                (None, None)
+            }
             Ev::Prune(sampled) => {
                 let keep_dev = dev.dirty;
                 dev.prune(sampled);
@@ -108,7 +151,11 @@ fn walk(events: &[Ev]) {
                 debug_assert_eq!(keep_dev, keep_new);
                 (None, None)
             }
-            Ev::Set => { dev.set(); new.set(); (None, None) }
+            Ev::Set => {
+                dev.set();
+                new.set();
+                (None, None)
+            }
             Ev::Take => {
                 let (a, b) = (dev.take(), new.take());
                 woke_dev |= a;
@@ -129,11 +176,25 @@ fn walk(events: &[Ev]) {
                 let b = reading_new.then(|| new.latch_end(active));
                 (a, b)
             }
-            Ev::Subs(has) => { dev.subs = has; (None, None) }
+            Ev::Subs(has) => {
+                dev.subs = has;
+                (None, None)
+            }
         };
-        assert_eq!(answer_dev, answer_new, "answer differed after {event:?} at step {i} of {events:?}");
-        assert_eq!(dev.visible, new.visible(), "visible differed after {event:?} at step {i} of {events:?}");
-        assert_eq!(dev.pending(), new.pending(), "pending differed after {event:?} at step {i} of {events:?}");
+        assert_eq!(
+            answer_dev, answer_new,
+            "answer differed after {event:?} at step {i} of {events:?}"
+        );
+        assert_eq!(
+            dev.visible,
+            new.visible(),
+            "visible differed after {event:?} at step {i} of {events:?}"
+        );
+        assert_eq!(
+            dev.pending(),
+            new.pending(),
+            "pending differed after {event:?} at step {i} of {events:?}"
+        );
         assert_eq!(
             fired_dev.load(Ordering::SeqCst),
             fired_new.load(Ordering::SeqCst),
@@ -185,7 +246,10 @@ fn a_publish_while_the_frame_reads_survives() {
     lane.publish();
     assert!(lane.latch_begin(true, true), "the frame reads");
     assert!(!lane.latch_end(false), "nothing is still moving");
-    assert!(lane.pending(), "the publish that landed during the read keeps a wake");
+    assert!(
+        lane.pending(),
+        "the publish that landed during the read keeps a wake"
+    );
     assert!(lane.take(), "and the next frame takes exactly it");
     assert!(!lane.pending());
 }
@@ -196,17 +260,27 @@ fn a_hidden_window_keeps_one_wake_for_show() {
     let fired = Arc::new(AtomicUsize::new(0));
     let mut lane = LiveLane::new({
         let fired = fired.clone();
-        Arc::new(move || { fired.fetch_add(1, Ordering::SeqCst); })
+        Arc::new(move || {
+            fired.fetch_add(1, Ordering::SeqCst);
+        })
     });
     lane.set_visible(false);
     lane.publish();
     lane.publish();
-    assert_eq!(fired.load(Ordering::SeqCst), 0, "a hidden window is not woken");
+    assert_eq!(
+        fired.load(Ordering::SeqCst),
+        0,
+        "a hidden window is not woken"
+    );
     assert!(!lane.pending(), "a hidden window has nothing to draw");
     assert!(!lane.take(), "and the take leaves the wake for show");
     assert!(!lane.latch_begin(true, true), "so no latch runs");
     lane.set_visible(true);
-    assert_eq!(fired.load(Ordering::SeqCst), 1, "showing delivers the one coalesced wake");
+    assert_eq!(
+        fired.load(Ordering::SeqCst),
+        1,
+        "showing delivers the one coalesced wake"
+    );
     assert!(lane.take());
     assert!(!lane.take(), "and it is delivered once");
     assert_eq!(fired.load(Ordering::SeqCst), 1);
@@ -218,13 +292,19 @@ fn hiding_and_showing_between_a_publish_and_its_frame_keeps_one_wake() {
     let fired = Arc::new(AtomicUsize::new(0));
     let mut lane = LiveLane::new({
         let fired = fired.clone();
-        Arc::new(move || { fired.fetch_add(1, Ordering::SeqCst); })
+        Arc::new(move || {
+            fired.fetch_add(1, Ordering::SeqCst);
+        })
     });
     lane.publish();
     assert_eq!(fired.load(Ordering::SeqCst), 1);
     lane.set_visible(false);
     lane.set_visible(true);
-    assert_eq!(fired.load(Ordering::SeqCst), 2, "the show finds the wake still waiting");
+    assert_eq!(
+        fired.load(Ordering::SeqCst),
+        2,
+        "the show finds the wake still waiting"
+    );
     assert!(lane.take());
     assert!(!lane.take());
     assert_eq!(fired.load(Ordering::SeqCst), 2);
@@ -236,7 +316,9 @@ fn two_publishes_before_one_frame_coalesce() {
     let fired = Arc::new(AtomicUsize::new(0));
     let mut lane = LiveLane::new({
         let fired = fired.clone();
-        Arc::new(move || { fired.fetch_add(1, Ordering::SeqCst); })
+        Arc::new(move || {
+            fired.fetch_add(1, Ordering::SeqCst);
+        })
     });
     lane.publish();
     lane.publish();
@@ -253,7 +335,9 @@ fn an_app_thread_set_wakes_an_idle_window() {
     let fired = Arc::new(AtomicUsize::new(0));
     let mut lane = LiveLane::new({
         let fired = fired.clone();
-        Arc::new(move || { fired.fetch_add(1, Ordering::SeqCst); })
+        Arc::new(move || {
+            fired.fetch_add(1, Ordering::SeqCst);
+        })
     });
     let value = crate::live::Live::new(0.0f32);
     let _sub = value.source.subscribe(lane.waker());
@@ -268,7 +352,11 @@ fn an_app_thread_set_wakes_an_idle_window() {
     assert_eq!(fired.load(Ordering::SeqCst), 1, "a hidden window is not");
     assert!(!lane.pending());
     lane.set_visible(true);
-    assert_eq!(fired.load(Ordering::SeqCst), 2, "showing delivers the held wake");
+    assert_eq!(
+        fired.load(Ordering::SeqCst),
+        2,
+        "showing delivers the held wake"
+    );
     assert!(lane.take());
     assert!(!lane.take(), "once");
     assert_eq!(fired.load(Ordering::SeqCst), 2);
@@ -281,7 +369,11 @@ fn an_empty_frame_leaves_the_state_untouched() {
     let mut lane = LiveLane::new(Arc::new(|| {}));
     assert_eq!(lane.state, LiveWake::Idle);
     assert!(!lane.take(), "nothing published");
-    assert_eq!(lane.state, LiveWake::Idle, "a take with nothing pending changes nothing");
+    assert_eq!(
+        lane.state,
+        LiveWake::Idle,
+        "a take with nothing pending changes nothing"
+    );
     assert!(!lane.latch_begin(false, true), "nothing to read");
     assert_eq!(lane.state, LiveWake::Idle, "a clean latch changes nothing");
 

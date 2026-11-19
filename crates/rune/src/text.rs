@@ -7,16 +7,18 @@
 //! a cached layout of the same text and style rather than shaping it again; glyph keys include
 //! the run's variation coordinates, so one variable font serves every weight.
 
+use crate::runtime::{HashMap as FxHashMap, HashSet as FxHashSet};
 use std::collections::HashMap;
 use std::hash::Hash;
-use crate::runtime::{HashMap as FxHashMap, HashSet as FxHashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use parley::fontique::{Blob, Collection, CollectionOptions, FallbackKey, FamilyId, Script, SourceCache};
+use parley::fontique::{
+    Blob, Collection, CollectionOptions, FallbackKey, FamilyId, Script, SourceCache,
+};
 use parley::{
-    Alignment, AlignmentOptions, FontContext, FontFamily, FontFamilyName, FontStyle, FontWeight, Layout, LayoutContext,
-    LineHeight, PositionedLayoutItem, StyleProperty,
+    Alignment, AlignmentOptions, FontContext, FontFamily, FontFamilyName, FontStyle, FontWeight,
+    Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
 };
 use swash::FontRef;
 use swash::scale::image::Content;
@@ -29,8 +31,8 @@ mod atlas;
 mod atlas_fill;
 pub(crate) use atlas_fill::QueuedFill;
 mod case;
-mod colr;
 mod color_icon;
+mod colr;
 mod cursor;
 mod decorations;
 mod families;
@@ -42,27 +44,27 @@ pub use language::set_language;
 mod line_break;
 mod ltr_units;
 pub use ltr_units::ltr_units;
-mod paragraphs;
-mod span;
-mod system_fonts;
-mod default_fonts;
 #[cfg(all(test, target_os = "macos"))]
 mod core_text_tests;
 pub(crate) mod coretext_match;
+mod default_fonts;
+mod paragraphs;
+mod span;
+mod system_fonts;
 pub use coretext_match::FontSmoothing;
-#[cfg(not(target_arch = "wasm32"))]
-#[doc(hidden)]
-pub mod pixel_compare;
 mod fallback;
 mod glyph_cache;
 mod glyph_emit;
+mod hairline;
 mod hash;
 mod hidden_axes;
-mod inline_fit;
-mod hairline;
 pub(crate) mod icon;
+mod inline_fit;
 mod layout_cache;
 mod macos;
+#[cfg(not(target_arch = "wasm32"))]
+#[doc(hidden)]
+pub mod pixel_compare;
 pub use macos::smoothing::{ApplePipeline, SmoothingInk, smoothed_glyph};
 mod measure;
 pub(crate) mod outline;
@@ -74,60 +76,66 @@ pub(crate) use pill_chips::{bare_icons, pill_chips};
 mod support;
 pub use support::SmoothingSupport;
 pub(crate) use support::note_dual_source;
+mod line_metrics;
 mod svg_path;
 mod trak;
 mod underline;
-mod line_metrics;
 mod windfoil;
-pub use line_metrics::{last_line_fill, layout_height, stream_height_lag};
-pub(crate) use line_metrics::spec_height;
-pub(crate) use underline::underline_edges;
+pub(crate) use case::Source as CaseSource;
 pub use case::TextCase;
+pub(crate) use families::choose_families;
 pub use hash::text_hash;
 pub(crate) use hash::{directed, elide_key, shape_key};
-pub(crate) use families::choose_families;
-pub use measure::{FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, layout, measure, measure_with, with_families};
+pub(crate) use layout_cache::CachedElision;
+pub(crate) use line_metrics::spec_height;
+pub use line_metrics::{last_line_fill, layout_height, stream_height_lag};
+pub use measure::{
+    FamiliesGuard, TextInk, advance, content_widths, font_epoch, ink, layout, measure,
+    measure_with, with_families,
+};
 pub use rich_layout::RichLayoutOptions;
 pub use run::{Run, RunLayout};
-pub(crate) use case::Source as CaseSource;
-pub(crate) use layout_cache::CachedElision;
+pub(crate) use underline::underline_edges;
 
 use default_fonts::DEFAULT_FONTS;
 use fallback::Route;
 pub(crate) use fallback::is_pictographic;
 use glyph_emit::Face;
 use hidden_axes::hidden_axes;
-use layout_cache::{Cache, Entry};
-pub(crate) use layout_cache::Keep;
-pub(crate) use paragraphs::{ParagraphLayout, Piece, TextFlow, TextLayout};
-#[cfg(test)]
-use layout_cache::STALE_BYTES;
-pub use icon::{Icon, icon_coverage, set_icon_swap, set_icon_swap_size};
 pub(crate) use icon::Facing;
 use icon::rasterize_icon;
+pub use icon::{Icon, icon_coverage, set_icon_swap, set_icon_swap_size};
+pub(crate) use layout_cache::Keep;
+#[cfg(test)]
+use layout_cache::STALE_BYTES;
+use layout_cache::{Cache, Entry};
+pub(crate) use paragraphs::{ParagraphLayout, Piece, TextFlow, TextLayout};
 use rich_layout::mono_tab_stops;
 use trak::{Trak, Traks, font_trak};
 
 pub use atlas::{ATLAS_SIZE, Atlas, AtlasPage, GlyphQuad};
 pub(crate) use cursor::{cursor_from_point, cursor_geometry, line_edge, move_line, range_boxes};
-pub use decorations::{Deco, SPAN_RADIUS};
 pub(crate) use decorations::PaintedDeco;
-pub use span::{Ink, Link, LinkPaint, Span, TextHighlight};
+pub use decorations::{Deco, SPAN_RADIUS};
 pub(crate) use span::{BareIcon, PillChip, PillMetrics, flatten_spans};
+pub use span::{Ink, Link, LinkPaint, Span, TextHighlight};
 
-use decorations::Decoration;
 use atlas::{AtlasGlyph, COLOR_GLYPH_BUDGET, ColorGlyph, GlyphKey, GlyphMap, Rasterized};
 #[cfg(test)]
 use atlas::{MAX_OVERFLOW_PAGES, MAX_STEADY_PAGES};
+use decorations::Decoration;
 #[cfg(test)]
 pub(crate) use glyph_emit::GLIDE_PHASES;
 use line_break::break_lines_with_blocks;
 use span::PILL_BOX;
-use system_fonts::{LoadedFiles, family_list, load_installed, load_system_mono, named_list, names_system_mono, register_cjk_fallbacks};
-#[cfg(any(test, not(target_arch = "wasm32")))]
-use system_fonts::system_font_files;
 #[cfg(test)]
 use system_fonts::CJK_FONT_FILES;
+#[cfg(any(test, not(target_arch = "wasm32")))]
+use system_fonts::system_font_files;
+use system_fonts::{
+    LoadedFiles, family_list, load_installed, load_system_mono, named_list, names_system_mono,
+    register_cjk_fallbacks,
+};
 
 /// How strictly Japanese and Chinese lines break, one switch. `Strict` (JIS X 4051, UAX #14's
 /// default) never starts a line with a small kana (ぁ ッ ャ), ー or 々. `Normal` is Chromium's
@@ -140,13 +148,24 @@ const SYNTHETIC_OBLIQUE: u8 = 12;
 
 /// The colour image of `glyph` (COLR layers or an embedded bitmap scaled to size), or None
 /// when the font draws it as an outline.
-fn rasterize_color(scaler: &mut swash::scale::Scaler<'_>, glyph: u16) -> Option<(crate::pixels::Pixels, swash::zeno::Placement)> {
+fn rasterize_color(
+    scaler: &mut swash::scale::Scaler<'_>,
+    glyph: u16,
+) -> Option<(crate::pixels::Pixels, swash::zeno::Placement)> {
     if !scaler.has_color_bitmaps() && !scaler.has_color_outlines() {
         return None;
     }
-    let image = Render::new(&[Source::ColorOutline(0), Source::ColorBitmap(StrikeWith::BestFit)]).render(scaler, glyph)?;
+    let image = Render::new(&[
+        Source::ColorOutline(0),
+        Source::ColorBitmap(StrikeWith::BestFit),
+    ])
+    .render(scaler, glyph)?;
     let (w, h) = (image.placement.width, image.placement.height);
-    if image.content != Content::Color || w == 0 || h == 0 || image.data.len() != (w * h * 4) as usize {
+    if image.content != Content::Color
+        || w == 0
+        || h == 0
+        || image.data.len() != (w * h * 4) as usize
+    {
         return None;
     }
     let pixels = crate::pixels::Pixels::new();
@@ -245,11 +264,16 @@ impl Default for TextSystem {
 }
 
 fn variations(style: TextStyle, size: f32) -> Vec<parley::FontVariation> {
-    let mut settings: Vec<_> = parley::FontVariation::parse_css_list(style.variations).flatten().collect();
+    let mut settings: Vec<_> = parley::FontVariation::parse_css_list(style.variations)
+        .flatten()
+        .collect();
     let opsz = parley::setting::Tag::new(b"opsz");
     let value = match style.optical_size {
         OpticalSize::Auto if !settings.iter().any(|v| v.tag == opsz) => Some(size),
-        OpticalSize::Fixed(value) => { settings.retain(|v| v.tag != opsz); Some(value) }
+        OpticalSize::Fixed(value) => {
+            settings.retain(|v| v.tag != opsz);
+            Some(value)
+        }
         _ => None,
     };
     if let Some(value) = value.filter(|v| v.is_finite() && *v > 0.0) {
@@ -264,11 +288,22 @@ impl TextSystem {
     /// `families` names the sans and mono slots; others are selectable with `Family::Named`.
     pub fn new(fonts: &[&'static [u8]], families: (&str, &str)) -> Self {
         measure::note_fonts(fonts, families);
-        let mut collection = Collection::new(CollectionOptions { shared: false, system_fonts: false });
-        let list: &[&'static [u8]] = if fonts.is_empty() { DEFAULT_FONTS } else { fonts };
+        let mut collection = Collection::new(CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        });
+        let list: &[&'static [u8]] = if fonts.is_empty() {
+            DEFAULT_FONTS
+        } else {
+            fonts
+        };
         let mut registered = Vec::new();
         for data in list {
-            let mut added: Vec<FamilyId> = collection.register_fonts(Blob::new(Arc::new(*data)), None).into_iter().map(|(id, _)| id).collect();
+            let mut added: Vec<FamilyId> = collection
+                .register_fonts(Blob::new(Arc::new(*data)), None)
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
             added.sort_unstable();
             registered.extend(added);
         }
@@ -277,8 +312,15 @@ impl TextSystem {
         // the embedded Inter is in use.
         #[cfg(all(target_arch = "wasm32", feature = "embedded-fonts"))]
         {
-            let fill: Vec<bool> = default_fonts::DEFAULT_FAMILIES.iter().map(|f| fonts.is_empty() || collection.family_id(f).is_none()).collect();
-            for (data, _) in DEFAULT_FONTS.iter().zip(&fill).filter(|(_, fill)| **fill && !fonts.is_empty()) {
+            let fill: Vec<bool> = default_fonts::DEFAULT_FAMILIES
+                .iter()
+                .map(|f| fonts.is_empty() || collection.family_id(f).is_none())
+                .collect();
+            for (data, _) in DEFAULT_FONTS
+                .iter()
+                .zip(&fill)
+                .filter(|(_, fill)| **fill && !fonts.is_empty())
+            {
                 collection.register_fonts(Blob::new(Arc::new(*data)), None);
             }
             if fill[0] {
@@ -288,10 +330,17 @@ impl TextSystem {
         // No system font loads here: each comes the first time a text needs it (`load_fallbacks`).
         let cjk = register_cjk_fallbacks(&mut collection, &registered, families);
         #[cfg(target_arch = "wasm32")]
-        let families = if fonts.is_empty() { ("Inter", "IBM Plex Mono") } else { families };
+        let families = if fonts.is_empty() {
+            ("Inter", "IBM Plex Mono")
+        } else {
+            families
+        };
         let (sans, mono) = families::slots(families.0, families.1);
         let mut text = TextSystem {
-            font_cx: FontContext { collection, source_cache: SourceCache::default() },
+            font_cx: FontContext {
+                collection,
+                source_cache: SourceCache::default(),
+            },
             layout_cx: LayoutContext::new(),
             scale_cx: ScaleContext::new(),
             layouts: Default::default(),
@@ -307,7 +356,8 @@ impl TextSystem {
             language: None,
             language_epoch: 0,
             faces_taken: 0,
-            sans, mono,
+            sans,
+            mono,
             symbol_families: Vec::new(),
             emoji: None,
             math: None,
@@ -360,14 +410,22 @@ impl TextSystem {
 
     /// The hidden-axis coordinates (`hidden_axes`) of the font text in `family` at `weight`
     /// shapes with first.
-    fn primary_axes(&mut self, family: Family, weight: f32, italic: bool) -> Rc<[parley::FontVariation]> {
+    fn primary_axes(
+        &mut self,
+        family: Family,
+        weight: f32,
+        italic: bool,
+    ) -> Rc<[parley::FontVariation]> {
         let key = (family, weight.to_bits(), italic);
         if let Some(axes) = self.primary_axes.get(&key) {
             return axes.clone();
         }
         let font = self.primary_font(family, weight, italic);
         let axes: Rc<[parley::FontVariation]> = font
-            .and_then(|f| FontRef::from_index(f.blob.as_ref(), f.index as usize).map(|r| hidden_axes(r, weight)))
+            .and_then(|f| {
+                FontRef::from_index(f.blob.as_ref(), f.index as usize)
+                    .map(|r| hidden_axes(r, weight))
+            })
             .unwrap_or_default()
             .into();
         self.primary_axes.insert(key, axes.clone());
@@ -383,7 +441,12 @@ impl TextSystem {
     }
 
     /// The font text in `family` at `weight` shapes with first.
-    fn primary_font(&mut self, family: Family, weight: f32, italic: bool) -> Option<parley::fontique::QueryFont> {
+    fn primary_font(
+        &mut self,
+        family: Family,
+        weight: f32,
+        italic: bool,
+    ) -> Option<parley::fontique::QueryFont> {
         if family == Family::SystemMono || self.slot_system_mono {
             self.system_mono();
         }
@@ -394,19 +457,44 @@ impl TextSystem {
         let named = |list: &str| -> Vec<String> {
             family_list(list, system, &self.sans)
                 .into_iter()
-                .filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None })
+                .filter_map(|f| match f {
+                    FontFamilyName::Named(name) => Some(name.into_owned()),
+                    _ => None,
+                })
                 .collect()
         };
         let names = match family {
             Family::Sans => named(&self.sans),
             Family::Mono => named(&self.mono),
-            Family::Named(list) => named_list(list).into_iter().filter_map(|f| match f { FontFamilyName::Named(name) => Some(name.into_owned()), _ => None }).chain(named(&self.sans)).collect(),
+            Family::Named(list) => named_list(list)
+                .into_iter()
+                .filter_map(|f| match f {
+                    FontFamilyName::Named(name) => Some(name.into_owned()),
+                    _ => None,
+                })
+                .chain(named(&self.sans))
+                .collect(),
             Family::SystemMono => system.iter().cloned().chain(named(&self.mono)).collect(),
         };
-        let mut query = self.font_cx.collection.query(&mut self.font_cx.source_cache);
-        query.set_families(names.iter().map(|name| parley::fontique::QueryFamily::Named(name)));
-        let style = if italic { FontStyle::Italic } else { FontStyle::Normal };
-        query.set_attributes(parley::fontique::Attributes::new(parley::fontique::FontWidth::NORMAL, style, FontWeight::new(weight)));
+        let mut query = self
+            .font_cx
+            .collection
+            .query(&mut self.font_cx.source_cache);
+        query.set_families(
+            names
+                .iter()
+                .map(|name| parley::fontique::QueryFamily::Named(name)),
+        );
+        let style = if italic {
+            FontStyle::Italic
+        } else {
+            FontStyle::Normal
+        };
+        query.set_attributes(parley::fontique::Attributes::new(
+            parley::fontique::FontWidth::NORMAL,
+            style,
+            FontWeight::new(weight),
+        ));
         query.first_available_font()
     }
 
@@ -414,12 +502,18 @@ impl TextSystem {
     /// Loads the installed families CSS family list `list` names that aren't registered, by
     /// name, so a slot or `Family::Named` can be any font on the system.
     pub(crate) fn load_installed(&mut self, list: &str) {
-        load_installed(&mut self.font_cx.collection, &mut self.font_files, &mut self.installed, list);
+        load_installed(
+            &mut self.font_cx.collection,
+            &mut self.font_files,
+            &mut self.installed,
+            list,
+        );
     }
 
     fn system_mono(&mut self) -> &[String] {
         let (collection, loaded) = (&mut self.font_cx.collection, &mut self.font_files);
-        self.system_mono.get_or_insert_with(|| load_system_mono(collection, loaded))
+        self.system_mono
+            .get_or_insert_with(|| load_system_mono(collection, loaded))
     }
 
     /// The RGBA image of a colour glyph quad (`GlyphQuad::color`, nonzero).
@@ -434,7 +528,9 @@ impl TextSystem {
     }
 
     /// How glyphs rasterise and place ([`FontSmoothing`]).
-    pub fn font_smoothing(&self) -> FontSmoothing { self.requested }
+    pub fn font_smoothing(&self) -> FontSmoothing {
+        self.requested
+    }
 
     /// How far each gliding glyph mask's ink sits below the top of its quad, in device px, keyed
     /// as `blend::apron_key` keys its instance: a Windfoil mask keeps one box across its y
@@ -442,9 +538,22 @@ impl TextSystem {
     /// where the phase wraps. The motion gate's raster, which spreads a glyph over its quad,
     /// moves its coverage by this so a glide reads as the quarter-pixel steps it draws.
     pub(crate) fn glyph_shifts(&self) -> std::collections::HashMap<[u32; 3], f32> {
-        self.atlas.map.iter()
+        self.atlas
+            .map
+            .iter()
             .filter(|(k, _)| k.subpy != 0 && k.apple & glyph_emit::WINDFOIL_KEY != 0)
-            .filter_map(|(k, a)| a.mask().map(|a| ([(a.x as f32).to_bits(), (a.y as f32).to_bits(), (a.page as f32).to_bits()], k.subpy as f32 / glyph_emit::GLIDE_PHASES as f32)))
+            .filter_map(|(k, a)| {
+                a.mask().map(|a| {
+                    (
+                        [
+                            (a.x as f32).to_bits(),
+                            (a.y as f32).to_bits(),
+                            (a.page as f32).to_bits(),
+                        ],
+                        k.subpy as f32 / glyph_emit::GLIDE_PHASES as f32,
+                    )
+                })
+            })
             .collect()
     }
 
@@ -472,10 +581,14 @@ impl TextSystem {
     }
 
     /// The CoreGraphics stages glyphs rasterize with.
-    pub fn apple_pipeline(&self) -> ApplePipeline { self.apple.pipeline() }
+    pub fn apple_pipeline(&self) -> ApplePipeline {
+        self.apple.pipeline()
+    }
     /// Overrides the stages [`Self::set_font_smoothing`] chose, until the next call to it; for
     /// measuring the stages one at a time.
-    pub fn set_apple_pipeline(&mut self, pipeline: ApplePipeline) { self.apple.set_pipeline(pipeline); }
+    pub fn set_apple_pipeline(&mut self, pipeline: ApplePipeline) {
+        self.apple.set_pipeline(pipeline);
+    }
 
     /// Begins a new batch of glyph placements, reclaiming unused atlas storage.
     /// Previously emitted quads must no longer be sampled after this call. Runtime
@@ -517,7 +630,9 @@ impl TextSystem {
                 }
             }
         }
-        for c in self.color_glyphs.values_mut() { c.used = false; }
+        for c in self.color_glyphs.values_mut() {
+            c.used = false;
+        }
         self.color_icons.begin_frame();
     }
 
@@ -540,13 +655,24 @@ impl TextSystem {
     ) -> Rc<Layout<Ink>> {
         self.follow_language();
         let cache = keep == Keep::Cached;
-        let shared = (keep == Keep::Secret).then(|| std::mem::replace(&mut self.layout_cx, LayoutContext::new()));
+        let shared = (keep == Keep::Secret)
+            .then(|| std::mem::replace(&mut self.layout_cx, LayoutContext::new()));
         let has_indented_blocks = blocks.iter().any(|&b| b != crate::edit::Block::Paragraph);
         // Shaping depends on the text, spans, style, scale, overflow-wrap and pills; line
         // breaking adds the width, alignment and block indents. A layout cached at one width
         // is re-broken at another rather than shaped again.
-        let shape_key = shape.unwrap_or_else(|| hash::directed(shape_key(text, spans, style, scale, wrap_anywhere, pills), base));
-        let key = hash::break_key(shape_key, max_width, align, has_indented_blocks.then_some(blocks));
+        let shape_key = shape.unwrap_or_else(|| {
+            hash::directed(
+                shape_key(text, spans, style, scale, wrap_anywhere, pills),
+                base,
+            )
+        });
+        let key = hash::break_key(
+            shape_key,
+            max_width,
+            align,
+            has_indented_blocks.then_some(blocks),
+        );
         let g = self.generation;
         if cache && let Some(Entry { value: l, used, .. }) = self.layouts.get_mut(&key) {
             *used = g;
@@ -566,10 +692,18 @@ impl TextSystem {
                     Some(b) => (b.size + b.gap, 0.0),
                     None => (pm.lead(p.icon.is_some()), pm.trail()),
                 };
-                (i, r, (lead * scale).round() as u32, (trail * scale).round() as u32)
+                (
+                    i,
+                    r,
+                    (lead * scale).round() as u32,
+                    (trail * scale).round() as u32,
+                )
             })
             .filter(|(_, r, ..)| {
-                !r.is_empty() && text.is_char_boundary(r.start) && text.is_char_boundary(r.end) && !text.as_bytes()[r.clone()].contains(&b'\n')
+                !r.is_empty()
+                    && text.is_char_boundary(r.start)
+                    && text.is_char_boundary(r.end)
+                    && !text.as_bytes()[r.clone()].contains(&b'\n')
             })
             .collect();
         let break_lines = |layout: &mut Layout<Ink>| {
@@ -581,18 +715,26 @@ impl TextSystem {
         };
         if cache
             && let Some(prev) = self.shapes.get(&shape_key).copied()
-            && let Some(Entry { value: shaped, used, .. }) = self.layouts.get(&prev)
+            && let Some(Entry {
+                value: shaped,
+                used,
+                ..
+            }) = self.layouts.get(&prev)
         {
             self.rebroken += 1;
             let _break_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Text);
             // One this commit hasn't used and nothing else holds moves to the new width and
             // re-breaks in place; otherwise the shaped runs are copied.
             let (moves, mut l) = (*used != g && Rc::strong_count(shaped) == 1, shaped.clone());
-            if moves { self.layouts.remove(&prev); self.glyph_cache.forget(&l); }
+            if moves {
+                self.layouts.remove(&prev);
+                self.glyph_cache.forget(&l);
+            }
             let layout = Rc::make_mut(&mut l);
             break_lines(layout);
             layout.align(align, AlignmentOptions::default());
-            self.layouts.insert(key, Entry::new(l.clone(), g, text.len(), shape_key));
+            self.layouts
+                .insert(key, Entry::new(l.clone(), g, text.len(), shape_key));
             self.shapes.insert(shape_key, key);
             return l;
         }
@@ -601,8 +743,16 @@ impl TextSystem {
         let _shape_ns = crate::marks::Timed::start("text.shape_ns", true);
         let _shape_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Text);
         let mono_style = matches!(style.family, Family::Mono | Family::SystemMono);
-        let tabs = if text.contains('\t') { mono_tab_stops(text, spans, mono_style) } else { Vec::new() };
-        let widen = if tabs.is_empty() { Vec::new() } else { self.mono_tab_widening(&tabs, spans, style, scale) };
+        let tabs = if text.contains('\t') {
+            mono_tab_stops(text, spans, mono_style)
+        } else {
+            Vec::new()
+        };
+        let widen = if tabs.is_empty() {
+            Vec::new()
+        } else {
+            self.mono_tab_widening(&tabs, spans, style, scale)
+        };
         // Parley has no tab stops and fonts draw a tab as a missing glyph (or nothing): shape it
         // as a space, one byte like the tab, so every byte range still holds. Monospace tabs
         // then widen to the next 4-column stop through word spacing.
@@ -621,8 +771,15 @@ impl TextSystem {
         // scaled to the set size; spans scale the lookup with their size. Each style range gets
         // its predicted first font's spacing; runs in another font are checked after shaping.
         let trak_tag = parley::setting::Tag::new(b"trak");
-        let mut features: Vec<parley::FontFeature> = parley::FontFeature::parse_css_list(style.features).flatten().collect();
-        let tracked = features.iter().rev().find(|f| f.tag == trak_tag).is_none_or(|f| f.value != 0);
+        let mut features: Vec<parley::FontFeature> =
+            parley::FontFeature::parse_css_list(style.features)
+                .flatten()
+                .collect();
+        let tracked = features
+            .iter()
+            .rev()
+            .find(|f| f.tag == trak_tag)
+            .is_none_or(|f| f.value != 0);
         let listed = features.len();
         features.retain(|f| f.tag != trak_tag);
         let stripped = features.len() != listed;
@@ -635,11 +792,18 @@ impl TextSystem {
             let points = px / scale;
             // `o` itself at the style's size (a run's size comes back through device px).
             let points = optical.map_or(points, |o| {
-                if (points - style.size).abs() <= style.size * 1e-6 { o } else { o * points / style.size }
+                if (points - style.size).abs() <= style.size * 1e-6 {
+                    o
+                } else {
+                    o * points / style.size
+                }
             });
             style.tracking + trak.map_or(0.0, |t| t.spacing(px, points, tracked) / scale)
         };
-        let base_spacing = spacing(self.primary_trak(style.family, style.weight, style.italic), style.size);
+        let base_spacing = spacing(
+            self.primary_trak(style.family, style.weight, style.italic),
+            style.size,
+        );
         let span_spacing: Vec<Option<f32>> = spans
             .iter()
             .map(|s| {
@@ -647,23 +811,40 @@ impl TextSystem {
                     return None;
                 }
                 let family = if s.mono { Family::Mono } else { style.family };
-                let trak = self.primary_trak(family, s.weight.unwrap_or(style.weight), s.italic || style.italic);
+                let trak = self.primary_trak(
+                    family,
+                    s.weight.unwrap_or(style.weight),
+                    s.italic || style.italic,
+                );
                 Some(spacing(trak, s.size.unwrap_or(style.size))).filter(|&v| v != base_spacing)
             })
             .collect();
         // Each style range's predicted first font at its weight, drawn at its named instance.
         let base_axes = self.primary_axes(style.family, style.weight, style.italic);
         // The strut inline code keeps inside (`inline_fit`).
-        let strut = if mono_style || !spans.iter().any(|s| s.mono) { None } else { self.primary_extents(style.family, style.weight, style.italic) };
+        let strut = if mono_style || !spans.iter().any(|s| s.mono) {
+            None
+        } else {
+            self.primary_extents(style.family, style.weight, style.italic)
+        };
         let span_axes: Vec<Rc<[parley::FontVariation]>> = spans
             .iter()
             .map(|s| {
                 let family = if s.mono { Family::Mono } else { style.family };
-                self.primary_axes(family, s.weight.unwrap_or(style.weight), s.italic || style.italic)
+                self.primary_axes(
+                    family,
+                    s.weight.unwrap_or(style.weight),
+                    s.italic || style.italic,
+                )
             })
             .collect();
-        let with_axes = |mut settings: Vec<parley::FontVariation>, axes: &[parley::FontVariation]| {
-            let extra: Vec<_> = axes.iter().filter(|a| !settings.iter().any(|v| v.tag == a.tag)).copied().collect();
+        let with_axes = |mut settings: Vec<parley::FontVariation>,
+                         axes: &[parley::FontVariation]| {
+            let extra: Vec<_> = axes
+                .iter()
+                .filter(|a| !settings.iter().any(|v| v.tag == a.tag))
+                .copied()
+                .collect();
             settings.extend(extra);
             settings
         };
@@ -677,11 +858,23 @@ impl TextSystem {
         let emoji = self.emoji.as_slice();
         let system = self.system_mono.as_deref().unwrap_or_default();
         let mono_scripts = self.mono_scripts.as_deref().unwrap_or(&[]);
-        let text_symbols: Vec<&'static str> = self.symbol_families.iter().copied().filter(|name| !emoji.contains(name)).collect();
+        let text_symbols: Vec<&'static str> = self
+            .symbol_families
+            .iter()
+            .copied()
+            .filter(|name| !emoji.contains(name))
+            .collect();
         let with_symbols = |primary, extra: &[&'static str]| {
             family_list(primary, system, self.sans.as_str())
                 .into_iter()
-                .chain(extra.iter().chain(&text_symbols).chain(math).chain(emoji).map(|name| FontFamilyName::named(name)))
+                .chain(
+                    extra
+                        .iter()
+                        .chain(&text_symbols)
+                        .chain(math)
+                        .chain(emoji)
+                        .map(|name| FontFamilyName::named(name)),
+                )
                 .collect::<Vec<_>>()
         };
         let sans = match style.family {
@@ -704,25 +897,40 @@ impl TextSystem {
         let mut stacks: [Option<Vec<FontFamilyName<'_>>>; 4] = Default::default();
         let mut routed = Vec::new();
         for (range, route) in routes {
-            let fonts = match route { Route::Math => math, Route::Emoji => emoji };
+            let fonts = match route {
+                Route::Math => math,
+                Route::Emoji => emoji,
+            };
             if fonts.is_empty() {
                 continue;
             }
-            let mono_span = spans.iter().any(|s| s.mono && (s.start as usize) < range.end && range.start < s.end as usize);
+            let mono_span = spans
+                .iter()
+                .any(|s| s.mono && (s.start as usize) < range.end && range.start < s.end as usize);
             let stack = 2 * (route == Route::Emoji) as usize + mono_span as usize;
             stacks[stack].get_or_insert_with(|| {
                 let base = if mono_span { &mono } else { &sans };
-                fonts.iter().map(|name| FontFamilyName::named(name)).chain(base.iter().cloned()).collect()
+                fonts
+                    .iter()
+                    .map(|name| FontFamilyName::named(name))
+                    .chain(base.iter().cloned())
+                    .collect()
             });
             routed.push((range, stack));
         }
-        let span_range = |s: &Span| (s.start as usize).min(text.len())..(s.end as usize).min(text.len());
+        let span_range =
+            |s: &Span| (s.start as usize).min(text.len())..(s.end as usize).min(text.len());
         // `exact` overrides the predicted spacing with each run's own, by byte range.
         // Code never takes ligatures (`->` stays two characters); later features override earlier.
-        let off = [b"liga", b"clig", b"calt", b"dlig"].map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 0));
+        let off = [b"liga", b"clig", b"calt", b"dlig"]
+            .map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 0));
         let unligated: Vec<parley::FontFeature> = features.iter().chain(&off).copied().collect();
         type Spacings = [(std::ops::Range<usize>, f32)];
-        let build = |lcx: &mut LayoutContext<Ink>, fcx: &mut FontContext, exact: &Spacings, widen: &Spacings, fits: &Spacings| {
+        let build = |lcx: &mut LayoutContext<Ink>,
+                     fcx: &mut FontContext,
+                     exact: &Spacings,
+                     widen: &Spacings,
+                     fits: &Spacings| {
             let mut b = lcx.ranged_builder(fcx, text, scale, true);
             b.set_base_direction(base);
             // Lines break where Chromium breaks them: after every run of spaces, even before a
@@ -738,13 +946,21 @@ impl TextSystem {
             }
             // Parley turns optional ligatures off under letter spacing; Core Text's tracking
             // keeps them, so spacing that only corrects `trak` turns them back on.
-            let corrected = base_spacing != 0.0 || span_spacing.iter().flatten().chain(exact.iter().map(|e| &e.1)).any(|&v| v != 0.0);
+            let corrected = base_spacing != 0.0
+                || span_spacing
+                    .iter()
+                    .flatten()
+                    .chain(exact.iter().map(|e| &e.1))
+                    .any(|&v| v != 0.0);
             if mono_style {
                 b.push_default(StyleProperty::FontFeatures(unligated.as_slice().into()));
             } else if style.tracking == 0.0 && corrected {
-                let ligatures = [b"liga", b"clig"].map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 1));
+                let ligatures = [b"liga", b"clig"]
+                    .map(|tag| parley::FontFeature::new(parley::setting::Tag::new(tag), 1));
                 let list = ligatures.iter().chain(&features).copied().collect();
-                b.push_default(StyleProperty::FontFeatures(parley::FontFeatures::List(std::borrow::Cow::Owned(list))));
+                b.push_default(StyleProperty::FontFeatures(parley::FontFeatures::List(
+                    std::borrow::Cow::Owned(list),
+                )));
             } else if stripped {
                 b.push_default(StyleProperty::FontFeatures(features.as_slice().into()));
             } else if !style.features.is_empty() {
@@ -752,7 +968,9 @@ impl TextSystem {
             }
             let settings = with_axes(variations(style, style.size), &base_axes);
             if !settings.is_empty() {
-                b.push_default(parley::FontVariations::List(std::borrow::Cow::Owned(settings)));
+                b.push_default(parley::FontVariations::List(std::borrow::Cow::Owned(
+                    settings,
+                )));
             }
             b.push_default(LineHeight::Absolute(style.line_px()));
             b.push_default(StyleProperty::LineBreak(LINE_BREAK));
@@ -770,7 +988,10 @@ impl TextSystem {
                 b.push(StyleProperty::Brush(Ink(i as u16 + 1)), r.clone());
                 if s.mono {
                     b.push(FontFamily::from(mono.as_slice()), r.clone());
-                    b.push(StyleProperty::FontFeatures(unligated.as_slice().into()), r.clone());
+                    b.push(
+                        StyleProperty::FontFeatures(unligated.as_slice().into()),
+                        r.clone(),
+                    );
                 }
                 if let Some(w) = s.weight {
                     b.push(StyleProperty::FontWeight(FontWeight::new(w)), r.clone());
@@ -782,12 +1003,21 @@ impl TextSystem {
                     b.push(StyleProperty::FontSize(sz), r.clone());
                     // CSS's unitless line-height: a span of its own size (inline code, a smaller run) keeps the
                     // paragraph's leading ratio, so its box fits inside the line instead of growing it
-                    b.push(LineHeight::FontSizeRelative(style.line_px() / style.size), r.clone());
+                    b.push(
+                        LineHeight::FontSizeRelative(style.line_px() / style.size),
+                        r.clone(),
+                    );
                 }
                 let resized = s.size.is_some() && style.optical_size == OpticalSize::Auto;
                 if resized || span_axes[i] != base_axes {
-                    let settings = with_axes(variations(style, s.size.unwrap_or(style.size)), &span_axes[i]);
-                    b.push(parley::FontVariations::List(std::borrow::Cow::Owned(settings)), r.clone());
+                    let settings = with_axes(
+                        variations(style, s.size.unwrap_or(style.size)),
+                        &span_axes[i],
+                    );
+                    b.push(
+                        parley::FontVariations::List(std::borrow::Cow::Owned(settings)),
+                        r.clone(),
+                    );
                 }
                 if let Some(v) = span_spacing[i] {
                     b.push(StyleProperty::LetterSpacing(v), r.clone());
@@ -797,7 +1027,10 @@ impl TextSystem {
                 b.push(LineHeight::Absolute(*lh), range.clone());
             }
             for (range, stack) in &routed {
-                b.push(FontFamily::from(stacks[*stack].as_deref().unwrap_or_default()), range.clone());
+                b.push(
+                    FontFamily::from(stacks[*stack].as_deref().unwrap_or_default()),
+                    range.clone(),
+                );
             }
             for (range, v) in exact {
                 b.push(StyleProperty::LetterSpacing(*v), range.clone());
@@ -827,13 +1060,20 @@ impl TextSystem {
         };
         let mut layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &[]);
         // Inline code keeps inside the line box its text sets, as a browser's does.
-        let fits = strut.map_or_else(Vec::new, |strut| inline_fit::mono_fits(&layout, text, spans, style, scale, strut));
+        let fits = strut.map_or_else(Vec::new, |strut| {
+            inline_fit::mono_fits(&layout, text, spans, style, scale, strut)
+        });
         if !fits.is_empty() {
             layout = build(&mut self.layout_cx, &mut self.font_cx, &[], &widen, &fits);
         }
         // The spacing each run got, against the spacing its own font needs.
         let given = |at: usize| {
-            spans.iter().zip(&span_spacing).rev().find_map(|(s, v)| v.filter(|_| span_range(s).contains(&at))).unwrap_or(base_spacing)
+            spans
+                .iter()
+                .zip(&span_spacing)
+                .rev()
+                .find_map(|(s, v)| v.filter(|_| span_range(s).contains(&at)))
+                .unwrap_or(base_spacing)
         };
         let mut exact: Vec<(std::ops::Range<usize>, f32)> = Vec::new();
         let mut mismatch = false;
@@ -848,18 +1088,27 @@ impl TextSystem {
                 }
                 mismatch |= (needed - given(range.start)).abs() > 1e-4;
                 match exact.last_mut() {
-                    Some((last, v)) if last.end == range.start && *v == needed => last.end = range.end,
+                    Some((last, v)) if last.end == range.start && *v == needed => {
+                        last.end = range.end
+                    }
                     _ => exact.push((range, needed)),
                 }
             }
         }
         if mismatch {
-            layout = build(&mut self.layout_cx, &mut self.font_cx, &exact, &widen, &fits);
+            layout = build(
+                &mut self.layout_cx,
+                &mut self.font_cx,
+                &exact,
+                &widen,
+                &fits,
+            );
         }
         layout.align(align, AlignmentOptions::default());
         let l = Rc::new(layout);
         if cache {
-            self.layouts.insert(key, Entry::new(l.clone(), g, text.len(), shape_key));
+            self.layouts
+                .insert(key, Entry::new(l.clone(), g, text.len(), shape_key));
             self.shapes.insert(shape_key, key);
         }
         if let Some(shared) = shared {
@@ -871,27 +1120,50 @@ impl TextSystem {
     /// Size in points, rounded up to whole device pixels so layout stays on the pixel grid.
     pub fn measure(&mut self, text: &str, style: TextStyle, scale: f32) -> (f32, f32) {
         let l = self.layout_rich(text, &[], style, scale, None);
-        (l.full_width().ceil() / scale, layout_height(&l, style, scale) / scale)
+        (
+            l.full_width().ceil() / scale,
+            layout_height(&l, style, scale) / scale,
+        )
     }
 
     /// The atlas quad for `icon` at `px` device pixels square, top-left at `origin`.
-    pub fn icon_quad(&mut self, icon: &'static Icon, px: u32, origin: [f32; 2]) -> Option<GlyphQuad> {
+    pub fn icon_quad(
+        &mut self,
+        icon: &'static Icon,
+        px: u32,
+        origin: [f32; 2],
+    ) -> Option<GlyphQuad> {
         self.icon_quad_facing(icon, px, origin, Facing::Upright)
     }
 
     /// [`Self::icon_quad`], drawn facing `facing` (`El::mirror_in_rtl` mirrors it).
-    pub(crate) fn icon_quad_facing(&mut self, icon: &'static Icon, px: u32, origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
+    pub(crate) fn icon_quad_facing(
+        &mut self,
+        icon: &'static Icon,
+        px: u32,
+        origin: [f32; 2],
+        facing: Facing,
+    ) -> Option<GlyphQuad> {
         self.icon_quad_sized(icon, (px, px as f32), origin, facing)
     }
 
     /// [`Self::icon_quad_facing`] for an icon `size` device pixels across on a `px` canvas, `px`
     /// the size rounded up: the drawing keeps its exact scale where the size isn't whole.
-    pub(crate) fn icon_quad_sized(&mut self, icon: &'static Icon, (px, size): (u32, f32), origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
+    pub(crate) fn icon_quad_sized(
+        &mut self,
+        icon: &'static Icon,
+        (px, size): (u32, f32),
+        origin: [f32; 2],
+        facing: Facing,
+    ) -> Option<GlyphQuad> {
         let icon = icon::swapped(icon);
         // A mirrored drawing is cached apart, under the size's top bit; what the size falls short
         // of the canvas, in 64ths of a pixel, under the seven bits below it.
         let short = ((px as f32 - size) * 64.0).round().clamp(0.0, 63.0) as u32;
-        let key = (icon as *const Icon as usize, px | (short << 24) | (u32::from(facing == Facing::Mirrored) << 31));
+        let key = (
+            icon as *const Icon as usize,
+            px | (short << 24) | (u32::from(facing == Facing::Mirrored) << 31),
+        );
         let size = px as f32 - short as f32 / 64.0;
         let entry = match self.atlas.icons.get(&key) {
             Some(&e) => {
@@ -914,7 +1186,10 @@ impl TextSystem {
         };
         entry.map(|a| GlyphQuad {
             rect: [origin[0], origin[1], px as f32, px as f32],
-            uv: [(a.x + 1) as f32, (a.page as u32 * ATLAS_SIZE + a.y + 1) as f32],
+            uv: [
+                (a.x + 1) as f32,
+                (a.page as u32 * ATLAS_SIZE + a.y + 1) as f32,
+            ],
             ink: 0,
             byte: 0,
             color: 0,

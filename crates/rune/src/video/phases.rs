@@ -42,10 +42,21 @@ pub(super) enum Stage {
     /// released player's frame stays on the surface.
     Bare,
     /// A player that can't play yet.
-    Loading { created: Instant, muted: bool, volume: f32 },
+    Loading {
+        created: Instant,
+        muted: bool,
+        volume: f32,
+    },
     /// A player that can. `rate` was last applied to it (0 = paused); `shown` is the item time
     /// of the frame on the surface.
-    Ready { created: Instant, muted: bool, volume: f32, rate: f32, settle: Settle, shown: Option<f64> },
+    Ready {
+        created: Instant,
+        muted: bool,
+        volume: f32,
+        rate: f32,
+        settle: Settle,
+        shown: Option<f64>,
+    },
 }
 
 impl Stage {
@@ -79,7 +90,11 @@ impl Settle {
     /// A seek to `to`, `same_frame` when it's paused within the frame on screen. It replaces
     /// any earlier seek, as the player cancels that one.
     pub(super) fn seek(&mut self, to: f64, same_frame: bool, now: Instant) {
-        *self = if same_frame { Settle::Holding { to } } else { Settle::Seeking { since: now, to } };
+        *self = if same_frame {
+            Settle::Holding { to }
+        } else {
+            Settle::Seeking { since: now, to }
+        };
     }
 
     /// A new frame reached the surface.
@@ -93,8 +108,12 @@ impl Settle {
     /// a hold ends once the player catches up, or when playback moves on from it.
     pub(super) fn observe(&mut self, current: f64, playing: bool, audio: bool) {
         match *self {
-            Settle::Seeking { to, .. } if audio && (current - to).abs() < AUDIO_SEEK_SLOP => *self = Settle::Still,
-            Settle::Holding { to } if playing || (current - to).abs() < 1e-3 => *self = Settle::Still,
+            Settle::Seeking { to, .. } if audio && (current - to).abs() < AUDIO_SEEK_SLOP => {
+                *self = Settle::Still
+            }
+            Settle::Holding { to } if playing || (current - to).abs() < 1e-3 => {
+                *self = Settle::Still
+            }
             _ => {}
         }
     }
@@ -147,20 +166,39 @@ pub(super) enum Event {
     LoadAudio,
     /// The poster worker finished the request made under `attempt`: the clip's facts, or why it
     /// couldn't open.
-    PosterDone { attempt: Attempt, result: Result<Meta, String> },
+    PosterDone {
+        attempt: Attempt,
+        result: Result<Meta, String>,
+    },
     /// A pull or tick reached a clip that hasn't failed, on the main thread.
     Pull,
-    PlayerMade { created: Instant },
-    Item { item: Item, now: Instant },
+    PlayerMade {
+        created: Instant,
+    },
+    Item {
+        item: Item,
+        now: Instant,
+    },
     /// The handle's intent is due at the player.
-    Reconcile { now: Instant },
+    Reconcile {
+        now: Instant,
+    },
     /// A new frame reached the surface, at this item time.
-    Framed { shown: f64 },
+    Framed {
+        shown: f64,
+    },
     /// The player reports its position, and that it stopped though told to run; `frame_time`
     /// is the frame's item time, for video.
-    Follow { current: f64, stopped: bool, frame_time: Option<f64>, now: Instant },
+    Follow {
+        current: f64,
+        stopped: bool,
+        frame_time: Option<f64>,
+        now: Instant,
+    },
     /// The turn is over.
-    Finish { now: Instant },
+    Finish {
+        now: Instant,
+    },
     /// The player goes because the clip failed.
     Release,
     /// The player goes because parked players are over their limit.
@@ -210,7 +248,11 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
             }
         }
         Event::Seek(seconds) => {
-            let seconds = if seconds.is_finite() { seconds.max(0.0) } else { 0.0 };
+            let seconds = if seconds.is_finite() {
+                seconds.max(0.0)
+            } else {
+                0.0
+            };
             let seconds = c.duration.map_or(seconds, |d| seconds.min(d));
             c.seek = Some(seconds);
             c.time = seconds;
@@ -268,7 +310,11 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
                     }
                 }
                 // Audio's load only opens it: once another open did, its error is old news.
-                Err(error) if current && !overtaken(c) && (c.kind == Kind::Video || !c.opened()) => failed(c, error),
+                Err(error)
+                    if current && !overtaken(c) && (c.kind == Kind::Video || !c.opened()) =>
+                {
+                    failed(c, error)
+                }
                 Err(_) => {}
             }
         }
@@ -284,7 +330,11 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
                 c.posters.next();
                 c.poster_at = None;
             }
-            c.stage = Stage::Loading { created, muted: false, volume: 1.0 };
+            c.stage = Stage::Loading {
+                created,
+                muted: false,
+                volume: 1.0,
+            };
         }
         Event::Item { item, now } => return item_reports(c, item, now),
         Event::Reconcile { now } => return reconcile(c, now),
@@ -294,7 +344,12 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
                 settle.framed();
             }
         }
-        Event::Follow { current, stopped, frame_time, now } => return follow(c, current, stopped, frame_time, now),
+        Event::Follow {
+            current,
+            stopped,
+            frame_time,
+            now,
+        } => return follow(c, current, stopped, frame_time, now),
         Event::Finish { now } => {
             if let Stage::Ready { settle, .. } = &mut c.stage {
                 settle.expire(now);
@@ -310,7 +365,11 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
             // A video that never showed a frame shows a poster instead.
             let shown = matches!(c.stage, Stage::Ready { shown: Some(_), .. });
             if c.stage.has_player() {
-                c.stage = if c.kind == Kind::Video && !shown { Stage::Unasked } else { Stage::Bare };
+                c.stage = if c.kind == Kind::Video && !shown {
+                    Stage::Unasked
+                } else {
+                    Stage::Bare
+                };
             }
         }
     }
@@ -323,7 +382,8 @@ pub(super) fn step(c: &mut Control, event: Event) -> Effects<Effect> {
 /// // differs from dev: dev had no fence, and failed the clip on the old answer.
 fn overtaken(c: &Control) -> bool {
     let clamp = |t: f64| c.duration.map_or(t, |d| t.min(d));
-    c.poster_at.is_some_and(|asked| c.seek.is_some_and(|target| clamp(target) != clamp(asked)))
+    c.poster_at
+        .is_some_and(|asked| c.seek.is_some_and(|target| clamp(target) != clamp(asked)))
 }
 
 fn opened(c: &mut Control, meta: Meta) {
@@ -337,7 +397,10 @@ fn opened(c: &mut Control, meta: Meta) {
 
 fn failed(c: &mut Control, error: String) {
     if !c.failed() {
-        c.run = Run::Failed { error, drawn: false };
+        c.run = Run::Failed {
+            error,
+            drawn: false,
+        };
         c.generation += 1;
     }
 }
@@ -352,7 +415,9 @@ fn advance(c: &mut Control, now: f64) {
             *anchor = None;
         }
     }
-    let Run::Playing { anchor } = &mut c.run else { return };
+    let Run::Playing { anchor } = &mut c.run else {
+        return;
+    };
     // A clock behind the anchor (another runtime on this thread) restarts from here.
     let (start_clock, start_time) = match *anchor {
         Some((clock, time)) if clock <= now => (clock, time),
@@ -378,7 +443,11 @@ fn ask_poster(c: &mut Control, at: f64) -> Effects<Effect> {
         c.posters.next();
         c.poster_at = Some(at);
     }
-    c.stage = if c.kind == Kind::Video { Stage::Poster } else { Stage::Bare };
+    c.stage = if c.kind == Kind::Video {
+        Stage::Poster
+    } else {
+        Stage::Bare
+    };
     Effects::one(Effect::AskPoster(at, c.posters.current()))
 }
 
@@ -390,7 +459,10 @@ fn pull(c: &mut Control) -> Effects<Effect> {
     }
     if !c.playing() {
         if c.kind == Kind::Video
-            && let Some(at) = c.seek.take().or_else(|| (c.stage == Stage::Unasked).then_some(c.time))
+            && let Some(at) = c
+                .seek
+                .take()
+                .or_else(|| (c.stage == Stage::Unasked).then_some(c.time))
         {
             return ask_poster(c, at);
         }
@@ -409,12 +481,26 @@ fn pull(c: &mut Control) -> Effects<Effect> {
 
 /// Fails the clip if its item failed or never loaded; marks it ready once it can play.
 fn item_reports(c: &mut Control, item: Item, now: Instant) -> Effects<Effect> {
-    let (Stage::Loading { created, muted, volume } | Stage::Ready { created, muted, volume, .. }) = c.stage else { return Effects::none() };
+    let (Stage::Loading {
+        created,
+        muted,
+        volume,
+    }
+    | Stage::Ready {
+        created,
+        muted,
+        volume,
+        ..
+    }) = c.stage
+    else {
+        return Effects::none();
+    };
     let failure = match &item {
         Item::Failed(error) => Some(error.clone()),
-        Item::Loading if now.saturating_duration_since(created) > LOAD_PATIENCE => {
-            Some(format!("timed out loading after {} s", LOAD_PATIENCE.as_secs()))
-        }
+        Item::Loading if now.saturating_duration_since(created) > LOAD_PATIENCE => Some(format!(
+            "timed out loading after {} s",
+            LOAD_PATIENCE.as_secs()
+        )),
         _ => None,
     };
     if let Some(error) = failure {
@@ -423,7 +509,14 @@ fn item_reports(c: &mut Control, item: Item, now: Instant) -> Effects<Effect> {
         return Effects::one(Effect::DropPlayer);
     }
     if item == Item::Ready && !c.stage.ready() {
-        c.stage = Stage::Ready { created, muted, volume, rate: 0.0, settle: Settle::Still, shown: None };
+        c.stage = Stage::Ready {
+            created,
+            muted,
+            volume,
+            rate: 0.0,
+            settle: Settle::Still,
+            shown: None,
+        };
         let mut effects = Effects::one(Effect::Orient);
         if !c.opened() {
             effects.push(Effect::ReadFacts);
@@ -450,11 +543,20 @@ fn reconcile(c: &mut Control, now: Instant) -> Effects<Effect> {
         effects.push(Effect::SetVolume(c.volume));
     }
     let playing = c.playing();
-    if let Stage::Ready { rate, settle, shown, .. } = &mut c.stage {
+    if let Stage::Ready {
+        rate,
+        settle,
+        shown,
+        ..
+    } = &mut c.stage
+    {
         if let Some(t) = c.seek.take() {
             effects.push(Effect::SeekTo(t));
             // A paused seek within the frame on screen brings no new frame to wait for.
-            let same_frame = !playing && c.meta.zip(*shown).is_some_and(|(m, shown)| m.frame_index(shown) == m.frame_index(t));
+            let same_frame = !playing
+                && c.meta
+                    .zip(*shown)
+                    .is_some_and(|(m, shown)| m.frame_index(shown) == m.frame_index(t));
             settle.seek(t, same_frame, now);
         }
         let want = if playing { c.rate } else { 0.0 };
@@ -467,9 +569,17 @@ fn reconcile(c: &mut Control, now: Instant) -> Effects<Effect> {
 }
 
 /// Folds the player's position into the state: seeks landing, the end, loops.
-fn follow(c: &mut Control, current: f64, stopped: bool, frame_time: Option<f64>, now: Instant) -> Effects<Effect> {
+fn follow(
+    c: &mut Control,
+    current: f64,
+    stopped: bool,
+    frame_time: Option<f64>,
+    now: Instant,
+) -> Effects<Effect> {
     let playing = c.playing();
-    let Stage::Ready { settle, .. } = &mut c.stage else { return Effects::none() };
+    let Stage::Ready { settle, .. } = &mut c.stage else {
+        return Effects::none();
+    };
     settle.observe(current, playing, frame_time.is_none());
     // Seeks land asynchronously: until then the player still reports the old position, which
     // may be the end.
@@ -484,7 +594,9 @@ fn follow(c: &mut Control, current: f64, stopped: bool, frame_time: Option<f64>,
     };
     let restart = c.observe(time, at_end);
     let playing = c.playing();
-    let Stage::Ready { rate, settle, .. } = &mut c.stage else { return Effects::none() };
+    let Stage::Ready { rate, settle, .. } = &mut c.stage else {
+        return Effects::none();
+    };
     if restart {
         *rate = c.rate;
         settle.seek(0.0, false, now);

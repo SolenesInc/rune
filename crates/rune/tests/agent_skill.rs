@@ -21,7 +21,10 @@ fn words(text: &str, prefix: &str, keep: fn(char) -> bool) -> BTreeSet<String> {
     let mut found = BTreeSet::new();
     let mut rest = text;
     while let Some(at) = rest.find(prefix) {
-        let boundary = rest[..at].chars().next_back().is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '/');
+        let boundary = rest[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-' && c != '/');
         let word: String = rest[at..].chars().take_while(|&c| keep(c)).collect();
         rest = &rest[at + word.len().max(prefix.len())..];
         if boundary && word[prefix.len()..].starts_with(|c: char| c.is_ascii_alphanumeric()) {
@@ -38,9 +41,14 @@ fn every_flag_the_skill_names_is_one_rune_parses() {
     let parser = read("crates/rune/src/tooling/args.rs");
     let unknown: Vec<String> = words(&skill(), "--", |c| c.is_ascii_lowercase() || c == '-')
         .into_iter()
-        .filter(|flag| !foreign.contains(&flag.as_str()) && !parser.contains(&format!("\"{flag}\"")))
+        .filter(|flag| {
+            !foreign.contains(&flag.as_str()) && !parser.contains(&format!("\"{flag}\""))
+        })
         .collect();
-    assert!(unknown.is_empty(), "the skill names flags Rune's headless tooling doesn't parse: {unknown:?}");
+    assert!(
+        unknown.is_empty(),
+        "the skill names flags Rune's headless tooling doesn't parse: {unknown:?}"
+    );
 }
 
 #[test]
@@ -57,7 +65,10 @@ fn every_path_the_skill_names_exists() {
                 Some((start, ending)) => {
                     let (dir, start) = start.rsplit_once('/').unwrap();
                     std::fs::read_dir(root().join(dir)).is_ok_and(|files| {
-                        files.flatten().map(|f| f.file_name().to_string_lossy().into_owned()).any(|f| f.starts_with(start) && f.ends_with(ending))
+                        files
+                            .flatten()
+                            .map(|f| f.file_name().to_string_lossy().into_owned())
+                            .any(|f| f.starts_with(start) && f.ends_with(ending))
                     })
                 }
             };
@@ -66,5 +77,8 @@ fn every_path_the_skill_names_exists() {
             }
         }
     }
-    assert!(missing.is_empty(), "the skill names paths this repository doesn't have: {missing:?}");
+    assert!(
+        missing.is_empty(),
+        "the skill names paths this repository doesn't have: {missing:?}"
+    );
 }

@@ -4,9 +4,9 @@
 //! the JS device's too. Nothing here goes through wgpu's error conversion, which panics on a
 //! `GPUInternalError`.
 
+use crate::gpu::health::{ErrorLog, Note};
 use std::cell::RefCell;
 use wasm_bindgen::{JsCast, prelude::*};
-use crate::gpu::health::{ErrorLog, Note};
 
 #[wasm_bindgen(module = "/src/platform/web/health.js")]
 extern "C" {
@@ -67,7 +67,9 @@ pub(super) fn watch(device: &wgpu::Device, lost: impl FnOnce(String) + 'static) 
             let line = match log.borrow_mut().note(&message) {
                 Note::First => format!("rune: GPU error on {adapter}: {kind}: {message}"),
                 Note::New => format!("rune: GPU error: {kind}: {message}"),
-                Note::Mute => format!("rune: GPU error: {kind}: {message}\n(further GPU errors on this device aren't logged)"),
+                Note::Mute => format!(
+                    "rune: GPU error: {kind}: {message}\n(further GPU errors on this device aren't logged)"
+                ),
                 Note::Quiet => return,
             };
             web_sys::console::error_1(&line.into());
@@ -76,6 +78,10 @@ pub(super) fn watch(device: &wgpu::Device, lost: impl FnOnce(String) + 'static) 
     let on_lost = Closure::once_into_js(move |reason: String, message: String| {
         lost(format!("{reason}: {message}, on {adapter}"));
     });
-    watch_gpu(js, on_error.as_ref().unchecked_ref(), on_lost.unchecked_ref());
+    watch_gpu(
+        js,
+        on_error.as_ref().unchecked_ref(),
+        on_lost.unchecked_ref(),
+    );
     on_error.forget();
 }

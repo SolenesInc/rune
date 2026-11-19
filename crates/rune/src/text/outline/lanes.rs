@@ -8,7 +8,14 @@
 
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub(crate) trait Lanes: Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Div<Output = Self> + Neg<Output = Self> {
+pub(crate) trait Lanes:
+    Copy
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+{
     /// One boolean a lane.
     type Mask: Copy;
     const N: usize;
@@ -51,33 +58,61 @@ impl Lanes for f32 {
     type Mask = bool;
     const N: usize = 1;
     #[inline(always)]
-    fn splat(v: f32) -> f32 { v }
+    fn splat(v: f32) -> f32 {
+        v
+    }
     #[inline(always)]
-    fn load(v: &[f32; 4]) -> f32 { v[0] }
+    fn load(v: &[f32; 4]) -> f32 {
+        v[0]
+    }
     #[inline(always)]
-    fn store(self) -> [f32; 4] { [self, 0.0, 0.0, 0.0] }
+    fn store(self) -> [f32; 4] {
+        [self, 0.0, 0.0, 0.0]
+    }
     #[inline(always)]
-    fn sqrt(self) -> f32 { f32::sqrt(self) }
+    fn sqrt(self) -> f32 {
+        f32::sqrt(self)
+    }
     #[inline(always)]
-    fn lt(self, o: f32) -> bool { self < o }
+    fn lt(self, o: f32) -> bool {
+        self < o
+    }
     #[inline(always)]
-    fn le(self, o: f32) -> bool { self <= o }
+    fn le(self, o: f32) -> bool {
+        self <= o
+    }
     #[inline(always)]
-    fn ge(self, o: f32) -> bool { self >= o }
+    fn ge(self, o: f32) -> bool {
+        self >= o
+    }
     #[inline(always)]
-    fn gt(self, o: f32) -> bool { self > o }
+    fn gt(self, o: f32) -> bool {
+        self > o
+    }
     #[inline(always)]
-    fn ne(self, o: f32) -> bool { self != o }
+    fn ne(self, o: f32) -> bool {
+        self != o
+    }
     #[inline(always)]
-    fn select(m: bool, a: f32, b: f32) -> f32 { if m { a } else { b } }
+    fn select(m: bool, a: f32, b: f32) -> f32 {
+        if m { a } else { b }
+    }
     #[inline(always)]
-    fn same(a: bool, b: bool) -> bool { a == b }
+    fn same(a: bool, b: bool) -> bool {
+        a == b
+    }
     #[inline(always)]
-    fn and(a: bool, b: bool) -> bool { a && b }
+    fn and(a: bool, b: bool) -> bool {
+        a && b
+    }
     #[inline(always)]
-    fn and_not(a: bool, b: bool) -> bool { a && !b }
+    fn and_not(a: bool, b: bool) -> bool {
+        a && !b
+    }
     #[inline(always)]
-    fn bits(m: bool) -> u32 { u32::from(m) }
+    fn bits(m: bool) -> u32 {
+        u32::from(m)
+    }
 }
 
 /// Four lanes as four `f32`s: the form for targets without a vector unit this code uses, and the
@@ -102,47 +137,80 @@ portable_op!(Div, div, /);
 impl Neg for Portable {
     type Output = Portable;
     #[inline(always)]
-    fn neg(self) -> Portable { Portable(self.0.map(|v| -v)) }
+    fn neg(self) -> Portable {
+        Portable(self.0.map(|v| -v))
+    }
 }
 
 impl Lanes for Portable {
     type Mask = [bool; 4];
     const N: usize = 4;
     #[inline(always)]
-    fn splat(v: f32) -> Portable { Portable([v; 4]) }
+    fn splat(v: f32) -> Portable {
+        Portable([v; 4])
+    }
     #[inline(always)]
-    fn load(v: &[f32; 4]) -> Portable { Portable(*v) }
+    fn load(v: &[f32; 4]) -> Portable {
+        Portable(*v)
+    }
     #[inline(always)]
-    fn store(self) -> [f32; 4] { self.0 }
+    fn store(self) -> [f32; 4] {
+        self.0
+    }
     #[inline(always)]
-    fn sqrt(self) -> Portable { Portable(self.0.map(f32::sqrt)) }
+    fn sqrt(self) -> Portable {
+        Portable(self.0.map(f32::sqrt))
+    }
     #[inline(always)]
-    fn lt(self, o: Portable) -> [bool; 4] { std::array::from_fn(|i| self.0[i] < o.0[i]) }
+    fn lt(self, o: Portable) -> [bool; 4] {
+        std::array::from_fn(|i| self.0[i] < o.0[i])
+    }
     #[inline(always)]
-    fn le(self, o: Portable) -> [bool; 4] { std::array::from_fn(|i| self.0[i] <= o.0[i]) }
+    fn le(self, o: Portable) -> [bool; 4] {
+        std::array::from_fn(|i| self.0[i] <= o.0[i])
+    }
     #[inline(always)]
-    fn ge(self, o: Portable) -> [bool; 4] { std::array::from_fn(|i| self.0[i] >= o.0[i]) }
+    fn ge(self, o: Portable) -> [bool; 4] {
+        std::array::from_fn(|i| self.0[i] >= o.0[i])
+    }
     #[inline(always)]
-    fn gt(self, o: Portable) -> [bool; 4] { std::array::from_fn(|i| self.0[i] > o.0[i]) }
+    fn gt(self, o: Portable) -> [bool; 4] {
+        std::array::from_fn(|i| self.0[i] > o.0[i])
+    }
     #[inline(always)]
-    fn ne(self, o: Portable) -> [bool; 4] { std::array::from_fn(|i| self.0[i] != o.0[i]) }
+    fn ne(self, o: Portable) -> [bool; 4] {
+        std::array::from_fn(|i| self.0[i] != o.0[i])
+    }
     #[inline(always)]
-    fn select(m: [bool; 4], a: Portable, b: Portable) -> Portable { Portable(std::array::from_fn(|i| if m[i] { a.0[i] } else { b.0[i] })) }
+    fn select(m: [bool; 4], a: Portable, b: Portable) -> Portable {
+        Portable(std::array::from_fn(|i| if m[i] { a.0[i] } else { b.0[i] }))
+    }
     #[inline(always)]
-    fn same(a: [bool; 4], b: [bool; 4]) -> [bool; 4] { std::array::from_fn(|i| a[i] == b[i]) }
+    fn same(a: [bool; 4], b: [bool; 4]) -> [bool; 4] {
+        std::array::from_fn(|i| a[i] == b[i])
+    }
     #[inline(always)]
-    fn and(a: [bool; 4], b: [bool; 4]) -> [bool; 4] { std::array::from_fn(|i| a[i] && b[i]) }
+    fn and(a: [bool; 4], b: [bool; 4]) -> [bool; 4] {
+        std::array::from_fn(|i| a[i] && b[i])
+    }
     #[inline(always)]
-    fn and_not(a: [bool; 4], b: [bool; 4]) -> [bool; 4] { std::array::from_fn(|i| a[i] && !b[i]) }
+    fn and_not(a: [bool; 4], b: [bool; 4]) -> [bool; 4] {
+        std::array::from_fn(|i| a[i] && !b[i])
+    }
     #[inline(always)]
-    fn bits(m: [bool; 4]) -> u32 { m.iter().enumerate().map(|(i, &v)| u32::from(v) << i).sum() }
+    fn bits(m: [bool; 4]) -> u32 {
+        m.iter().enumerate().map(|(i, &v)| u32::from(v) << i).sum()
+    }
 }
 
-#[cfg(target_arch = "x86_64")]
-pub(crate) use sse::F4;
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 pub(crate) use simd128::F4;
-#[cfg(not(any(target_arch = "x86_64", all(target_arch = "wasm32", target_feature = "simd128"))))]
+#[cfg(target_arch = "x86_64")]
+pub(crate) use sse::F4;
+#[cfg(not(any(
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", target_feature = "simd128")
+)))]
 pub(crate) type F4 = Portable;
 
 #[cfg(target_arch = "x86_64")]
@@ -170,7 +238,9 @@ mod sse {
             impl $tr for F4 {
                 type Output = F4;
                 #[inline(always)]
-                fn $f(self, o: F4) -> F4 { F4(sse!($op(self.0, o.0))) }
+                fn $f(self, o: F4) -> F4 {
+                    F4(sse!($op(self.0, o.0)))
+                }
             }
         };
     }
@@ -182,16 +252,22 @@ mod sse {
     impl Neg for F4 {
         type Output = F4;
         #[inline(always)]
-        fn neg(self) -> F4 { F4(sse!(_mm_xor_ps(self.0, _mm_set1_ps(-0.0)))) }
+        fn neg(self) -> F4 {
+            F4(sse!(_mm_xor_ps(self.0, _mm_set1_ps(-0.0))))
+        }
     }
 
     impl Lanes for F4 {
         type Mask = __m128;
         const N: usize = 4;
         #[inline(always)]
-        fn splat(v: f32) -> F4 { F4(sse!(_mm_set1_ps(v))) }
+        fn splat(v: f32) -> F4 {
+            F4(sse!(_mm_set1_ps(v)))
+        }
         #[inline(always)]
-        fn load(v: &[f32; 4]) -> F4 { F4(sse!(_mm_loadu_ps(v.as_ptr()))) }
+        fn load(v: &[f32; 4]) -> F4 {
+            F4(sse!(_mm_loadu_ps(v.as_ptr())))
+        }
         #[inline(always)]
         fn store(self) -> [f32; 4] {
             let mut out = [0.0f32; 4];
@@ -199,27 +275,52 @@ mod sse {
             out
         }
         #[inline(always)]
-        fn sqrt(self) -> F4 { F4(sse!(_mm_sqrt_ps(self.0))) }
+        fn sqrt(self) -> F4 {
+            F4(sse!(_mm_sqrt_ps(self.0)))
+        }
         #[inline(always)]
-        fn lt(self, o: F4) -> __m128 { sse!(_mm_cmplt_ps(self.0, o.0)) }
+        fn lt(self, o: F4) -> __m128 {
+            sse!(_mm_cmplt_ps(self.0, o.0))
+        }
         #[inline(always)]
-        fn le(self, o: F4) -> __m128 { sse!(_mm_cmple_ps(self.0, o.0)) }
+        fn le(self, o: F4) -> __m128 {
+            sse!(_mm_cmple_ps(self.0, o.0))
+        }
         #[inline(always)]
-        fn ge(self, o: F4) -> __m128 { sse!(_mm_cmpge_ps(self.0, o.0)) }
+        fn ge(self, o: F4) -> __m128 {
+            sse!(_mm_cmpge_ps(self.0, o.0))
+        }
         #[inline(always)]
-        fn gt(self, o: F4) -> __m128 { sse!(_mm_cmpgt_ps(self.0, o.0)) }
+        fn gt(self, o: F4) -> __m128 {
+            sse!(_mm_cmpgt_ps(self.0, o.0))
+        }
         #[inline(always)]
-        fn ne(self, o: F4) -> __m128 { sse!(_mm_cmpneq_ps(self.0, o.0)) }
+        fn ne(self, o: F4) -> __m128 {
+            sse!(_mm_cmpneq_ps(self.0, o.0))
+        }
         #[inline(always)]
-        fn select(m: __m128, a: F4, b: F4) -> F4 { F4(sse!(_mm_or_ps(_mm_and_ps(m, a.0), _mm_andnot_ps(m, b.0)))) }
+        fn select(m: __m128, a: F4, b: F4) -> F4 {
+            F4(sse!(_mm_or_ps(_mm_and_ps(m, a.0), _mm_andnot_ps(m, b.0))))
+        }
         #[inline(always)]
-        fn same(a: __m128, b: __m128) -> __m128 { sse!(_mm_castsi128_ps(_mm_cmpeq_epi32(_mm_castps_si128(a), _mm_castps_si128(b)))) }
+        fn same(a: __m128, b: __m128) -> __m128 {
+            sse!(_mm_castsi128_ps(_mm_cmpeq_epi32(
+                _mm_castps_si128(a),
+                _mm_castps_si128(b)
+            )))
+        }
         #[inline(always)]
-        fn and(a: __m128, b: __m128) -> __m128 { sse!(_mm_and_ps(a, b)) }
+        fn and(a: __m128, b: __m128) -> __m128 {
+            sse!(_mm_and_ps(a, b))
+        }
         #[inline(always)]
-        fn and_not(a: __m128, b: __m128) -> __m128 { sse!(_mm_andnot_ps(b, a)) }
+        fn and_not(a: __m128, b: __m128) -> __m128 {
+            sse!(_mm_andnot_ps(b, a))
+        }
         #[inline(always)]
-        fn bits(m: __m128) -> u32 { sse!(_mm_movemask_ps(m)) as u32 }
+        fn bits(m: __m128) -> u32 {
+            sse!(_mm_movemask_ps(m)) as u32
+        }
     }
 }
 
@@ -239,7 +340,9 @@ mod simd128 {
             impl $tr for F4 {
                 type Output = F4;
                 #[inline(always)]
-                fn $f(self, o: F4) -> F4 { F4($op(self.0, o.0)) }
+                fn $f(self, o: F4) -> F4 {
+                    F4($op(self.0, o.0))
+                }
             }
         };
     }
@@ -251,41 +354,74 @@ mod simd128 {
     impl Neg for F4 {
         type Output = F4;
         #[inline(always)]
-        fn neg(self) -> F4 { F4(f32x4_neg(self.0)) }
+        fn neg(self) -> F4 {
+            F4(f32x4_neg(self.0))
+        }
     }
 
     impl Lanes for F4 {
         type Mask = v128;
         const N: usize = 4;
         #[inline(always)]
-        fn splat(v: f32) -> F4 { F4(f32x4_splat(v)) }
-        #[inline(always)]
-        fn load(v: &[f32; 4]) -> F4 { F4(f32x4(v[0], v[1], v[2], v[3])) }
-        #[inline(always)]
-        fn store(self) -> [f32; 4] {
-            [f32x4_extract_lane::<0>(self.0), f32x4_extract_lane::<1>(self.0), f32x4_extract_lane::<2>(self.0), f32x4_extract_lane::<3>(self.0)]
+        fn splat(v: f32) -> F4 {
+            F4(f32x4_splat(v))
         }
         #[inline(always)]
-        fn sqrt(self) -> F4 { F4(f32x4_sqrt(self.0)) }
+        fn load(v: &[f32; 4]) -> F4 {
+            F4(f32x4(v[0], v[1], v[2], v[3]))
+        }
         #[inline(always)]
-        fn lt(self, o: F4) -> v128 { f32x4_lt(self.0, o.0) }
+        fn store(self) -> [f32; 4] {
+            [
+                f32x4_extract_lane::<0>(self.0),
+                f32x4_extract_lane::<1>(self.0),
+                f32x4_extract_lane::<2>(self.0),
+                f32x4_extract_lane::<3>(self.0),
+            ]
+        }
         #[inline(always)]
-        fn le(self, o: F4) -> v128 { f32x4_le(self.0, o.0) }
+        fn sqrt(self) -> F4 {
+            F4(f32x4_sqrt(self.0))
+        }
         #[inline(always)]
-        fn ge(self, o: F4) -> v128 { f32x4_ge(self.0, o.0) }
+        fn lt(self, o: F4) -> v128 {
+            f32x4_lt(self.0, o.0)
+        }
         #[inline(always)]
-        fn gt(self, o: F4) -> v128 { f32x4_gt(self.0, o.0) }
+        fn le(self, o: F4) -> v128 {
+            f32x4_le(self.0, o.0)
+        }
         #[inline(always)]
-        fn ne(self, o: F4) -> v128 { f32x4_ne(self.0, o.0) }
+        fn ge(self, o: F4) -> v128 {
+            f32x4_ge(self.0, o.0)
+        }
         #[inline(always)]
-        fn select(m: v128, a: F4, b: F4) -> F4 { F4(v128_bitselect(a.0, b.0, m)) }
+        fn gt(self, o: F4) -> v128 {
+            f32x4_gt(self.0, o.0)
+        }
         #[inline(always)]
-        fn same(a: v128, b: v128) -> v128 { i32x4_eq(a, b) }
+        fn ne(self, o: F4) -> v128 {
+            f32x4_ne(self.0, o.0)
+        }
         #[inline(always)]
-        fn and(a: v128, b: v128) -> v128 { v128_and(a, b) }
+        fn select(m: v128, a: F4, b: F4) -> F4 {
+            F4(v128_bitselect(a.0, b.0, m))
+        }
         #[inline(always)]
-        fn and_not(a: v128, b: v128) -> v128 { v128_andnot(a, b) }
+        fn same(a: v128, b: v128) -> v128 {
+            i32x4_eq(a, b)
+        }
         #[inline(always)]
-        fn bits(m: v128) -> u32 { u32::from(i32x4_bitmask(m)) }
+        fn and(a: v128, b: v128) -> v128 {
+            v128_and(a, b)
+        }
+        #[inline(always)]
+        fn and_not(a: v128, b: v128) -> v128 {
+            v128_andnot(a, b)
+        }
+        #[inline(always)]
+        fn bits(m: v128) -> u32 {
+            u32::from(i32x4_bitmask(m))
+        }
     }
 }

@@ -38,19 +38,41 @@ struct Old {
 
 impl Old {
     fn new(start: Instant) -> Self {
-        Self { reports: Vec::new(), start, pending: VecDeque::new(), last_present: None, scratch: Vec::new() }
+        Self {
+            reports: Vec::new(),
+            start,
+            pending: VecDeque::new(),
+            last_present: None,
+            scratch: Vec::new(),
+        }
     }
 
-    fn push(&mut self, line: String, seq: Option<u64>, continuous: bool, out: &mut impl std::io::Write) {
-        for p in &mut self.pending { p.age += 1; }
-        self.pending.push_back(OldPending { line, seq, present: None, continuous, age: 0 });
+    fn push(
+        &mut self,
+        line: String,
+        seq: Option<u64>,
+        continuous: bool,
+        out: &mut impl std::io::Write,
+    ) {
+        for p in &mut self.pending {
+            p.age += 1;
+        }
+        self.pending.push_back(OldPending {
+            line,
+            seq,
+            present: None,
+            continuous,
+            age: 0,
+        });
         self.poll();
         self.write_ready(out, false);
     }
 
     fn waiting(&mut self) -> bool {
         self.poll();
-        self.pending.iter().any(|p| p.seq.is_some() && p.present.is_none())
+        self.pending
+            .iter()
+            .any(|p| p.seq.is_some() && p.present.is_none())
     }
 
     fn flush(&mut self, out: &mut impl std::io::Write) {
@@ -69,7 +91,9 @@ impl Old {
 
     fn write_ready(&mut self, out: &mut impl std::io::Write, all: bool) {
         while let Some(p) = self.pending.front() {
-            if !(all || p.seq.is_none() || p.present.is_some() || p.age >= WAIT_FRAMES) { break; }
+            if !(all || p.seq.is_none() || p.present.is_some() || p.age >= WAIT_FRAMES) {
+                break;
+            }
             let p = self.pending.pop_front().unwrap();
             let line = self.finish(p);
             let _ = writeln!(out, "{line}");
@@ -78,7 +102,9 @@ impl Old {
 
     fn finish(&mut self, p: OldPending) -> String {
         let mut line = p.line;
-        if !p.continuous { self.last_present = None; }
+        if !p.continuous {
+            self.last_present = None;
+        }
         match (p.seq, p.present) {
             (Some(_), Some(Some(at))) => {
                 let _ = write!(line, r#","present_ms":{at}"#);
@@ -104,14 +130,22 @@ impl Old {
 struct Fake(Mutex<Vec<Presented>>);
 
 impl Source for Fake {
-    fn take(&self, out: &mut Vec<Presented>) { out.append(&mut self.0.lock().unwrap()); }
+    fn take(&self, out: &mut Vec<Presented>) {
+        out.append(&mut self.0.lock().unwrap());
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 enum Ev {
-    Push { seq: Option<u64>, continuous: bool },
+    Push {
+        seq: Option<u64>,
+        continuous: bool,
+    },
     /// Drawable `seq` landed (`Some`, at a time set by the event's place) or was skipped.
-    Report { seq: u64, landed: bool },
+    Report {
+        seq: u64,
+        landed: bool,
+    },
     Flush,
     Waiting,
     /// `WAIT_FRAMES` frames without a drawable, so every line still waiting expires.
@@ -119,12 +153,30 @@ enum Ev {
 }
 
 const ALPHABET: [Ev; 9] = [
-    Ev::Push { seq: Some(1), continuous: true },
-    Ev::Push { seq: Some(2), continuous: false },
-    Ev::Push { seq: None, continuous: true },
-    Ev::Report { seq: 1, landed: true },
-    Ev::Report { seq: 2, landed: true },
-    Ev::Report { seq: 1, landed: false },
+    Ev::Push {
+        seq: Some(1),
+        continuous: true,
+    },
+    Ev::Push {
+        seq: Some(2),
+        continuous: false,
+    },
+    Ev::Push {
+        seq: None,
+        continuous: true,
+    },
+    Ev::Report {
+        seq: 1,
+        landed: true,
+    },
+    Ev::Report {
+        seq: 2,
+        landed: true,
+    },
+    Ev::Report {
+        seq: 1,
+        landed: false,
+    },
     Ev::Flush,
     Ev::Waiting,
     Ev::Expire,
@@ -153,18 +205,34 @@ fn walk(events: &[Ev]) {
                 new.flush(&mut new_out);
                 old.flush(&mut old_out);
             }
-            Ev::Waiting => assert_eq!(new.waiting(), old.waiting(), "waiting after {:?}", &events[..=k]),
-            Ev::Expire => for _ in 0..WAIT_FRAMES {
-                frame += 1;
-                new.push(format!(r#"{{"t":{frame}"#), None, true, &mut new_out);
-                old.push(format!(r#"{{"t":{frame}"#), None, true, &mut old_out);
-            },
+            Ev::Waiting => assert_eq!(
+                new.waiting(),
+                old.waiting(),
+                "waiting after {:?}",
+                &events[..=k]
+            ),
+            Ev::Expire => {
+                for _ in 0..WAIT_FRAMES {
+                    frame += 1;
+                    new.push(format!(r#"{{"t":{frame}"#), None, true, &mut new_out);
+                    old.push(format!(r#"{{"t":{frame}"#), None, true, &mut old_out);
+                }
+            }
         }
-        assert_eq!(String::from_utf8_lossy(&new_out), String::from_utf8_lossy(&old_out), "after {:?}", &events[..=k]);
+        assert_eq!(
+            String::from_utf8_lossy(&new_out),
+            String::from_utf8_lossy(&old_out),
+            "after {:?}",
+            &events[..=k]
+        );
     }
     new.flush(&mut new_out);
     old.flush(&mut old_out);
-    assert_eq!(String::from_utf8_lossy(&new_out), String::from_utf8_lossy(&old_out), "flushed after {events:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&new_out),
+        String::from_utf8_lossy(&old_out),
+        "flushed after {events:?}"
+    );
 }
 
 #[test]
@@ -187,12 +255,51 @@ fn every_sequence_of_frames_and_reports_writes_what_the_old_queue_wrote() {
 #[test]
 fn an_interval_needs_two_landed_frames_drawn_back_to_back() {
     let mut cadence = Cadence::Broken;
-    let landed = |at| Written { present: Present::Landed { seq: 1, at }, continuous: true };
-    assert_eq!(step(&mut cadence, landed(10.0)), Effects::one(Field::At { at: 10.0, dt: None }));
-    assert_eq!(step(&mut cadence, landed(18.5)), Effects::one(Field::At { at: 18.5, dt: Some(8.5) }));
-    let idle = Written { present: Present::Landed { seq: 2, at: 500.0 }, continuous: false };
-    assert_eq!(step(&mut cadence, idle), Effects::one(Field::At { at: 500.0, dt: None }));
-    assert_eq!(step(&mut cadence, Written { present: Present::Skipped { seq: 3 }, continuous: true }), Effects::one(Field::Null));
+    let landed = |at| Written {
+        present: Present::Landed { seq: 1, at },
+        continuous: true,
+    };
+    assert_eq!(
+        step(&mut cadence, landed(10.0)),
+        Effects::one(Field::At { at: 10.0, dt: None })
+    );
+    assert_eq!(
+        step(&mut cadence, landed(18.5)),
+        Effects::one(Field::At {
+            at: 18.5,
+            dt: Some(8.5)
+        })
+    );
+    let idle = Written {
+        present: Present::Landed { seq: 2, at: 500.0 },
+        continuous: false,
+    };
+    assert_eq!(
+        step(&mut cadence, idle),
+        Effects::one(Field::At {
+            at: 500.0,
+            dt: None
+        })
+    );
+    assert_eq!(
+        step(
+            &mut cadence,
+            Written {
+                present: Present::Skipped { seq: 3 },
+                continuous: true
+            }
+        ),
+        Effects::one(Field::Null)
+    );
     assert_eq!(cadence, Cadence::Broken);
-    assert_eq!(step(&mut cadence, Written { present: Present::Waiting { seq: 4 }, continuous: true }), Effects::none());
+    assert_eq!(
+        step(
+            &mut cadence,
+            Written {
+                present: Present::Waiting { seq: 4 },
+                continuous: true
+            }
+        ),
+        Effects::none()
+    );
 }

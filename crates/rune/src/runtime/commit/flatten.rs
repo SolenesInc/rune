@@ -10,13 +10,24 @@ use super::*;
 pub(super) fn fit_room(own: &CompactStyle, parent_row: bool) -> CompactStyle {
     let raw = own.to_style();
     let zero = |d: LengthPercentageAuto| if d.is_auto() { length(0.0) } else { d };
-    let main_max = if parent_row { raw.max_size.width } else { raw.max_size.height };
+    let main_max = if parent_row {
+        raw.max_size.width
+    } else {
+        raw.max_size.height
+    };
     CompactStyle::from_style(Style {
         size: raw.max_size.map(Into::into),
-        min_size: Size { width: zero(raw.min_size.width), height: zero(raw.min_size.height) },
+        min_size: Size {
+            width: zero(raw.min_size.width),
+            height: zero(raw.min_size.height),
+        },
         flex_grow: 1.0,
         flex_shrink: 1.0,
-        flex_basis: if main_max.is_auto() { length(0.0) } else { auto() },
+        flex_basis: if main_max.is_auto() {
+            length(0.0)
+        } else {
+            auto()
+        },
         align_self: Some(AlignSelf::STRETCH),
         aspect_ratio: None,
         ..raw
@@ -28,7 +39,10 @@ pub(super) fn fit_room(own: &CompactStyle, parent_row: bool) -> CompactStyle {
 pub(super) fn fitted(ratio: f32, own: &CompactStyle, room: Size<f32>) -> CompactStyle {
     let w = room.width.min(room.height * ratio).max(0.0);
     CompactStyle::from_style(Style {
-        size: Size { width: length(w), height: length(w / ratio) },
+        size: Size {
+            width: length(w),
+            height: length(w / ratio),
+        },
         flex_grow: 0.0,
         flex_shrink: 0.0,
         flex_basis: auto(),
@@ -40,7 +54,11 @@ pub(super) fn fitted(ratio: f32, own: &CompactStyle, room: Size<f32>) -> Compact
 /// Width over height of the image in `pixels`, or 0 while it's empty.
 pub(super) fn pixel_ratio(pixels: &crate::Pixels) -> f32 {
     let (w, h) = pixels.size();
-    if w > 0 && h > 0 { w as f32 / h as f32 } else { 0.0 }
+    if w > 0 && h > 0 {
+        w as f32 / h as f32
+    } else {
+        0.0
+    }
 }
 
 /// How a picture that takes one side from its image's ratio gets the other. Taffy carries an
@@ -54,15 +72,37 @@ fn picture_side(style: &mut CompactStyle) -> Picture {
     let size = style.size();
     let tall = size.height.is_auto();
     let (min, max) = (style.min_size(), style.max_size());
-    let (set, min, max) = if tall { (size.width, min.width, max.width) } else { (size.height, min.height, max.height) };
-    if min.is_auto() && max.is_auto() { return Picture::Styled; }
+    let (set, min, max) = if tall {
+        (size.width, min.width, max.width)
+    } else {
+        (size.height, min.height, max.height)
+    };
+    if min.is_auto() && max.is_auto() {
+        return Picture::Styled;
+    }
     let points = |l: LengthPercentageAuto| l.maybe_resolve(None, |_, _| 0.0);
-    let limits_in_points = (min.is_auto() || points(min).is_some()) && (max.is_auto() || points(max).is_some());
-    let Some(v) = set.maybe_resolve(None, |_, _| 0.0).filter(|_| limits_in_points) else { return Picture::Measured };
+    let limits_in_points =
+        (min.is_auto() || points(min).is_some()) && (max.is_auto() || points(max).is_some());
+    let Some(v) = set
+        .maybe_resolve(None, |_, _| 0.0)
+        .filter(|_| limits_in_points)
+    else {
+        return Picture::Measured;
+    };
     let v = points(max).map_or(v, |m| v.min(m));
     let v = points(min).map_or(v, |m| v.max(m));
     let side = taffy::Dimension::length(v);
-    style.set_size(if tall { Size { width: side, height: size.height } } else { Size { width: size.width, height: side } });
+    style.set_size(if tall {
+        Size {
+            width: side,
+            height: size.height,
+        }
+    } else {
+        Size {
+            width: size.width,
+            height: side,
+        }
+    });
     Picture::Styled
 }
 
@@ -76,7 +116,9 @@ enum Picture {
 }
 
 /// A measured picture's measure key: its ratio, so a new one measures again.
-fn picture_key(ratio: f32) -> u64 { 0x7069_6300_0000_0000 | u64::from(ratio.to_bits()) }
+fn picture_key(ratio: f32) -> u64 {
+    0x7069_6300_0000_0000 | u64::from(ratio.to_bits())
+}
 
 // Build the owned path directly, without cloning a key or formatting an index into a
 // temporary segment first. Measurement and flattening must use the same identity rule.
@@ -226,7 +268,9 @@ fn prepare_text(
         t.dir = dir;
         t.shape = None;
     }
-    if let Some(t) = text && t.redacted {
+    if let Some(t) = text
+        && t.redacted
+    {
         // Rich links carry URLs and can expose them through hover, copy and tree children.
         use zeroize::Zeroize;
         let t: &mut TextSpec = t;
@@ -234,8 +278,12 @@ fn prepare_text(
         if let Some(cold) = t.cold.get_mut_if_some() {
             for link in &mut cold.links {
                 link.id.zeroize();
-                if let Some(label) = &mut link.label { label.zeroize(); }
-                if let Some(help) = &mut link.help { help.zeroize(); }
+                if let Some(label) = &mut link.label {
+                    label.zeroize();
+                }
+                if let Some(help) = &mut link.help {
+                    help.zeroize();
+                }
             }
             cold.links.clear();
             cold.rings.clear();
@@ -243,9 +291,13 @@ fn prepare_text(
             cold.live = None;
         }
     }
-    if input.is_some_and(|i| i.edit.is_hidden_multiline()) && let Some(t) = text {
+    if input.is_some_and(|i| i.edit.is_hidden_multiline())
+        && let Some(t) = text
+    {
         // The fixed mask stays one line even in a field narrower than twelve bullets.
-        if t.wrap { t.wrap = false; }
+        if t.wrap {
+            t.wrap = false;
+        }
     } else if input.is_none()
         && let Some(t) = text
         && t.redacted
@@ -255,32 +307,54 @@ fn prepare_text(
             t.conceal();
         }
     }
-    if let Some(t) = text && t.cold.live.is_some() {
-        assert!(input.is_none() && !t.redacted && !t.wrap && t.spans.is_empty() && t.reveal < 0.0 && !t.truncate,
-            "live_text requires plain single-line text; use truncate_fade for overflow");
+    if let Some(t) = text
+        && t.cold.live.is_some()
+    {
+        assert!(
+            input.is_none()
+                && !t.redacted
+                && !t.wrap
+                && t.spans.is_empty()
+                && t.reveal < 0.0
+                && !t.truncate,
+            "live_text requires plain single-line text; use truncate_fade for overflow"
+        );
     }
     if input.is_none()
-        && text.as_ref().is_some_and(|t| !t.cold.isolates.is_empty() || !t.cold.pills.is_empty())
+        && text
+            .as_ref()
+            .is_some_and(|t| !t.cold.isolates.is_empty() || !t.cold.pills.is_empty())
         && let Some(t) = text
     {
         t.apply_isolates();
     }
     if input.is_none()
-        && text.as_ref().is_some_and(|t| t.redacted || t.case.is_some() || !t.cold.rings.is_empty())
+        && text
+            .as_ref()
+            .is_some_and(|t| t.redacted || t.case.is_some() || !t.cold.rings.is_empty())
         && let Some(t) = text
     {
         t.apply_case();
     }
-    if text.as_ref().is_some_and(|t| t.redacted || t.shape.is_none_or(|s| s.0 != scale.to_bits()))
+    if text
+        .as_ref()
+        .is_some_and(|t| t.redacted || t.shape.is_none_or(|s| s.0 != scale.to_bits()))
         && let Some(t) = text
     {
         t.key_shape(scale);
     }
-    let measure = text.as_ref().map(|t| t.shape.map_or(0, |s| s.1) ^ u64::from(t.wrap) ^ (u64::from(t.truncate || t.truncate_fade) << 1)
-        ^ ((t.max_lines as u64) << 2)
-        ^ (u64::from(input.is_some_and(|i| i.edit.is_revealed()) || t.cold.secure_revealed) << 3)
-        ^ (u64::from(t.wrap_anywhere) << 4)
-        ^ t.cold.advance_in.as_ref().map_or(0, |(run, at)| run.hash.rotate_left(3) ^ (*at as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)));
+    let measure = text.as_ref().map(|t| {
+        t.shape.map_or(0, |s| s.1)
+            ^ u64::from(t.wrap)
+            ^ (u64::from(t.truncate || t.truncate_fade) << 1)
+            ^ ((t.max_lines as u64) << 2)
+            ^ (u64::from(input.is_some_and(|i| i.edit.is_revealed()) || t.cold.secure_revealed)
+                << 3)
+            ^ (u64::from(t.wrap_anywhere) << 4)
+            ^ t.cold.advance_in.as_ref().map_or(0, |(run, at)| {
+                run.hash.rotate_left(3) ^ (*at as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            })
+    });
     // Secure leaves remeasure without retaining a content-derived dictionary oracle.
     let secure_measure = text.as_ref().is_some_and(|t| t.redacted);
     let measure = if secure_measure { Some(0) } else { measure };
@@ -302,7 +376,10 @@ fn take_foreground(
     foreground: Option<Color>,
 ) {
     let Some(fg) = foreground else { return };
-    if let Some(t) = text && !t.inked && t.color != fg {
+    if let Some(t) = text
+        && !t.inked
+        && t.color != fg
+    {
         t.color = fg;
     }
     if let Some(i) = input {
@@ -316,7 +393,10 @@ fn take_foreground(
             }
         }
     }
-    if !vis.icon_inked && vis.icon.is_some_and(|(_, c)| c != fg) && let Some((_, c)) = &mut vis.cold_mut().icon {
+    if !vis.icon_inked
+        && vis.icon.is_some_and(|(_, c)| c != fg)
+        && let Some((_, c)) = &mut vis.cold_mut().icon
+    {
         *c = fg;
     }
 }
@@ -394,7 +474,10 @@ pub(super) fn flatten_with_buf(
     if path_buf.capacity() < path_buf.len() + 128 {
         path_buf.reserve(128);
     }
-    flatten_owned(el, parent, path_buf, index, motion, in_row, parent_row, None, taffy, nodes, scale, memo_ctx)
+    flatten_owned(
+        el, parent, path_buf, index, motion, in_row, parent_row, None, taffy, nodes, scale,
+        memo_ctx,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -413,15 +496,29 @@ fn flatten_owned(
     memo_ctx: &mut memo_reuse::MemoFlattenCtx<'_>,
 ) -> (SlotId, bool) {
     if parent_sx.is_none()
-        && let Some(slot) = memo_reuse::try_reuse_memo(&el, parent, path_buf, index, motion, in_row, scale, taffy, nodes, memo_ctx)
+        && let Some(slot) = memo_reuse::try_reuse_memo(
+            &el, parent, path_buf, index, motion, in_row, scale, taffy, nodes, memo_ctx,
+        )
     {
         return (slot, false);
     }
-    let record_built = parent_sx.is_none().then(|| {
-        let built = el.memo_built().filter(|b| b.reusable && memo_reuse::same_root_el(&el, b))?;
-        let (inherited, hover_within) = memo_reuse::inherited_for(parent, nodes, motion, in_row, scale, memo_ctx.foreground);
-        Some((built.id, inherited, hover_within))
-    }).flatten();
+    let record_built = parent_sx
+        .is_none()
+        .then(|| {
+            let built = el
+                .memo_built()
+                .filter(|b| b.reusable && memo_reuse::same_root_el(&el, b))?;
+            let (inherited, hover_within) = memo_reuse::inherited_for(
+                parent,
+                nodes,
+                motion,
+                in_row,
+                scale,
+                memo_ctx.foreground,
+            );
+            Some((built.id, inherited, hover_within))
+        })
+        .flatten();
     let prev_len = path_buf.len();
     push_segment(path_buf, el.key.as_deref(), index);
     let me = nodes.len();
@@ -438,40 +535,78 @@ fn flatten_owned(
     } else {
         in_row
     };
-    let instant_changes = flags.has(ElFlags::INSTANT_CHANGES) || (parent.is_some_and(|p| nodes[p].instant_changes) && !el.cold.animated_changes);
-    let trace_namespace = el.cold.trace_namespace.or_else(|| parent.and_then(|p| nodes[p].trace_namespace));
+    let instant_changes = flags.has(ElFlags::INSTANT_CHANGES)
+        || (parent.is_some_and(|p| nodes[p].instant_changes) && !el.cold.animated_changes);
+    let trace_namespace = el
+        .cold
+        .trace_namespace
+        .or_else(|| parent.and_then(|p| nodes[p].trace_namespace));
     let role = el.role_name();
     let parent_flow = parent.map_or(crate::el::Flow::Ltr, |p| nodes[p].flow);
     let (flow, dir_effect) = crate::el::step_direction(parent_flow, crate::el::DirEvent::of(&el));
     let directed = el.flags.dir().is_some() || parent.is_some_and(|p| nodes[p].directed);
     let pin = crate::el::Pin::of(&el);
-    let El { handlers, key, mut style, mut vis, vis_flags, mut text, children, memo, mut cold, scale: static_scale, .. } = el;
+    let El {
+        handlers,
+        key,
+        mut style,
+        mut vis,
+        vis_flags,
+        mut text,
+        children,
+        memo,
+        mut cold,
+        scale: static_scale,
+        ..
+    } = el;
     let option_as_alt = cold.option_as_alt;
     let ime_at = cold.ime_at.clone();
     let focus = cold.focus.clone();
     // Only a text field's element has to own its cold fields here; a memo placeholder shares them.
-    let mut input = if cold.input.is_some() { cold.get_mut_if_some().and_then(|c| c.input.take()) } else { None };
+    let mut input = if cold.input.is_some() {
+        cold.get_mut_if_some().and_then(|c| c.input.take())
+    } else {
+        None
+    };
     if let Some(sx) = parent_sx {
         apply_scroll_x_child(&mut style, sx);
     }
-    let (measure, secure_measure) = prepare_text(&mut text, input.as_deref(), scale, directed.then_some(flow));
-    take_foreground(&mut text, input.as_deref_mut(), &mut vis, memo_ctx.foreground);
-    if vis.border_layout { lay_out_border(&mut style, &vis, scale); }
+    let (measure, secure_measure) =
+        prepare_text(&mut text, input.as_deref(), scale, directed.then_some(flow));
+    take_foreground(
+        &mut text,
+        input.as_deref_mut(),
+        &mut vis,
+        memo_ctx.foreground,
+    );
+    if vis.border_layout {
+        lay_out_border(&mut style, &vis, scale);
+    }
     if dir_effect == crate::el::DirEffect::Mirror {
         crate::el::mirror_visual(&mut vis);
-        if let Some(a) = cold.get_mut_if_some().and_then(|c| c.above.as_mut()) { crate::el::mirror_anchor(a); }
+        if let Some(a) = cold.get_mut_if_some().and_then(|c| c.above.as_mut()) {
+            crate::el::mirror_anchor(a);
+        }
     }
     let inert = flags.has(ElFlags::INERT) || parent.is_some_and(|p| nodes[p].inert);
     let hover_within = inherit_hover_within(&vis, cold.above.as_ref(), parent, nodes);
-    let pixel_aspect = vis.pixels.as_ref()
+    let pixel_aspect = vis
+        .pixels
+        .as_ref()
         .filter(|_| {
             let sz = style.size();
             style.aspect_ratio().is_none() && sz.width.is_auto() != sz.height.is_auto()
         })
         .map(pixel_ratio);
-    let picture = pixel_aspect.filter(|&r| r > 0.0).map(|ratio| (ratio, picture_side(&mut style)));
-    if let Some((ratio, Picture::Styled)) = picture { style.set_aspect_ratio(Some(ratio)); }
-    let measure = measure.or(picture.filter(|p| p.1 == Picture::Measured).map(|p| picture_key(p.0)));
+    let picture = pixel_aspect
+        .filter(|&r| r > 0.0)
+        .map(|ratio| (ratio, picture_side(&mut style)));
+    if let Some((ratio, Picture::Styled)) = picture {
+        style.set_aspect_ratio(Some(ratio));
+    }
+    let measure = measure.or(picture
+        .filter(|p| p.1 == Picture::Measured)
+        .map(|p| picture_key(p.0)));
     let aspect_fit = (cold.aspect_fit > 0.0).then(|| {
         let room = fit_room(&style, parent_row);
         Box::new((cold.aspect_fit, std::mem::replace(&mut style, room)))
@@ -482,12 +617,16 @@ fn flatten_owned(
         let scroll_axes = cold.scroll_axes;
         if total_children == 1 {
             style.set_flex_direction(FlexDirection::Row);
-            Some(ScrollXChild::Single { vertical: scroll_axes.y() })
+            Some(ScrollXChild::Single {
+                vertical: scroll_axes.y(),
+            })
         } else {
             if !scroll_axes.y() {
                 style.set_flex_direction(FlexDirection::Row);
             }
-            Some(ScrollXChild::Many { vertical: scroll_axes.y() })
+            Some(ScrollXChild::Many {
+                vertical: scroll_axes.y(),
+            })
         }
     } else {
         None
@@ -495,7 +634,11 @@ fn flatten_owned(
     let room_taken = scroll_room::room_taken_before(memo_ctx, id, cold.scroll_edges.room);
     scroll_room::pad_room(&mut style, cold.scroll_edges.room, room_taken, 1.0);
     let time_scale = cold.time_scale;
-    let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
+    let cold = if cold.is_empty()
+        && trace_namespace.is_none()
+        && pixel_aspect.is_none()
+        && aspect_fit.is_none()
+    {
         crate::cold::Cold::default()
     } else {
         let c = cold.into_owned();
@@ -573,27 +716,70 @@ fn flatten_owned(
         moved_stub: false,
     });
     let child_in_row = match in_row {
-        RowLayout::Free if parent_is_stack => if animate_layout { RowLayout::Horizontal } else { RowLayout::Snaps },
+        RowLayout::Free if parent_is_stack => {
+            if animate_layout {
+                RowLayout::Horizontal
+            } else {
+                RowLayout::Snaps
+            }
+        }
         r => r,
     };
-    let row = matches!(style.flex_direction(), FlexDirection::Row | FlexDirection::RowReverse);
+    let row = matches!(
+        style.flex_direction(),
+        FlexDirection::Row | FlexDirection::RowReverse
+    );
     let child_mark = taffy.begin_children();
     let mut children_dirty = false;
     let shared_len = memo_children.as_ref().map_or(0, |m| m.children.len());
     if let Some(shared) = &memo_children {
         for (i, c) in shared.children.iter().enumerate() {
-            let (kid, kid_dirty) = flatten_ref(c, Some(me), path_buf, i, motion, child_in_row, row, child_sx, taffy, nodes, scale, memo_ctx);
+            let (kid, kid_dirty) = flatten_ref(
+                c,
+                Some(me),
+                path_buf,
+                i,
+                motion,
+                child_in_row,
+                row,
+                child_sx,
+                taffy,
+                nodes,
+                scale,
+                memo_ctx,
+            );
             taffy.push_child(kid);
             children_dirty |= kid_dirty;
         }
     }
     for (j, c) in children.into_iter().enumerate() {
-        let (kid, kid_dirty) = flatten_owned(c, Some(me), path_buf, shared_len + j, motion, child_in_row, row, child_sx, taffy, nodes, scale, memo_ctx);
+        let (kid, kid_dirty) = flatten_owned(
+            c,
+            Some(me),
+            path_buf,
+            shared_len + j,
+            motion,
+            child_in_row,
+            row,
+            child_sx,
+            taffy,
+            nodes,
+            scale,
+            memo_ctx,
+        );
         taffy.push_child(kid);
         children_dirty |= kid_dirty;
     }
     path_buf.truncate(prev_len);
-    let (slot, dirty) = taffy.sync_node(id.0, me as u32, style, measure, secure_measure, child_mark, children_dirty);
+    let (slot, dirty) = taffy.sync_node(
+        id.0,
+        me as u32,
+        style,
+        measure,
+        secure_measure,
+        child_mark,
+        children_dirty,
+    );
     nodes[me].taffy = slot;
     if let Some((built_id, inherited, hover_within)) = record_built {
         memo_ctx.pending.push(memo_reuse::PendingFlat {
@@ -623,15 +809,29 @@ fn flatten_ref(
     memo_ctx: &mut memo_reuse::MemoFlattenCtx<'_>,
 ) -> (SlotId, bool) {
     if parent_sx.is_none()
-        && let Some(slot) = memo_reuse::try_reuse_memo(el, parent, path_buf, index, motion, in_row, scale, taffy, nodes, memo_ctx)
+        && let Some(slot) = memo_reuse::try_reuse_memo(
+            el, parent, path_buf, index, motion, in_row, scale, taffy, nodes, memo_ctx,
+        )
     {
         return (slot, false);
     }
-    let record_built = parent_sx.is_none().then(|| {
-        let built = el.memo_built().filter(|b| b.reusable && memo_reuse::same_root_el(el, b))?;
-        let (inherited, hover_within) = memo_reuse::inherited_for(parent, nodes, motion, in_row, scale, memo_ctx.foreground);
-        Some((built.id, inherited, hover_within))
-    }).flatten();
+    let record_built = parent_sx
+        .is_none()
+        .then(|| {
+            let built = el
+                .memo_built()
+                .filter(|b| b.reusable && memo_reuse::same_root_el(el, b))?;
+            let (inherited, hover_within) = memo_reuse::inherited_for(
+                parent,
+                nodes,
+                motion,
+                in_row,
+                scale,
+                memo_ctx.foreground,
+            );
+            Some((built.id, inherited, hover_within))
+        })
+        .flatten();
     let prev_len = path_buf.len();
     push_segment(path_buf, el.key.as_deref(), index);
     let me = nodes.len();
@@ -648,8 +848,12 @@ fn flatten_ref(
     } else {
         in_row
     };
-    let instant_changes = flags.has(ElFlags::INSTANT_CHANGES) || (parent.is_some_and(|p| nodes[p].instant_changes) && !el.cold.animated_changes);
-    let trace_namespace = el.cold.trace_namespace.or_else(|| parent.and_then(|p| nodes[p].trace_namespace));
+    let instant_changes = flags.has(ElFlags::INSTANT_CHANGES)
+        || (parent.is_some_and(|p| nodes[p].instant_changes) && !el.cold.animated_changes);
+    let trace_namespace = el
+        .cold
+        .trace_namespace
+        .or_else(|| parent.and_then(|p| nodes[p].trace_namespace));
     let mut style: Cow<'_, CompactStyle> = Cow::Borrowed(&el.style);
     if let Some(sx) = parent_sx {
         apply_scroll_x_child(style.to_mut(), sx);
@@ -660,22 +864,40 @@ fn flatten_ref(
     let parent_flow = parent.map_or(crate::el::Flow::Ltr, |p| nodes[p].flow);
     let (flow, dir_effect) = crate::el::step_direction(parent_flow, crate::el::DirEvent::of(el));
     let directed = el.flags.dir().is_some() || parent.is_some_and(|p| nodes[p].directed);
-    let (measure, secure_measure) = prepare_text(&mut text, input.as_deref(), scale, directed.then_some(flow));
+    let (measure, secure_measure) =
+        prepare_text(&mut text, input.as_deref(), scale, directed.then_some(flow));
     let inert = flags.has(ElFlags::INERT) || parent.is_some_and(|p| nodes[p].inert);
     let mut vis = el.vis.clone();
-    take_foreground(&mut text, input.as_deref_mut(), &mut vis, memo_ctx.foreground);
-    if vis.border_layout { lay_out_border(style.to_mut(), &vis, scale); }
-    if dir_effect == crate::el::DirEffect::Mirror { crate::el::mirror_visual(&mut vis); }
+    take_foreground(
+        &mut text,
+        input.as_deref_mut(),
+        &mut vis,
+        memo_ctx.foreground,
+    );
+    if vis.border_layout {
+        lay_out_border(style.to_mut(), &vis, scale);
+    }
+    if dir_effect == crate::el::DirEffect::Mirror {
+        crate::el::mirror_visual(&mut vis);
+    }
     let hover_within = inherit_hover_within(&vis, c.above.as_ref(), parent, nodes);
-    let pixel_aspect = vis.pixels.as_ref()
+    let pixel_aspect = vis
+        .pixels
+        .as_ref()
         .filter(|_| {
             let sz = style.size();
             style.aspect_ratio().is_none() && sz.width.is_auto() != sz.height.is_auto()
         })
         .map(pixel_ratio);
-    let picture = pixel_aspect.filter(|&r| r > 0.0).map(|ratio| (ratio, picture_side(style.to_mut())));
-    if let Some((ratio, Picture::Styled)) = picture { style.to_mut().set_aspect_ratio(Some(ratio)); }
-    let measure = measure.or(picture.filter(|p| p.1 == Picture::Measured).map(|p| picture_key(p.0)));
+    let picture = pixel_aspect
+        .filter(|&r| r > 0.0)
+        .map(|ratio| (ratio, picture_side(style.to_mut())));
+    if let Some((ratio, Picture::Styled)) = picture {
+        style.to_mut().set_aspect_ratio(Some(ratio));
+    }
+    let measure = measure.or(picture
+        .filter(|p| p.1 == Picture::Measured)
+        .map(|p| picture_key(p.0)));
     let aspect_fit = if c.aspect_fit > 0.0 {
         let room = fit_room(&style, parent_row);
         let orig = std::mem::replace(&mut style, Cow::Owned(room)).into_owned();
@@ -683,16 +905,21 @@ fn flatten_ref(
     } else {
         None
     };
-    let total_children = el.memo.as_ref().map_or(0, |m| m.children.children.len()) + el.children.len();
+    let total_children =
+        el.memo.as_ref().map_or(0, |m| m.children.children.len()) + el.children.len();
     let child_sx = if c.scroll.is_some() && c.scroll_axes.x() {
         if total_children == 1 {
             style.to_mut().set_flex_direction(FlexDirection::Row);
-            Some(ScrollXChild::Single { vertical: c.scroll_axes.y() })
+            Some(ScrollXChild::Single {
+                vertical: c.scroll_axes.y(),
+            })
         } else {
             if !c.scroll_axes.y() {
                 style.to_mut().set_flex_direction(FlexDirection::Row);
             }
-            Some(ScrollXChild::Many { vertical: c.scroll_axes.y() })
+            Some(ScrollXChild::Many {
+                vertical: c.scroll_axes.y(),
+            })
         }
     } else {
         None
@@ -701,7 +928,11 @@ fn flatten_ref(
     if room_taken != [false; 2] {
         scroll_room::pad_room(style.to_mut(), c.scroll_edges.room, room_taken, 1.0);
     }
-    let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
+    let cold = if el.cold.is_empty()
+        && trace_namespace.is_none()
+        && pixel_aspect.is_none()
+        && aspect_fit.is_none()
+    {
         crate::cold::Cold::default()
     } else {
         pack_node_cold(NodeCold {
@@ -717,7 +948,9 @@ fn flatten_ref(
             transition: c.transition.clone(),
             matched: c.matched.as_ref().map(|id| (id.clone(), own_motion)),
             above: c.above.clone().map(|mut a| {
-                if dir_effect == crate::el::DirEffect::Mirror { crate::el::mirror_anchor(&mut a); }
+                if dir_effect == crate::el::DirEffect::Mirror {
+                    crate::el::mirror_anchor(&mut a);
+                }
                 a
             }),
             scroll: c.scroll,
@@ -781,19 +1014,49 @@ fn flatten_ref(
         moved_stub: false,
     });
     let child_in_row = match in_row {
-        RowLayout::Free if parent_is_stack => if animate_layout { RowLayout::Horizontal } else { RowLayout::Snaps },
+        RowLayout::Free if parent_is_stack => {
+            if animate_layout {
+                RowLayout::Horizontal
+            } else {
+                RowLayout::Snaps
+            }
+        }
         r => r,
     };
-    let row = matches!(style.flex_direction(), FlexDirection::Row | FlexDirection::RowReverse);
+    let row = matches!(
+        style.flex_direction(),
+        FlexDirection::Row | FlexDirection::RowReverse
+    );
     let child_mark = taffy.begin_children();
     let mut children_dirty = false;
     for (i, c) in el.all_children().enumerate() {
-        let (kid, kid_dirty) = flatten_ref(c, Some(me), path_buf, i, motion, child_in_row, row, child_sx, taffy, nodes, scale, memo_ctx);
+        let (kid, kid_dirty) = flatten_ref(
+            c,
+            Some(me),
+            path_buf,
+            i,
+            motion,
+            child_in_row,
+            row,
+            child_sx,
+            taffy,
+            nodes,
+            scale,
+            memo_ctx,
+        );
         taffy.push_child(kid);
         children_dirty |= kid_dirty;
     }
     path_buf.truncate(prev_len);
-    let (slot, dirty) = taffy.sync_node(id.0, me as u32, style.into_owned(), measure, secure_measure, child_mark, children_dirty);
+    let (slot, dirty) = taffy.sync_node(
+        id.0,
+        me as u32,
+        style.into_owned(),
+        measure,
+        secure_measure,
+        child_mark,
+        children_dirty,
+    );
     nodes[me].taffy = slot;
     if let Some((built_id, inherited, hover_within)) = record_built {
         memo_ctx.pending.push(memo_reuse::PendingFlat {

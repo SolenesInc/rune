@@ -3,8 +3,8 @@
 use crate::cold::Empty;
 use crate::el::{
     AtBottomFn, Cursor, DragEndFn, DragFn, DragOutFn, DropSpec, LayoutFn, LayoutTxFn, ModalSpec,
-    OwnTextFn, PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy, VisibleRowsFn,
-    WindowFocusFn,
+    OwnTextFn, PasteFn, PointerFn, PressFn, ScrollOffsetFn, SelectionChangeFn, SelectionCopy,
+    VisibleRowsFn, WindowFocusFn,
 };
 
 #[derive(Clone)]
@@ -143,6 +143,13 @@ impl Empty for Handlers {
         cursor: None,
         press_scale: None,
         #[cfg(debug_assertions)]
-        sites: HandlerSites { hover: None, hover_change: None, pointer_move: None, layout: None, drawn_layout: None, visible_rows: None },
+        sites: HandlerSites {
+            hover: None,
+            hover_change: None,
+            pointer_move: None,
+            layout: None,
+            drawn_layout: None,
+            visible_rows: None,
+        },
     };
 }

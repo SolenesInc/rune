@@ -60,7 +60,15 @@ impl Mode {
         }
     }
 
-    fn horizontal(self) -> bool { matches!(self, Mode::Pan { horizontal: true, .. }) }
+    fn horizontal(self) -> bool {
+        matches!(
+            self,
+            Mode::Pan {
+                horizontal: true,
+                ..
+            }
+        )
+    }
 }
 
 impl RuntimeCore {
@@ -70,7 +78,9 @@ impl RuntimeCore {
         match phase {
             TouchPhase::Started => self.touch_down(id, x, y, time),
             TouchPhase::Moved => self.touch_move(id, x, y, time),
-            TouchPhase::Ended | TouchPhase::Cancelled => self.touch_up(id, x, y, time, phase == TouchPhase::Cancelled),
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                self.touch_up(id, x, y, time, phase == TouchPhase::Cancelled)
+            }
         }
     }
 
@@ -80,19 +90,36 @@ impl RuntimeCore {
     }
 
     fn touch_down(&mut self, id: u64, x: f32, y: f32, time: f64) {
-        if self.touch.finger.is_some() { return; }
+        if self.touch.finger.is_some() {
+            return;
+        }
         let scroll = self.touch_scroll_start(x, y);
         self.pointer_move(x, y);
         self.pointer_down(x, y);
-        self.touch.finger = Some(Finger { id, origin: (x, y), last: 0.0, at: time, velocity: 0.0, mode: Mode::Pending { scroll } });
+        self.touch.finger = Some(Finger {
+            id,
+            origin: (x, y),
+            last: 0.0,
+            at: time,
+            velocity: 0.0,
+            mode: Mode::Pending { scroll },
+        });
     }
 
     fn touch_move(&mut self, id: u64, x: f32, y: f32, time: f64) {
-        let Some(f) = self.touch.finger.as_ref().filter(|f| f.id == id) else { return };
+        let Some(f) = self.touch.finger.as_ref().filter(|f| f.id == id) else {
+            return;
+        };
         let (dx, dy) = (x - f.origin.0, y - f.origin.1);
-        if let Mode::Pending { scroll } = f.mode && dx.hypot(dy) > TOUCH_SLOP {
+        if let Mode::Pending { scroll } = f.mode
+            && dx.hypot(dy) > TOUCH_SLOP
+        {
             let origin = f.origin;
-            let (scroll, horizontal) = if self.press_drags() { (None, false) } else { self.touch_scroll_pan(origin.0, origin.1, dx.abs() > dy.abs(), scroll) };
+            let (scroll, horizontal) = if self.press_drags() {
+                (None, false)
+            } else {
+                self.touch_scroll_pan(origin.0, origin.1, dx.abs() > dy.abs(), scroll)
+            };
             self.touch.finger.as_mut().unwrap().mode = match scroll {
                 Some(scroll) => Mode::Pan { scroll, horizontal },
                 None => Mode::Drag,
@@ -101,7 +128,9 @@ impl RuntimeCore {
         let f = self.touch.finger.as_mut().unwrap();
         let along = if f.mode.horizontal() { dx } else { dy };
         let dt = time - f.at;
-        if dt > 0.0 { f.velocity = (along - f.last) / dt as f32; }
+        if dt > 0.0 {
+            f.velocity = (along - f.last) / dt as f32;
+        }
         (f.last, f.at) = (along, time);
         match f.mode {
             Mode::Pan { scroll, .. } => self.touch_scroll_move(scroll, along),
@@ -111,9 +140,15 @@ impl RuntimeCore {
     }
 
     fn touch_up(&mut self, id: u64, x: f32, y: f32, time: f64, cancelled: bool) {
-        let Some(f) = self.touch.finger.take_if(|f| f.id == id) else { return };
+        let Some(f) = self.touch.finger.take_if(|f| f.id == id) else {
+            return;
+        };
         let pan = matches!(f.mode, Mode::Pan { .. });
-        let velocity = if pan && !cancelled && time - f.at < FLING_HOLD { f.velocity } else { 0.0 };
+        let velocity = if pan && !cancelled && time - f.at < FLING_HOLD {
+            f.velocity
+        } else {
+            0.0
+        };
         self.touch_scroll_end(f.mode.scroll(), velocity);
         if cancelled {
             self.cancel_pointer();
@@ -121,7 +156,9 @@ impl RuntimeCore {
         }
         // A pan cancelled the press, so its release clicks nothing.
         let (x, y) = if pan { f.origin } else { (x, y) };
-        if f.mode == Mode::Drag { self.pointer_move(x, y); }
+        if f.mode == Mode::Drag {
+            self.pointer_move(x, y);
+        }
         self.pointer_up(x, y);
         // No hover is left under a lifted finger.
         self.pointer_leave();
@@ -129,8 +166,12 @@ impl RuntimeCore {
 
     /// Whether the held press is on an element that drags, so a finger drags it, not the page.
     fn press_drags(&self) -> bool {
-        let Some(path) = self.press.path() else { return false };
-        self.live_index(path).is_some_and(|i| self.nodes[i].handlers.on_drag.is_some() && !self.drags_out(&self.nodes[i]))
+        let Some(path) = self.press.path() else {
+            return false;
+        };
+        self.live_index(path).is_some_and(|i| {
+            self.nodes[i].handlers.on_drag.is_some() && !self.drags_out(&self.nodes[i])
+        })
     }
 }
 
@@ -140,13 +181,34 @@ mod tests {
     use crate::{ScrollSpec, col, el};
 
     #[derive(Default)]
-    struct S { taps: Vec<usize>, drags: Vec<f32> }
+    struct S {
+        taps: Vec<usize>,
+        drags: Vec<f32>,
+    }
 
     fn view(_: &S, _: &mut Cx<S>) -> El {
-        col().size(200.0, 300.0)
-            .child(el().key("knob").size(200.0, 40.0).on_drag(|s: &mut S, d: &mut Drag, _| s.drags.push(d.dx)))
-            .child(col().key("list").w_full().h(200.0).scroll(ScrollSpec { stick_bottom: false })
-                .children((0..30).map(|i| el().key(format!("row{i}")).w_full().h(40.0).on_press(move |s: &mut S| s.taps.push(i)))))
+        col()
+            .size(200.0, 300.0)
+            .child(
+                el().key("knob")
+                    .size(200.0, 40.0)
+                    .on_drag(|s: &mut S, d: &mut Drag, _| s.drags.push(d.dx)),
+            )
+            .child(
+                col()
+                    .key("list")
+                    .w_full()
+                    .h(200.0)
+                    .scroll(ScrollSpec {
+                        stick_bottom: false,
+                    })
+                    .children((0..30).map(|i| {
+                        el().key(format!("row{i}"))
+                            .w_full()
+                            .h(40.0)
+                            .on_press(move |s: &mut S| s.taps.push(i))
+                    })),
+            )
     }
 
     fn rig() -> Runtime<S> {
@@ -156,7 +218,12 @@ mod tests {
     }
 
     fn offset(rt: &Runtime<S>) -> f64 {
-        let id = rt.nodes.iter().find(|n| n.key.as_deref() == Some("list")).unwrap().id;
+        let id = rt
+            .nodes
+            .iter()
+            .find(|n| n.key.as_deref() == Some("list"))
+            .unwrap()
+            .id;
         rt.scrolls[&id].offset
     }
 
@@ -164,7 +231,13 @@ mod tests {
     fn swipe(rt: &mut Runtime<S>, (x, y): (f32, f32), dy: f32, steps: usize) {
         rt.touch(1, TouchPhase::Started, x, y, 0.0);
         for i in 1..=steps {
-            rt.touch(1, TouchPhase::Moved, x, y + dy * i as f32 / steps as f32, i as f64 * 0.01);
+            rt.touch(
+                1,
+                TouchPhase::Moved,
+                x,
+                y + dy * i as f32 / steps as f32,
+                i as f64 * 0.01,
+            );
         }
         rt.touch(1, TouchPhase::Ended, x, y + dy, steps as f64 * 0.01 + 0.005);
         rt.frame(1.0 / 60.0);
@@ -189,8 +262,14 @@ mod tests {
         assert!(rt.state().taps.is_empty(), "a pan presses nothing");
         let lifted = offset(&rt);
         assert!(lifted >= 90.0, "the list followed the finger: {lifted}");
-        for _ in 0..30 { rt.frame(1.0 / 60.0); }
-        assert!(offset(&rt) > lifted + 50.0, "and coasted on: {} after {lifted}", offset(&rt));
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(
+            offset(&rt) > lifted + 50.0,
+            "and coasted on: {} after {lifted}",
+            offset(&rt)
+        );
     }
 
     #[test]
@@ -199,7 +278,9 @@ mod tests {
         rt.touch(1, TouchPhase::Started, 100.0, 200.0, 0.0);
         rt.touch(1, TouchPhase::Moved, 100.0, 150.0, 0.01);
         rt.touch(1, TouchPhase::Ended, 100.0, 150.0, 0.5);
-        for _ in 0..30 { rt.frame(1.0 / 60.0); }
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
         assert_eq!(offset(&rt), 50.0);
     }
 
@@ -229,14 +310,33 @@ mod tests {
     #[test]
     fn a_finger_past_the_slop_picks_one_mode_with_only_its_own_data() {
         let mut rt = rig();
-        let list = rt.nodes.iter().find(|n| n.key.as_deref() == Some("list")).unwrap().id;
+        let list = rt
+            .nodes
+            .iter()
+            .find(|n| n.key.as_deref() == Some("list"))
+            .unwrap()
+            .id;
         rt.touch(1, TouchPhase::Started, 100.0, 200.0, 0.0);
-        assert_eq!(rt.touch.finger.as_ref().map(|f| f.mode), Some(Mode::Pending { scroll: Some(list) }), "pending, it holds the viewport under it");
+        assert_eq!(
+            rt.touch.finger.as_ref().map(|f| f.mode),
+            Some(Mode::Pending { scroll: Some(list) }),
+            "pending, it holds the viewport under it"
+        );
         rt.touch(1, TouchPhase::Moved, 100.0, 150.0, 0.01);
-        assert_eq!(rt.touch.finger.as_ref().map(|f| f.mode), Some(Mode::Pan { scroll: list, horizontal: false }));
+        assert_eq!(
+            rt.touch.finger.as_ref().map(|f| f.mode),
+            Some(Mode::Pan {
+                scroll: list,
+                horizontal: false
+            })
+        );
         rt.touch(1, TouchPhase::Ended, 100.0, 150.0, 0.02);
         rt.touch(2, TouchPhase::Started, 20.0, 20.0, 1.0);
         rt.touch(2, TouchPhase::Moved, 60.0, 20.0, 1.01);
-        assert_eq!(rt.touch.finger.as_ref().map(|f| f.mode), Some(Mode::Drag), "on an element that drags it holds no viewport");
+        assert_eq!(
+            rt.touch.finger.as_ref().map(|f| f.mode),
+            Some(Mode::Drag),
+            "on an element that drags it holds no viewport"
+        );
     }
 }

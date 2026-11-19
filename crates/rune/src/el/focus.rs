@@ -70,7 +70,10 @@ impl crate::cold::Empty for FocusSpec {
         group: false,
         selected: false,
         reveal: Reveal::Off,
-        preserve_on_press: crate::runtime::selectable::OnPress { focus: false, selection: false },
+        preserve_on_press: crate::runtime::selectable::OnPress {
+            focus: false,
+            selection: false,
+        },
         ring: None,
         within: false,
         ring_off: false,
@@ -106,7 +109,10 @@ impl El {
     /// With `focusable(true)`, this is a control that owns its keyboard, like a virtualised
     /// list whose rows aren't all built: it keeps focus while its rows scroll in and out, and a
     /// click anywhere inside it focuses it (an NSTableView).
-    pub fn on_key<S: 'static>(mut self, f: impl Fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool + 'static) -> Self {
+    pub fn on_key<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool + 'static,
+    ) -> Self {
         self.cold_mut().focus.key = Some(Rc::new(move |s, key, tx| f(downcast::<S>(s), key, tx)));
         self
     }
@@ -148,7 +154,11 @@ impl El {
     /// Off by default; useful for suggestions controlled by an outside text field.
     pub fn reveal_selected(mut self, enabled: bool) -> Self {
         if enabled || !self.cold.focus.is_empty() {
-            self.cold_mut().focus.reveal = if enabled { Reveal::Selected } else { Reveal::Off };
+            self.cold_mut().focus.reveal = if enabled {
+                Reveal::Selected
+            } else {
+                Reveal::Off
+            };
         }
         self
     }
@@ -216,7 +226,8 @@ impl El {
     /// becomes focusable, and its role `slider` unless it has another. Home and End go to the
     /// ends with [`El::on_step_limit`].
     pub fn on_step<S: 'static>(mut self, f: impl Fn(&mut S, i32, &mut Tx) + 'static) -> Self {
-        self.cold_mut().focus.step = Some(Rc::new(move |s, delta, tx| f(downcast::<S>(s), delta, tx)));
+        self.cold_mut().focus.step =
+            Some(Rc::new(move |s, delta, tx| f(downcast::<S>(s), delta, tx)));
         self.cold_mut().focus.enabled = true;
         if self.role == RoleTag::GROUP {
             self.role = RoleTag::SLIDER;
@@ -225,8 +236,12 @@ impl El {
     }
     /// A slider's Home and End (see [`El::on_step`]): `f` gets `false` for Home, which goes to
     /// the minimum, and `true` for End, the maximum. Without it they scroll, as elsewhere.
-    pub fn on_step_limit<S: 'static>(mut self, f: impl Fn(&mut S, bool, &mut Tx) + 'static) -> Self {
-        self.cold_mut().focus.step_limit = Some(Rc::new(move |s, max, tx| f(downcast::<S>(s), max, tx)));
+    pub fn on_step_limit<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, bool, &mut Tx) + 'static,
+    ) -> Self {
+        self.cold_mut().focus.step_limit =
+            Some(Rc::new(move |s, max, tx| f(downcast::<S>(s), max, tx)));
         self
     }
     /// Return focus to this keyed trigger (or its first focusable child) when removed.
@@ -253,7 +268,11 @@ impl El {
     /// Keyboard-only ring, on this element or a visual child of the focused control. A
     /// control with no ring of its own draws the default one (see [`El::no_focus_ring`]).
     pub fn focus_ring(mut self, width: f32, offset: f32, color: Color) -> Self {
-        self.cold_mut().focus.ring = Some(Outline { width, offset, color });
+        self.cold_mut().focus.ring = Some(Outline {
+            width,
+            offset,
+            color,
+        });
         self.cold_mut().focus.within = false;
         self.cold_mut().focus.ring_off = false;
         self
@@ -263,7 +282,11 @@ impl El {
     /// `focus_within_ring(1.0, -1.0, c)` for `outline: 1px solid; outline-offset: -1px`, a ring
     /// just inside the border box. It isn't a Tab stop by itself.
     pub fn focus_within_ring(mut self, width: f32, offset: f32, color: Color) -> Self {
-        self.cold_mut().focus.ring = Some(Outline { width, offset, color });
+        self.cold_mut().focus.ring = Some(Outline {
+            width,
+            offset,
+            color,
+        });
         self.cold_mut().focus.within = true;
         self.cold_mut().focus.ring_off = false;
         self
@@ -294,20 +317,40 @@ impl El {
         self
     }
     /// Trap focus and make the background inert while mounted. Escape requests dismissal.
-    pub fn modal<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
-            dismiss: Rc::new(move |s, _| dismiss(downcast::<S>(s))) });
+    pub fn modal<S: 'static>(
+        mut self,
+        click_outside: bool,
+        dismiss: impl Fn(&mut S) + 'static,
+    ) -> Self {
+        self.handlers.modal = Some(ModalSpec {
+            outside: click_outside,
+            press_through: false,
+            wheel_closes: false,
+            dismiss: Rc::new(move |s, _| dismiss(downcast::<S>(s))),
+        });
         self
     }
     /// [`El::modal`] whose dismissal gets the change's [`Tx`]: a dialog that closes at once
     /// (`tx.instant()`), say.
-    pub fn modal_tx<S: 'static>(mut self, click_outside: bool, dismiss: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        self.handlers.modal = Some(ModalSpec { outside: click_outside, press_through: false, wheel_closes: false,
-            dismiss: Rc::new(move |s, tx| dismiss(downcast::<S>(s), tx)) });
+    pub fn modal_tx<S: 'static>(
+        mut self,
+        click_outside: bool,
+        dismiss: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> Self {
+        self.handlers.modal = Some(ModalSpec {
+            outside: click_outside,
+            press_through: false,
+            wheel_closes: false,
+            dismiss: Rc::new(move |s, tx| dismiss(downcast::<S>(s), tx)),
+        });
         self
     }
     pub fn modal_click_outside(mut self, enabled: bool) -> Self {
-        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.outside = enabled; }
+        if let Some(h) = self.handlers.get_mut_if_some()
+            && let Some(m) = &mut h.modal
+        {
+            m.outside = enabled;
+        }
         self
     }
     /// A press outside a modal that closes on one ([`El::modal`]'s `click_outside`) goes on to
@@ -315,14 +358,22 @@ impl El {
     /// press on another control both closes the popover and presses that control. Off by
     /// default, when the press only closes the modal.
     pub fn modal_press_through(mut self, enabled: bool) -> Self {
-        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.press_through = enabled; }
+        if let Some(h) = self.handlers.get_mut_if_some()
+            && let Some(m) = &mut h.modal
+        {
+            m.press_through = enabled;
+        }
         self
     }
     /// A wheel or trackpad scroll outside where the modal is drawn asks it to close, as a
     /// press outside does; with [`El::modal_press_through`] the scroll still moves what is
     /// under it. Off by default, when the wheel leaves the modal open.
     pub fn modal_wheel_closes(mut self, enabled: bool) -> Self {
-        if let Some(h) = self.handlers.get_mut_if_some() && let Some(m) = &mut h.modal { m.wheel_closes = enabled; }
+        if let Some(h) = self.handlers.get_mut_if_some()
+            && let Some(m) = &mut h.modal
+        {
+            m.wheel_closes = enabled;
+        }
         self
     }
 }

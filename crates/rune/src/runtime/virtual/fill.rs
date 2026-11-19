@@ -46,7 +46,11 @@ impl Fill {
                 // decides a draw, so the state stops counting where the answer does.
                 let frames = frames.saturating_add(1).min(FILL_FRAMES + 1);
                 *self = Fill::Filling { frames };
-                if frames <= FILL_FRAMES { Effects::one(FillEffect::Draw) } else { Effects::none() }
+                if frames <= FILL_FRAMES {
+                    Effects::one(FillEffect::Draw)
+                } else {
+                    Effects::none()
+                }
             }
             (_, FillEvent::Frame { wanted: false }) => {
                 *self = Fill::Idle;

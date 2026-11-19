@@ -1,6 +1,8 @@
 use super::*;
 
-fn focus(path: &str) -> impl FnOnce() -> Option<String> + '_ { move || Some(path.to_owned()) }
+fn focus(path: &str) -> impl FnOnce() -> Option<String> + '_ {
+    move || Some(path.to_owned())
+}
 
 #[test]
 fn a_release_goes_to_where_its_key_went_down_until_the_last_key_is_up() {
@@ -9,7 +11,11 @@ fn a_release_goes_to_where_its_key_went_down_until_the_last_key_is_up() {
     k.down(false, true, focus("b"));
     k.down(false, false, focus("b"));
     assert!(!k.eat(false));
-    assert_eq!(k.route(), Some("b".into()), "the focus the last key went down in");
+    assert_eq!(
+        k.route(),
+        Some("b".into()),
+        "the focus the last key went down in"
+    );
     assert!(!k.eat(false));
     assert_eq!(k.route(), Some("b".into()));
     assert_eq!(k.route(), None, "both keys are up: nothing is held");
@@ -52,7 +58,10 @@ fn a_physical_release_while_composing_keeps_one_for_the_key_that_ends_it() {
     let mut k = KeyReleases::default();
     k.down(true, false, focus("a"));
     k.composing_release();
-    assert!(k.eat(false), "the last key counted is still the composition's");
+    assert!(
+        k.eat(false),
+        "the last key counted is still the composition's"
+    );
     assert!(!k.eat(false));
 }
 

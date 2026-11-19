@@ -47,21 +47,43 @@ impl RuntimeCore {
             return false;
         }
         if !self.nodes.iter().all(|n| {
-            relayout::reusable(n) && n.text.as_ref().is_none_or(|t| !t.redacted && t.cold.live.is_none())
+            relayout::reusable(n)
+                && n.text
+                    .as_ref()
+                    .is_none_or(|t| !t.redacted && t.cold.live.is_none())
         }) {
             return false;
         }
         for (path, v) in &self.virtuals {
-            if !v.indexed || !v.selection.pins.source().and_then(|s| s.rebuild()).is_some_and(|s| s.count == v.keys.len()) {
+            if !v.indexed
+                || !v
+                    .selection
+                    .pins
+                    .source()
+                    .and_then(|s| s.rebuild())
+                    .is_some_and(|s| s.count == v.keys.len())
+            {
                 return false;
             }
-            let Some(&list_id) = self.path_ids.get(path) else { return false };
-            let Some(&list_idx) = self.node_index.get(&list_id) else { return false };
-            if !self.nodes.get(list_idx).is_some_and(|n| n.id == list_id && n.path == *path && n.growth.is_some()) {
+            let Some(&list_id) = self.path_ids.get(path) else {
+                return false;
+            };
+            let Some(&list_idx) = self.node_index.get(&list_id) else {
+                return false;
+            };
+            if !self
+                .nodes
+                .get(list_idx)
+                .is_some_and(|n| n.id == list_id && n.path == *path && n.growth.is_some())
+            {
                 return false;
             }
-            let Some(&scroll_id) = self.path_ids.get(&v.scroll_path) else { return false };
-            let Some(&scroll_idx) = self.node_index.get(&scroll_id) else { return false };
+            let Some(&scroll_id) = self.path_ids.get(&v.scroll_path) else {
+                return false;
+            };
+            let Some(&scroll_idx) = self.node_index.get(&scroll_id) else {
+                return false;
+            };
             if !self.nodes.get(scroll_idx).is_some_and(|n| {
                 n.id == scroll_id
                     && n.path == v.scroll_path
@@ -72,7 +94,10 @@ impl RuntimeCore {
                 return false;
             }
             if self.virtuals.keys().any(|other| {
-                other != path && other.strip_prefix(path.as_str()).is_some_and(|r| r.starts_with('/'))
+                other != path
+                    && other
+                        .strip_prefix(path.as_str())
+                        .is_some_and(|r| r.starts_with('/'))
             }) {
                 return false;
             }
@@ -109,7 +134,11 @@ fn move_slice(
         n.clear_run_layout();
         n.scale_track = false;
         n.group_fade = false;
-        n.virtual_mount = if k == 0 { root_virtual_mount.unwrap_or(false) } else { false };
+        n.virtual_mount = if k == 0 {
+            root_virtual_mount.unwrap_or(false)
+        } else {
+            false
+        };
         n.parent = old_parent.map(|p| old_to_new[p] as usize);
         n.target = [0.0; 4];
         n.local = MRect::ZERO;
@@ -160,7 +189,9 @@ impl Measurement<'_> {
 
             let mut list_subtree_end = old_list_idx + 1;
             while list_subtree_end < self.nodes.len()
-                && self.nodes[list_subtree_end].parent.is_some_and(|p| p >= old_list_idx)
+                && self.nodes[list_subtree_end]
+                    .parent
+                    .is_some_and(|p| p >= old_list_idx)
             {
                 list_subtree_end += 1;
             }
@@ -186,15 +217,24 @@ impl Measurement<'_> {
             let mut offset = old_scroll.map_or(0.0, |s| s.offset as f32);
             v.viewport = self.nodes[scroll_idx].local.h;
             offset = (offset - v.top).max(0.0);
-            v.anchor = if pinned { None } else { v.first_visible(offset, |_| true) };
+            v.anchor = if pinned {
+                None
+            } else {
+                v.first_visible(offset, |_| true)
+            };
             let delta = v.anchor_delta();
             offset = (offset + delta).max(0.0);
-            if let Some(st) = self.scrolls.get_mut(&scroll_id) && !pinned {
+            if let Some(st) = self.scrolls.get_mut(&scroll_id)
+                && !pinned
+            {
                 st.offset = (st.offset + f64::from(delta)).max(0.0);
             }
             let shown = std::mem::take(&mut v.shown);
             v.select(offset, pinned, Some(&shown));
-            for key in shown.iter().filter(|k| v.index_of(k).is_some_and(|i| !v.range.contains(&i))) {
+            for key in shown
+                .iter()
+                .filter(|k| v.index_of(k).is_some_and(|i| !v.range.contains(&i)))
+            {
                 self.virtual_culled.insert(format!("{path}/{key}"));
             }
             v.shown = shown;
@@ -203,10 +243,18 @@ impl Measurement<'_> {
             let inert = v.selection.scope.inert;
             // Cleared in place: a later plan that falls back keeps this list's buffers too.
             v.selection.pins.clear_texts();
-            let rows = v.selection.pins.source().and_then(|s| s.rebuild())
-                .expect("an index-built list keeps its row builder").clone();
+            let rows = v
+                .selection
+                .pins
+                .source()
+                .and_then(|s| s.rebuild())
+                .expect("an index-built list keeps its row builder")
+                .clone();
 
-            let under = |f: &str| f.strip_prefix(path.as_str()).is_some_and(|rest| rest.starts_with('/'));
+            let under = |f: &str| {
+                f.strip_prefix(path.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+            };
             let focused = v
                 .focused_row
                 .as_deref()
@@ -269,8 +317,21 @@ impl Measurement<'_> {
         for plan in &mut plans {
             let v = self.virtuals.get_mut(&plan.path).unwrap();
             if let Some(i) = plan.focused {
-                let row = build_indexed_row(&plan.rows, state, &plan.path, &v.keys[i], i, self.key_warnings);
-                measure::collect_virtual_inputs(&row, &plan.path, i, plan.inert, self.virtual_inputs);
+                let row = build_indexed_row(
+                    &plan.rows,
+                    state,
+                    &plan.path,
+                    &v.keys[i],
+                    i,
+                    self.key_warnings,
+                );
+                measure::collect_virtual_inputs(
+                    &row,
+                    &plan.path,
+                    i,
+                    plan.inert,
+                    self.virtual_inputs,
+                );
                 if plan.pinned.contains(&i) {
                     selectable::virtual_selection::collect_row_into_pins(
                         &mut v.selection.pins,
@@ -287,7 +348,14 @@ impl Measurement<'_> {
                 if Some(i) == plan.focused {
                     continue;
                 }
-                let row = build_indexed_row(&plan.rows, state, &plan.path, &v.keys[i], i, self.key_warnings);
+                let row = build_indexed_row(
+                    &plan.rows,
+                    state,
+                    &plan.path,
+                    &v.keys[i],
+                    i,
+                    self.key_warnings,
+                );
                 selectable::virtual_selection::collect_row_into_pins(
                     &mut v.selection.pins,
                     &row,
@@ -301,7 +369,14 @@ impl Measurement<'_> {
             for (pos, row_i) in plan.range.clone().enumerate() {
                 let key = &v.keys[row_i];
                 if !plan.mounted_rows.contains_key(key) {
-                    let row = build_indexed_row(&plan.rows, state, &plan.path, key, row_i, self.key_warnings);
+                    let row = build_indexed_row(
+                        &plan.rows,
+                        state,
+                        &plan.path,
+                        key,
+                        row_i,
+                        self.key_warnings,
+                    );
                     if row.flags.has(crate::el::ElFlags::HAS_VIRTUAL) {
                         nested_virtual = true;
                         break;
@@ -326,9 +401,14 @@ impl Measurement<'_> {
 
         for plan in &mut plans {
             let v = self.virtuals.get_mut(&plan.path).unwrap();
-            plan.quiet = plan.range.clone().map(|i| v.mounts_quietly(i, self.commits)).collect();
+            plan.quiet = plan
+                .range
+                .clone()
+                .map(|i| v.mounts_quietly(i, self.commits))
+                .collect();
             for (pos, row) in &mut plan.built_rows {
-                row.flags.set(crate::el::ElFlags::VIRTUAL_MOUNT, plan.quiet[*pos]);
+                row.flags
+                    .set(crate::el::ElFlags::VIRTUAL_MOUNT, plan.quiet[*pos]);
             }
         }
 
@@ -550,6 +630,9 @@ impl RuntimeCore {
     /// Runs one remount pass on its own and says whether it fell back, so a test can read what
     /// the fallback left in the lists before the full rebuild that follows it fills them again.
     pub(in crate::runtime) fn remount_falls_back(&mut self) -> bool {
-        matches!(self.measurement(true).remount_virtuals(), RemountOutcome::Fallback)
+        matches!(
+            self.measurement(true).remount_virtuals(),
+            RemountOutcome::Fallback
+        )
     }
 }

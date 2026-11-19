@@ -4,9 +4,9 @@
 //! renderer can), and text whose scale moves draws the same coverage straight from the outline
 //! store, on the pen its mask would sit at, so the two meet exactly when it lands.
 
-use super::*;
 use super::atlas_fill::{Fill, Residency};
 use super::glyph_emit::{GLIDE_PHASES, Placed};
+use super::*;
 
 /// What a face is, for drawing it from outlines.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -40,7 +40,8 @@ impl TextSystem {
     /// Whether moving text draws from its outlines: in a mode drawn from them, unless the
     /// renderer has said it can't.
     pub(crate) fn draws_outlines(&self) -> bool {
-        self.smoothing.look().is_some() && self.atlas.outlines.support() != outline::Support::Unavailable
+        self.smoothing.look().is_some()
+            && self.atlas.outlines.support() != outline::Support::Unavailable
     }
 
     /// Whether pens sit on quarter pixels (Skia's) rather than CoreGraphics' steps.
@@ -56,10 +57,22 @@ impl TextSystem {
 
     /// Steps text `node`'s raster path for this frame (`moving`: its scale moves) and draws the
     /// glyphs placed next its way; what the step asks the painter to do.
-    pub(crate) fn begin_text(&mut self, node: u64, moving: bool) -> crate::machine::Effects<outline::PathEffect> {
-        let frame = if moving && self.draws_outlines() { outline::Frame::Moving } else { outline::Frame::Resting };
+    pub(crate) fn begin_text(
+        &mut self,
+        node: u64,
+        moving: bool,
+    ) -> crate::machine::Effects<outline::PathEffect> {
+        let frame = if moving && self.draws_outlines() {
+            outline::Frame::Moving
+        } else {
+            outline::Frame::Resting
+        };
         let (path, effects) = self.paths.step(node, frame);
-        self.emit = if self.draws_outlines() { path.emit() } else { outline::Emit::Atlas };
+        self.emit = if self.draws_outlines() {
+            path.emit()
+        } else {
+            outline::Emit::Atlas
+        };
         effects
     }
 
@@ -68,11 +81,17 @@ impl TextSystem {
         self.emit = emit;
     }
 
-    pub(crate) fn emit(&self) -> outline::Emit { self.emit }
+    pub(crate) fn emit(&self) -> outline::Emit {
+        self.emit
+    }
 
     /// How glyphs that move outside a text's own path draw (a text flight's).
     pub(crate) fn moving_emit(&self) -> outline::Emit {
-        if self.draws_outlines() { outline::Emit::Outline } else { outline::Emit::Atlas }
+        if self.draws_outlines() {
+            outline::Emit::Outline
+        } else {
+            outline::Emit::Atlas
+        }
     }
 
     /// `glyph`'s outline record at `ppem`, building it the first time. A CJK face at small sizes
@@ -82,8 +101,13 @@ impl TextSystem {
     fn find_outline(&mut self, face: &Face, coords: &[i16], glyph: u32, ppem: f32) -> Found {
         let (font, skew) = (&face.font, face.skew);
         let face_key = (font.data.id(), font.index);
-        let Some(font_ref) = FontRef::from_index(font.data.as_ref(), font.index as usize) else { return Found::Elsewhere };
-        let kind = *self.face_kinds.entry(face_key).or_insert_with(|| face_kind(font_ref));
+        let Some(font_ref) = FontRef::from_index(font.data.as_ref(), font.index as usize) else {
+            return Found::Elsewhere;
+        };
+        let kind = *self
+            .face_kinds
+            .entry(face_key)
+            .or_insert_with(|| face_kind(font_ref));
         if kind == FaceKind::Color {
             return Found::Elsewhere;
         }
@@ -92,18 +116,39 @@ impl TextSystem {
             outline::Hinting::Auto(ppem)
         } else if kind == FaceKind::Cjk && ppem <= CJK_HINT_MAX {
             outline::Hinting::TrueType(ppem)
-        } else if cfg!(not(target_os = "macos")) && look == Some(coretext_match::OutlineHint::DirectWrite) && kind == FaceKind::Hinted && gasp_grid_fits(font_ref, ppem) {
+        } else if cfg!(not(target_os = "macos"))
+            && look == Some(coretext_match::OutlineHint::DirectWrite)
+            && kind == FaceKind::Hinted
+            && gasp_grid_fits(font_ref, ppem)
+        {
             outline::Hinting::Vertical(ppem)
         } else {
             outline::Hinting::None
         };
-        let key = outline::Key { font: face_key.0, index: face_key.1, glyph, coords: face.coords_key, skew, hinted: hint.key() };
+        let key = outline::Key {
+            font: face_key.0,
+            index: face_key.1,
+            glyph,
+            coords: face.coords_key,
+            skew,
+            hinted: hint.key(),
+        };
         let scale_cx = &mut self.scale_cx;
         match self.atlas.outlines.glyph(key, || {
             let _built = crate::marks::Timed::start("text.outline_ns", true);
-            outline::extract(scale_cx, font_ref, face_key.1, coords, glyph as u16, skew, hint)
+            outline::extract(
+                scale_cx,
+                font_ref,
+                face_key.1,
+                coords,
+                glyph as u16,
+                skew,
+                hint,
+            )
         }) {
-            outline::Found::Outline(g) => Found::Draws(g, matches!(hint, outline::Hinting::TrueType(_))),
+            outline::Found::Outline(g) => {
+                Found::Draws(g, matches!(hint, outline::Hinting::TrueType(_)))
+            }
             outline::Found::Empty => Found::Blank,
             outline::Found::Full => Found::Elsewhere,
         }
@@ -111,22 +156,60 @@ impl TextSystem {
 
     /// The dilation radius (device px) and hint record a glyph of `face` at `ppem` draws with; a
     /// TrueType-hinted outline (`tt_hinted`) takes CoreGraphics' hint no further.
-    fn outline_look(&mut self, face: &Face, coords: &[i16], ppem: f32, tt_hinted: bool) -> (f32, u32) {
-        let weight = if self.smoothing != FontSmoothing::Windfoil { 1.0 } else if tt_hinted { CJK_WEIGHT } else { outline::TEXT_WEIGHT };
+    fn outline_look(
+        &mut self,
+        face: &Face,
+        coords: &[i16],
+        ppem: f32,
+        tt_hinted: bool,
+    ) -> (f32, u32) {
+        let weight = if self.smoothing != FontSmoothing::Windfoil {
+            1.0
+        } else if tt_hinted {
+            CJK_WEIGHT
+        } else {
+            outline::TEXT_WEIGHT
+        };
         let radius = self.apple.radius(face.ink, ppem) * weight;
         let font = &face.font;
-        let Some(font_ref) = FontRef::from_index(font.data.as_ref(), font.index as usize) else { return (radius as f32, 0) };
-        let cg_hint = self.smoothing.look().is_none_or(|l| l.hint == coretext_match::OutlineHint::CoreGraphics);
-        let hint = if face.skew != 0 || tt_hinted || !cg_hint { None } else {
-            self.apple.hint(&mut self.scale_cx, font_ref, (font.data.id(), font.index, face.coords_key), coords, ppem as f64, radius)
+        let Some(font_ref) = FontRef::from_index(font.data.as_ref(), font.index as usize) else {
+            return (radius as f32, 0);
         };
-        (radius as f32, hint.map_or(0, |t| self.atlas.outlines.hint(t.values)))
+        let cg_hint = self
+            .smoothing
+            .look()
+            .is_none_or(|l| l.hint == coretext_match::OutlineHint::CoreGraphics);
+        let hint = if face.skew != 0 || tt_hinted || !cg_hint {
+            None
+        } else {
+            self.apple.hint(
+                &mut self.scale_cx,
+                font_ref,
+                (font.data.id(), font.index, face.coords_key),
+                coords,
+                ppem as f64,
+                radius,
+            )
+        };
+        (
+            radius as f32,
+            hint.map_or(0, |t| self.atlas.outlines.hint(t.values)),
+        )
     }
 
     /// [`Self::push_glyph`] from the glyph's outline, on the pen its atlas mask would sit at.
     /// None for a glyph outlines can't draw, which takes the atlas.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn push_outline(&mut self, face: &Face, coords: &[i16], glyph: u32, at: [f32; 2], k: f32, byte: u32, out: &mut Vec<GlyphQuad>) -> Option<Placed> {
+    pub(super) fn push_outline(
+        &mut self,
+        face: &Face,
+        coords: &[i16],
+        glyph: u32,
+        at: [f32; 2],
+        k: f32,
+        byte: u32,
+        out: &mut Vec<GlyphQuad>,
+    ) -> Option<Placed> {
         let ppem = face.size * k;
         let (g, tt_hinted) = match self.find_outline(face, coords, glyph, ppem) {
             Found::Draws(g, tt_hinted) => (g, tt_hinted),
@@ -138,11 +221,27 @@ impl TextSystem {
         let (radius, hint) = self.outline_look(face, coords, ppem, tt_hinted);
         let (phase_x, nudge) = pen_phase(self.whole_pens(tt_hinted), subpx);
         let shift_y = subpy as f32 / GLIDE_PHASES as f32;
-        let mut o = Outline { pen: [phase_x, 0.0], scale: ppem / g.upem, zoom: 1.0, record: g.record, hint, radius, coverage: self.coverage_fn() };
+        let mut o = Outline {
+            pen: [phase_x, 0.0],
+            scale: ppem / g.upem,
+            zoom: 1.0,
+            record: g.record,
+            hint,
+            radius,
+            coverage: self.coverage_fn(),
+        };
         // The quad of the atlas mask it lands on, so nothing that reads quads sees it change.
         let [left, top, w, h] = mask_box(&o, g.bbox);
         o.pen = [fx + nudge + phase_x, fy + shift_y];
-        out.push(GlyphQuad { rect: [fx + nudge + left, fy + top, w, h], uv: [0.0; 2], ink: face.ink, byte, color: 0, outline: Some(o), lcd: false });
+        out.push(GlyphQuad {
+            rect: [fx + nudge + left, fy + top, w, h],
+            uv: [0.0; 2],
+            ink: face.ink,
+            byte,
+            color: 0,
+            outline: Some(o),
+            lcd: false,
+        });
         Some(Placed::Other)
     }
 
@@ -150,7 +249,14 @@ impl TextSystem {
     /// renderer's GPU fill when it draws outlines, filled here on the CPU otherwise, from the same
     /// coverage. Its box doesn't move with the y phase, which moves the ink down inside it. None
     /// for a glyph outlines can't draw.
-    pub(super) fn windfoil_mask(&mut self, key: GlyphKey, face: &Face, coords: &[i16], ppem: f32, phase: [u8; 2]) -> Option<Rasterized> {
+    pub(super) fn windfoil_mask(
+        &mut self,
+        key: GlyphKey,
+        face: &Face,
+        coords: &[i16],
+        ppem: f32,
+        phase: [u8; 2],
+    ) -> Option<Rasterized> {
         let (g, tt_hinted) = match self.find_outline(face, coords, key.glyph, ppem) {
             Found::Draws(g, tt_hinted) => (g, tt_hinted),
             Found::Blank => {
@@ -162,32 +268,78 @@ impl TextSystem {
         let (radius, hint) = self.outline_look(face, coords, ppem, tt_hinted);
         let (phase_x, nudge) = pen_phase(self.whole_pens(tt_hinted), phase[0]);
         let shift_y = phase[1] as f32 / GLIDE_PHASES as f32;
-        let o = Outline { pen: [phase_x, 0.0], scale: ppem / g.upem, zoom: 1.0, record: g.record, hint, radius, coverage: self.coverage_fn() };
+        let o = Outline {
+            pen: [phase_x, 0.0],
+            scale: ppem / g.upem,
+            zoom: 1.0,
+            record: g.record,
+            hint,
+            radius,
+            coverage: self.coverage_fn(),
+        };
         let [left, top, w, h] = mask_box(&o, g.bbox);
-        let fill = Fill { record: g.record, hint, scale: o.scale, radius, pen: [phase_x - left, shift_y - top], coverage: o.coverage };
+        let fill = Fill {
+            record: g.record,
+            hint,
+            scale: o.scale,
+            radius,
+            pen: [phase_x - left, shift_y - top],
+            coverage: o.coverage,
+        };
         if self.atlas.outlines.support() == outline::Support::Drawn {
             // A subpixel mask is three texels a pixel, each one subpixel's box (coverage 3).
             let (texels, fill) = if self.smoothing.lcd() {
-                (3, Fill { pen: [fill.pen[0] * 3.0, fill.pen[1]], coverage: 3, ..fill })
+                (
+                    3,
+                    Fill {
+                        pen: [fill.pen[0] * 3.0, fill.pen[1]],
+                        coverage: 3,
+                        ..fill
+                    },
+                )
             } else {
                 (1, fill)
             };
-            return Some(match self.atlas.reserve(key, w as u32 * texels, h as u32, (left + nudge) as i32, -top as i32, fill) {
-                Some(mask) => Rasterized::Placed(mask),
-                None => Rasterized::Unplaced,
-            });
+            return Some(
+                match self.atlas.reserve(
+                    key,
+                    w as u32 * texels,
+                    h as u32,
+                    (left + nudge) as i32,
+                    -top as i32,
+                    fill,
+                ) {
+                    Some(mask) => Rasterized::Placed(mask),
+                    None => Rasterized::Unplaced,
+                },
+            );
         }
         // The CPU has Windfoil's box coverage only: a Slug mask filled here is Windfoil's. With no
         // renderer to match, it's filled as if at its page's origin.
         let mut coverage = Vec::with_capacity((w * h) as usize);
-        outline::fill_mask(&self.atlas.outlines, &fill, [0, 0], w as u32, h as u32, &mut coverage);
-        Some(match self.atlas.put(w as u32, h as u32, &coverage, (left + nudge) as i32, -top as i32) {
-            Some(mask) => {
-                self.atlas.map.insert(key, Residency::Uploaded(mask));
-                Rasterized::Placed(mask)
-            }
-            None => Rasterized::Unplaced,
-        })
+        outline::fill_mask(
+            &self.atlas.outlines,
+            &fill,
+            [0, 0],
+            w as u32,
+            h as u32,
+            &mut coverage,
+        );
+        Some(
+            match self.atlas.put(
+                w as u32,
+                h as u32,
+                &coverage,
+                (left + nudge) as i32,
+                -top as i32,
+            ) {
+                Some(mask) => {
+                    self.atlas.map.insert(key, Residency::Uploaded(mask));
+                    Rasterized::Placed(mask)
+                }
+                None => Rasterized::Unplaced,
+            },
+        )
     }
 }
 
@@ -202,7 +354,14 @@ impl TextSystem {
 /// a TrueType-hinted outline keeps its strokes on the grid only from a whole-pixel pen, the
 /// nearest, and a mode on whole pens (`whole`) takes it too.
 fn pen_phase(whole: bool, subpx: u8) -> (f32, f32) {
-    if whole { (0.0, (subpx as f32 >= coretext_match::PHASES / 2.0) as u8 as f32) } else { (subpx as f32 / coretext_match::PHASES, 0.0) }
+    if whole {
+        (
+            0.0,
+            (subpx as f32 >= coretext_match::PHASES / 2.0) as u8 as f32,
+        )
+    } else {
+        (subpx as f32 / coretext_match::PHASES, 0.0)
+    }
 }
 
 /// The texels `[left, top, w, h]` of the mask of outline `o` (its pen at its x phase on the
@@ -211,26 +370,48 @@ fn pen_phase(whole: bool, subpx: u8) -> (f32, f32) {
 fn mask_box(o: &Outline, bbox: [f32; 4]) -> [f32; 4] {
     let r = o.rect(bbox);
     let (left, top) = (r[0].floor(), r[1].floor());
-    [left, top, (r[0] + r[2]).ceil() - left, (r[1] + r[3]).ceil() + 1.0 - top]
+    [
+        left,
+        top,
+        (r[0] + r[2]).ceil() - left,
+        (r[1] + r[3]).ceil() + 1.0 - top,
+    ]
 }
 
 /// Whether `font` draws colour glyphs or claims CJK scripts.
 fn face_kind(font: FontRef<'_>) -> FaceKind {
-    if [*b"COLR", *b"CBDT", *b"sbix", *b"SVG "].iter().any(|tag| font.table(u32::from_be_bytes(*tag)).is_some()) {
+    if [*b"COLR", *b"CBDT", *b"sbix", *b"SVG "]
+        .iter()
+        .any(|tag| font.table(u32::from_be_bytes(*tag)).is_some())
+    {
         return FaceKind::Color;
     }
     // ulUnicodeRange2: Hiragana (bit 49), Hangul syllables (56), CJK unified ideographs (59).
-    let range2 = font.table(u32::from_be_bytes(*b"OS/2")).and_then(|t| t.get(46..50)).map_or(0, |b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
-    if range2 & (1 << 17 | 1 << 24 | 1 << 27) != 0 { return FaceKind::Cjk; }
-    if font.table(u32::from_be_bytes(*b"fpgm")).is_some() { FaceKind::Hinted } else { FaceKind::Plain }
+    let range2 = font
+        .table(u32::from_be_bytes(*b"OS/2"))
+        .and_then(|t| t.get(46..50))
+        .map_or(0, |b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
+    if range2 & (1 << 17 | 1 << 24 | 1 << 27) != 0 {
+        return FaceKind::Cjk;
+    }
+    if font.table(u32::from_be_bytes(*b"fpgm")).is_some() {
+        FaceKind::Hinted
+    } else {
+        FaceKind::Plain
+    }
 }
 
 /// Whether `font`'s `gasp` table asks for grid fitting at `ppem` (`GASP_GRIDFIT` or
 /// `GASP_SYMMETRIC_GRIDFIT`), as DirectWrite reads it; a face without one is grid fitted.
 fn gasp_grid_fits(font: FontRef<'_>, ppem: f32) -> bool {
-    let Some(gasp) = font.table(u32::from_be_bytes(*b"gasp")) else { return true };
+    let Some(gasp) = font.table(u32::from_be_bytes(*b"gasp")) else {
+        return true;
+    };
     let u16_at = |i: usize| gasp.get(i..i + 2).map(|b| u16::from_be_bytes([b[0], b[1]]));
     let count = u16_at(2).unwrap_or(0) as usize;
     let size = ppem.round() as u32;
-    (0..count).filter_map(|k| Some((u16_at(4 + 4 * k)?, u16_at(6 + 4 * k)?))).find(|&(max, _)| size <= u32::from(max)).is_none_or(|(_, flags)| flags & (0x0001 | 0x0004) != 0)
+    (0..count)
+        .filter_map(|k| Some((u16_at(4 + 4 * k)?, u16_at(6 + 4 * k)?)))
+        .find(|&(max, _)| size <= u32::from(max))
+        .is_none_or(|(_, flags)| flags & (0x0001 | 0x0004) != 0)
 }

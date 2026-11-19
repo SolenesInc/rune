@@ -20,14 +20,24 @@ pub struct TextMark {
 impl TextMark {
     /// Bytes `range` of the text at `path`, which hold `text`.
     pub fn new(path: impl Into<String>, range: Range<usize>, text: impl Into<String>) -> TextMark {
-        TextMark { path: path.into(), range, text: text.into() }
+        TextMark {
+            path: path.into(),
+            range,
+            text: text.into(),
+        }
     }
     /// The text's path.
-    pub fn path(&self) -> &str { &self.path }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
     /// The marked bytes of the text's content.
-    pub fn range(&self) -> Range<usize> { self.range.clone() }
+    pub fn range(&self) -> Range<usize> {
+        self.range.clone()
+    }
     /// What the marked bytes held.
-    pub fn text(&self) -> &str { &self.text }
+    pub fn text(&self) -> &str {
+        &self.text
+    }
 }
 
 impl<S> Cx<S> {
@@ -49,13 +59,21 @@ impl RuntimeCore {
     /// The marks the view declared, as (node, start, end) for each mounted text that still
     /// holds its marked bytes, in node order.
     pub(super) fn mark_ranges(&self) -> Vec<(usize, usize, usize)> {
-        if self.defaults.marks.is_empty() { return Vec::new(); }
+        if self.defaults.marks.is_empty() {
+            return Vec::new();
+        }
         let mut by_path: HashMap<&str, Vec<&TextMark>> = HashMap::default();
-        for m in self.defaults.marks.iter() { by_path.entry(m.path.as_str()).or_default().push(m); }
+        for m in self.defaults.marks.iter() {
+            by_path.entry(m.path.as_str()).or_default().push(m);
+        }
         let mut out = Vec::new();
         for (i, n) in self.nodes.iter().enumerate() {
-            let Some(marks) = by_path.get(n.path.as_str()) else { continue };
-            if self.subtree_exiting(i) { continue; }
+            let Some(marks) = by_path.get(n.path.as_str()) else {
+                continue;
+            };
+            if self.subtree_exiting(i) {
+                continue;
+            }
             let content = self.content_of(i);
             for m in marks {
                 if !m.range.is_empty() && content.get(m.range.clone()) == Some(m.text.as_str()) {
@@ -72,14 +90,31 @@ impl RuntimeCore {
 /// without the newline that may end it.
 /// `laid` maps content bytes to the layout's (an elided text's differ).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn push_mark(out: &mut Vec<Instance>, layout: &Layout<Ink>, content: &str, (a, b): (usize, usize), laid: impl Fn(usize, usize) -> (usize, usize),
-    origin: [f32; 2], k: f32, fill: [f32; 4], clip: [f32; 4], fade: [f32; 4]) {
-    let Some(marked) = content.get(a..b) else { return };
+pub(super) fn push_mark(
+    out: &mut Vec<Instance>,
+    layout: &Layout<Ink>,
+    content: &str,
+    (a, b): (usize, usize),
+    laid: impl Fn(usize, usize) -> (usize, usize),
+    origin: [f32; 2],
+    k: f32,
+    fill: [f32; 4],
+    clip: [f32; 4],
+    fade: [f32; 4],
+) {
+    let Some(marked) = content.get(a..b) else {
+        return;
+    };
     let mut at = a;
     for line in marked.split_inclusive('\n') {
         let (from, to) = laid(at, at + line.trim_end_matches(['\n', '\r']).len());
         for (bb, _) in crate::text::range_boxes(layout, from, to, true) {
-            let rect = [origin[0] + bb.x0 as f32 * k, origin[1] + bb.y0 as f32 * k, (bb.x1 - bb.x0) as f32 * k, (bb.y1 - bb.y0) as f32 * k];
+            let rect = [
+                origin[0] + bb.x0 as f32 * k,
+                origin[1] + bb.y0 as f32 * k,
+                (bb.x1 - bb.x0) as f32 * k,
+                (bb.y1 - bb.y0) as f32 * k,
+            ];
             out.push(rect_inst(rect, fill, 0.0, clip, fade));
         }
         at += line.len();

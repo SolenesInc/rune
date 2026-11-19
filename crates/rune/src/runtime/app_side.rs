@@ -13,7 +13,15 @@ pub(crate) type CxAny = Cx<()>;
 
 /// The app hooks the core asks about before it calls them.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Hook { Poll, Key, FieldKey, Focus, Mods, Visibility, Ime }
+pub(crate) enum Hook {
+    Poll,
+    Key,
+    FieldKey,
+    Focus,
+    Mods,
+    Visibility,
+    Ime,
+}
 
 /// What the core needs of the app's state, view and hooks, whatever the state's type.
 pub(crate) trait AppSide: Any {
@@ -73,34 +81,90 @@ pub(crate) trait LiveDyn {
 }
 
 impl<S: 'static> LiveDyn for Live<S> {
-    fn is_open(&self) -> bool { Live::is_open(self) }
-    fn region(&self) -> Region { Live::region(self) }
-    fn region_at(&self, x: f32, width: f32) -> Region { Live::region_at(self, x, width) }
-    fn is_shortcut(&self, ev: &KeyEvent) -> bool { Live::is_shortcut(self, ev) }
-    fn side_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool { Live::side_key(self, ev, tx) }
-    fn nav(&self, ev: &KeyEvent, region: Region) -> Nav { Live::nav(self, ev, region) }
-    fn clear_filter(&mut self) -> bool { Live::clear_filter(self) }
-    fn first_shown(&self) -> Option<usize> { Live::first_shown(self) }
-    fn first_match(&self) -> Option<usize> { Live::first_match(self) }
-    fn moved(&mut self, moved: Moved) -> bool { Live::moved(self, moved) }
-    fn saw_focus(&self, focus: Option<&str>) -> bool { Live::saw_focus(self, focus) }
-    fn request(&mut self, requests: Vec<Request>) { Live::request(self, requests) }
-    fn has_pending(&self) -> bool { Live::has_pending(self) }
-    fn pending_swaps_stage(&self) -> bool { Live::pending_swaps_stage(self) }
-    fn pending_replays_only(&self) -> bool { Live::pending_replays_only(self) }
-    fn polls(&self) -> bool { Live::polls(self) }
-    fn poll_stage(&mut self, t: f64, tx: &mut Tx) -> bool { Live::poll_stage(self, t, tx) }
-    fn take_pressed(&mut self) -> Vec<KeyEvent> { Live::take_pressed(self) }
-    fn root(&self) -> usize { self.root }
-    fn set_root(&mut self, root: usize) { self.root = root; }
-    fn pressing(&self) -> bool { self.pressing }
-    fn set_pressing(&mut self, pressing: bool) { self.pressing = pressing; }
-    fn played(&self) -> u64 { self.played }
-    fn app_time_scale(&self) -> f32 { self.app_time_scale }
-    fn set_app_time_scale(&mut self, scale: f32) { self.app_time_scale = scale; }
-    fn open_at(&mut self, story: &str, variant: Option<&str>) -> Result<(), String> { Live::open_at(self, Some(story), variant) }
-    fn trigger_or_why(&self, key: char) -> Result<Request, String> { Live::trigger_or_why(self, key) }
-    fn stage_state(&self) -> Option<&dyn Any> { Live::stage_state(self) }
+    fn is_open(&self) -> bool {
+        Live::is_open(self)
+    }
+    fn region(&self) -> Region {
+        Live::region(self)
+    }
+    fn region_at(&self, x: f32, width: f32) -> Region {
+        Live::region_at(self, x, width)
+    }
+    fn is_shortcut(&self, ev: &KeyEvent) -> bool {
+        Live::is_shortcut(self, ev)
+    }
+    fn side_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
+        Live::side_key(self, ev, tx)
+    }
+    fn nav(&self, ev: &KeyEvent, region: Region) -> Nav {
+        Live::nav(self, ev, region)
+    }
+    fn clear_filter(&mut self) -> bool {
+        Live::clear_filter(self)
+    }
+    fn first_shown(&self) -> Option<usize> {
+        Live::first_shown(self)
+    }
+    fn first_match(&self) -> Option<usize> {
+        Live::first_match(self)
+    }
+    fn moved(&mut self, moved: Moved) -> bool {
+        Live::moved(self, moved)
+    }
+    fn saw_focus(&self, focus: Option<&str>) -> bool {
+        Live::saw_focus(self, focus)
+    }
+    fn request(&mut self, requests: Vec<Request>) {
+        Live::request(self, requests)
+    }
+    fn has_pending(&self) -> bool {
+        Live::has_pending(self)
+    }
+    fn pending_swaps_stage(&self) -> bool {
+        Live::pending_swaps_stage(self)
+    }
+    fn pending_replays_only(&self) -> bool {
+        Live::pending_replays_only(self)
+    }
+    fn polls(&self) -> bool {
+        Live::polls(self)
+    }
+    fn poll_stage(&mut self, t: f64, tx: &mut Tx) -> bool {
+        Live::poll_stage(self, t, tx)
+    }
+    fn take_pressed(&mut self) -> Vec<KeyEvent> {
+        Live::take_pressed(self)
+    }
+    fn root(&self) -> usize {
+        self.root
+    }
+    fn set_root(&mut self, root: usize) {
+        self.root = root;
+    }
+    fn pressing(&self) -> bool {
+        self.pressing
+    }
+    fn set_pressing(&mut self, pressing: bool) {
+        self.pressing = pressing;
+    }
+    fn played(&self) -> u64 {
+        self.played
+    }
+    fn app_time_scale(&self) -> f32 {
+        self.app_time_scale
+    }
+    fn set_app_time_scale(&mut self, scale: f32) {
+        self.app_time_scale = scale;
+    }
+    fn open_at(&mut self, story: &str, variant: Option<&str>) -> Result<(), String> {
+        Live::open_at(self, Some(story), variant)
+    }
+    fn trigger_or_why(&self, key: char) -> Result<Request, String> {
+        Live::trigger_or_why(self, key)
+    }
+    fn stage_state(&self) -> Option<&dyn Any> {
+        Live::stage_state(self)
+    }
 }
 
 /// The playground's typed half, behind a second vtable so a state type that never attaches a
@@ -112,7 +176,13 @@ pub(crate) trait LiveApp<S: 'static>: LiveDyn {
     fn as_dyn_mut(&mut self) -> &mut dyn LiveDyn;
     fn app_states<'a>(&'a mut self, app: &'a mut S) -> States<'a>;
     fn app_states_ref<'a>(&'a self, app: &'a S) -> StatesRef<'a>;
-    fn app_view(&self, app: &S, view: fn(&S, &mut Cx<S>) -> El, cx: &mut Cx<S>, viewport: (f32, f32)) -> El;
+    fn app_view(
+        &self,
+        app: &S,
+        view: fn(&S, &mut Cx<S>) -> El,
+        cx: &mut Cx<S>,
+        viewport: (f32, f32),
+    ) -> El;
     fn app_key_state<'a>(&'a mut self, app: &'a mut S) -> Option<&'a mut S>;
     fn app_stage_hears(&self, app: &S) -> bool;
     fn app_typing(&self, app: &S) -> bool;
@@ -120,17 +190,45 @@ pub(crate) trait LiveApp<S: 'static>: LiveDyn {
 }
 
 impl<S: 'static> LiveApp<S> for Live<S> {
-    fn live(&self) -> &Live<S> { self }
-    fn live_mut(&mut self) -> &mut Live<S> { self }
-    fn as_dyn(&self) -> &dyn LiveDyn { self }
-    fn as_dyn_mut(&mut self) -> &mut dyn LiveDyn { self }
-    fn app_states<'a>(&'a mut self, app: &'a mut S) -> States<'a> { self.states(app) }
-    fn app_states_ref<'a>(&'a self, app: &'a S) -> StatesRef<'a> { self.states_ref(app) }
-    fn app_view(&self, app: &S, view: fn(&S, &mut Cx<S>) -> El, cx: &mut Cx<S>, viewport: (f32, f32)) -> El { self.view(app, view, cx, viewport) }
-    fn app_key_state<'a>(&'a mut self, app: &'a mut S) -> Option<&'a mut S> { self.key_state(app) }
-    fn app_stage_hears(&self, app: &S) -> bool { self.stage_hears(app) }
-    fn app_typing(&self, app: &S) -> bool { self.typing(app) }
-    fn app_apply(&mut self, clock: f64, app: &mut S) -> bool { self.apply(clock, app) }
+    fn live(&self) -> &Live<S> {
+        self
+    }
+    fn live_mut(&mut self) -> &mut Live<S> {
+        self
+    }
+    fn as_dyn(&self) -> &dyn LiveDyn {
+        self
+    }
+    fn as_dyn_mut(&mut self) -> &mut dyn LiveDyn {
+        self
+    }
+    fn app_states<'a>(&'a mut self, app: &'a mut S) -> States<'a> {
+        self.states(app)
+    }
+    fn app_states_ref<'a>(&'a self, app: &'a S) -> StatesRef<'a> {
+        self.states_ref(app)
+    }
+    fn app_view(
+        &self,
+        app: &S,
+        view: fn(&S, &mut Cx<S>) -> El,
+        cx: &mut Cx<S>,
+        viewport: (f32, f32),
+    ) -> El {
+        self.view(app, view, cx, viewport)
+    }
+    fn app_key_state<'a>(&'a mut self, app: &'a mut S) -> Option<&'a mut S> {
+        self.key_state(app)
+    }
+    fn app_stage_hears(&self, app: &S) -> bool {
+        self.stage_hears(app)
+    }
+    fn app_typing(&self, app: &S) -> bool {
+        self.typing(app)
+    }
+    fn app_apply(&mut self, clock: f64, app: &mut S) -> bool {
+        self.apply(clock, app)
+    }
 }
 
 /// The app's state, view and hooks, as a [`Runtime`] of its state type holds them.
@@ -163,8 +261,12 @@ impl<S: 'static> Typed<S> {
 }
 
 impl<S: 'static> AppSide for Typed<S> {
-    fn as_any(&self) -> &dyn Any { self }
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 
     fn states(&mut self) -> States<'_> {
         match &mut self.playground {
@@ -207,21 +309,34 @@ impl<S: 'static> AppSide for Typed<S> {
     }
 
     fn key(&mut self, field: bool, ev: &KeyEvent, tx: &mut Tx) -> bool {
-        let Some(f) = (if field { self.on_field_key } else { self.on_key }) else { return false };
-        self.key_state().is_some_and(|state| app_call!(f, state, ev, tx))
+        let Some(f) = (if field {
+            self.on_field_key
+        } else {
+            self.on_key
+        }) else {
+            return false;
+        };
+        self.key_state()
+            .is_some_and(|state| app_call!(f, state, ev, tx))
     }
 
     fn focus(&mut self, focused: bool, tx: &mut Tx) {
-        if let Some(f) = self.on_focus { f(&mut self.state, focused, tx); }
+        if let Some(f) = self.on_focus {
+            f(&mut self.state, focused, tx);
+        }
     }
 
     fn visibility(&mut self, visible: bool, tx: &mut Tx) {
-        if let Some(f) = self.on_visibility { f(&mut self.state, visible, tx); }
+        if let Some(f) = self.on_visibility {
+            f(&mut self.state, visible, tx);
+        }
     }
 
     fn mods(&mut self, mods: crate::Mods, tx: &mut Tx) -> bool {
         let Some(f) = self.on_mods else { return false };
-        let Some(state) = self.key_state() else { return false };
+        let Some(state) = self.key_state() else {
+            return false;
+        };
         f(state, mods, tx);
         true
     }
@@ -236,12 +351,24 @@ impl<S: 'static> AppSide for Typed<S> {
         state.is_some_and(|state| Tx::took(app_call!(f, state, ev, tx), tx))
     }
 
-    fn playground(&self) -> Option<&dyn LiveDyn> { self.playground.as_deref().map(|p| p.as_dyn()) }
-    fn playground_mut(&mut self) -> Option<&mut dyn LiveDyn> { self.playground.as_deref_mut().map(|p| p.as_dyn_mut()) }
-    fn playground_typing(&self) -> bool { self.playground.as_ref().is_some_and(|p| p.app_typing(&self.state)) }
+    fn playground(&self) -> Option<&dyn LiveDyn> {
+        self.playground.as_deref().map(|p| p.as_dyn())
+    }
+    fn playground_mut(&mut self) -> Option<&mut dyn LiveDyn> {
+        self.playground.as_deref_mut().map(|p| p.as_dyn_mut())
+    }
+    fn playground_typing(&self) -> bool {
+        self.playground
+            .as_ref()
+            .is_some_and(|p| p.app_typing(&self.state))
+    }
     fn playground_apply(&mut self, clock: f64) -> bool {
-        let Typed { playground, state, .. } = self;
-        playground.as_mut().is_some_and(|p| p.app_apply(clock, state))
+        let Typed {
+            playground, state, ..
+        } = self;
+        playground
+            .as_mut()
+            .is_some_and(|p| p.app_apply(clock, state))
     }
 }
 
@@ -254,11 +381,15 @@ pub struct Runtime<S: 'static> {
 
 impl<S: 'static> Deref for Runtime<S> {
     type Target = RuntimeCore;
-    fn deref(&self) -> &RuntimeCore { &self.core }
+    fn deref(&self) -> &RuntimeCore {
+        &self.core
+    }
 }
 
 impl<S: 'static> DerefMut for Runtime<S> {
-    fn deref_mut(&mut self) -> &mut RuntimeCore { &mut self.core }
+    fn deref_mut(&mut self) -> &mut RuntimeCore {
+        &mut self.core
+    }
 }
 
 impl<S: 'static> Runtime<S> {
@@ -266,28 +397,63 @@ impl<S: 'static> Runtime<S> {
         Self::with_text(state, view, viewport, env, TextSystem::default())
     }
 
-    pub fn with_text(state: S, view: fn(&S, &mut Cx<S>) -> El, viewport: (f32, f32), env: Env, text: TextSystem) -> Self {
-        let app = Typed { state, view, poll: None, on_key: None, on_field_key: None, on_focus: None, on_mods: None, on_visibility: None, on_ime: None, playground: None };
-        Runtime { core: RuntimeCore::with_app(Box::new(app), viewport, env, text), _s: PhantomData }
+    pub fn with_text(
+        state: S,
+        view: fn(&S, &mut Cx<S>) -> El,
+        viewport: (f32, f32),
+        env: Env,
+        text: TextSystem,
+    ) -> Self {
+        let app = Typed {
+            state,
+            view,
+            poll: None,
+            on_key: None,
+            on_field_key: None,
+            on_focus: None,
+            on_mods: None,
+            on_visibility: None,
+            on_ime: None,
+            playground: None,
+        };
+        Runtime {
+            core: RuntimeCore::with_app(Box::new(app), viewport, env, text),
+            _s: PhantomData,
+        }
     }
 
     /// The app's state, view and hooks.
     pub fn app(&self) -> &Typed<S> {
-        self.core.app.as_any().downcast_ref().expect("a Runtime<S> holds a Typed<S>")
+        self.core
+            .app
+            .as_any()
+            .downcast_ref()
+            .expect("a Runtime<S> holds a Typed<S>")
     }
 
     pub fn app_mut(&mut self) -> &mut Typed<S> {
-        self.core.app.as_any_mut().downcast_mut().expect("a Runtime<S> holds a Typed<S>")
+        self.core
+            .app
+            .as_any_mut()
+            .downcast_mut()
+            .expect("a Runtime<S> holds a Typed<S>")
     }
 
-    pub fn state(&self) -> &S { &self.app().state }
-    pub fn state_mut(&mut self) -> &mut S { &mut self.app_mut().state }
+    pub fn state(&self) -> &S {
+        &self.app().state
+    }
+    pub fn state_mut(&mut self) -> &mut S {
+        &mut self.app_mut().state
+    }
 
     /// Changes the state from outside any handler, for data another thread delivered
     /// (`AppHandle::update`). Runs now, so it works while no window shows; the next frame commits
     /// it with the motion `f` asked for.
     pub fn update(&mut self, f: impl FnOnce(&mut S, &mut Tx)) {
-        self.update_if(|s, tx| { f(s, tx); true });
+        self.update_if(|s, tx| {
+            f(s, tx);
+            true
+        });
     }
 
     /// `update` for a change that may be no change: `f` returns whether it changed state the
@@ -295,7 +461,10 @@ impl<S: 'static> Runtime<S> {
     pub fn update_if(&mut self, f: impl FnOnce(&mut S, &mut Tx) -> bool) -> bool {
         let mut f = Some(f);
         self.core.update_app(&mut |app, tx| {
-            let app: &mut Typed<S> = app.as_any_mut().downcast_mut().expect("a Runtime<S> holds a Typed<S>");
+            let app: &mut Typed<S> = app
+                .as_any_mut()
+                .downcast_mut()
+                .expect("a Runtime<S> holds a Typed<S>");
             f.take().is_some_and(|f| f(&mut app.state, tx))
         })
     }

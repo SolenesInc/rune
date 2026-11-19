@@ -12,8 +12,12 @@ pub(crate) mod pause;
 mod platform;
 #[cfg(not(target_os = "macos"))]
 mod platform {
-    pub(super) fn misspelled(_: &str) -> Vec<(usize, usize)> { Vec::new() }
-    pub(super) fn suggest(_: &str) -> Vec<String> { Vec::new() }
+    pub(super) fn misspelled(_: &str) -> Vec<(usize, usize)> {
+        Vec::new()
+    }
+    pub(super) fn suggest(_: &str) -> Vec<String> {
+        Vec::new()
+    }
     pub(super) fn learn(_: &str) {}
 }
 
@@ -55,7 +59,10 @@ pub(crate) fn misspelled(text: &str) -> Ranges {
 
 /// The misspelled word of `text` at byte `at` (in it or at its end), once its words are checked.
 pub(crate) fn misspelled_at(text: &str, at: usize) -> Option<(usize, usize)> {
-    misspelled(text).iter().copied().find(|&(a, b)| a <= at && at <= b)
+    misspelled(text)
+        .iter()
+        .copied()
+        .find(|&(a, b)| a <= at && at <= b)
 }
 /// The checker's suggestions for misspelled `word`, best first.
 pub(crate) fn suggest(word: &str) -> Vec<String> {

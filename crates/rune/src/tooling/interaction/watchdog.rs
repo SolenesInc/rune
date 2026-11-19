@@ -14,7 +14,10 @@
 //!
 //! Started by the first armed frame, on the thread that armed it; frames on other threads (a
 //! second runtime on a worker) aren't watched. Apple Silicon Macs only (`stack`).
-#![cfg_attr(not(all(target_os = "macos", target_arch = "aarch64", not(test))), allow(dead_code))]
+#![cfg_attr(
+    not(all(target_os = "macos", target_arch = "aarch64", not(test))),
+    allow(dead_code)
+)]
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -59,20 +62,34 @@ enum Watch {
     /// It hasn't looked yet.
     Unarmed,
     /// Frame `seq` runs, not yet sampled; old enough at `due`.
-    Waiting { seq: u64, due: u64 },
+    Waiting {
+        seq: u64,
+        due: u64,
+    },
     Sampling(Progress),
     /// No frame since `since`. `left` is the frame it was sampling: a look can land inside
     /// `arm`, after the number moved and before the start did, so that number can come back.
-    Quiet { since: u64, left: Option<Progress> },
+    Quiet {
+        since: u64,
+        left: Option<Progress>,
+    },
     /// No frame for [`REST`]: asleep until a frame unparks it.
-    Parked { left: Option<Progress> },
+    Parked {
+        left: Option<Progress>,
+    },
 }
 
 impl Watch {
     /// How far it got with frame `seq`, if it has tried to sample it.
     fn progress(self, seq: u64) -> Option<Progress> {
         match self {
-            Watch::Sampling(p) | Watch::Quiet { left: Some(p), .. } | Watch::Parked { left: Some(p) } if p.seq == seq => Some(p),
+            Watch::Sampling(p)
+            | Watch::Quiet { left: Some(p), .. }
+            | Watch::Parked { left: Some(p) }
+                if p.seq == seq =>
+            {
+                Some(p)
+            }
             _ => None,
         }
     }
@@ -114,26 +131,52 @@ fn step(watch: &mut Watch, event: Event) -> Effects<Effect> {
                 Effects::one(Effect::Park)
             }
         }
-        Event::Look { frame: Some(Running { seq, start, after_us }), now } => {
+        Event::Look {
+            frame:
+                Some(Running {
+                    seq,
+                    start,
+                    after_us,
+                }),
+            now,
+        } => {
             // Unsampled, the due time follows `after_us`, which `hurry` can bring forward.
-            let progress = watch.progress(seq).unwrap_or(Progress { seq, taken: 0, due: start + u64::from(after_us) * 1000 });
+            let progress = watch.progress(seq).unwrap_or(Progress {
+                seq,
+                taken: 0,
+                due: start + u64::from(after_us) * 1000,
+            });
             let Progress { taken, due, .. } = progress;
-            *watch = if taken == 0 { Watch::Waiting { seq, due } } else { Watch::Sampling(progress) };
+            *watch = if taken == 0 {
+                Watch::Waiting { seq, due }
+            } else {
+                Watch::Sampling(progress)
+            };
             Effects::one(if taken >= MOST {
                 Effect::Sleep(IDLE_POLL)
             } else if now < due {
                 Effect::Sleep(Duration::from_nanos(due - now))
             } else {
-                Effect::Sample { seq, start, at: now }
+                Effect::Sample {
+                    seq,
+                    start,
+                    at: now,
+                }
             })
         }
         Event::Taken { seq, now } => {
             let taken = match *watch {
                 Watch::Waiting { seq: held, .. } if held == seq => 0,
-                Watch::Sampling(Progress { seq: held, taken, .. }) if held == seq => taken,
+                Watch::Sampling(Progress {
+                    seq: held, taken, ..
+                }) if held == seq => taken,
                 _ => return Effects::none(),
             };
-            *watch = Watch::Sampling(Progress { seq, taken: taken + 1, due: now + EVERY.as_nanos() as u64 });
+            *watch = Watch::Sampling(Progress {
+                seq,
+                taken: taken + 1,
+                due: now + EVERY.as_nanos() as u64,
+            });
             Effects::none()
         }
     }
@@ -171,7 +214,8 @@ impl Stacks {
         let first = samples.first()?;
         let last = samples.last()?;
         let wall_us = last.at_ns.saturating_sub(first.at_ns) / 1000;
-        let cpu_share = (samples.len() >= 2 && wall_us > 0).then(|| last.raw.cpu_us.saturating_sub(first.raw.cpu_us) as f64 / wall_us as f64);
+        let cpu_share = (samples.len() >= 2 && wall_us > 0)
+            .then(|| last.raw.cpu_us.saturating_sub(first.raw.cpu_us) as f64 / wall_us as f64);
         Some(Stacks {
             taken: samples.len() as u32,
             waiting: samples.iter().filter(|s| s.raw.waiting).count() as u32,
@@ -183,7 +227,12 @@ impl Stacks {
     /// Names the samples with `frames`. Slow: never on the UI thread.
     pub(crate) fn names(&self, frames: impl FnMut(&Raw) -> Vec<Frame>) -> Names {
         let named: Vec<Vec<Frame>> = self.raw.iter().map(frames).collect();
-        let spot = |s: &Vec<Frame>| s.iter().find(|f| f.app).or(s.first()).map(|f| f.name.clone());
+        let spot = |s: &Vec<Frame>| {
+            s.iter()
+                .find(|f| f.app)
+                .or(s.first())
+                .map(|f| f.name.clone())
+        };
         let mut hot: Vec<(Arc<str>, u32)> = Vec::new();
         for name in named.iter().filter_map(spot) {
             match hot.iter_mut().find(|(n, _)| *n == name) {
@@ -193,7 +242,11 @@ impl Stacks {
         }
         hot.sort_by_key(|h| std::cmp::Reverse(h.1));
         let top = hot.first().map(|h| h.0.clone());
-        let stack = named.iter().find(|s| spot(s) == top).map(|s| s.iter().take(16).map(|f| f.name.clone()).collect()).unwrap_or_default();
+        let stack = named
+            .iter()
+            .find(|s| spot(s) == top)
+            .map(|s| s.iter().take(16).map(|f| f.name.clone()).collect())
+            .unwrap_or_default();
         hot.truncate(3);
         Names { hot, stack }
     }
@@ -212,9 +265,15 @@ trait Frames {
 /// Reads what's running and decodes it. Past here, no frame is `None`, not a zero.
 fn look(frames: &impl Frames) -> Option<Running> {
     let start = frames.start();
-    if start == 0 { return None; }
+    if start == 0 {
+        return None;
+    }
     let seq = frames.seq();
-    Some(Running { seq, start, after_us: frames.after_us() })
+    Some(Running {
+        seq,
+        start,
+        after_us: frames.after_us(),
+    })
 }
 
 /// A frame's writes when it starts.
@@ -226,13 +285,21 @@ fn begin(frames: &impl Frames, now: impl FnOnce() -> u64) {
 
 /// Tries one sample of frame `seq`. `sample` stops the thread, calls its argument with the
 /// sample while it's stopped, and resumes it: a `disarm` right after must find the sample.
-fn capture(samples: &Caught, taken: &AtomicBool, seq: u64, at: u64, sample: impl FnOnce(&dyn Fn(&Raw)) -> Option<Raw>) {
+fn capture(
+    samples: &Caught,
+    taken: &AtomicBool,
+    seq: u64,
+    at: u64,
+    sample: impl FnOnce(&dyn Fn(&Raw)) -> Option<Raw>,
+) {
     sample(&|raw| samples.publish(taken, seq, at, raw));
 }
 
 /// What was caught of the frame that just ended; `seq` reads its number if anything was.
 fn collected(samples: &Caught, taken: &AtomicBool, seq: impl FnOnce() -> u64) -> Option<Stacks> {
-    if !taken.swap(false, Ordering::Acquire) { return None; }
+    if !taken.swap(false, Ordering::Acquire) {
+        return None;
+    }
     samples.collect(seq())
 }
 
@@ -248,11 +315,20 @@ struct Slot {
 
 impl Slot {
     const fn new() -> Self {
-        Self { pcs: [const { AtomicUsize::new(0) }; DEPTH], len: AtomicUsize::new(0), waiting: AtomicBool::new(false), cpu_us: AtomicU64::new(0), at_ns: AtomicU64::new(0), images: AtomicU64::new(0) }
+        Self {
+            pcs: [const { AtomicUsize::new(0) }; DEPTH],
+            len: AtomicUsize::new(0),
+            waiting: AtomicBool::new(false),
+            cpu_us: AtomicU64::new(0),
+            at_ns: AtomicU64::new(0),
+            images: AtomicU64::new(0),
+        }
     }
 
     fn write(&self, raw: &Raw, at: u64) {
-        for (slot, &pc) in self.pcs.iter().zip(&raw.pcs[..raw.len]) { slot.store(pc, Ordering::Relaxed); }
+        for (slot, &pc) in self.pcs.iter().zip(&raw.pcs[..raw.len]) {
+            slot.store(pc, Ordering::Relaxed);
+        }
         self.len.store(raw.len, Ordering::Relaxed);
         self.waiting.store(raw.waiting, Ordering::Relaxed);
         self.cpu_us.store(raw.cpu_us, Ordering::Relaxed);
@@ -263,8 +339,19 @@ impl Slot {
     fn read(&self) -> Sampled {
         let len = self.len.load(Ordering::Relaxed);
         let mut pcs = [0; DEPTH];
-        for (pc, slot) in pcs.iter_mut().zip(&self.pcs[..len]) { *pc = slot.load(Ordering::Relaxed); }
-        Sampled { raw: Raw { pcs, len, waiting: self.waiting.load(Ordering::Relaxed), cpu_us: self.cpu_us.load(Ordering::Relaxed), images: self.images.load(Ordering::Relaxed) }, at_ns: self.at_ns.load(Ordering::Relaxed) }
+        for (pc, slot) in pcs.iter_mut().zip(&self.pcs[..len]) {
+            *pc = slot.load(Ordering::Relaxed);
+        }
+        Sampled {
+            raw: Raw {
+                pcs,
+                len,
+                waiting: self.waiting.load(Ordering::Relaxed),
+                cpu_us: self.cpu_us.load(Ordering::Relaxed),
+                images: self.images.load(Ordering::Relaxed),
+            },
+            at_ns: self.at_ns.load(Ordering::Relaxed),
+        }
     }
 }
 
@@ -279,13 +366,25 @@ struct Caught {
 }
 
 impl Caught {
-    const fn new() -> Self { Self { seq: AtomicU64::new(0), count: AtomicUsize::new(0), slots: [const { Slot::new() }; MOST] } }
+    const fn new() -> Self {
+        Self {
+            seq: AtomicU64::new(0),
+            count: AtomicUsize::new(0),
+            slots: [const { Slot::new() }; MOST],
+        }
+    }
 
     /// Stores a sample of frame `seq` and says one was caught, before the thread resumes: a
     /// `disarm` right after must find it. No lock or allocation.
     fn publish(&self, taken: &AtomicBool, seq: u64, at: u64, raw: &Raw) {
-        let count = if self.seq.load(Ordering::Relaxed) == seq { self.count.load(Ordering::Relaxed) } else { 0 };
-        let Some(slot) = self.slots.get(count) else { return };
+        let count = if self.seq.load(Ordering::Relaxed) == seq {
+            self.count.load(Ordering::Relaxed)
+        } else {
+            0
+        };
+        let Some(slot) = self.slots.get(count) else {
+            return;
+        };
         slot.write(raw, at);
         self.seq.store(seq, Ordering::Relaxed);
         self.count.store(count + 1, Ordering::Relaxed);
@@ -294,8 +393,15 @@ impl Caught {
 
     /// Frame `seq`'s samples, summarized. Other frames' are left behind.
     fn collect(&self, seq: u64) -> Option<Stacks> {
-        if self.seq.load(Ordering::Relaxed) != seq { return None; }
-        Stacks::of(self.slots[..self.count.load(Ordering::Relaxed)].iter().map(Slot::read).collect())
+        if self.seq.load(Ordering::Relaxed) != seq {
+            return None;
+        }
+        Stacks::of(
+            self.slots[..self.count.load(Ordering::Relaxed)]
+                .iter()
+                .map(Slot::read)
+                .collect(),
+        )
     }
 }
 
@@ -307,7 +413,9 @@ pub(crate) use mac::{arm, disarm, hurry};
 mod none {
     pub(crate) fn arm() {}
     pub(crate) fn hurry() {}
-    pub(crate) fn disarm() -> Option<super::Stacks> { None }
+    pub(crate) fn disarm() -> Option<super::Stacks> {
+        None
+    }
 }
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64", not(test))))]
 pub(crate) use none::{arm, disarm, hurry};
@@ -315,13 +423,16 @@ pub(crate) use none::{arm, disarm, hurry};
 #[cfg(all(target_os = "macos", target_arch = "aarch64", not(test)))]
 mod mac {
     use std::cell::Cell;
-    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
     use std::thread::{Thread, ThreadId};
     use std::time::Instant;
 
     use super::super::stack::{Target, watch_unloads};
-    use super::{AFTER_MS, Caught, Effect, Event, Frames, HURRY_MS, Stacks, Watch, begin, capture, collected, look, step};
+    use super::{
+        AFTER_MS, Caught, Effect, Event, Frames, HURRY_MS, Stacks, Watch, begin, capture,
+        collected, look, step,
+    };
 
     /// Bumped by each frame, so a sample can tell its frame is the one still running.
     static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -337,17 +448,29 @@ mod mac {
 
     impl Frames for Statics {
         #[inline(always)]
-        fn start(&self) -> u64 { START.load(Ordering::SeqCst) }
+        fn start(&self) -> u64 {
+            START.load(Ordering::SeqCst)
+        }
         #[inline(always)]
-        fn seq(&self) -> u64 { SEQ.load(Ordering::SeqCst) }
+        fn seq(&self) -> u64 {
+            SEQ.load(Ordering::SeqCst)
+        }
         #[inline(always)]
-        fn after_us(&self) -> u32 { AFTER_US.load(Ordering::Relaxed) }
+        fn after_us(&self) -> u32 {
+            AFTER_US.load(Ordering::Relaxed)
+        }
         #[inline(always)]
-        fn next_seq(&self) { SEQ.fetch_add(1, Ordering::Relaxed); }
+        fn next_seq(&self) {
+            SEQ.fetch_add(1, Ordering::Relaxed);
+        }
         #[inline(always)]
-        fn set_after_us(&self, us: u32) { AFTER_US.store(us, Ordering::Relaxed); }
+        fn set_after_us(&self, us: u32) {
+            AFTER_US.store(us, Ordering::Relaxed);
+        }
         #[inline(always)]
-        fn set_start(&self, ns: u64) { START.store(ns, Ordering::SeqCst); }
+        fn set_start(&self, ns: u64) {
+            START.store(ns, Ordering::SeqCst);
+        }
     }
 
     /// Whether a thread's frames are watched.
@@ -367,7 +490,9 @@ mod mac {
         *AT.get_or_init(Instant::now)
     }
 
-    fn now_ns() -> u64 { epoch().elapsed().as_nanos() as u64 + 1 }
+    fn now_ns() -> u64 {
+        epoch().elapsed().as_nanos() as u64 + 1
+    }
 
     /// The watchdog's thread, started on the first call, watching the calling thread.
     fn watchdog() -> Option<&'static (Thread, ThreadId)> {
@@ -375,9 +500,13 @@ mod mac {
         ONE.get_or_init(|| {
             let target = Target::current()?;
             epoch();
-            let thread = std::thread::Builder::new().name("rune-watchdog".into()).spawn(move || run(target)).ok()?;
+            let thread = std::thread::Builder::new()
+                .name("rune-watchdog".into())
+                .spawn(move || run(target))
+                .ok()?;
             Some((thread.thread().clone(), std::thread::current().id()))
-        }).as_ref()
+        })
+        .as_ref()
     }
 
     /// A frame starts on this thread.
@@ -390,26 +519,36 @@ mod mac {
             }
             w => w == Watched::Yes,
         };
-        if !watched { return; }
+        if !watched {
+            return;
+        }
         begin(&Statics, now_ns);
-        if PARKED.load(Ordering::SeqCst) { wake(); }
+        if PARKED.load(Ordering::SeqCst) {
+            wake();
+        }
     }
 
     /// The running frame's interaction was slow before: sample it sooner.
     pub(crate) fn hurry() {
-        if WATCHED.get() != Watched::Yes { return; }
+        if WATCHED.get() != Watched::Yes {
+            return;
+        }
         AFTER_US.fetch_min(HURRY_MS * 1000, Ordering::Relaxed);
         wake();
     }
 
     fn wake() {
         PARKED.store(false, Ordering::SeqCst);
-        if let Some((thread, _)) = watchdog() { thread.unpark(); }
+        if let Some((thread, _)) = watchdog() {
+            thread.unpark();
+        }
     }
 
     /// The frame on this thread ended: what the watchdog saw of it, if it ran long.
     pub(crate) fn disarm() -> Option<Stacks> {
-        if WATCHED.get() != Watched::Yes { return None; }
+        if WATCHED.get() != Watched::Yes {
+            return None;
+        }
         START.store(0, Ordering::SeqCst);
         collected(&SAMPLES, &TAKEN, || SEQ.load(Ordering::Relaxed))
     }
@@ -418,17 +557,30 @@ mod mac {
         watch_unloads();
         let mut watch = Watch::Unarmed;
         loop {
-            for effect in step(&mut watch, Event::Look { frame: look(&Statics), now: now_ns() }) {
+            for effect in step(
+                &mut watch,
+                Event::Look {
+                    frame: look(&Statics),
+                    now: now_ns(),
+                },
+            ) {
                 match effect {
                     Effect::Sleep(wait) => std::thread::park_timeout(wait),
                     Effect::Park => {
                         PARKED.store(true, Ordering::SeqCst);
-                        if START.load(Ordering::SeqCst) == 0 { std::thread::park(); }
+                        if START.load(Ordering::SeqCst) == 0 {
+                            std::thread::park();
+                        }
                         PARKED.store(false, Ordering::SeqCst);
                     }
                     Effect::Sample { seq, start, at } => {
-                        let still = || SEQ.load(Ordering::SeqCst) == seq && START.load(Ordering::SeqCst) == start;
-                        capture(&SAMPLES, &TAKEN, seq, at, |caught| target.sample(still, caught));
+                        let still = || {
+                            SEQ.load(Ordering::SeqCst) == seq
+                                && START.load(Ordering::SeqCst) == start
+                        };
+                        capture(&SAMPLES, &TAKEN, seq, at, |caught| {
+                            target.sample(still, caught)
+                        });
                         step(&mut watch, Event::Taken { seq, now: now_ns() });
                     }
                 }

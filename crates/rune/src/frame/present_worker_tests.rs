@@ -30,7 +30,11 @@ fn run_returns_before_its_job_finishes() {
         gate.recv().unwrap();
         flag.store(1, Ordering::SeqCst);
     });
-    assert_eq!(done.load(Ordering::SeqCst), 0, "the caller went on while the job waited");
+    assert_eq!(
+        done.load(Ordering::SeqCst),
+        0,
+        "the caller went on while the job waited"
+    );
     release.send(()).unwrap();
     worker.wait();
     assert_eq!(done.load(Ordering::SeqCst), 1);
@@ -54,13 +58,22 @@ fn a_panicking_job_panics_on_the_owners_thread() {
     let mut worker = PresentWorker::spawn().expect("a thread");
     worker.run(|| panic!("device lost"));
     let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| worker.wait()));
-    let message = caught.expect_err("the panic came back").downcast::<&str>().map(|m| *m);
+    let message = caught
+        .expect_err("the panic came back")
+        .downcast::<&str>()
+        .map(|m| *m);
     assert_eq!(message.ok(), Some("device lost"));
     let ran = Arc::new(AtomicUsize::new(0));
     let flag = ran.clone();
-    worker.run(move || { flag.store(1, Ordering::SeqCst); });
+    worker.run(move || {
+        flag.store(1, Ordering::SeqCst);
+    });
     worker.wait();
-    assert_eq!(ran.load(Ordering::SeqCst), 1, "later jobs run on the caller's thread");
+    assert_eq!(
+        ran.load(Ordering::SeqCst),
+        1,
+        "later jobs run on the caller's thread"
+    );
 }
 
 // Every short sequence of jobs, panicking jobs and waits, then the drop, through the real worker
@@ -82,13 +95,23 @@ impl Old {
     fn spawn() -> Option<Old> {
         let (jobs, inbox) = std::sync::mpsc::channel::<OldJob>();
         let (finished, done) = std::sync::mpsc::channel();
-        let thread = std::thread::Builder::new().name("old present".into()).spawn(move || {
-            while let Ok(job) = inbox.recv() {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
-                if finished.send(result).is_err() { break; }
-            }
-        }).ok()?;
-        Some(Old { jobs: Some(jobs), done, in_flight: false, thread: Some(thread) })
+        let thread = std::thread::Builder::new()
+            .name("old present".into())
+            .spawn(move || {
+                while let Ok(job) = inbox.recv() {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
+                    if finished.send(result).is_err() {
+                        break;
+                    }
+                }
+            })
+            .ok()?;
+        Some(Old {
+            jobs: Some(jobs),
+            done,
+            in_flight: false,
+            thread: Some(thread),
+        })
     }
 
     fn run(&mut self, job: impl FnOnce() + Send + 'static) {
@@ -101,7 +124,9 @@ impl Old {
     }
 
     fn wait(&mut self) {
-        if !std::mem::take(&mut self.in_flight) { return; }
+        if !std::mem::take(&mut self.in_flight) {
+            return;
+        }
         if let Ok(Err(panic)) = self.done.recv() {
             self.jobs = None;
             std::panic::resume_unwind(panic);
@@ -111,9 +136,13 @@ impl Old {
 
 impl Drop for Old {
     fn drop(&mut self) {
-        if self.in_flight && !std::thread::panicking() { self.wait(); }
+        if self.in_flight && !std::thread::panicking() {
+            self.wait();
+        }
         self.jobs = None;
-        if let Some(thread) = self.thread.take() { let _ = thread.join(); }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 
@@ -130,14 +159,20 @@ type Log = Arc<Mutex<Vec<(usize, bool)>>>;
 fn job(log: &Log, id: usize, panics: bool) -> impl FnOnce() + Send + 'static {
     let (log, caller) = (log.clone(), std::thread::current().id());
     move || {
-        log.lock().unwrap().push((id, std::thread::current().id() == caller));
-        if panics { std::panic::panic_any(id); }
+        log.lock()
+            .unwrap()
+            .push((id, std::thread::current().id() == caller));
+        if panics {
+            std::panic::panic_any(id);
+        }
     }
 }
 
 /// What a call did: `None`, or the id the job that panicked into it carried.
 fn outcome(f: impl FnOnce()) -> Option<usize> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).err().map(|p| *p.downcast::<usize>().expect("a job's id"))
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .err()
+        .map(|p| *p.downcast::<usize>().expect("a job's id"))
 }
 
 fn walk(events: &[Ev]) {
@@ -155,11 +190,23 @@ fn walk(events: &[Ev]) {
         };
         assert_eq!(n, o, "call {id} of {events:?}");
         if let Ev::Wait = ev {
-            assert_eq!(*new_log.lock().unwrap(), *old_log.lock().unwrap(), "after wait {id} of {events:?}");
+            assert_eq!(
+                *new_log.lock().unwrap(),
+                *old_log.lock().unwrap(),
+                "after wait {id} of {events:?}"
+            );
         }
     }
-    assert_eq!(outcome(move || drop(new)), outcome(move || drop(old)), "drop after {events:?}");
-    assert_eq!(*new_log.lock().unwrap(), *old_log.lock().unwrap(), "after drop of {events:?}");
+    assert_eq!(
+        outcome(move || drop(new)),
+        outcome(move || drop(old)),
+        "drop after {events:?}"
+    );
+    assert_eq!(
+        *new_log.lock().unwrap(),
+        *old_log.lock().unwrap(),
+        "after drop of {events:?}"
+    );
 }
 
 #[test]
@@ -184,7 +231,10 @@ fn every_sequence_of_jobs_and_waits_runs_as_the_old_worker_did() {
 fn the_state_holds_the_sender_only_while_jobs_go_to_the_thread() {
     let (jobs, _inbox) = std::sync::mpsc::channel::<Job>();
     let mut state = State::Idle(jobs);
-    assert!(step(&mut state, Event::Wait).is_empty(), "nothing in flight");
+    assert!(
+        step(&mut state, Event::Wait).is_empty(),
+        "nothing in flight"
+    );
     assert!(step(&mut state, Event::Sent).is_empty());
     assert!(matches!(state, State::Busy(_)));
     assert_eq!(step(&mut state, Event::Wait), Effects::one(Effect::Recv));
@@ -192,5 +242,8 @@ fn the_state_holds_the_sender_only_while_jobs_go_to_the_thread() {
     step(&mut state, Event::Panicked);
     assert!(matches!(state, State::Inline));
     assert!(step(&mut state, Event::Sent).is_empty() && step(&mut state, Event::Wait).is_empty());
-    assert!(matches!(state, State::Inline), "a panicked worker runs jobs inline for good");
+    assert!(
+        matches!(state, State::Inline),
+        "a panicked worker runs jobs inline for good"
+    );
 }

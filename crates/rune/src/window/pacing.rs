@@ -5,7 +5,8 @@ use super::*;
 
 /// The runtime's next timer, on the wall clock that started with the host.
 pub(crate) fn wall_wake_deadline<S>(rt: &Runtime<S>) -> Option<Instant> {
-    rt.wall_start?.checked_add(Duration::try_from_secs_f64(rt.wake_deadline()?).ok()?)
+    rt.wall_start?
+        .checked_add(Duration::try_from_secs_f64(rt.wake_deadline()?).ok()?)
 }
 
 /// The runtime's next timer as a host with no display link to take it waits for it: hidden,
@@ -15,10 +16,19 @@ pub(crate) fn wall_wake_deadline<S>(rt: &Runtime<S>) -> Option<Instant> {
 /// Motion's own frames (a loop's step, a video's next picture) come when due: held a frame
 /// after each poll, they'd drift later every frame and drop one every half second.
 pub(crate) fn timer_deadline<S>(rt: &Runtime<S>) -> Option<Instant> {
-    let wall = |t: f64| rt.wall_start?.checked_add(Duration::try_from_secs_f64(t).ok()?);
+    let wall = |t: f64| {
+        rt.wall_start?
+            .checked_add(Duration::try_from_secs_f64(t).ok()?)
+    };
     let polled = wall(rt.polled_at());
-    let timer = rt.poll_wake_deadline().and_then(wall).map(|due| polled.map_or(due, |polled| due.max(polled + TIMER_FRAME)));
-    timer.into_iter().chain(rt.motion_wake_deadline().and_then(wall)).min()
+    let timer = rt
+        .poll_wake_deadline()
+        .and_then(wall)
+        .map(|due| polled.map_or(due, |polled| due.max(polled + TIMER_FRAME)));
+    timer
+        .into_iter()
+        .chain(rt.motion_wake_deadline().and_then(wall))
+        .min()
 }
 
 /// Paces the frame a hidden host keeps ready to show (a launcher's cached pixels, a retained
@@ -56,8 +66,12 @@ impl HiddenPace {
     pub(crate) fn step(self, event: PaceEvent) -> (HiddenPace, bool) {
         match (self, event) {
             (pace, PaceEvent::Changed(now)) if pace.ready(now) => (pace.settled(), true),
-            (HiddenPace::Rendered { at } | HiddenPace::Waiting { at }, PaceEvent::Changed(_)) => (HiddenPace::Waiting { at }, false),
-            (HiddenPace::Waiting { at }, PaceEvent::Due(now)) if at + HIDDEN_REFRESH <= now => (HiddenPace::Rendered { at }, true),
+            (HiddenPace::Rendered { at } | HiddenPace::Waiting { at }, PaceEvent::Changed(_)) => {
+                (HiddenPace::Waiting { at }, false)
+            }
+            (HiddenPace::Waiting { at }, PaceEvent::Due(now)) if at + HIDDEN_REFRESH <= now => {
+                (HiddenPace::Rendered { at }, true)
+            }
             (_, PaceEvent::Rendered(now)) => (HiddenPace::Rendered { at: now }, false),
             (_, PaceEvent::Reset) => (HiddenPace::Fresh, false),
             (pace, PaceEvent::Changed(_) | PaceEvent::Due(_)) => (pace, false),
@@ -73,7 +87,9 @@ impl HiddenPace {
     }
 
     /// Whether a change at `now` renders now. Otherwise it waits for `deadline`.
-    pub(crate) fn changed(&mut self, now: Instant) -> bool { self.apply(PaceEvent::Changed(now)) }
+    pub(crate) fn changed(&mut self, now: Instant) -> bool {
+        self.apply(PaceEvent::Changed(now))
+    }
     /// Whether a change at `now` would render at once.
     pub(crate) fn ready(&self, now: Instant) -> bool {
         match *self {
@@ -89,11 +105,17 @@ impl HiddenPace {
         }
     }
     /// Whether the change that waits is due at `now`; it stops waiting either way it renders.
-    pub(crate) fn take_due(&mut self, now: Instant) -> bool { self.apply(PaceEvent::Due(now)) }
+    pub(crate) fn take_due(&mut self, now: Instant) -> bool {
+        self.apply(PaceEvent::Due(now))
+    }
     /// A hidden frame rendered what had changed.
-    pub(crate) fn rendered(&mut self, now: Instant) { self.apply(PaceEvent::Rendered(now)); }
+    pub(crate) fn rendered(&mut self, now: Instant) {
+        self.apply(PaceEvent::Rendered(now));
+    }
     /// Shown, the host draws its own frames; hidden again, the first change renders at once.
-    pub(crate) fn reset(&mut self) { self.apply(PaceEvent::Reset); }
+    pub(crate) fn reset(&mut self) {
+        self.apply(PaceEvent::Reset);
+    }
 
     fn apply(&mut self, event: PaceEvent) -> bool {
         let (next, render) = self.step(event);
@@ -139,27 +161,40 @@ impl TimerFrame {
 
     /// The frame asked for at the stall bound ran covered in its place, and the next is asked for
     /// from `now`; only a timer asking still holds.
-    pub(crate) fn stalled_again(&mut self, now: Instant) { self.owed = Some(now); }
+    pub(crate) fn stalled_again(&mut self, now: Instant) {
+        self.owed = Some(now);
+    }
 
     /// A key asked for a frame: its handlers run in it, and may change nothing on screen.
-    pub(crate) fn asked_by_key(&mut self) { self.quiet = true; }
+    pub(crate) fn asked_by_key(&mut self) {
+        self.quiet = true;
+    }
 
     /// The frame came, or ran covered in its place: nothing waits for it now.
-    pub(crate) fn drawn(&mut self) { self.owed = None; }
+    pub(crate) fn drawn(&mut self) {
+        self.owed = None;
+    }
 
     /// Something other than a timer asked for a frame: the one that follows draws in full.
-    pub(crate) fn no_longer_quiet(&mut self) { self.quiet = false; }
+    pub(crate) fn no_longer_quiet(&mut self) {
+        self.quiet = false;
+    }
 
     /// Only a timer asked for the frame that is next to draw.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    pub(crate) fn quiet(&self) -> bool { self.quiet }
+    pub(crate) fn quiet(&self) -> bool {
+        self.quiet
+    }
 
     /// The frame reaches its draw decision: whether only a timer asked for it.
-    pub(crate) fn take_quiet(&mut self) -> bool { std::mem::take(&mut self.quiet) }
+    pub(crate) fn take_quiet(&mut self) -> bool {
+        std::mem::take(&mut self.quiet)
+    }
 
     /// Whether the frame asked for is still outstanding after the stall bound.
     pub(crate) fn stalled(&self, now: Instant) -> bool {
-        self.owed.is_some_and(|asked| now >= asked + TIMER_FRAME_STALL)
+        self.owed
+            .is_some_and(|asked| now >= asked + TIMER_FRAME_STALL)
     }
 
     /// The runtime's next timer as the host waits for it: one already due while its frame is
@@ -213,7 +248,12 @@ impl Missed {
     /// sleep. A display link that is still running retries a timeout on its next tick.
     /// `occluded_wait` is the caller's backoff (`Backoff`), held to
     /// `OCCLUDED_RETRY..=OCCLUDED_MAX`; an occluded miss waits it out, then doubles it.
-    pub(crate) fn retry(self, paced: bool, now: Instant, occluded_wait: &mut Duration) -> Option<Instant> {
+    pub(crate) fn retry(
+        self,
+        paced: bool,
+        now: Instant,
+        occluded_wait: &mut Duration,
+    ) -> Option<Instant> {
         match self {
             Missed::Occluded => {
                 let at = now + (*occluded_wait).clamp(OCCLUDED_RETRY, OCCLUDED_MAX);
@@ -231,8 +271,14 @@ impl Missed {
 /// `reconfigures` times, synchronously; every other miss returns at once. On macOS a surface
 /// wgpu would call occluded is never asked: each failed `get_current_texture` leaks a texture
 /// id in wgpu-core 30.0.1.
-pub(crate) fn acquire(surface: &wgpu::Surface, gpu: &Gpu, config: &wgpu::SurfaceConfiguration, configured: bool, reconfigures: u32,
-    meter: &mut SurfaceMeter) -> Result<wgpu::SurfaceTexture, Missed> {
+pub(crate) fn acquire(
+    surface: &wgpu::Surface,
+    gpu: &Gpu,
+    config: &wgpu::SurfaceConfiguration,
+    configured: bool,
+    reconfigures: u32,
+    meter: &mut SurfaceMeter,
+) -> Result<wgpu::SurfaceTexture, Missed> {
     acquire_checked(surface, gpu, config, configured, reconfigures, meter, true)
 }
 
@@ -240,8 +286,15 @@ pub(crate) fn acquire(surface: &wgpu::Surface, gpu: &Gpu, config: &wgpu::Surface
 /// the surface as visible (`check_occlusion` false). `configured` is whether the surface's last
 /// configuration took: one that didn't has no presentation, and wgpu panics on its next
 /// drawable (`Missed::Unconfigured`), so it is never asked.
-pub(crate) fn acquire_checked(surface: &wgpu::Surface, gpu: &Gpu, config: &wgpu::SurfaceConfiguration, configured: bool, mut reconfigures: u32,
-    meter: &mut SurfaceMeter, check_occlusion: bool) -> Result<wgpu::SurfaceTexture, Missed> {
+pub(crate) fn acquire_checked(
+    surface: &wgpu::Surface,
+    gpu: &Gpu,
+    config: &wgpu::SurfaceConfiguration,
+    configured: bool,
+    mut reconfigures: u32,
+    meter: &mut SurfaceMeter,
+    check_occlusion: bool,
+) -> Result<wgpu::SurfaceTexture, Missed> {
     #[cfg(not(target_os = "macos"))]
     let _ = check_occlusion;
     // A lost device configures nothing, and wgpu drops the error that says so: like a surface
@@ -257,7 +310,9 @@ pub(crate) fn acquire_checked(surface: &wgpu::Surface, gpu: &Gpu, config: &wgpu:
     }
     loop {
         let status = Missed::of(surface.get_current_texture());
-        if let Err(missed) = status { meter.failed(missed); }
+        if let Err(missed) = status {
+            meter.failed(missed);
+        }
         match status {
             // A surface that won't take its configuration again is reported rather than
             // panicking in wgpu's default error handler.

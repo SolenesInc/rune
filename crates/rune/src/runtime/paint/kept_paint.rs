@@ -17,8 +17,14 @@ pub(crate) struct LastPaint {
 
 impl Default for LastPaint {
     fn default() -> Self {
-        let asked = cfg!(debug_assertions) && std::env::var_os("RUNE_KEPT_PAINT_CHECK").is_some_and(|v| v != "0");
-        LastPaint { inputs: None, instances: Vec::new(), repeated: false, checked: cfg!(test) || asked }
+        let asked = cfg!(debug_assertions)
+            && std::env::var_os("RUNE_KEPT_PAINT_CHECK").is_some_and(|v| v != "0");
+        LastPaint {
+            inputs: None,
+            instances: Vec::new(),
+            repeated: false,
+            checked: cfg!(test) || asked,
+        }
     }
 }
 
@@ -35,10 +41,23 @@ fn same(a: &[Instance], b: &[Instance]) -> bool {
     bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b)
 }
 
-pub(super) fn check(kept: &[Instance], painted: &[Instance], animating: bool, ime: (Option<[f32; 4]>, Option<[f32; 4]>)) {
-    assert_eq!(ime.0, ime.1, "rune: a frame kept its paint, but placed the input method's area apart from where painting it does");
-    if same(kept, painted) && !animating { return; }
-    let first = kept.iter().zip(painted).position(|(a, b)| bytemuck::bytes_of(a) != bytemuck::bytes_of(b));
+pub(super) fn check(
+    kept: &[Instance],
+    painted: &[Instance],
+    animating: bool,
+    ime: (Option<[f32; 4]>, Option<[f32; 4]>),
+) {
+    assert_eq!(
+        ime.0, ime.1,
+        "rune: a frame kept its paint, but placed the input method's area apart from where painting it does"
+    );
+    if same(kept, painted) && !animating {
+        return;
+    }
+    let first = kept
+        .iter()
+        .zip(painted)
+        .position(|(a, b)| bytemuck::bytes_of(a) != bytemuck::bytes_of(b));
     panic!(
         "rune: a frame kept its paint, but painting it moves ({animating}) or draws {} instances where it kept {}, first differing at {first:?}",
         painted.len(),

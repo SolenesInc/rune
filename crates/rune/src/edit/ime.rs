@@ -39,7 +39,10 @@ impl Drop for Ime {
 pub(super) enum Composition {
     #[default]
     Idle,
-    Composing { text: String, cursor: Option<(usize, usize)> },
+    Composing {
+        text: String,
+        cursor: Option<(usize, usize)>,
+    },
 }
 
 /// What steps a [`Composition`]: the input method, or the field ending it on its own.
@@ -73,7 +76,10 @@ impl Composition {
     /// one (a cursor range that isn't empty).
     pub(super) fn target(&self) -> Option<(usize, usize)> {
         match self {
-            Composition::Composing { text, cursor: Some((a, b)) } if a < b && *b <= text.len() => Some((*a, *b)),
+            Composition::Composing {
+                text,
+                cursor: Some((a, b)),
+            } if a < b && *b <= text.len() => Some((*a, *b)),
             _ => None,
         }
     }
@@ -86,7 +92,10 @@ pub(super) fn step(composition: &mut Composition, event: Event<'_>) -> Effects<E
         (mut old, Event::Ime(Ime::Preedit(text, cursor))) => {
             wipe(&mut old);
             if !text.is_empty() {
-                *composition = Composition::Composing { text: text.clone(), cursor: *cursor };
+                *composition = Composition::Composing {
+                    text: text.clone(),
+                    cursor: *cursor,
+                };
             }
             Effects::none()
         }
@@ -108,5 +117,7 @@ pub(super) fn step(composition: &mut Composition, event: Event<'_>) -> Effects<E
 }
 
 fn wipe(composition: &mut Composition) {
-    if let Composition::Composing { text, .. } = composition { text.zeroize(); }
+    if let Composition::Composing { text, .. } = composition {
+        text.zeroize();
+    }
 }

@@ -8,12 +8,16 @@ impl Windows {
     /// per quit.
     pub(super) fn quit(&mut self) {
         use crate::quit::{After, Effect, Event};
-        for host in self.hosts.iter_mut().flatten() { host.vanish(); }
+        for host in self.hosts.iter_mut().flatten() {
+            host.vanish();
+        }
         crate::marks::mark("quit.hidden");
         for effect in crate::quit::send(Event::Start { after: After::Exit }) {
             match effect {
                 Effect::RunHooks => {
-                    for host in self.hosts.iter_mut().flatten() { host.quit_hook(); }
+                    for host in self.hosts.iter_mut().flatten() {
+                        host.quit_hook();
+                    }
                     crate::marks::mark("quit.hooks");
                     crate::quit::send(Event::HooksRan);
                 }
@@ -32,8 +36,13 @@ impl Windows {
         let brought_back = self.reopen_hidden(event_loop, token.clone());
         #[cfg(target_os = "linux")]
         if !brought_back && !event_loop.exiting() {
-            for host in self.hosts.iter_mut().flatten() { host.apply_pending(event_loop); }
-            if let Some(Some(host)) = crate::platform::reopen::focus_target(&self.reopen_candidates()).and_then(|i| self.hosts.get_mut(i)) {
+            for host in self.hosts.iter_mut().flatten() {
+                host.apply_pending(event_loop);
+            }
+            if let Some(Some(host)) =
+                crate::platform::reopen::focus_target(&self.reopen_candidates())
+                    .and_then(|i| self.hosts.get_mut(i))
+            {
                 host.reopen(event_loop, token);
             }
         }
@@ -42,7 +51,10 @@ impl Windows {
     }
 
     fn reopen_candidates(&self) -> Vec<crate::platform::reopen::Candidate> {
-        self.hosts.iter().map(|h| h.as_ref().map(|h| h.reopen_candidate()).unwrap_or_default()).collect()
+        self.hosts
+            .iter()
+            .map(|h| h.as_ref().map(|h| h.reopen_candidate()).unwrap_or_default())
+            .collect()
     }
 
     /// The hooks and the default; true when the default brought a window back.
@@ -52,15 +64,27 @@ impl Windows {
         for host in self.hosts.iter_mut().flatten() {
             handled |= host.reopen_hook(event_loop, has_visible);
         }
-        if handled || event_loop.exiting() { return false; }
+        if handled || event_loop.exiting() {
+            return false;
+        }
         #[cfg(target_os = "macos")]
-        if crate::platform::reopen::accessory() { return false; }
+        if crate::platform::reopen::accessory() {
+            return false;
+        }
         // The default sees what the hooks did, to other windows too.
-        for host in self.hosts.iter_mut().flatten() { host.apply_pending(event_loop); }
-        if event_loop.exiting() { return false; }
+        for host in self.hosts.iter_mut().flatten() {
+            host.apply_pending(event_loop);
+        }
+        if event_loop.exiting() {
+            return false;
+        }
         #[cfg(target_os = "macos")]
         crate::platform::reopen::unhide();
-        let Some(Some(host)) = crate::platform::reopen::target(&self.reopen_candidates()).and_then(|i| self.hosts.get_mut(i)) else { return false };
+        let Some(Some(host)) = crate::platform::reopen::target(&self.reopen_candidates())
+            .and_then(|i| self.hosts.get_mut(i))
+        else {
+            return false;
+        };
         host.reopen(event_loop, token);
         true
     }

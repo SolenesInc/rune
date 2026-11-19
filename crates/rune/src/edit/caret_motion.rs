@@ -68,7 +68,10 @@ impl TextEdit {
             match self.pill_after(j) {
                 Some(end) => j = end,
                 None => {
-                    while j < b.len() && !b[j].is_ascii_whitespace() && !self.marks.iter().any(|m| m.mark.is_pill() && m.start == j) {
+                    while j < b.len()
+                        && !b[j].is_ascii_whitespace()
+                        && !self.marks.iter().any(|m| m.mark.is_pill() && m.start == j)
+                    {
                         j = next_char(s, j);
                     }
                 }
@@ -109,7 +112,11 @@ pub(super) enum CaretMotion {
 impl CaretMotion {
     pub(super) fn of(layout: &Layout<Ink>, hidden: bool) -> CaretMotion {
         let bidi = layout.is_rtl() || layout.lines().any(|line| line.runs().any(|r| r.is_rtl()));
-        if bidi && !hidden { CaretMotion::Visual } else { CaretMotion::Logical }
+        if bidi && !hidden {
+            CaretMotion::Visual
+        } else {
+            CaretMotion::Logical
+        }
     }
 }
 
@@ -128,7 +135,10 @@ pub(super) enum Arrow {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Seek {
     /// Trying the caret's place on `side`; `then`, the other side, is still to try.
-    Try { side: Affinity, then: Option<Affinity> },
+    Try {
+        side: Affinity,
+        then: Option<Affinity>,
+    },
     /// It moves to this display byte, on this side.
     Found(usize, Affinity),
     /// Neither place moves: the caret is at the line's edge that way.
@@ -144,7 +154,12 @@ enum Tried {
 fn step(state: Seek, event: Tried) -> Seek {
     match (state, event) {
         (Seek::Try { .. }, Tried::Moved(j, side)) => Seek::Found(j, side),
-        (Seek::Try { then: Some(side), .. }, Tried::Stayed) => Seek::Try { side, then: None },
+        (
+            Seek::Try {
+                then: Some(side), ..
+            },
+            Tried::Stayed,
+        ) => Seek::Try { side, then: None },
         (Seek::Try { then: None, .. }, Tried::Stayed) => Seek::Edge,
         (done, _) => done,
     }
@@ -165,7 +180,13 @@ pub(super) enum Landing {
 /// with the direction of the paragraph it's in; `None` where it moves in the text's order (a
 /// paragraph of only left-to-right runs, or a `hidden` secret). A pill's isolate marks are
 /// stops of their own that leave the caret on the same byte, so it steps on past them.
-pub(super) fn visual_in(text: crate::text::TextFlow<'_>, at: usize, side: Affinity, arrow: Arrow, hidden: bool) -> Option<(Landing, crate::el::Flow)> {
+pub(super) fn visual_in(
+    text: crate::text::TextFlow<'_>,
+    at: usize,
+    side: Affinity,
+    arrow: Arrow,
+    hidden: bool,
+) -> Option<(Landing, crate::el::Flow)> {
     let p = text.piece_at(at);
     if CaretMotion::of(p.layout, hidden) == CaretMotion::Logical {
         return None;
@@ -186,13 +207,21 @@ pub(super) fn visual_in(text: crate::text::TextFlow<'_>, at: usize, side: Affini
 pub(super) fn space_right(text: crate::text::TextFlow<'_>, at: usize, side: Affinity) -> bool {
     let p = text.piece_at(at);
     let c = Cursor::from_byte_index(p.layout, p.shaped(at), side);
-    c.visual_clusters(p.layout)[1].as_ref().is_some_and(|cl| cl.is_space_or_nbsp() && !cl.is_rtl())
+    c.visual_clusters(p.layout)[1]
+        .as_ref()
+        .is_some_and(|cl| cl.is_space_or_nbsp() && !cl.is_rtl())
 }
 
 /// Where `arrow` takes a caret at display byte `at`, on `side` of it, across `layout` as drawn.
 fn visual(layout: &Layout<Ink>, at: usize, side: Affinity, arrow: Arrow) -> Landing {
-    let other = match side { Affinity::Downstream => Affinity::Upstream, Affinity::Upstream => Affinity::Downstream };
-    let mut state = Seek::Try { side, then: Some(other) };
+    let other = match side {
+        Affinity::Downstream => Affinity::Upstream,
+        Affinity::Upstream => Affinity::Downstream,
+    };
+    let mut state = Seek::Try {
+        side,
+        then: Some(other),
+    };
     loop {
         state = match state {
             Seek::Try { side, .. } => {
@@ -203,8 +232,16 @@ fn visual(layout: &Layout<Ink>, at: usize, side: Affinity, arrow: Arrow) -> Land
                     Arrow::WordLeft => c.previous_visual_word(layout),
                     Arrow::WordRight => c.next_visual_word(layout),
                 };
-                let moved = to.index() != at || to.geometry(layout, 0.0).x0 != c.geometry(layout, 0.0).x0;
-                step(state, if moved { Tried::Moved(to.index(), to.affinity()) } else { Tried::Stayed })
+                let moved =
+                    to.index() != at || to.geometry(layout, 0.0).x0 != c.geometry(layout, 0.0).x0;
+                step(
+                    state,
+                    if moved {
+                        Tried::Moved(to.index(), to.affinity())
+                    } else {
+                        Tried::Stayed
+                    },
+                )
             }
             Seek::Found(j, s) => return Landing::At(j, s),
             Seek::Edge => return Landing::Edge,

@@ -22,17 +22,26 @@ pub(crate) enum Moved {
     /// A press, or a key that asks for a column: `region` takes the keyboard, and `seen` is the
     /// focus it was made with (`None` when nothing is focused), so the column holds until focus
     /// moves again.
-    Give { region: Region, seen: Option<String> },
+    Give {
+        region: Region,
+        seen: Option<String>,
+    },
     /// A key the stage's steps pressed holds `region` for its route. Focus was set aside for
     /// it, so the focus it last saw stays as it was.
     Hold(Region),
     /// The route is over: `region` takes the keyboard again, and `back` is the focus it puts
     /// back. `None` when the key left focus where its handler chose: the next look at focus
     /// gives the keyboard to the column it landed in.
-    Resume { region: Region, back: Option<String> },
+    Resume {
+        region: Region,
+        back: Option<String>,
+    },
     /// Focus moved to `focus`, into `region`: none when it left every column or only a hover
     /// moved it, which takes no keys.
-    Focus { focus: Option<String>, region: Option<Region> },
+    Focus {
+        focus: Option<String>,
+        region: Option<Region>,
+    },
     /// Focus moved onto the open story's slot (`true`) or off it.
     Slot(bool),
     /// The playground closed: the list has the keyboard.
@@ -76,13 +85,17 @@ impl Keyboard {
             Moved::Hold(region) => self.region = region,
             Moved::Resume { region, back } => {
                 self.region = region;
-                if back.is_some() { self.seen = back; }
+                if back.is_some() {
+                    self.seen = back;
+                }
             }
             // Focus leaving every column keeps the one that has the keyboard, and a hover takes
             // no keys: neither moves a column.
             Moved::Focus { focus, region } if self.seen != focus => {
                 self.seen = focus;
-                if let Some(region) = region { self.region = region; }
+                if let Some(region) = region {
+                    self.region = region;
+                }
             }
             Moved::Focus { .. } => {}
             Moved::Slot(slot) => self.slot_focused = slot,

@@ -13,7 +13,11 @@ pub(super) enum Mask {
 }
 
 impl Default for Mask {
-    fn default() -> Self { Mask::Forgotten { exiting: Vec::new() } }
+    fn default() -> Self {
+        Mask::Forgotten {
+            exiting: Vec::new(),
+        }
+    }
 }
 
 impl Mask {
@@ -25,12 +29,16 @@ impl Mask {
     }
 
     pub(super) fn forget(&mut self) {
-        *self = Mask::Forgotten { exiting: std::mem::take(self).into_flags() };
+        *self = Mask::Forgotten {
+            exiting: std::mem::take(self).into_flags(),
+        };
     }
 
     fn get(&self, i: usize, len: usize, commit: u64) -> Option<bool> {
         match self {
-            Mask::Fresh { exiting, commit: c } if *c == commit && exiting.len() == len => Some(exiting[i]),
+            Mask::Fresh { exiting, commit: c } if *c == commit && exiting.len() == len => {
+                Some(exiting[i])
+            }
             Mask::Forgotten { .. } | Mask::Fresh { .. } => None,
         }
     }
@@ -45,10 +53,19 @@ impl RuntimeCore {
         exiting.reserve(self.nodes.len());
         for i in 0..self.nodes.len() {
             let n = &self.nodes[i];
-            let up = n.parent.is_some_and(|p| if p < i { exiting[p] } else { self.subtree_exiting(p) });
+            let up = n.parent.is_some_and(|p| {
+                if p < i {
+                    exiting[p]
+                } else {
+                    self.subtree_exiting(p)
+                }
+            });
             exiting.push(up || self.is_exiting(n.id));
         }
-        self.exit_mask = Mask::Fresh { exiting, commit: self.commit_gen };
+        self.exit_mask = Mask::Fresh {
+            exiting,
+            commit: self.commit_gen,
+        };
     }
 
     pub(super) fn end_exit_mask(&mut self) {
@@ -60,8 +77,12 @@ impl RuntimeCore {
             return exiting;
         }
         loop {
-            if self.is_exiting(self.nodes[i].id) { return true; }
-            let Some(parent) = self.nodes[i].parent else { return false };
+            if self.is_exiting(self.nodes[i].id) {
+                return true;
+            }
+            let Some(parent) = self.nodes[i].parent else {
+                return false;
+            };
             i = parent;
         }
     }

@@ -65,23 +65,36 @@ impl PresentWorker {
     pub(crate) fn spawn() -> Option<PresentWorker> {
         let (jobs, inbox) = mpsc::channel::<Job>();
         let (finished, done) = mpsc::channel();
-        let thread = std::thread::Builder::new().name("rune present".into()).spawn(move || {
-            #[cfg(target_os = "macos")]
-            interactive();
-            while let Ok(job) = inbox.recv() {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
-                if finished.send(result).is_err() { break; }
-            }
-        }).ok()?;
-        Some(PresentWorker { state: State::Idle(jobs), done, thread: Some(thread) })
+        let thread = std::thread::Builder::new()
+            .name("rune present".into())
+            .spawn(move || {
+                #[cfg(target_os = "macos")]
+                interactive();
+                while let Ok(job) = inbox.recv() {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
+                    if finished.send(result).is_err() {
+                        break;
+                    }
+                }
+            })
+            .ok()?;
+        Some(PresentWorker {
+            state: State::Idle(jobs),
+            done,
+            thread: Some(thread),
+        })
     }
 
     /// Runs `job` on the thread once the job before it has finished.
     pub(crate) fn run(&mut self, job: impl FnOnce() + Send + 'static) {
         self.wait();
-        let State::Idle(jobs) = &self.state else { return job() };
+        let State::Idle(jobs) = &self.state else {
+            return job();
+        };
         match jobs.send(Box::new(job)) {
-            Ok(()) => { step(&mut self.state, Event::Sent); }
+            Ok(()) => {
+                step(&mut self.state, Event::Sent);
+            }
             Err(mpsc::SendError(job)) => job(),
         }
     }
@@ -100,9 +113,13 @@ impl PresentWorker {
 
 impl Drop for PresentWorker {
     fn drop(&mut self) {
-        if matches!(self.state, State::Busy(_)) && !std::thread::panicking() { self.wait(); }
+        if matches!(self.state, State::Busy(_)) && !std::thread::panicking() {
+            self.wait();
+        }
         step(&mut self.state, Event::Close);
-        if let Some(thread) = self.thread.take() { let _ = thread.join(); }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
     }
 }
 

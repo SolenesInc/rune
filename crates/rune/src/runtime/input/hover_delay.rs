@@ -22,7 +22,12 @@ pub(super) enum Event {
     /// Whether the pointer is inside it now; `may_enter` is false while a held press, or a
     /// press or blur the pointer hasn't moved since, keeps an enter from starting its wait.
     /// `delay` is its [enter, exit] delay in seconds.
-    Settle { inside: bool, may_enter: bool, delay: [f32; 2], now: f64 },
+    Settle {
+        inside: bool,
+        may_enter: bool,
+        delay: [f32; 2],
+        now: f64,
+    },
     /// A frame at `now`: a wait due by then reports.
     Due { now: f64 },
     /// A press: a wait to report an enter stops; the pointer's next move starts it again.
@@ -44,21 +49,32 @@ pub(super) fn step(state: &mut Option<Delayed>, event: Event) -> Effects<Effect>
     use Delayed::*;
     let shown = matches!(state, Some(Shown | LeaveDue { .. }));
     match event {
-        Event::Settle { inside, may_enter, delay, now } => {
+        Event::Settle {
+            inside,
+            may_enter,
+            delay,
+            now,
+        } => {
             let want = inside && (shown || may_enter);
             if want == shown {
                 *state = shown.then_some(Shown);
                 return Effects::none();
             }
             // Already waiting to report `want`.
-            if matches!(state, Some(EnterDue { .. } | LeaveDue { .. })) { return Effects::none(); }
+            if matches!(state, Some(EnterDue { .. } | LeaveDue { .. })) {
+                return Effects::none();
+            }
             let d = f64::from(delay[if want { 0 } else { 1 }]);
             if d <= 0.0 {
                 *state = want.then_some(Shown);
                 return Effects::one(Effect::Report(want));
             }
             let due = now + d;
-            *state = Some(if want { EnterDue { due } } else { LeaveDue { due } });
+            *state = Some(if want {
+                EnterDue { due }
+            } else {
+                LeaveDue { due }
+            });
             Effects::one(Effect::WakeAt(due))
         }
         Event::Due { now } => match *state {
@@ -73,12 +89,18 @@ pub(super) fn step(state: &mut Option<Delayed>, event: Event) -> Effects<Effect>
             _ => Effects::none(),
         },
         Event::Pressed => {
-            if matches!(state, Some(EnterDue { .. })) { *state = None; }
+            if matches!(state, Some(EnterDue { .. })) {
+                *state = None;
+            }
             Effects::none()
         }
         Event::Ended => {
             *state = None;
-            if shown { Effects::one(Effect::Report(false)) } else { Effects::none() }
+            if shown {
+                Effects::one(Effect::Report(false))
+            } else {
+                Effects::none()
+            }
         }
     }
 }
@@ -90,21 +112,34 @@ pub(super) fn step(state: &mut Option<Delayed>, event: Event) -> Effects<Effect>
 pub(super) struct HoverDelays(Vec<(String, Delayed)>);
 
 impl HoverDelays {
-    pub(super) fn is_empty(&self) -> bool { self.0.is_empty() }
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 
-    pub(super) fn paths(&self) -> impl Iterator<Item = &str> { self.0.iter().map(|(p, _)| p.as_str()) }
+    pub(super) fn paths(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(p, _)| p.as_str())
+    }
 
     /// Some wait is running.
     pub(super) fn waiting(&self) -> bool {
-        self.0.iter().any(|(_, d)| matches!(d, Delayed::EnterDue { .. } | Delayed::LeaveDue { .. }))
+        self.0
+            .iter()
+            .any(|(_, d)| matches!(d, Delayed::EnterDue { .. } | Delayed::LeaveDue { .. }))
     }
 
-    pub(super) fn clear(&mut self) { self.0.clear(); }
+    pub(super) fn clear(&mut self) {
+        self.0.clear();
+    }
 
     /// Drops `path`'s report unheard. Returns whether it had heard the enter.
     pub(super) fn forget(&mut self, path: &str) -> bool {
-        let Some(i) = self.0.iter().position(|(p, _)| p == path) else { return false };
-        matches!(self.0.remove(i).1, Delayed::Shown | Delayed::LeaveDue { .. })
+        let Some(i) = self.0.iter().position(|(p, _)| p == path) else {
+            return false;
+        };
+        matches!(
+            self.0.remove(i).1,
+            Delayed::Shown | Delayed::LeaveDue { .. }
+        )
     }
 
     /// Steps `path`'s report.
@@ -116,7 +151,9 @@ impl HoverDelays {
             (Some(i), Some(s)) if self.0[i].1 == s => {}
             (Some(i), s) => {
                 let (path, _) = self.0.remove(i);
-                if let Some(s) = s { self.0.push((path, s)); }
+                if let Some(s) = s {
+                    self.0.push((path, s));
+                }
             }
             (None, Some(s)) => self.0.push((path.to_owned(), s)),
             (None, None) => {}
@@ -130,7 +167,9 @@ impl RuntimeCore {
     pub(super) fn step_hover_delay(&mut self, path: &str, event: Event) {
         for effect in self.hover_delays.step(path, event) {
             match effect {
-                Effect::Report(inside) => self.queue.push(Action::HoverChange(path.to_owned(), inside)),
+                Effect::Report(inside) => self
+                    .queue
+                    .push(Action::HoverChange(path.to_owned(), inside)),
                 Effect::WakeAt(due) => self.schedule_wakes_from(due, [std::time::Duration::ZERO]),
             }
         }
@@ -139,7 +178,15 @@ impl RuntimeCore {
     /// Starts or drops the waits of `hover_delays` elements whose inside changed.
     pub(super) fn settle_hover_delays(&mut self) {
         let mut paths: Vec<String> = self.hover_delays.paths().map(str::to_owned).collect();
-        paths.extend(self.hover_within.iter().filter(|p| self.node(p).is_some_and(|n| n.handlers.hover_delay != [0.0; 2])).cloned());
+        paths.extend(
+            self.hover_within
+                .iter()
+                .filter(|p| {
+                    self.node(p)
+                        .is_some_and(|n| n.handlers.hover_delay != [0.0; 2])
+                })
+                .cloned(),
+        );
         paths.sort();
         paths.dedup();
         let now = self.now_clock();
@@ -150,7 +197,12 @@ impl RuntimeCore {
             // Gone or on its way out: a shown hover hears its leave now, a pending enter just
             // stops waiting.
             let event = match self.node(&path).map(|n| n.handlers.hover_delay) {
-                Some(delay) => Event::Settle { inside: self.hover_within.contains(&path), may_enter, delay, now },
+                Some(delay) => Event::Settle {
+                    inside: self.hover_within.contains(&path),
+                    may_enter,
+                    delay,
+                    now,
+                },
                 None => Event::Ended,
             };
             self.step_hover_delay(&path, event);
@@ -159,22 +211,30 @@ impl RuntimeCore {
 
     /// Reports the delayed hover changes due by this frame.
     pub(super) fn fire_hover_delays(&mut self) {
-        if !self.hover_delays.waiting() { return; }
+        if !self.hover_delays.waiting() {
+            return;
+        }
         let now = self.clock + 1e-6;
         let paths: Vec<String> = self.hover_delays.paths().map(str::to_owned).collect();
-        for path in paths { self.step_hover_delay(&path, Event::Due { now }); }
+        for path in paths {
+            self.step_hover_delay(&path, Event::Due { now });
+        }
     }
 
     /// A press stops the waits to report an enter.
     pub(super) fn press_hover_delays(&mut self) {
         let paths: Vec<String> = self.hover_delays.paths().map(str::to_owned).collect();
-        for path in paths { self.step_hover_delay(&path, Event::Pressed); }
+        for path in paths {
+            self.step_hover_delay(&path, Event::Pressed);
+        }
     }
 
     /// The window lost focus: every shown hover hears its leave, and the waits stop.
     pub(super) fn end_hover_delays(&mut self) {
         let paths: Vec<String> = self.hover_delays.paths().map(str::to_owned).collect();
-        for path in paths { self.step_hover_delay(&path, Event::Ended); }
+        for path in paths {
+            self.step_hover_delay(&path, Event::Ended);
+        }
     }
 }
 

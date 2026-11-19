@@ -11,18 +11,56 @@ pub(crate) const MAX_RICH_BYTES: usize = 4 * 1024 * 1024;
 
 /// Elements dropped with everything inside them.
 const DROP_WITH_CONTENT: &[&str] = &[
-    "script", "iframe", "object", "applet", "noscript", "noembed", "noframes", "template", "frameset",
-    "svg", "math", "xml", "portal", "fencedframe",
+    "script",
+    "iframe",
+    "object",
+    "applet",
+    "noscript",
+    "noembed",
+    "noframes",
+    "template",
+    "frameset",
+    "svg",
+    "math",
+    "xml",
+    "portal",
+    "fencedframe",
 ];
 /// Elements dropped on their own; their content (if any) is sanitised as ordinary markup.
 const DROP_TAG: &[&str] = &[
-    "base", "link", "meta", "embed", "frame", "param", "form",
-    "title", "textarea", "xmp", "plaintext", "listing",
+    "base",
+    "link",
+    "meta",
+    "embed",
+    "frame",
+    "param",
+    "form",
+    "title",
+    "textarea",
+    "xmp",
+    "plaintext",
+    "listing",
 ];
 /// Attributes that hold a URL (or, for `srcset`, a list of them).
 const URL_ATTRIBUTES: &[&str] = &[
-    "href", "src", "xlink:href", "background", "poster", "cite", "longdesc", "lowsrc",
-    "dynsrc", "data", "codebase", "ping", "srcset", "manifest", "icon", "profile", "classid", "archive",
+    "href",
+    "src",
+    "xlink:href",
+    "background",
+    "poster",
+    "cite",
+    "longdesc",
+    "lowsrc",
+    "dynsrc",
+    "data",
+    "codebase",
+    "ping",
+    "srcset",
+    "manifest",
+    "icon",
+    "profile",
+    "classid",
+    "archive",
 ];
 const DROP_ATTRIBUTES: &[&str] = &["srcdoc", "http-equiv", "action", "formaction"];
 
@@ -46,16 +84,30 @@ pub fn sanitize_html(raw: &str) -> String {
         let rest = &html[lt..];
         let at = |n: usize| rest.as_bytes().get(n).copied().unwrap_or(0);
         if rest.starts_with("<!--") {
-            let Some(end) = comment_end(rest) else { return out };
+            let Some(end) = comment_end(rest) else {
+                return out;
+            };
             i = lt + end;
-        } else if rest.get(..9).is_some_and(|s| s.eq_ignore_ascii_case("<![cdata[")) {
-            let Some(end) = rest[9..].find("]]>") else { return out };
+        } else if rest
+            .get(..9)
+            .is_some_and(|s| s.eq_ignore_ascii_case("<![cdata["))
+        {
+            let Some(end) = rest[9..].find("]]>") else {
+                return out;
+            };
             i = lt + 9 + end + 3;
-        } else if rest.starts_with("<!") || rest.starts_with("<?") || (at(1) == b'/' && !at(2).is_ascii_alphabetic()) {
-            let Some(end) = rest.find('>') else { return out };
+        } else if rest.starts_with("<!")
+            || rest.starts_with("<?")
+            || (at(1) == b'/' && !at(2).is_ascii_alphabetic())
+        {
+            let Some(end) = rest.find('>') else {
+                return out;
+            };
             i = lt + end + 1;
         } else if at(1) == b'/' {
-            let Some(tag) = Tag::parse(&rest[2..]) else { return out };
+            let Some(tag) = Tag::parse(&rest[2..]) else {
+                return out;
+            };
             i = lt + 2 + tag.len;
             if !dropped(&tag.name) && tag.name != "style" {
                 out.push_str("</");
@@ -63,11 +115,19 @@ pub fn sanitize_html(raw: &str) -> String {
                 out.push('>');
             }
         } else if at(1).is_ascii_alphabetic() {
-            let Some(tag) = Tag::parse(&rest[1..]) else { return out };
+            let Some(tag) = Tag::parse(&rest[1..]) else {
+                return out;
+            };
             i = lt + 1 + tag.len;
             if DROP_WITH_CONTENT.contains(&tag.name.as_str()) || tag.name == "style" {
-                let Some((inner, close)) = until_close(&html[i..], &tag.name) else { return out };
-                if tag.name == "style" && !tag.closed && css_is_inert(inner) && css_is_inert(&decode_entities(inner)) {
+                let Some((inner, close)) = until_close(&html[i..], &tag.name) else {
+                    return out;
+                };
+                if tag.name == "style"
+                    && !tag.closed
+                    && css_is_inert(inner)
+                    && css_is_inert(&decode_entities(inner))
+                {
                     tag.write(&mut out);
                     out.push_str(inner);
                     out.push_str("</style>");
@@ -86,31 +146,45 @@ pub fn sanitize_html(raw: &str) -> String {
 }
 
 fn clamp_utf8(s: &str, max: usize) -> &str {
-    if s.len() <= max { return s; }
+    if s.len() <= max {
+        return s;
+    }
     let mut end = max;
-    while end > 0 && !s.is_char_boundary(end) { end -= 1; }
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
     &s[..end]
 }
 
 /// Byte length of an HTML5 comment starting with `<!--`, including abrupt `<!-->` / `<!--->`
 /// and `--!>` closers.
 fn comment_end(rest: &str) -> Option<usize> {
-    if rest.starts_with("<!-->") { return Some(5); }
-    if rest.starts_with("<!--->") { return Some(6); }
+    if rest.starts_with("<!-->") {
+        return Some(5);
+    }
+    if rest.starts_with("<!--->") {
+        return Some(6);
+    }
     let body = rest.get(4..)?;
     let bytes = body.as_bytes();
     let mut j = 0;
     while j + 2 < bytes.len() {
         if bytes[j] == b'-' && bytes[j + 1] == b'-' {
-            if bytes[j + 2] == b'>' { return Some(4 + j + 3); }
-            if bytes[j + 2] == b'!' && bytes.get(j + 3) == Some(&b'>') { return Some(4 + j + 4); }
+            if bytes[j + 2] == b'>' {
+                return Some(4 + j + 3);
+            }
+            if bytes[j + 2] == b'!' && bytes.get(j + 3) == Some(&b'>') {
+                return Some(4 + j + 4);
+            }
         }
         j += 1;
     }
     None
 }
 
-fn dropped(name: &str) -> bool { DROP_WITH_CONTENT.contains(&name) || DROP_TAG.contains(&name) }
+fn dropped(name: &str) -> bool {
+    DROP_WITH_CONTENT.contains(&name) || DROP_TAG.contains(&name)
+}
 
 /// The text before `</name`, and the byte length through that end tag's `>`. Scans in place
 /// without allocating a lowercase copy of the remaining document.
@@ -122,7 +196,9 @@ fn until_close<'a>(html: &'a str, name: &str) -> Option<(&'a str, usize)> {
         let at = i + rel;
         let after_name = at + 2 + needle.len();
         if bytes.get(at + 1) == Some(&b'/')
-            && bytes.get(at + 2..after_name).is_some_and(|s| s.eq_ignore_ascii_case(needle))
+            && bytes
+                .get(at + 2..after_name)
+                .is_some_and(|s| s.eq_ignore_ascii_case(needle))
         {
             let boundary = bytes.get(after_name).copied().unwrap_or(b'>');
             if !boundary.is_ascii_alphanumeric() && !matches!(boundary, b'-' | b':' | b'_') {
@@ -147,7 +223,10 @@ impl Tag {
     /// A tag starting at its name; `None` when it never ends.
     fn parse(s: &str) -> Option<Tag> {
         let b = s.as_bytes();
-        let name_len = b.iter().position(|c| !(c.is_ascii_alphanumeric() || matches!(c, b'-' | b':' | b'_'))).unwrap_or(b.len());
+        let name_len = b
+            .iter()
+            .position(|c| !(c.is_ascii_alphanumeric() || matches!(c, b'-' | b':' | b'_')))
+            .unwrap_or(b.len());
         let name = s[..name_len].to_ascii_lowercase();
         let (mut i, mut attributes, mut closed) = (name_len, Vec::new(), false);
         loop {
@@ -157,18 +236,34 @@ impl Tag {
             }
             match b.get(i) {
                 None => return None,
-                Some(b'>') => return Some(Tag { name, attributes, closed, len: i + 1 }),
+                Some(b'>') => {
+                    return Some(Tag {
+                        name,
+                        attributes,
+                        closed,
+                        len: i + 1,
+                    });
+                }
                 _ => closed = false,
             }
             let start = i;
-            while i < b.len() && !b[i].is_ascii_whitespace() && !matches!(b[i], b'/' | b'>' | b'=') { i += 1; }
-            if i == start { i += 1; } // A stray `=`.
+            while i < b.len() && !b[i].is_ascii_whitespace() && !matches!(b[i], b'/' | b'>' | b'=')
+            {
+                i += 1;
+            }
+            if i == start {
+                i += 1;
+            } // A stray `=`.
             let attr = s[start..i].to_ascii_lowercase();
-            while i < b.len() && b[i].is_ascii_whitespace() { i += 1; }
+            while i < b.len() && b[i].is_ascii_whitespace() {
+                i += 1;
+            }
             let mut value = None;
             if b.get(i) == Some(&b'=') {
                 i += 1;
-                while i < b.len() && b[i].is_ascii_whitespace() { i += 1; }
+                while i < b.len() && b[i].is_ascii_whitespace() {
+                    i += 1;
+                }
                 match b.get(i) {
                     Some(&q) if q == b'"' || q == b'\'' => {
                         let end = s[i + 1..].find(q as char)? + i + 1;
@@ -177,12 +272,16 @@ impl Tag {
                     }
                     _ => {
                         let start = i;
-                        while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' { i += 1; }
+                        while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' {
+                            i += 1;
+                        }
                         value = Some(s[start..i].to_owned());
                     }
                 }
             }
-            if keep_attribute(&attr, value.as_deref()) { attributes.push((attr, value)); }
+            if keep_attribute(&attr, value.as_deref()) {
+                attributes.push((attr, value));
+            }
         }
     }
 
@@ -205,20 +304,34 @@ impl Tag {
                 out.push('"');
             }
         }
-        if self.closed { out.push_str(" /"); }
+        if self.closed {
+            out.push_str(" /");
+        }
         out.push('>');
     }
 }
 
 fn keep_attribute(name: &str, value: Option<&str>) -> bool {
-    if name.is_empty() || !name.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b':' | b'_' | b'.')) {
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b':' | b'_' | b'.'))
+    {
         return false;
     }
-    if name.starts_with("on") || DROP_ATTRIBUTES.contains(&name) { return false; }
+    if name.starts_with("on") || DROP_ATTRIBUTES.contains(&name) {
+        return false;
+    }
     let value = value.unwrap_or("");
-    if name == "style" { return css_is_inert(value) && css_is_inert(&decode_entities(value)); }
-    if name == "srcset" { return srcset_is_safe(value); }
-    if URL_ATTRIBUTES.contains(&name) { return url_is_safe(value, name == "src"); }
+    if name == "style" {
+        return css_is_inert(value) && css_is_inert(&decode_entities(value));
+    }
+    if name == "srcset" {
+        return srcset_is_safe(value);
+    }
+    if URL_ATTRIBUTES.contains(&name) {
+        return url_is_safe(value, name == "src");
+    }
     true
 }
 
@@ -227,18 +340,31 @@ fn keep_attribute(name: &str, value: Option<&str>) -> bool {
 fn srcset_is_safe(raw: &str) -> bool {
     let decoded = decode_entities(raw);
     let mut rest = decoded.trim();
-    if rest.is_empty() { return false; }
+    if rest.is_empty() {
+        return false;
+    }
     while !rest.is_empty() {
         rest = rest.trim_start_matches(|c: char| c.is_whitespace() || c == ',');
-        if rest.is_empty() { break; }
-        let url_end = if rest.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("data:")) {
+        if rest.is_empty() {
+            break;
+        }
+        let url_end = if rest
+            .get(..5)
+            .is_some_and(|p| p.eq_ignore_ascii_case("data:"))
+        {
             // A `data:` URL ends at whitespace (before a width/density descriptor) or after its payload's comma.
             let after_comma = rest.find(',').map_or(0, |c| c + 1);
-            after_comma + rest[after_comma..].find(|c: char| c.is_whitespace() || c == ',').unwrap_or(rest.len() - after_comma)
+            after_comma
+                + rest[after_comma..]
+                    .find(|c: char| c.is_whitespace() || c == ',')
+                    .unwrap_or(rest.len() - after_comma)
         } else {
-            rest.find(|c: char| c.is_whitespace() || c == ',').unwrap_or(rest.len())
+            rest.find(|c: char| c.is_whitespace() || c == ',')
+                .unwrap_or(rest.len())
         };
-        if !url_is_safe(&rest[..url_end], true) { return false; }
+        if !url_is_safe(&rest[..url_end], true) {
+            return false;
+        }
         rest = &rest[url_end..];
         if let Some(comma) = rest.find(',') {
             rest = &rest[comma + 1..];
@@ -257,7 +383,9 @@ fn css_is_inert(css: &str) -> bool {
     let mut rest = css;
     while let Some(start) = rest.find("/*") {
         stripped.push_str(&rest[..start]);
-        let Some(end) = rest[start + 2..].find("*/") else { return false };
+        let Some(end) = rest[start + 2..].find("*/") else {
+            return false;
+        };
         rest = &rest[start + 2 + end + 2..];
     }
     stripped.push_str(rest);
@@ -265,16 +393,37 @@ fn css_is_inert(css: &str) -> bool {
 }
 
 fn css_tokens_clean(css: &str) -> bool {
-    let plain: String = css.chars().filter(|c| !c.is_whitespace() && !c.is_control()).collect::<String>().to_ascii_lowercase();
-    !["expression(", "javascript:", "vbscript:", "data:", "@import", "url(", "image-set(", "behavior:", "-moz-binding", "</", "\\", "<"]
-        .iter()
-        .any(|bad| plain.contains(bad))
+    let plain: String = css
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_control())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    ![
+        "expression(",
+        "javascript:",
+        "vbscript:",
+        "data:",
+        "@import",
+        "url(",
+        "image-set(",
+        "behavior:",
+        "-moz-binding",
+        "</",
+        "\\",
+        "<",
+    ]
+    .iter()
+    .any(|bad| plain.contains(bad))
 }
 
 /// A relative URL, or one whose scheme is web, mail, phone or an attachment; `image` also
 /// allows raster `data:` images.
 fn url_is_safe(raw: &str, image: bool) -> bool {
-    let url: String = decode_entities(raw).chars().filter(|c| !c.is_control() && !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
+    let url: String = decode_entities(raw)
+        .chars()
+        .filter(|c| !c.is_control() && !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
     let Some(colon) = url.find(':') else {
         // Reject un-decoded `&` entities that could hide a colon, or protocol-relative `//` / `\\`.
         return !url.starts_with("//") && !url.starts_with("\\\\") && !url.contains('&');
@@ -284,10 +433,14 @@ fn url_is_safe(raw: &str, image: bool) -> bool {
     }
     match &url[..colon] {
         "http" | "https" | "mailto" | "tel" | "cid" => true,
-        "data" => image && ["png", "jpeg", "jpg", "gif", "webp"].iter().any(|t| {
-            let prefix = format!("data:image/{t}");
-            url.starts_with(&prefix) && matches!(url.as_bytes().get(prefix.len()), Some(b';' | b','))
-        }),
+        "data" => {
+            image
+                && ["png", "jpeg", "jpg", "gif", "webp"].iter().any(|t| {
+                    let prefix = format!("data:image/{t}");
+                    url.starts_with(&prefix)
+                        && matches!(url.as_bytes().get(prefix.len()), Some(b';' | b','))
+                })
+        }
         _ => false,
     }
 }
@@ -300,30 +453,60 @@ fn decode_entities(s: &str) -> String {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         rest = &rest[amp..];
-        let body_len = rest[1..].bytes().take_while(|c| c.is_ascii_alphanumeric() || *c == b'#').count();
+        let body_len = rest[1..]
+            .bytes()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == b'#')
+            .count();
         let body = &rest[1..1 + body_len];
         let decoded = if let Some(num) = body.strip_prefix('#') {
             let (raw_digits, radix, prefix_len) = match num.strip_prefix(['x', 'X']) {
                 Some(hex) => (hex, 16, 2),
                 None => (num, 10, 1),
             };
-            let digit_len = raw_digits.bytes().take_while(|&c| (c as char).is_digit(radix)).count();
+            let digit_len = raw_digits
+                .bytes()
+                .take_while(|&c| (c as char).is_digit(radix))
+                .count();
             let digits = &raw_digits[..digit_len];
             if digits.is_empty() {
                 None
             } else {
                 let trimmed = digits.trim_start_matches('0');
-                let n = if trimmed.is_empty() { Some(0) } else { u32::from_str_radix(trimmed, radix).ok() };
-                let ch = n.and_then(char::from_u32).filter(|&c| c != '\0').unwrap_or('\u{fffd}');
+                let n = if trimmed.is_empty() {
+                    Some(0)
+                } else {
+                    u32::from_str_radix(trimmed, radix).ok()
+                };
+                let ch = n
+                    .and_then(char::from_u32)
+                    .filter(|&c| c != '\0')
+                    .unwrap_or('\u{fffd}');
                 Some((ch, prefix_len + digit_len))
             }
         } else {
             let named = match body.to_ascii_lowercase().as_str() {
-                "colon" => Some(':'), "tab" => Some('\t'), "newline" => Some('\n'), "lpar" => Some('('), "rpar" => Some(')'),
-                "sol" => Some('/'), "bsol" => Some('\\'), "amp" => Some('&'), "lt" | "nvlt" => Some('<'), "gt" | "nvgt" => Some('>'),
-                "quot" => Some('"'), "apos" => Some('\''), "nbsp" => Some(' '), "num" => Some('#'), "period" => Some('.'),
-                "commat" => Some('@'), "semi" => Some(';'), "equals" => Some('='), "grave" => Some('`'),
-                "plus" => Some('+'), "comma" => Some(','), "dollar" => Some('$'),
+                "colon" => Some(':'),
+                "tab" => Some('\t'),
+                "newline" => Some('\n'),
+                "lpar" => Some('('),
+                "rpar" => Some(')'),
+                "sol" => Some('/'),
+                "bsol" => Some('\\'),
+                "amp" => Some('&'),
+                "lt" | "nvlt" => Some('<'),
+                "gt" | "nvgt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\''),
+                "nbsp" => Some(' '),
+                "num" => Some('#'),
+                "period" => Some('.'),
+                "commat" => Some('@'),
+                "semi" => Some(';'),
+                "equals" => Some('='),
+                "grave" => Some('`'),
+                "plus" => Some('+'),
+                "comma" => Some(','),
+                "dollar" => Some('$'),
                 _ => None,
             };
             named.map(|c| (c, body.len()))
@@ -332,7 +515,9 @@ fn decode_entities(s: &str) -> String {
             Some((c, used)) => {
                 out.push(c);
                 rest = &rest[1 + used..];
-                if rest.starts_with(';') { rest = &rest[1..]; }
+                if rest.starts_with(';') {
+                    rest = &rest[1..];
+                }
             }
             None => {
                 out.push('&');
@@ -351,12 +536,27 @@ mod tests {
     #[test]
     fn formatting_survives() {
         let html = r#"<p class="p1"><b>Bold</b> <i>it</i> <a href="https://example.com/a?b=1">link</a><br/><span style="font-weight: 700; color: #333">x</span></p>"#;
-        assert_eq!(clean(html), r#"<p class="p1"><b>Bold</b> <i>it</i> <a href="https://example.com/a?b=1">link</a><br /><span style="font-weight: 700; color: #333">x</span></p>"#);
-        assert_eq!(clean("<ul><li>1 &lt; 2 &amp; 3 > 0</li></ul>"), "<ul><li>1 &lt; 2 &amp; 3 > 0</li></ul>");
-        assert_eq!(clean("<style>p.p1 {margin: 0; font: 12px Helvetica}</style><p>a</p>"), "<style>p.p1 {margin: 0; font: 12px Helvetica}</style><p>a</p>");
+        assert_eq!(
+            clean(html),
+            r#"<p class="p1"><b>Bold</b> <i>it</i> <a href="https://example.com/a?b=1">link</a><br /><span style="font-weight: 700; color: #333">x</span></p>"#
+        );
+        assert_eq!(
+            clean("<ul><li>1 &lt; 2 &amp; 3 > 0</li></ul>"),
+            "<ul><li>1 &lt; 2 &amp; 3 > 0</li></ul>"
+        );
+        assert_eq!(
+            clean("<style>p.p1 {margin: 0; font: 12px Helvetica}</style><p>a</p>"),
+            "<style>p.p1 {margin: 0; font: 12px Helvetica}</style><p>a</p>"
+        );
         assert_eq!(clean("a < b"), "a &lt; b");
-        assert_eq!(clean(r#"<img src="data:image/png;base64,AAAA" alt='a "q"'>"#), r#"<img src="data:image/png;base64,AAAA" alt="a &quot;q&quot;">"#);
-        assert_eq!(clean(r#"<img srcset="data:image/png;base64,AAAA 1x, https://example.com/a.png 2x">"#), r#"<img srcset="data:image/png;base64,AAAA 1x, https://example.com/a.png 2x">"#);
+        assert_eq!(
+            clean(r#"<img src="data:image/png;base64,AAAA" alt='a "q"'>"#),
+            r#"<img src="data:image/png;base64,AAAA" alt="a &quot;q&quot;">"#
+        );
+        assert_eq!(
+            clean(r#"<img srcset="data:image/png;base64,AAAA 1x, https://example.com/a.png 2x">"#),
+            r#"<img srcset="data:image/png;base64,AAAA 1x, https://example.com/a.png 2x">"#
+        );
     }
 
     #[test]
@@ -370,32 +570,74 @@ mod tests {
             ("<img src=x on\0error=alert(1)>", "<img src=\"x\">"),
             ("<img src=x OnError = 'alert(1)' >", "<img src=\"x\">"),
             ("<a href=\"javascript:alert(1)\">x</a>", "<a>x</a>"),
-            ("<a href=\" JaVa&#x09;Script&colon;alert(1)\">x</a>", "<a>x</a>"),
+            (
+                "<a href=\" JaVa&#x09;Script&colon;alert(1)\">x</a>",
+                "<a>x</a>",
+            ),
             ("<a href=\"jav&#97;script:alert(1)\">x</a>", "<a>x</a>"),
-            ("<a href=\"javascript&#0000000000000000000000000000000000058;alert(1)\">x</a>", "<a>x</a>"),
-            ("<a href=\"javascript&#x00000000000000000000000000000000003a;alert(1)\">x</a>", "<a>x</a>"),
-            ("<a href=\"javascript&unknownentity;alert(1)\">x</a>", "<a>x</a>"),
+            (
+                "<a href=\"javascript&#0000000000000000000000000000000000058;alert(1)\">x</a>",
+                "<a>x</a>",
+            ),
+            (
+                "<a href=\"javascript&#x00000000000000000000000000000000003a;alert(1)\">x</a>",
+                "<a>x</a>",
+            ),
+            (
+                "<a href=\"javascript&unknownentity;alert(1)\">x</a>",
+                "<a>x</a>",
+            ),
             ("<a href=\"//evil.example/x\">x</a>", "<a>x</a>"),
             ("<a href='vbscript:x'>x</a>", "<a>x</a>"),
             ("<img src=\"data:image/svg+xml;base64,AAAA\">", "<img>"),
             ("<img src=\"data:image/png.svg;base64,AAAA\">", "<img>"),
             ("<a href=\"data:text/html,<script>\">x</a>", "<a>x</a>"),
             ("<iframe srcdoc=\"<script>\"></iframe>t", "t"),
-            ("<svg><a xlink:href=\"javascript:x\"/><script>x</script></svg>t", "t"),
+            (
+                "<svg><a xlink:href=\"javascript:x\"/><script>x</script></svg>t",
+                "t",
+            ),
             ("<math><mi href=javascript:x>x</mi></math>t", "t"),
-            ("<meta http-equiv=refresh content=\"0;url=javascript:x\"><base href=//evil><link rel=import href=x>t", "t"),
+            (
+                "<meta http-equiv=refresh content=\"0;url=javascript:x\"><base href=//evil><link rel=import href=x>t",
+                "t",
+            ),
             ("<embed src=x.swf><object data=x>fallback</object>t", "t"),
-            ("<div style=\"background:url(javascript:x)\">t</div>", "<div>t</div>"),
-            ("<div style=\"width: expression(alert(1))\">t</div>", "<div>t</div>"),
-            ("<div style=\"x: ex/**/pression(1)\">t</div>", "<div>t</div>"),
-            ("<div style=\"font-family:'/*';background:url(https://evil.example/x);/*'\">t</div>", "<div>t</div>"),
-            ("<div style=\"&commat;import 'https://evil.example/x.css'\">t</div>", "<div>t</div>"),
-            ("<div style=\"background:u\\72l(x)\">t</div>", "<div>t</div>"),
+            (
+                "<div style=\"background:url(javascript:x)\">t</div>",
+                "<div>t</div>",
+            ),
+            (
+                "<div style=\"width: expression(alert(1))\">t</div>",
+                "<div>t</div>",
+            ),
+            (
+                "<div style=\"x: ex/**/pression(1)\">t</div>",
+                "<div>t</div>",
+            ),
+            (
+                "<div style=\"font-family:'/*';background:url(https://evil.example/x);/*'\">t</div>",
+                "<div>t</div>",
+            ),
+            (
+                "<div style=\"&commat;import 'https://evil.example/x.css'\">t</div>",
+                "<div>t</div>",
+            ),
+            (
+                "<div style=\"background:u\\72l(x)\">t</div>",
+                "<div>t</div>",
+            ),
             ("<div style=\"background:u\0rl(x)\">t</div>", "<div>t</div>"),
             ("<style>@import 'x.css';</style>t", "t"),
-            ("<style>a{font-family:'/*'}@import 'x.css';/*'}*/</style>t", "t"),
+            (
+                "<style>a{font-family:'/*'}@import 'x.css';/*'}*/</style>t",
+                "t",
+            ),
             ("<style>a{background:&#x75;rl(x)}</style>t", "t"),
-            ("<style>p{}</style><script>x</script>t", "<style>p{}</style>t"),
+            (
+                "<style>p{}</style><script>x</script>t",
+                "<style>p{}</style>t",
+            ),
             ("<style>p{}</style ><b>t</b>", "<style>p{}</style><b>t</b>"),
             ("<!--<script>x</script>-->t", "t"),
             ("<!--><script>x</script>t", "t"),
@@ -404,13 +646,25 @@ mod tests {
             ("<![CDATA[<script>x</script>]]>t", "t"),
             ("<!--[if gte mso 9]><xml>x</xml><![endif]-->t", "t"),
             ("<![if !supportLists]>t<![endif]>", "t"),
-            ("<!DOCTYPE html><html><body>t</body></html>", "<html><body>t</body></html>"),
+            (
+                "<!DOCTYPE html><html><body>t</body></html>",
+                "<html><body>t</body></html>",
+            ),
             ("<title><!--</title><script>x</script>-->t", "t"),
-            ("<textarea><div title=\"</textarea><script>x</script>\"></div></textarea>t", "<div title=\"&lt;/textarea&gt;&lt;script&gt;x&lt;/script&gt;\"></div>t"),
+            (
+                "<textarea><div title=\"</textarea><script>x</script>\"></div></textarea>t",
+                "<div title=\"&lt;/textarea&gt;&lt;script&gt;x&lt;/script&gt;\"></div>t",
+            ),
             ("<xmp><script>x</script></xmp>t", "t"),
             ("<plaintext><script>x</script>", ""),
-            ("<form action=https://evil.example><button formaction=javascript:y>b</button></form>", "<button>b</button>"),
-            ("<details open ontoggle=x>t</details>", "<details open>t</details>"),
+            (
+                "<form action=https://evil.example><button formaction=javascript:y>b</button></form>",
+                "<button>b</button>",
+            ),
+            (
+                "<details open ontoggle=x>t</details>",
+                "<details open>t</details>",
+            ),
             ("<scr<script>ipt>alert(1)</script>", "<scr>ipt>alert(1)"),
             ("<img srcset=\"a.png 1x, javascript:x 2x\">", "<img>"),
             ("t<script>never closed", "t"),
@@ -418,7 +672,9 @@ mod tests {
             ("t<a href=\"unterminated>", "t"),
             ("a\0b", "ab"),
         ];
-        for (dirty, want) in cases { assert_eq!(clean(dirty), want, "{dirty}"); }
+        for (dirty, want) in cases {
+            assert_eq!(clean(dirty), want, "{dirty}");
+        }
     }
 
     #[test]
@@ -449,6 +705,10 @@ mod tests {
 
         let multibyte = "café 🦀 <b title=\"🎉\">bold</b>".repeat(2_000);
         assert!(clean(&multibyte).contains("🦀"));
-        assert!(start.elapsed() < std::time::Duration::from_secs(2), "sanitizer took {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "sanitizer took {:?}",
+            start.elapsed()
+        );
     }
 }

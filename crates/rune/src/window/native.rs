@@ -44,30 +44,48 @@ pub(super) enum Prime {
 
 #[cfg(target_os = "macos")]
 impl Prime {
-    pub(super) fn launching() -> Self { Prime::Launching { left: 2 } }
+    pub(super) fn launching() -> Self {
+        Prime::Launching { left: 2 }
+    }
 
-    pub(super) fn presumes(self) -> bool { matches!(self, Prime::Launching { .. }) }
+    pub(super) fn presumes(self) -> bool {
+        matches!(self, Prime::Launching { .. })
+    }
 
     /// A frame drew presuming it shown.
     pub(super) fn spend(&mut self) {
         if let Prime::Launching { left } = *self {
-            *self = if left > 1 { Prime::Launching { left: left - 1 } } else { Prime::Steady };
+            *self = if left > 1 {
+                Prime::Launching { left: left - 1 }
+            } else {
+                Prime::Steady
+            };
         }
     }
 
-    pub(super) fn stop(&mut self) { *self = Prime::Steady; }
+    pub(super) fn stop(&mut self) {
+        *self = Prime::Steady;
+    }
 }
 
 #[cfg(all(test, target_os = "macos"))]
 #[path = "native_tests.rs"]
 mod tests;
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+#[cfg(all(
+    unix,
+    not(target_os = "macos"),
+    not(target_os = "ios"),
+    not(target_os = "android")
+))]
 #[derive(Default)]
 pub(super) struct Native {
     pub(super) activator: Option<crate::platform::activation::Activator>,
 }
 
-#[cfg(not(any(target_os = "macos", all(unix, not(target_os = "ios"), not(target_os = "android")))))]
+#[cfg(not(any(
+    target_os = "macos",
+    all(unix, not(target_os = "ios"), not(target_os = "android"))
+)))]
 #[derive(Default)]
 pub(super) struct Native;

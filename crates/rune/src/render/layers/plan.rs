@@ -61,10 +61,16 @@ pub(super) enum Disposition {
     /// Drawn straight into its parent's pass.
     Inline,
     /// Drawn into a target of its own, then composited. The target keeps `cache` for the next frame.
-    Render { rect: [f32; 4], cache: Option<(u64, u64)> },
+    Render {
+        rect: [f32; 4],
+        cache: Option<(u64, u64)>,
+    },
     /// Composited from the texture its cache kept, without drawing into it. `cache` is `None` when
     /// the budget only let this frame borrow the texture.
-    Cached { rect: [f32; 4], cache: Option<(u64, u64)> },
+    Cached {
+        rect: [f32; 4],
+        cache: Option<(u64, u64)>,
+    },
 }
 
 impl Disposition {
@@ -91,7 +97,13 @@ pub(super) struct Held {
 impl Held {
     /// What a target of `size` costs, and holds, before anything draws into it.
     fn new(size: [u32; 2], bpp: u64) -> Self {
-        Self { size, bytes: u64::from(size[0]) * u64::from(size[1]) * bpp, cache: None, last_used: 0, content: [0.0; 2] }
+        Self {
+            size,
+            bytes: u64::from(size[0]) * u64::from(size[1]) * bpp,
+            cache: None,
+            last_used: 0,
+            content: [0.0; 2],
+        }
     }
 }
 
@@ -121,13 +133,22 @@ pub(super) enum Move {
 
 /// A layer's bounds, from the edges of what it draws.
 pub(super) fn rect_of(edges: [f32; 4]) -> [f32; 4] {
-    [edges[0], edges[1], (edges[2] - edges[0]).max(0.0), (edges[3] - edges[1]).max(0.0)]
+    [
+        edges[0],
+        edges[1],
+        (edges[2] - edges[0]).max(0.0),
+        (edges[3] - edges[1]).max(0.0),
+    ]
 }
 
 /// A target's texture size for `bounds`: whole 64-pixel buckets, beside the size it was asked for.
 fn bucket_of(bounds: [f32; 4]) -> ([u32; 2], u32, u32) {
     let (width, height) = (bounds[2] as u32, bounds[3] as u32);
-    ([width.div_ceil(64) * 64, height.div_ceil(64) * 64], width, height)
+    (
+        [width.div_ceil(64) * 64, height.div_ceil(64) * 64],
+        width,
+        height,
+    )
 }
 
 /// What a texel of a layer target costs.
@@ -160,7 +181,10 @@ pub(super) struct Pools<'a, T> {
 impl<T: Describe> Pools<'_, T> {
     fn held(&self, source: Source) -> Held {
         match source {
-            Source::Slot(index) => self.slots[index].as_ref().expect("the plan places only targets that exist").held(),
+            Source::Slot(index) => self.slots[index]
+                .as_ref()
+                .expect("the plan places only targets that exist")
+                .held(),
             Source::Retained(at) => self.retained[at].held(),
             Source::Spare(at) => self.spare[at].held(),
             Source::New(size) => Held::new(size, bpp()),
@@ -183,7 +207,14 @@ pub(super) struct View {
 
 impl View {
     fn new(own: fn(usize) -> Source) -> Self {
-        Self { own, len: 0, moved: false, order: Vec::new(), #[cfg(test)] visits: 0 }
+        Self {
+            own,
+            len: 0,
+            moved: false,
+            order: Vec::new(),
+            #[cfg(test)]
+            visits: 0,
+        }
     }
 
     /// Starts a frame on a pool of `len` targets.
@@ -196,28 +227,42 @@ impl View {
     /// The target at `place`.
     fn held<T: Describe>(&mut self, place: usize, pools: &Pools<'_, T>) -> Held {
         #[cfg(test)]
-        { self.visits += 1; }
+        {
+            self.visits += 1;
+        }
         pools.held(self.source(place))
     }
 
     /// Where the target at `place` is before the frame's moves.
     fn source(&self, place: usize) -> Source {
-        if self.moved { self.order[place] } else { (self.own)(place) }
+        if self.moved {
+            self.order[place]
+        } else {
+            (self.own)(place)
+        }
     }
 
     /// The first place whose target passes `test`.
-    fn position<T: Describe>(&mut self, pools: &Pools<'_, T>, test: impl Fn(&Held) -> bool) -> Option<usize> {
+    fn position<T: Describe>(
+        &mut self,
+        pools: &Pools<'_, T>,
+        test: impl Fn(&Held) -> bool,
+    ) -> Option<usize> {
         (0..self.len).find(|&place| test(&self.held(place, pools)))
     }
 
     /// What every target in it costs.
     fn bytes<T: Describe>(&mut self, pools: &Pools<'_, T>) -> u64 {
-        (0..self.len).map(|place| self.held(place, pools).bytes).sum()
+        (0..self.len)
+            .map(|place| self.held(place, pools).bytes)
+            .sum()
     }
 
     /// The place of the least recently used target, the first of equals.
     fn oldest<T: Describe>(&mut self, pools: &Pools<'_, T>) -> usize {
-        (0..self.len).min_by_key(|&place| self.held(place, pools).last_used).unwrap()
+        (0..self.len)
+            .min_by_key(|&place| self.held(place, pools).last_used)
+            .unwrap()
     }
 
     /// Takes the target at `place` out, the last one taking its place, as `Vec::swap_remove` does.
@@ -235,9 +280,13 @@ impl View {
 
     /// From the first move on, the plan keeps the pool's order itself.
     fn own_order(&mut self) {
-        if self.moved { return; }
+        if self.moved {
+            return;
+        }
         #[cfg(test)]
-        { self.visits += self.len as u64; }
+        {
+            self.visits += self.len as u64;
+        }
         let own = self.own;
         self.order.extend((0..self.len).map(own));
         self.moved = true;
@@ -250,7 +299,9 @@ const WARM: usize = 64;
 
 /// Gives back what a burst grew `scratch` to, beyond twice what `keep` entries need.
 fn shrink<T>(scratch: &mut Vec<T>, keep: usize) {
-    if scratch.capacity() > 2 * keep { scratch.shrink_to(keep); }
+    if scratch.capacity() > 2 * keep {
+        scratch.shrink_to(keep);
+    }
 }
 
 /// The plan of a frame's layers, and the scratch it is decided in, kept warm between frames.
@@ -289,12 +340,25 @@ impl Planner {
     /// takes. It reads each target where `pools` holds it, and only where dev's passes read one: a
     /// layer whose slot fits reads no spare. It moves nothing and needs no device, so a walk of
     /// frames drives it.
-    pub(super) fn decide<T: Describe>(&mut self, plan: &[Layer], pools: &Pools<'_, T>, budget: u64, isolate: bool, max_dim: u32) {
+    pub(super) fn decide<T: Describe>(
+        &mut self,
+        plan: &[Layer],
+        pools: &Pools<'_, T>,
+        budget: u64,
+        isolate: bool,
+        max_dim: u32,
+    ) {
         let bpp = bpp();
         self.dispositions.clear();
         self.dispositions.resize(plan.len(), Disposition::Skip);
         self.slots.clear();
-        self.slots.extend(pools.slots.iter().enumerate().map(|(index, t)| t.is_some().then_some(Source::Slot(index))));
+        self.slots.extend(
+            pools
+                .slots
+                .iter()
+                .enumerate()
+                .map(|(index, t)| t.is_some().then_some(Source::Slot(index))),
+        );
         self.moves.clear();
         self.kept.reset(pools.retained.len());
         self.parked.reset(pools.spare.len());
@@ -303,26 +367,45 @@ impl Planner {
         // budget.
         for (index, layer) in plan.iter().enumerate() {
             let rect = rect_of(layer.edges);
-            if rect[2] == 0.0 || rect[3] == 0.0 || !isolate || layer.planned != Planned::Inline { continue; }
+            if rect[2] == 0.0 || rect[3] == 0.0 || !isolate || layer.planned != Planned::Inline {
+                continue;
+            }
             let Some(cache) = layer.cache else { continue };
-            let Some(at) = self.kept.position(pools, |t| t.cache == Some(cache)) else { continue };
+            let Some(at) = self.kept.position(pools, |t| t.cache == Some(cache)) else {
+                continue;
+            };
             let bytes = self.kept.held(at, pools).bytes;
             let over = active + bytes > budget;
             // A cache with contents keeps its place under the budget: it can't be made again cheaply.
-            if over && layer.begin + 1 < layer.end { continue; }
-            if !over { active += bytes; }
-            self.dispositions[index] = Disposition::Cached { rect, cache: (!over).then_some(cache) };
+            if over && layer.begin + 1 < layer.end {
+                continue;
+            }
+            if !over {
+                active += bytes;
+            }
+            self.dispositions[index] = Disposition::Cached {
+                rect,
+                cache: (!over).then_some(cache),
+            };
             self.slots[index] = Some(self.kept.swap_remove(at));
-            self.moves.push(Move::Set { slot: index, from: Kept::Retained(at) });
+            self.moves.push(Move::Set {
+                slot: index,
+                from: Kept::Retained(at),
+            });
         }
         for (index, layer) in plan.iter().enumerate() {
-            if matches!(self.dispositions[index], Disposition::Cached { .. }) { continue; }
+            if matches!(self.dispositions[index], Disposition::Cached { .. }) {
+                continue;
+            }
             let rect = rect_of(layer.edges);
             let parent = layer.parent.map(|p| self.dispositions[p]);
             // A layer inside a cache that composites from its texture, or inside a transparent one,
             // draws nothing: what a cache kept comes from its texture.
-            if layer.planned == Planned::Hidden || rect[2] == 0.0 || rect[3] == 0.0
-                || matches!(parent, Some(Disposition::Skip | Disposition::Cached { .. })) {
+            if layer.planned == Planned::Hidden
+                || rect[2] == 0.0
+                || rect[3] == 0.0
+                || matches!(parent, Some(Disposition::Skip | Disposition::Cached { .. }))
+            {
                 self.dispositions[index] = Disposition::Skip;
                 self.park_slot(index, pools);
                 continue;
@@ -337,7 +420,9 @@ impl Planner {
             let (mut bucket, mut width, mut height) = bucket_of(bounds);
             let mut cache = None;
             if let Some((node, sig)) = layer.cache {
-                let previous = self.kept.position(pools, |t| t.cache.is_some_and(|(n, _)| n == node));
+                let previous = self
+                    .kept
+                    .position(pools, |t| t.cache.is_some_and(|(n, _)| n == node));
                 let needed = u64::from(bucket[0]) * u64::from(bucket[1]) * bpp;
                 if bucket[0] <= max_dim && bucket[1] <= max_dim && active + needed <= budget {
                     active += needed;
@@ -347,7 +432,10 @@ impl Planner {
                         Some(at) => {
                             self.park_slot(index, pools);
                             self.slots[index] = Some(self.kept.swap_remove(at));
-                            self.moves.push(Move::Set { slot: index, from: Kept::Retained(at) });
+                            self.moves.push(Move::Set {
+                                slot: index,
+                                from: Kept::Retained(at),
+                            });
                         }
                         None => self.trim(active, budget, pools),
                     }
@@ -361,46 +449,73 @@ impl Planner {
                     (bucket, width, height) = bucket_of(bounds);
                 }
             }
-            let additive_parent = layer.parent.is_some_and(|p| plan[p].blend == Blend::PlusLighter);
+            let additive_parent = layer
+                .parent
+                .is_some_and(|p| plan[p].blend == Blend::PlusLighter);
             // A clip of whole pixels with square corners and no fade is a scissor, exactly: such a
             // group draws straight into its parent too (`Renderer::draw_layer_range`). That keeps a
             // clipped pane's video in the window's own pass, where its own layer can show it.
-            let scissor_clip = layer.clip == NO_CLIP || (layer.fade == [0; 4] && layer.clip.iter().all(|v| (v - v.round()).abs() < 1e-3));
-            if cache.is_none() && layer.opacity == 1.0 && layer.blend == Blend::SourceOver && !additive_parent
-                && layer.blur == 0.0 && layer.fade[3] == 0 && scissor_clip
-                && layer.turn.is_none() && layer.hole[3] == 0.0 {
+            let scissor_clip = layer.clip == NO_CLIP
+                || (layer.fade == [0; 4]
+                    && layer.clip.iter().all(|v| (v - v.round()).abs() < 1e-3));
+            if cache.is_none()
+                && layer.opacity == 1.0
+                && layer.blend == Blend::SourceOver
+                && !additive_parent
+                && layer.blur == 0.0
+                && layer.fade[3] == 0
+                && scissor_clip
+                && layer.turn.is_none()
+                && layer.hole[3] == 0.0
+            {
                 self.dispositions[index] = Disposition::Inline;
                 self.park_slot(index, pools);
                 continue;
             }
-            self.dispositions[index] = Disposition::Render { rect: bounds, cache };
+            self.dispositions[index] = Disposition::Render {
+                rect: bounds,
+                cache,
+            };
             let fits = self.slots[index].is_some_and(|source| {
                 let size = pools.held(source).size;
                 // The minimum bucket is unavoidable for tiny controls. Do not recreate that
                 // same bucket every frame when rounding alone exceeds the 2x area limit.
-                size[0] >= width && size[1] >= height && (size == bucket
-                    || u64::from(size[0]) * u64::from(size[1]) <= 2 * u64::from(width) * u64::from(height))
+                size[0] >= width
+                    && size[1] >= height
+                    && (size == bucket
+                        || u64::from(size[0]) * u64::from(size[1])
+                            <= 2 * u64::from(width) * u64::from(height))
             });
             if !fits {
                 self.park_slot(index, pools);
                 let spare = self.parked.position(pools, |t| {
                     let size = t.size;
-                    size[0] >= width && size[1] >= height
-                        && u64::from(size[0]) * u64::from(size[1]) <= 2 * u64::from(width.max(64)) * u64::from(height.max(64))
+                    size[0] >= width
+                        && size[1] >= height
+                        && u64::from(size[0]) * u64::from(size[1])
+                            <= 2 * u64::from(width.max(64)) * u64::from(height.max(64))
                 });
                 match spare {
                     Some(at) => {
                         self.slots[index] = Some(self.parked.swap_remove(at));
-                        self.moves.push(Move::Set { slot: index, from: Kept::Spare(at) });
+                        self.moves.push(Move::Set {
+                            slot: index,
+                            from: Kept::Spare(at),
+                        });
                     }
                     None => {
                         self.slots[index] = Some(Source::New(bucket));
-                        self.moves.push(Move::Create { slot: index, size: bucket });
+                        self.moves.push(Move::Create {
+                            slot: index,
+                            size: bucket,
+                        });
                     }
                 }
             }
             // The scratch a blur left behind goes before the next layer makes its own texture.
-            if layer.blur == 0.0 { self.moves.push(Move::Unblur(index)); }
+            if layer.blur == 0.0 {
+                self.moves.push(Move::Unblur(index));
+            }
         }
         self.trim(active, budget, pools);
     }
@@ -412,13 +527,17 @@ impl Planner {
     /// stays empty, never comes here, so it touches nothing.
     pub(super) fn settle(&mut self, len: usize, retained: usize, spare: usize) {
         #[cfg(test)]
-        { self.settles += 1; }
+        {
+            self.settles += 1;
+        }
         // The moves are carried out and the views read; only the dispositions outlive the frame.
         self.moves.clear();
         self.slots.clear();
         self.kept.reset(0);
         self.parked.reset(0);
-        if len == 0 { self.dispositions.clear(); }
+        if len == 0 {
+            self.dispositions.clear();
+        }
         let keep = len.max(WARM);
         shrink(&mut self.dispositions, keep);
         shrink(&mut self.moves, keep);
@@ -430,14 +549,21 @@ impl Planner {
     /// Test-only: the scratch's capacities, which a warm frame never changes.
     #[cfg(test)]
     pub(super) fn capacities(&self) -> [usize; 5] {
-        [self.dispositions.capacity(), self.moves.capacity(), self.slots.capacity(),
-            self.kept.order.capacity(), self.parked.order.capacity()]
+        [
+            self.dispositions.capacity(),
+            self.moves.capacity(),
+            self.slots.capacity(),
+            self.kept.order.capacity(),
+            self.parked.order.capacity(),
+        ]
     }
 
     /// Parks slot `index`'s target for a later layer of its size: what `spare` stops holding once
     /// it passes `SPARE_BYTES`, least recently used first, goes.
     fn park_slot<T: Describe>(&mut self, index: usize, pools: &Pools<'_, T>) {
-        let Some(source) = self.slots[index].take() else { return };
+        let Some(source) = self.slots[index].take() else {
+            return;
+        };
         self.moves.push(Move::Park(index));
         self.parked.push(source);
         let mut bytes = self.parked.bytes(pools);

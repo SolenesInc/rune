@@ -17,7 +17,11 @@ pub fn ltr_units(text: &str) -> Vec<Range<usize>> {
     let mut at = 0;
     for word in text.split(char::is_whitespace) {
         let start = at;
-        at += word.len() + text[start + word.len()..].chars().next().map_or(0, char::len_utf8);
+        at += word.len()
+            + text[start + word.len()..]
+                .chars()
+                .next()
+                .map_or(0, char::len_utf8);
         if let Some(r) = unit(word) {
             out.push(start + r.start..start + r.end);
         }
@@ -30,10 +34,18 @@ fn unit(word: &str) -> Option<Range<usize>> {
     let (mut a, mut b) = (0, word.len());
     // Opening brackets and quotes come off the front, and closing ones and sentence
     // punctuation off the end, unless the word opened them itself (`renderView()`, `a[0]`).
-    while let Some(c) = word[a..b].chars().next().filter(|c| OPEN.contains(c) && !closes_inside(&word[a..b], *c)) {
+    while let Some(c) = word[a..b]
+        .chars()
+        .next()
+        .filter(|c| OPEN.contains(c) && !closes_inside(&word[a..b], *c))
+    {
         a += c.len_utf8();
     }
-    while let Some(c) = word[a..b].chars().next_back().filter(|&c| END.contains(&c) && !(CLOSE.contains(&c) && opens_inside(&word[a..b], c))) {
+    while let Some(c) = word[a..b]
+        .chars()
+        .next_back()
+        .filter(|&c| END.contains(&c) && !(CLOSE.contains(&c) && opens_inside(&word[a..b], c)))
+    {
         b -= c.len_utf8();
     }
     let core = &word[a..b];
@@ -48,7 +60,10 @@ fn unit(word: &str) -> Option<Range<usize>> {
 
 const OPEN: &[char] = &['(', '[', '{', '"', '\'', '«', '“', '‘', '<'];
 const CLOSE: &[char] = &[')', ']', '}', '>'];
-const END: &[char] = &['.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'', '»', '”', '’', '،', '؛', '؟', '۔', '…', '>'];
+const END: &[char] = &[
+    '.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'', '»', '”', '’', '،', '؛', '؟', '۔', '…',
+    '>',
+];
 
 fn pair(c: char) -> char {
     match c {
@@ -83,5 +98,9 @@ fn drive(s: &str) -> bool {
 
 /// It ends in a dot and one to eight ASCII letters or digits, as a file name does.
 fn extension(s: &str) -> bool {
-    s.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && (1..=8).contains(&ext.len()) && ext.bytes().all(|c| c.is_ascii_alphanumeric()))
+    s.rsplit_once('.').is_some_and(|(stem, ext)| {
+        !stem.is_empty()
+            && (1..=8).contains(&ext.len())
+            && ext.bytes().all(|c| c.is_ascii_alphanumeric())
+    })
 }

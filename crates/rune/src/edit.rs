@@ -29,12 +29,12 @@ mod marks;
 mod model;
 pub use model::{Block, MAX_LIST_LEVEL, Mark, MarkRange, ParagraphInfo, RichStyle};
 mod secure;
-pub(crate) use secure::{MULTILINE_SECURE_MASK, Masking};
 use secure::LineMode;
+pub(crate) use secure::{MULTILINE_SECURE_MASK, Masking};
 mod typing;
-use typing::Typing;
 pub(crate) use history::History;
 use history::{EditKind, EditedTag, Group};
+use typing::Typing;
 
 #[derive(Clone, Default, PartialEq)]
 pub struct TextEdit {
@@ -81,10 +81,23 @@ pub struct TextEdit {
 
 impl std::fmt::Debug for TextEdit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TextEdit").field("text", &if self.secure { "[redacted]" } else { &self.text })
-            .field("anchor", &self.anchor).field("focus", &self.focus).field("focused", &self.focused)
-            .field("marks", &self.marks).field("blocks", &self.blocks)
-            .field("secure", &self.secure).field("revealed", &self.revealed).finish_non_exhaustive()
+        f.debug_struct("TextEdit")
+            .field(
+                "text",
+                &if self.secure {
+                    "[redacted]"
+                } else {
+                    &self.text
+                },
+            )
+            .field("anchor", &self.anchor)
+            .field("focus", &self.focus)
+            .field("focused", &self.focused)
+            .field("marks", &self.marks)
+            .field("blocks", &self.blocks)
+            .field("secure", &self.secure)
+            .field("revealed", &self.revealed)
+            .finish_non_exhaustive()
     }
 }
 
@@ -144,7 +157,10 @@ pub struct EditOutcome {
 /// tone whole.
 fn prev_char(s: &str, i: usize) -> usize {
     use unicode_segmentation::UnicodeSegmentation;
-    s[..i].grapheme_indices(true).next_back().map_or(0, |(j, _)| j)
+    s[..i]
+        .grapheme_indices(true)
+        .next_back()
+        .map_or(0, |(j, _)| j)
 }
 
 /// Where Backspace deletes back to from `i`, as Chromium's `BackspaceStateMachine` and native
@@ -202,7 +218,11 @@ impl TextEdit {
     /// Construct a [`TextEdit`] from plain text, inline [`MarkRange`]s, and per-line [`Block`]s.
     /// Caret starts at the end of `text`. Ranges are clamped to char boundaries and canonicalized,
     /// and `blocks` is padded or truncated to match the number of `\n`-separated lines in `text`.
-    pub fn from_parts(text: impl Into<String>, marks: Vec<MarkRange>, blocks: Vec<Block>) -> TextEdit {
+    pub fn from_parts(
+        text: impl Into<String>,
+        marks: Vec<MarkRange>,
+        blocks: Vec<Block>,
+    ) -> TextEdit {
         let mut edit = Self::new(text).rich();
         edit.marks = marks;
         edit.blocks = blocks;
@@ -243,7 +263,11 @@ impl TextEdit {
     /// ```
     pub fn allow_marks(mut self, marks: impl IntoIterator<Item = Mark>) -> Self {
         let pill = 1 << Mark::Pill(String::new()).kind_order();
-        self.allowed_marks = Some(marks.into_iter().fold(pill, |bits, m| bits | 1 << m.kind_order()));
+        self.allowed_marks = Some(
+            marks
+                .into_iter()
+                .fold(pill, |bits, m| bits | 1 << m.kind_order()),
+        );
         self.sync_invariants();
         self
     }
@@ -253,7 +277,11 @@ impl TextEdit {
     /// [`Block::Paragraph`] is always allowed, and list levels don't matter (`Block::Bullet(0)`
     /// allows every bullet).
     pub fn allow_blocks(mut self, blocks: impl IntoIterator<Item = Block>) -> Self {
-        self.allowed_blocks = Some(blocks.into_iter().fold(Block::Paragraph.kind_bit(), |bits, b| bits | b.kind_bit()));
+        self.allowed_blocks = Some(
+            blocks
+                .into_iter()
+                .fold(Block::Paragraph.kind_bit(), |bits, b| bits | b.kind_bit()),
+        );
         self.sync_invariants();
         self
     }
@@ -262,12 +290,14 @@ impl TextEdit {
     /// to hide a formatting bar's button for one it doesn't (`Mark::Link(String::new())` checks
     /// links).
     pub fn allows_mark(&self, mark: &Mark) -> bool {
-        self.allowed_marks.is_none_or(|bits| bits & 1 << mark.kind_order() != 0)
+        self.allowed_marks
+            .is_none_or(|bits| bits & 1 << mark.kind_order() != 0)
     }
 
     /// Whether this field keeps blocks of `block`'s kind (see [`allow_blocks`](Self::allow_blocks)).
     pub fn allows_block(&self, block: Block) -> bool {
-        self.allowed_blocks.is_none_or(|bits| bits & block.kind_bit() != 0)
+        self.allowed_blocks
+            .is_none_or(|bits| bits & block.kind_bit() != 0)
     }
 
     /// The mark a rich field's `⌘B`, `⌘I` or `⌘U` toggles, if this field takes that chord.
@@ -295,7 +325,9 @@ impl TextEdit {
 
     /// No marks, pending style or non-paragraph blocks: draws exactly as plain text.
     pub(crate) fn is_plain(&self) -> bool {
-        self.marks.is_empty() && self.typing == Typing::Inherited && self.blocks.iter().all(|&b| b == Block::Paragraph)
+        self.marks.is_empty()
+            && self.typing == Typing::Inherited
+            && self.blocks.iter().all(|&b| b == Block::Paragraph)
     }
 
     /// Parse an HTML fragment (`<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<del>`, `<strike>`,
@@ -391,14 +423,24 @@ impl TextEdit {
             if b == b'\n' {
                 let block = self.blocks.get(idx).copied().unwrap_or(Block::Paragraph);
                 let soft_break = self.soft_breaks.binary_search(&(idx as u32)).is_ok();
-                out.push(ParagraphInfo { index: idx, range: line_start..i, block, soft_break });
+                out.push(ParagraphInfo {
+                    index: idx,
+                    range: line_start..i,
+                    block,
+                    soft_break,
+                });
                 line_start = i + 1;
                 idx += 1;
             }
         }
         let block = self.blocks.get(idx).copied().unwrap_or(Block::Paragraph);
         let soft_break = self.soft_breaks.binary_search(&(idx as u32)).is_ok();
-        out.push(ParagraphInfo { index: idx, range: line_start..self.text.len(), block, soft_break });
+        out.push(ParagraphInfo {
+            index: idx,
+            range: line_start..self.text.len(),
+            block,
+            soft_break,
+        });
         out
     }
 
@@ -430,7 +472,10 @@ impl TextEdit {
     /// do). True when there was one. The runtime tells the platform's input method to drop its
     /// own copy.
     pub fn finish_composition(&mut self) -> bool {
-        if self.secure { self.cancel_composition(); return false; }
+        if self.secure {
+            self.cancel_composition();
+            return false;
+        }
         let mut finished = false;
         for effect in ime::step(&mut self.composition, ime::Event::Finish) {
             let ime::Effect::Commit(mut s) = effect;
@@ -449,7 +494,11 @@ impl TextEdit {
     pub fn replace_text(&mut self, text: impl Into<String>) {
         let text = text.into();
         self.text.zeroize();
-        let line_count = if self.secure { 0 } else { 1 + count_newlines(text.as_bytes()) };
+        let line_count = if self.secure {
+            0
+        } else {
+            1 + count_newlines(text.as_bytes())
+        };
         self.text = text;
         self.anchor = self.text.len();
         self.focus = self.anchor;
@@ -483,7 +532,9 @@ impl TextEdit {
     }
 
     #[cfg(test)]
-    pub(crate) fn has_history(&self) -> bool { !self.history.undo.is_empty() || !self.history.redo.is_empty() }
+    pub(crate) fn has_history(&self) -> bool {
+        !self.history.undo.is_empty() || !self.history.redo.is_empty()
+    }
 
     pub(crate) fn same_model(&self, other: &TextEdit) -> bool {
         Arc::ptr_eq(&self.history, &other.history)
@@ -506,7 +557,10 @@ impl TextEdit {
     /// may have replaced `text` without moving the caret).
     pub fn range(&self) -> (usize, usize) {
         let t = &self.text;
-        (Self::clamp_char_boundary(t, self.anchor.min(self.focus)), Self::clamp_char_boundary(t, self.anchor.max(self.focus)))
+        (
+            Self::clamp_char_boundary(t, self.anchor.min(self.focus)),
+            Self::clamp_char_boundary(t, self.anchor.max(self.focus)),
+        )
     }
 
     /// Move the caret to `byte` (clamped to a character boundary of `self.text`) and collapse the
@@ -538,19 +592,29 @@ impl TextEdit {
         let t = &self.text;
         self.marks.iter().filter_map(move |m| {
             let id = m.mark.pill_id()?;
-            (m.start < m.end && m.end <= t.len() && t.is_char_boundary(m.start) && t.is_char_boundary(m.end) && !t.as_bytes()[m.start..m.end].contains(&b'\n'))
-                .then(|| (m.range(), id))
+            (m.start < m.end
+                && m.end <= t.len()
+                && t.is_char_boundary(m.start)
+                && t.is_char_boundary(m.end)
+                && !t.as_bytes()[m.start..m.end].contains(&b'\n'))
+            .then(|| (m.range(), id))
         })
     }
 
     /// The start of the pill that ends at or contains `j`, when `j` is past its start.
     fn pill_before(&self, j: usize) -> Option<usize> {
-        self.marks.iter().find(|m| m.mark.is_pill() && m.start < j && j <= m.end).map(|m| m.start)
+        self.marks
+            .iter()
+            .find(|m| m.mark.is_pill() && m.start < j && j <= m.end)
+            .map(|m| m.start)
     }
 
     /// The end of the pill that starts at or contains `j`, when `j` is before its end.
     fn pill_after(&self, j: usize) -> Option<usize> {
-        self.marks.iter().find(|m| m.mark.is_pill() && m.start <= j && j < m.end).map(|m| m.end)
+        self.marks
+            .iter()
+            .find(|m| m.mark.is_pill() && m.start <= j && j < m.end)
+            .map(|m| m.end)
     }
 
     /// Replace the selection with `label` as one [`Mark::Pill`] carrying `id`, and put the
@@ -565,7 +629,16 @@ impl TextEdit {
     /// cover any pill it cuts into. Line breaks in `label` become spaces; an empty label or a
     /// secure field inserts nothing.
     pub fn replace_with_pill(&mut self, range: Range<usize>, id: impl Into<String>, label: &str) {
-        let label: String = label.chars().map(|c| if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') { ' ' } else { c }).collect();
+        let label: String = label
+            .chars()
+            .map(|c| {
+                if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') {
+                    ' '
+                } else {
+                    c
+                }
+            })
+            .collect();
         if self.secure || label.is_empty() {
             return;
         }
@@ -578,19 +651,27 @@ impl TextEdit {
         self.typing = Typing::Inherited;
         self.apply_text_and_attr_replace((a, b), &label, &[], None, false);
         // Code blocks keep no inline marks: there the label stays plain text.
-        self.marks.push(MarkRange { start: a, end: a + label.len(), mark: Mark::Pill(id.into()) });
+        self.marks.push(MarkRange {
+            start: a,
+            end: a + label.len(),
+            mark: Mark::Pill(id.into()),
+        });
         self.normalize_marks();
         self.record_change(before, EditKind::Other);
     }
 
     /// The pill strictly containing byte `i` (`start < i < end`).
     fn pill_around(&self, i: usize) -> Option<(usize, usize)> {
-        self.marks.iter().find(|m| m.mark.is_pill() && m.start < i && i < m.end).map(|m| (m.start, m.end))
+        self.marks
+            .iter()
+            .find(|m| m.mark.is_pill() && m.start < i && i < m.end)
+            .map(|m| (m.start, m.end))
     }
 
     /// `i` moved out of any pill it lands inside, to its end when `forward`, else its start.
     fn out_of_pill(&self, i: usize, forward: bool) -> usize {
-        self.pill_around(i).map_or(i, |(s, e)| if forward { e } else { s })
+        self.pill_around(i)
+            .map_or(i, |(s, e)| if forward { e } else { s })
     }
 
     /// `a..b` grown to cover any pill either end cuts into; an empty range inside one moves
@@ -611,7 +692,11 @@ impl TextEdit {
         }
         if self.anchor == self.focus {
             if let Some((s, e)) = self.pill_around(self.focus) {
-                let to = if self.focus - s < e - self.focus { s } else { e };
+                let to = if self.focus - s < e - self.focus {
+                    s
+                } else {
+                    e
+                };
                 (self.anchor, self.focus) = (to, to);
             }
         } else {
@@ -668,7 +753,10 @@ impl TextEdit {
     fn sanitize(&self, s: &str) -> Zeroizing<String> {
         let mut out = Zeroizing::new(String::with_capacity(s.len()));
         if self.is_single_line() {
-            out.extend(s.chars().filter(|c| !c.is_control() && !matches!(c, '\u{2028}' | '\u{2029}')));
+            out.extend(
+                s.chars()
+                    .filter(|c| !c.is_control() && !matches!(c, '\u{2028}' | '\u{2029}')),
+            );
         } else if self.secure {
             let mut chars = s.chars().peekable();
             while let Some(c) = chars.next() {
@@ -678,14 +766,18 @@ impl TextEdit {
                     }
                     continue;
                 }
-                if (!c.is_control() || matches!(c, '\n' | '\t')) && !matches!(c, '\u{2028}' | '\u{2029}') {
+                if (!c.is_control() || matches!(c, '\n' | '\t'))
+                    && !matches!(c, '\u{2028}' | '\u{2029}')
+                {
                     out.push(c);
                 }
             }
         } else {
             let mut chars = s.chars().peekable();
             while let Some(c) = chars.next() {
-                if c == '\r' && chars.peek() == Some(&'\n') { continue; }
+                if c == '\r' && chars.peek() == Some(&'\n') {
+                    continue;
+                }
                 out.push(c);
             }
         }
@@ -718,7 +810,8 @@ impl TextEdit {
             let removed = count_newlines(&self.text.as_bytes()[a..b]);
             let added = count_newlines(s.as_bytes());
             self.text.replace_range(a..b, s);
-            self.blocks.resize(self.blocks.len() + added - removed, Block::Paragraph);
+            self.blocks
+                .resize(self.blocks.len() + added - removed, Block::Paragraph);
             self.anchor = a + ins_len;
             self.focus = self.anchor;
             self.cancel_composition();
@@ -765,7 +858,10 @@ impl TextEdit {
         }
         if added_lines > 0 {
             let insert_pos = (line_a + 1).min(self.blocks.len());
-            self.blocks.splice(insert_pos..insert_pos, std::iter::repeat_n(next_line_blk, added_lines));
+            self.blocks.splice(
+                insert_pos..insert_pos,
+                std::iter::repeat_n(next_line_blk, added_lines),
+            );
         }
 
         // Update `soft_breaks`.
@@ -827,7 +923,9 @@ impl TextEdit {
             for im in inserted_marks.iter().filter(|m| !m.is_pill()) {
                 // Avoid wrapping a pure newline at the trailing edge of a mark unless inside the mark.
                 if s == "\n" {
-                    let was_inside = updated_marks.iter().any(|m| m.mark == *im && m.start >= a + ins_len);
+                    let was_inside = updated_marks
+                        .iter()
+                        .any(|m| m.mark == *im && m.start >= a + ins_len);
                     if !was_inside {
                         continue;
                     }
@@ -866,10 +964,15 @@ impl TextEdit {
         self.sync_invariants();
         // Backspace or Delete next to a pill, or a selection into one, takes it whole.
         let (a, b) = self.cover_pills(a, b);
-        if kind == EditKind::Other { self.break_history_group(); }
+        if kind == EditKind::Other {
+            self.break_history_group();
+        }
         if &self.text[a..b] == s
             && self.typing == Typing::Inherited
-            && !self.marks.iter().any(|m| m.mark.is_pill() && m.start < b && a < m.end)
+            && !self
+                .marks
+                .iter()
+                .any(|m| m.mark.is_pill() && m.start < b && a < m.end)
         {
             self.anchor = a + s.len();
             self.focus = self.anchor;
@@ -902,13 +1005,14 @@ impl TextEdit {
         self.apply_text_and_attr_replace((a, b), s, &inserted_marks, None, false);
         self.record_change(before, kind);
     }
-
 }
 
 /// `\n` bytes in `s`. Counts into `u8` lanes so it vectorizes: `filter().count()` widens every
 /// byte to `usize` and runs several times slower on a long field.
 fn count_newlines(s: &[u8]) -> usize {
-    s.chunks(255).map(|c| c.iter().fold(0u8, |n, &b| n + (b == b'\n') as u8) as usize).sum()
+    s.chunks(255)
+        .map(|c| c.iter().fold(0u8, |n, &b| n + (b == b'\n') as u8) as usize)
+        .sum()
 }
 
 #[cfg(test)]

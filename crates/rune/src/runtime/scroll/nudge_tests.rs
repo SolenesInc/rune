@@ -45,7 +45,11 @@ fn walk(acts: &[Act]) {
             Act::Arm => {
                 let effects = nudge.arm(now);
                 dev.arm();
-                assert_eq!(effects, Effects::one(Effect::WakeAt(now + NUDGE_HOLD)), "{acts:?} at {at}: the arm asks for its due time");
+                assert_eq!(
+                    effects,
+                    Effects::one(Effect::WakeAt(now + NUDGE_HOLD)),
+                    "{acts:?} at {at}: the arm asks for its due time"
+                );
             }
             Act::Frame => {
                 now += FRAME;
@@ -53,7 +57,11 @@ fn walk(acts: &[Act]) {
                 dev.frame();
             }
         }
-        assert_eq!(nudge.hold_at(now), dev.held(), "{acts:?}: held after event {at}, at {now}");
+        assert_eq!(
+            nudge.hold_at(now),
+            dev.held(),
+            "{acts:?}: held after event {at}, at {now}"
+        );
     }
 }
 
@@ -90,10 +98,16 @@ fn the_hold_covers_the_landing_frame_and_the_next() {
     nudge.tick(landed + FRAME);
     assert!(nudge.hold_at(landed + FRAME), "so does the next");
     nudge.tick(landed + 2.0 * FRAME);
-    assert!(!nudge.hold_at(landed + 2.0 * FRAME), "and it is over on the third");
+    assert!(
+        !nudge.hold_at(landed + 2.0 * FRAME),
+        "and it is over on the third"
+    );
     assert_eq!(nudge.state, Hold::Free);
     nudge.tick(landed + 3.0 * FRAME);
-    assert!(!nudge.hold_at(landed + 3.0 * FRAME), "a spent hold stays free");
+    assert!(
+        !nudge.hold_at(landed + 3.0 * FRAME),
+        "a spent hold stays free"
+    );
 }
 
 /// differs from dev: dev took a frame off the countdown whatever the frame rate, so it held
@@ -114,7 +128,10 @@ fn the_hold_ends_a_fixed_time_after_the_land() {
             }
         }
         let freed = freed.unwrap_or_else(|| panic!("{rate} fps: the hold ends"));
-        assert!(freed >= NUDGE_HOLD - 1e-9 && freed < NUDGE_HOLD + 1.0 / rate + 1e-9, "{rate} fps: held {freed} seconds");
+        assert!(
+            freed >= NUDGE_HOLD - 1e-9 && freed < NUDGE_HOLD + 1.0 / rate + 1e-9,
+            "{rate} fps: held {freed} seconds"
+        );
     }
 }
 
@@ -123,13 +140,38 @@ fn the_hold_ends_a_fixed_time_after_the_land() {
 fn a_due_from_an_earlier_arm_changes_nothing() {
     let (mut nudge, mut now) = (Nudge::default(), 0.0);
     let _ = nudge.arm(now);
-    let Hold::Held { attempt: first, due: first_due } = nudge.state else { panic!("armed") };
+    let Hold::Held {
+        attempt: first,
+        due: first_due,
+    } = nudge.state
+    else {
+        panic!("armed")
+    };
     now += FRAME;
     let _ = nudge.arm(now);
-    let Hold::Held { attempt: second, due } = nudge.state else { panic!("armed") };
+    let Hold::Held {
+        attempt: second,
+        due,
+    } = nudge.state
+    else {
+        panic!("armed")
+    };
     assert_ne!(second, first);
     assert_eq!(due, now + NUDGE_HOLD);
-    let _ = step(&mut nudge.seq, &mut nudge.state, Event::Due { attempt: first, now: first_due + 1.0 });
+    let _ = step(
+        &mut nudge.seq,
+        &mut nudge.state,
+        Event::Due {
+            attempt: first,
+            now: first_due + 1.0,
+        },
+    );
     assert!(nudge.hold_at(now), "the newer arm still holds");
-    assert_eq!(nudge.state, Hold::Held { attempt: second, due });
+    assert_eq!(
+        nudge.state,
+        Hold::Held {
+            attempt: second,
+            due
+        }
+    );
 }

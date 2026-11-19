@@ -107,8 +107,15 @@ pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
 pub fn auto_grow(field: El, min_lines: usize, max_lines: usize) -> El {
     let line = field.text.as_ref().map_or(0.0, |t| t.style.line_px());
     let (min, max) = (min_lines.max(1), max_lines.max(min_lines.max(1)));
-    col().key("scroll").w_full().shrink().min_h(min as f32 * line).max_h(max as f32 * line)
-        .scroll(ScrollSpec { stick_bottom: false })
+    col()
+        .key("scroll")
+        .w_full()
+        .shrink()
+        .min_h(min as f32 * line)
+        .max_h(max as f32 * line)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .child(field.animate_edit_layout())
 }
 
@@ -123,8 +130,13 @@ impl El {
     /// fields' menus show as a Spellcheck item with a check mark, as a browser's do. Picking it
     /// calls `f` with the setting flipped; the app keeps it and passes it to its fields'
     /// [`El::spellcheck`].
-    pub fn on_spellcheck<S: 'static>(mut self, on: bool, f: impl Fn(&mut S, bool, &mut Tx) + 'static) -> Self {
-        self.handlers.on_spellcheck = Some((on, Rc::new(move |s, on, tx| f(downcast::<S>(s), on, tx))));
+    pub fn on_spellcheck<S: 'static>(
+        mut self,
+        on: bool,
+        f: impl Fn(&mut S, bool, &mut Tx) + 'static,
+    ) -> Self {
+        self.handlers.on_spellcheck =
+            Some((on, Rc::new(move |s, on, tx| f(downcast::<S>(s), on, tx))));
         self
     }
     /// Mask a text element or text input before layout; disable undo, copy, cut, selection and
@@ -137,7 +149,11 @@ impl El {
     /// Pair with [`revealed`](Self::revealed) to toggle plaintext display.
     pub fn secure(mut self) -> Self {
         self.cold_mut().a11y.secure = true;
-        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+        if let Some(input) = self
+            .cold
+            .get_mut_if_some()
+            .and_then(|c| c.input.as_deref_mut())
+        {
             input.edit.set_secure(true);
             let single = input.single_line;
             if let Some(text) = &mut self.text {
@@ -166,7 +182,11 @@ impl El {
     /// text, redacted [`Debug`], uncached shaping/raster, and zeroized buffers). Prefer
     /// [`TextEdit::revealed`] or [`TextEdit::set_revealed`] when an input model owns the state.
     pub fn revealed(mut self, revealed: bool) -> Self {
-        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+        if let Some(input) = self
+            .cold
+            .get_mut_if_some()
+            .and_then(|c| c.input.as_deref_mut())
+        {
             input.edit.set_revealed(revealed);
             input.revealed_override = Some(revealed);
             if let Some(text) = &mut self.text {
@@ -181,7 +201,11 @@ impl El {
     }
     /// Called after a focused field's text changes, with the updated model available.
     pub fn on_input_change<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
-        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+        if let Some(input) = self
+            .cold
+            .get_mut_if_some()
+            .and_then(|c| c.input.as_deref_mut())
+        {
             input.change = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         }
         self
@@ -197,15 +221,31 @@ impl El {
     ///     None => false,
     /// })
     /// ```
-    pub fn on_input_paste<S: 'static>(mut self, f: impl Fn(&mut S, &crate::ClipboardContent, &mut Tx) -> bool + 'static) -> Self {
-        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
-            input.paste = Some(Rc::new(move |s, content, tx| f(downcast::<S>(s), content, tx)));
+    pub fn on_input_paste<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, &crate::ClipboardContent, &mut Tx) -> bool + 'static,
+    ) -> Self {
+        if let Some(input) = self
+            .cold
+            .get_mut_if_some()
+            .and_then(|c| c.input.as_deref_mut())
+        {
+            input.paste = Some(Rc::new(move |s, content, tx| {
+                f(downcast::<S>(s), content, tx)
+            }));
         }
         self
     }
     /// Handle a focused text field's key before the editor. Return true to consume it.
-    pub fn on_input_key<S: 'static>(mut self, f: impl Fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool + 'static) -> Self {
-        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+    pub fn on_input_key<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, &crate::KeyEvent, &mut Tx) -> bool + 'static,
+    ) -> Self {
+        if let Some(input) = self
+            .cold
+            .get_mut_if_some()
+            .and_then(|c| c.input.as_deref_mut())
+        {
             input.key = Some(Rc::new(move |s, key, tx| f(downcast::<S>(s), key, tx)));
         }
         self

@@ -37,9 +37,9 @@ mod fill;
 mod painter;
 mod pool;
 mod raster;
-mod scroll;
 #[doc(hidden)]
 pub mod record;
+mod scroll;
 mod shade;
 pub(crate) mod tool;
 
@@ -88,13 +88,19 @@ pub enum HalfRounding {
 }
 
 /// PCI vendor IDs whose half-float rounding was measured.
-const MEASURED: [(u32, HalfRounding); 2] = [(0x8086, HalfRounding::TowardZero), (0x10de, HalfRounding::TowardZero)];
+const MEASURED: [(u32, HalfRounding); 2] = [
+    (0x8086, HalfRounding::TowardZero),
+    (0x10de, HalfRounding::TowardZero),
+];
 
 impl HalfRounding {
     /// The rounding of the GPU with PCI vendor ID `vendor`: measured for Intel and NVIDIA,
     /// assumed (toward zero) for any other, AMD (0x1002) among them.
     pub fn of_vendor(vendor: u32) -> HalfRounding {
-        MEASURED.iter().find(|m| m.0 == vendor).map_or(HalfRounding::TowardZero, |m| m.1)
+        MEASURED
+            .iter()
+            .find(|m| m.0 == vendor)
+            .map_or(HalfRounding::TowardZero, |m| m.1)
     }
 }
 
@@ -122,10 +128,40 @@ impl<'a> Scene<'a> {
     /// The frame `instances` draws with `atlas`'s glyph masks and `images`' pages into a
     /// `size` (device pixels) target cleared to `clear` (`Runtime::clear_color`), blending in
     /// sRGB encoding as windows do by default.
-    pub fn new(instances: &'a [Instance], atlas: &'a Atlas, images: &'a ImageAtlas, size: (u32, u32), clear: [f32; 4]) -> Self {
-        let glyph_pages = (0..atlas.page_count()).filter_map(|p| atlas.page_data(p)).collect();
-        let images = images.pages.iter().map(|p| Image { width: p.width, data: &p.data, dirty: p.dirty }).collect();
-        Scene { instances, glyph_pages, outlines: Some(&atlas.outlines), images, size, clear, lcd: atlas.lcd, srgb_blend: true, native_surfaces: false, compositor: false, smoothing: None, atlas_resets: atlas.resets(), half: HalfRounding::default() }
+    pub fn new(
+        instances: &'a [Instance],
+        atlas: &'a Atlas,
+        images: &'a ImageAtlas,
+        size: (u32, u32),
+        clear: [f32; 4],
+    ) -> Self {
+        let glyph_pages = (0..atlas.page_count())
+            .filter_map(|p| atlas.page_data(p))
+            .collect();
+        let images = images
+            .pages
+            .iter()
+            .map(|p| Image {
+                width: p.width,
+                data: &p.data,
+                dirty: p.dirty,
+            })
+            .collect();
+        Scene {
+            instances,
+            glyph_pages,
+            outlines: Some(&atlas.outlines),
+            images,
+            size,
+            clear,
+            lcd: atlas.lcd,
+            srgb_blend: true,
+            native_surfaces: false,
+            compositor: false,
+            smoothing: None,
+            atlas_resets: atlas.resets(),
+            half: HalfRounding::default(),
+        }
     }
 
     /// Whether the frame blends in sRGB encoding (`Runtime::srgb_blend`). Linear blending needs
@@ -157,7 +193,14 @@ impl<'a> Scene<'a> {
 
     /// The scene-wide switches, which a frame that only recolours keeps.
     fn flags(&self) -> Flags {
-        Flags { srgb_blend: self.srgb_blend, native_surfaces: self.native_surfaces, compositor: self.compositor, lcd: self.lcd, smoothing: self.smoothing, half: self.half }
+        Flags {
+            srgb_blend: self.srgb_blend,
+            native_surfaces: self.native_surfaces,
+            compositor: self.compositor,
+            lcd: self.lcd,
+            smoothing: self.smoothing,
+            half: self.half,
+        }
     }
 
     /// How the GPU that will take over rounds half floats (`HalfRounding::of_vendor`).
@@ -174,20 +217,37 @@ impl<'a> Scene<'a> {
 
     /// The first thing in this frame only the GPU can draw, or None when `paint` draws all of it.
     pub fn needs_gpu(&self) -> Option<NeedsGpu> {
-        if !self.srgb_blend { return Some(NeedsGpu::LinearBlend); }
-        if self.native_surfaces { return Some(NeedsGpu::NativeSurface); }
-        if self.smoothing == Some(FontSmoothing::Slug) { return Some(NeedsGpu::SlugText); }
+        if !self.srgb_blend {
+            return Some(NeedsGpu::LinearBlend);
+        }
+        if self.native_surfaces {
+            return Some(NeedsGpu::NativeSurface);
+        }
+        if self.smoothing == Some(FontSmoothing::Slug) {
+            return Some(NeedsGpu::SlugText);
+        }
         // How many layer scopes are open: a backdrop blur inside one reads that layer's target.
         let mut depth = 0u32;
         self.instances.iter().find_map(|i| match i.params[1] {
             k if k == KIND_LAYER && i.params[2] != 0.0 => Some(NeedsGpu::LayerBlur),
             k if k == KIND_LAYER && i.border[1] != 0.0 => Some(NeedsGpu::TurnedLayer),
-            k if k == KIND_LAYER => { depth += 1; None }
-            k if k == KIND_LAYER_END => { depth = depth.saturating_sub(1); None }
+            k if k == KIND_LAYER => {
+                depth += 1;
+                None
+            }
+            k if k == KIND_LAYER_END => {
+                depth = depth.saturating_sub(1);
+                None
+            }
             k if k == KIND_BACKDROP_BLUR && depth > 0 => Some(NeedsGpu::BackdropBlur),
             k if k == KIND_EFFECT && self.compositor => Some(NeedsGpu::Effect),
             // Slug's rays (coverage 1) have no CPU form; Windfoil's box does (outline::coverage).
-            k if k == KIND_GLYPH && i.radii[3] > 0.0 && (self.outlines.is_none() || i.border[3] == 1.0) => Some(NeedsGpu::OutlineGlyph),
+            k if k == KIND_GLYPH
+                && i.radii[3] > 0.0
+                && (self.outlines.is_none() || i.border[3] == 1.0) =>
+            {
+                Some(NeedsGpu::OutlineGlyph)
+            }
             k if !(0.0..=13.0).contains(&k) || k.fract() != 0.0 => Some(NeedsGpu::UnknownKind),
             _ => None,
         })
@@ -231,12 +291,22 @@ pub struct Target<'a> {
 impl<'a> Target<'a> {
     /// Tightly packed rows (`width * 4` bytes), as a top-down 32-bit DIB section lays them out.
     pub fn new(pixels: &'a mut [u8], width: u32, height: u32) -> Self {
-        Target { pixels, width, height, stride: width as usize * 4 }
+        Target {
+            pixels,
+            width,
+            height,
+            stride: width as usize * 4,
+        }
     }
 
     /// Rows `stride` bytes apart.
     pub fn with_stride(pixels: &'a mut [u8], width: u32, height: u32, stride: usize) -> Self {
-        Target { pixels, width, height, stride }
+        Target {
+            pixels,
+            width,
+            height,
+            stride,
+        }
     }
 }
 
@@ -268,14 +338,27 @@ pub struct Report {
 
 /// Paints `scene` into `target` on `threads` threads (the calling one among them), or says why
 /// only the GPU can.
-pub fn paint(scene: &Scene<'_>, target: &mut Target<'_>, threads: usize) -> Result<Report, NeedsGpu> {
-    if let Some(why) = scene.needs_gpu() { return Err(why); }
+pub fn paint(
+    scene: &Scene<'_>,
+    target: &mut Target<'_>,
+    threads: usize,
+) -> Result<Report, NeedsGpu> {
+    if let Some(why) = scene.needs_gpu() {
+        return Err(why);
+    }
     check_target(scene, target)?;
     let start = Instant::now();
     let bins = bin::Bins::of(scene);
     let binned = Instant::now();
     let tiles: Vec<u32> = (0..bins.tile_count() as u32).collect();
-    let mut report = raster::run(scene, &bins, target, &tiles, &raster::Spawn(threads.max(1)), &raster::Spawn(threads.max(1)));
+    let mut report = raster::run(
+        scene,
+        &bins,
+        target,
+        &tiles,
+        &raster::Spawn(threads.max(1)),
+        &raster::Spawn(threads.max(1)),
+    );
     let done = Instant::now();
     report.bin_ns = ns(binned - start);
     report.raster_ns = ns(done - binned);
@@ -289,7 +372,9 @@ pub fn paint(scene: &Scene<'_>, target: &mut Target<'_>, threads: usize) -> Resu
 /// Whether `target` is `scene`'s size, with rows at least a row of pixels apart.
 fn check_target(scene: &Scene<'_>, target: &Target<'_>) -> Result<(), NeedsGpu> {
     let (w, h) = scene.size;
-    let fits = target.width == w && target.height == h && target.stride >= w as usize * 4
+    let fits = target.width == w
+        && target.height == h
+        && target.stride >= w as usize * 4
         && target.pixels.len() >= target.stride * h.saturating_sub(1) as usize + w as usize * 4;
     if fits { Ok(()) } else { Err(NeedsGpu::Target) }
 }

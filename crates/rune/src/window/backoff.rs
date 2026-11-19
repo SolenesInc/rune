@@ -24,7 +24,13 @@ pub(crate) struct Backoff {
 }
 
 impl Default for Backoff {
-    fn default() -> Self { Backoff { at: None, occluded: OCCLUDED_RETRY, hidden: TIMEOUT_RETRY } }
+    fn default() -> Self {
+        Backoff {
+            at: None,
+            occluded: OCCLUDED_RETRY,
+            hidden: TIMEOUT_RETRY,
+        }
+    }
 }
 
 /// What happened to the window's next frame.
@@ -32,7 +38,11 @@ impl Default for Backoff {
 pub(crate) enum BackoffEvent {
     /// A shown frame got no drawable at `now`. `paced` is a running display link, whose next tick
     /// draws the frame itself.
-    Missed { missed: Missed, paced: bool, now: Instant },
+    Missed {
+        missed: Missed,
+        paced: bool,
+        now: Instant,
+    },
     /// A hidden launcher's refresh got no drawable at `now`. `preparing` is a first frame whose
     /// own deadline retries it, which the window waits on once rather than twice.
     HiddenMissed { preparing: bool, now: Instant },
@@ -71,7 +81,9 @@ impl Backoff {
             BackoffEvent::HiddenMissed { preparing, now } => {
                 // A first frame's deadline owns its retries; the window waits for none of its own.
                 self.at = (!preparing).then(|| now + self.hidden);
-                if !preparing { self.hidden = (self.hidden * 2).min(OCCLUDED_MAX); }
+                if !preparing {
+                    self.hidden = (self.hidden * 2).min(OCCLUDED_MAX);
+                }
                 Effects::none()
             }
             BackoffEvent::At(at) => {
@@ -101,13 +113,23 @@ impl Backoff {
     }
 
     /// When the window may draw again, until it does.
-    pub(crate) fn deadline(&self) -> Option<Instant> { self.at }
+    pub(crate) fn deadline(&self) -> Option<Instant> {
+        self.at
+    }
 
     /// Whether the window is still waiting out a frame it couldn't draw at `now`.
-    pub(crate) fn waiting(&self, now: Instant) -> bool { self.at.is_some_and(|at| at > now) }
+    pub(crate) fn waiting(&self, now: Instant) -> bool {
+        self.at.is_some_and(|at| at > now)
+    }
 
     /// A window whose occluded and hidden waits start at `occluded` and `hidden`, as a long
     /// occluded spell or a test leaves them.
     #[cfg(test)]
-    pub(crate) fn seeded(occluded: Duration, hidden: Duration) -> Self { Backoff { at: None, occluded, hidden } }
+    pub(crate) fn seeded(occluded: Duration, hidden: Duration) -> Self {
+        Backoff {
+            at: None,
+            occluded,
+            hidden,
+        }
+    }
 }

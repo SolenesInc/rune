@@ -18,7 +18,9 @@ impl RuntimeCore {
             EndRef::Offscreen(vi, ti) => self.live(&self.offscreen_text(vi, ti).list_path),
         };
         let (n0, n1) = (node_for(h)?, node_for(f)?);
-        let around = |a: usize, j: usize| std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == a);
+        let around = |a: usize, j: usize| {
+            std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == a)
+        };
         let provider = std::iter::successors(Some(n0), |&p| self.nodes[p].parent)
             .find(|&p| self.nodes[p].handlers.selection_copy.is_some() && around(p, n1));
         if let Some(p) = provider
@@ -42,21 +44,33 @@ impl RuntimeCore {
         texts: &mut Vec<OffscreenText>,
         providers: &mut Vec<(String, SelectionCopy)>,
     ) {
-        let Some(v) = self.virtuals.get(list_path) else { return };
+        let Some(v) = self.virtuals.get(list_path) else {
+            return;
+        };
         let Some(key) = v.keys.get(r) else { return };
-        let (group_path, inert) = (v.selection.scope.group_path.as_deref(), v.selection.scope.inert);
+        let (group_path, inert) = (
+            v.selection.scope.group_path.as_deref(),
+            v.selection.scope.inert,
+        );
         match v.selection.pins.source() {
             Some(Source::Rebuild(rows)) => {
                 let state = self.app.states_ref();
                 let mut row = (rows.build)(state, r).key(key.clone());
                 if !crate::input::key_diagnostics::clean(&row) {
-                    let _ = crate::input::key_diagnostics::repair_at(&mut row, &format!("{list_path}/{key}"));
+                    let _ = crate::input::key_diagnostics::repair_at(
+                        &mut row,
+                        &format!("{list_path}/{key}"),
+                    );
                 }
-                collect_virtual_row_selection(&row, list_path, key, r, group_path, inert, texts, providers);
+                collect_virtual_row_selection(
+                    &row, list_path, key, r, group_path, inert, texts, providers,
+                );
             }
             Some(Source::Stored) => {
                 if let Some(row) = v.selection.stored.get(&r) {
-                    collect_virtual_row_selection(row, list_path, key, r, group_path, inert, texts, providers);
+                    collect_virtual_row_selection(
+                        row, list_path, key, r, group_path, inert, texts, providers,
+                    );
                 }
             }
             // Before the list's first commit there is nothing to build a row from, as dev's
@@ -67,7 +81,9 @@ impl RuntimeCore {
 
     /// Pins row `r` of `list_path` and ensures its offscreen texts are kept.
     pub(crate) fn pin_offscreen_row(&mut self, list_path: &str, r: usize) {
-        let Some(v) = self.virtuals.get(list_path) else { return };
+        let Some(v) = self.virtuals.get(list_path) else {
+            return;
+        };
         if v.range.contains(&r) || r >= v.keys.len() {
             return;
         }
@@ -78,7 +94,11 @@ impl RuntimeCore {
             self.build_unmounted_row(list_path, r, &mut texts, &mut providers);
         }
         if let Some(v) = self.virtuals.get_mut(list_path) {
-            v.selection.pins.sync(PinsEvent::Pin { key: row_key, texts, providers });
+            v.selection.pins.sync(PinsEvent::Pin {
+                key: row_key,
+                texts,
+                providers,
+            });
         }
     }
 
@@ -94,26 +114,39 @@ impl RuntimeCore {
             let (a, b) = (sel.anchor.min(sel.focus), sel.anchor.max(sel.focus));
             return match h {
                 EndRef::Mounted(i) => {
-                    if a >= b || b > self.content_of(i).len() { return None; }
+                    if a >= b || b > self.content_of(i).len() {
+                        return None;
+                    }
                     let piece = self.selected_piece(i, a..b, base);
                     let text = piece.text().to_owned();
-                    Some(TextSelection { texts: vec![piece], text, backward: self.selection_backward() })
+                    Some(TextSelection {
+                        texts: vec![piece],
+                        text,
+                        backward: self.selection_backward(),
+                    })
                 }
                 EndRef::Offscreen(vi, ti) => {
                     let t = self.offscreen_text(vi, ti);
-                    if a >= b || b > t.spec.content.len() { return None; }
+                    if a >= b || b > t.spec.content.len() {
+                        return None;
+                    }
                     let piece = offscreen_piece(t, a..b, base_path);
                     let text = piece.text().to_owned();
-                    Some(TextSelection { texts: vec![piece], text, backward: self.selection_backward() })
+                    Some(TextSelection {
+                        texts: vec![piece],
+                        text,
+                        backward: self.selection_backward(),
+                    })
                 }
             };
         }
 
-        let ((first_end, first_byte), (last_end, last_byte)) = if self.tree_order(h) < self.tree_order(f) {
-            ((h, sel.anchor), (f, sel.focus))
-        } else {
-            ((f, sel.focus), (h, sel.anchor))
-        };
+        let ((first_end, first_byte), (last_end, last_byte)) =
+            if self.tree_order(h) < self.tree_order(f) {
+                ((h, sel.anchor), (f, sel.focus))
+            } else {
+                ((f, sel.focus), (h, sel.anchor))
+            };
         let (first_ord, last_ord) = (self.tree_order(first_end), self.tree_order(last_end));
         let g_path = self.end_group_path(h)?;
 
@@ -127,34 +160,69 @@ impl RuntimeCore {
             if self.offscreen_text(vi1, ti1).row_key == *row_key {
                 let (mut texts, mut out) = (Vec::new(), CopyJoin::default());
                 for (ti, t) in kept.iter().enumerate() {
-                    if &t.row_key != row_key || t.group_path.as_deref() != Some(g_path) { continue; }
+                    if &t.row_key != row_key || t.group_path.as_deref() != Some(g_path) {
+                        continue;
+                    }
                     let end_ref = EndRef::Offscreen(vi0, ti);
                     let ord = self.tree_order(end_ref);
-                    if ord < first_ord || ord > last_ord { continue; }
+                    if ord < first_ord || ord > last_ord {
+                        continue;
+                    }
                     let len = t.spec.content.len();
-                    let a = if end_ref == first_end { first_byte.min(len) } else { 0 };
-                    let b = if end_ref == last_end { last_byte.min(len) } else { len };
-                    if a >= b { continue; }
+                    let a = if end_ref == first_end {
+                        first_byte.min(len)
+                    } else {
+                        0
+                    };
+                    let b = if end_ref == last_end {
+                        last_byte.min(len)
+                    } else {
+                        len
+                    };
+                    if a >= b {
+                        continue;
+                    }
                     let piece = offscreen_piece(t, a..b, base_path);
-                    let hit_cap = out.push(&t.spec, a..b, piece.text(), t.tab_before, MAX_VIRTUAL_COPY_BYTES);
+                    let hit_cap = out.push(
+                        &t.spec,
+                        a..b,
+                        piece.text(),
+                        t.tab_before,
+                        MAX_VIRTUAL_COPY_BYTES,
+                    );
                     texts.push(piece);
-                    if hit_cap { break; }
+                    if hit_cap {
+                        break;
+                    }
                 }
                 let text = out.finish();
-                return (!text.is_empty()).then_some(TextSelection { texts, text, backward: self.selection_backward() });
+                return (!text.is_empty()).then_some(TextSelection {
+                    texts,
+                    text,
+                    backward: self.selection_backward(),
+                });
             }
         }
 
         // General group selection spanning a virtual list.
-        let list_path = self.virtual_end_of(first_end, 0)
+        let list_path = self
+            .virtual_end_of(first_end, 0)
             .or_else(|| self.virtual_end_of(last_end, 0))
             .map(|e| e.list_path)
             .or_else(|| {
                 let g = self.live(g_path)?;
-                let inside = |j: usize| j == g || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == g);
+                let inside = |j: usize| {
+                    j == g
+                        || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                            .any(|p| p == g)
+                };
                 (g..self.nodes.len())
                     .take_while(|&j| inside(j))
-                    .find_map(|j| self.virtuals.contains_key(&self.nodes[j].path).then(|| self.nodes[j].path.clone()))
+                    .find_map(|j| {
+                        self.virtuals
+                            .contains_key(&self.nodes[j].path)
+                            .then(|| self.nodes[j].path.clone())
+                    })
             })?;
         let list_node = self.live(&list_path)?;
         let v = self.virtuals.get(&list_path)?;
@@ -163,16 +231,34 @@ impl RuntimeCore {
         let (mut texts, mut out) = (Vec::new(), CopyJoin::default());
         let (mut unbuilt_rows, mut prev_mounted, mut hit_cap) = (0usize, None, false);
 
-        let append_mounted = |j: usize, out: &mut CopyJoin, texts: &mut Vec<SelectedText>, prev_mounted: &mut Option<usize>| -> bool {
+        let append_mounted = |j: usize,
+                              out: &mut CopyJoin,
+                              texts: &mut Vec<SelectedText>,
+                              prev_mounted: &mut Option<usize>|
+         -> bool {
             let end_ref = EndRef::Mounted(j);
             let ord = self.tree_order(end_ref);
-            if ord < first_ord || ord > last_ord { return false; }
+            if ord < first_ord || ord > last_ord {
+                return false;
+            }
             let len = self.content_of(j).len();
-            let a = if end_ref == first_end { first_byte.min(len) } else { 0 };
-            let b = if end_ref == last_end { last_byte.min(len) } else { len };
-            if a >= b { return false; }
+            let a = if end_ref == first_end {
+                first_byte.min(len)
+            } else {
+                0
+            };
+            let b = if end_ref == last_end {
+                last_byte.min(len)
+            } else {
+                len
+            };
+            if a >= b {
+                return false;
+            }
             let piece = self.selected_piece(j, a..b, base);
-            let Some(spec) = self.nodes[j].text.as_ref() else { return false };
+            let Some(spec) = self.nodes[j].text.as_ref() else {
+                return false;
+            };
             let beside = prev_mounted.is_some_and(|p| self.beside(p, j));
             let capped = out.push(spec, a..b, piece.text(), beside, MAX_VIRTUAL_COPY_BYTES);
             texts.push(piece);
@@ -181,7 +267,9 @@ impl RuntimeCore {
         };
 
         // 1. Mounted group members before `list_node`.
-        let inside_g = |j: usize| std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == g);
+        let inside_g = |j: usize| {
+            std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == g)
+        };
         for j in (g + 1..list_node).filter(|&j| inside_g(j) && self.member(j, g)) {
             if append_mounted(j, &mut out, &mut texts, &mut prev_mounted) {
                 hit_cap = true;
@@ -191,40 +279,66 @@ impl RuntimeCore {
 
         // 2. Rows of the virtual list in `[row_start..=row_end]`.
         if !hit_cap && !v.keys.is_empty() {
-            let row_start = self.virtual_end_of(first_end, 0)
+            let row_start = self
+                .virtual_end_of(first_end, 0)
                 .filter(|e| e.list_path == list_path)
                 .map_or(0, |e| e.row_index);
-            let row_end = self.virtual_end_of(last_end, 0)
+            let row_end = self
+                .virtual_end_of(last_end, 0)
                 .filter(|e| e.list_path == list_path)
                 .map_or(v.keys.len() - 1, |e| e.row_index.min(v.keys.len() - 1));
 
-            let inside_list = |j: usize| std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == list_node);
-            let list_end = (list_node + 1..self.nodes.len()).take_while(|&j| inside_list(j)).last().unwrap_or(list_node);
+            let inside_list = |j: usize| {
+                std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                    .any(|p| p == list_node)
+            };
+            let list_end = (list_node + 1..self.nodes.len())
+                .take_while(|&j| inside_list(j))
+                .last()
+                .unwrap_or(list_node);
 
             for r in row_start..=row_end {
                 if v.range.contains(&r) {
                     let row_path = format!("{list_path}/{}", v.keys[r]);
-                    let Some(row_node) = (list_node + 1..=list_end)
-                        .find(|&j| self.nodes[j].parent == Some(list_node) && self.nodes[j].path == row_path)
-                    else { continue };
-                    let inside_row = |j: usize| {
-                        j == row_node || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == row_node)
+                    let Some(row_node) = (list_node + 1..=list_end).find(|&j| {
+                        self.nodes[j].parent == Some(list_node) && self.nodes[j].path == row_path
+                    }) else {
+                        continue;
                     };
-                    for j in (row_node..=list_end).take_while(|&j| inside_row(j)).filter(|&j| self.member(j, g)) {
+                    let inside_row = |j: usize| {
+                        j == row_node
+                            || std::iter::successors(self.nodes[j].parent, |&p| {
+                                self.nodes[p].parent
+                            })
+                            .any(|p| p == row_node)
+                    };
+                    for j in (row_node..=list_end)
+                        .take_while(|&j| inside_row(j))
+                        .filter(|&j| self.member(j, g))
+                    {
                         if append_mounted(j, &mut out, &mut texts, &mut prev_mounted) {
                             hit_cap = true;
                             break;
                         }
                     }
-                    if hit_cap { break; }
+                    if hit_cap {
+                        break;
+                    }
                 } else {
                     prev_mounted = None;
                     let row_key = &v.keys[r];
                     let mut built_texts = Vec::new();
                     let row_texts: Vec<&OffscreenText> = if v.selection.pins.has_text_row(row_key) {
-                        v.selection.pins.texts().iter().filter(|t| &t.row_key == row_key).collect()
+                        v.selection
+                            .pins
+                            .texts()
+                            .iter()
+                            .filter(|t| &t.row_key == row_key)
+                            .collect()
                     } else {
-                        if unbuilt_rows >= MAX_VIRTUAL_COPY_ROWS || out.text().len() >= MAX_VIRTUAL_COPY_BYTES {
+                        if unbuilt_rows >= MAX_VIRTUAL_COPY_ROWS
+                            || out.text().len() >= MAX_VIRTUAL_COPY_BYTES
+                        {
                             hit_cap = true;
                             break;
                         }
@@ -235,15 +349,35 @@ impl RuntimeCore {
                     };
                     let mut first_in_row = true;
                     for t in row_texts {
-                        if t.group_path.as_deref() != Some(g_path) { continue; }
+                        if t.group_path.as_deref() != Some(g_path) {
+                            continue;
+                        }
                         let ord = (list_node * 2 + 1, r, t.order_in_row);
-                        if ord < first_ord || ord > last_ord { continue; }
+                        if ord < first_ord || ord > last_ord {
+                            continue;
+                        }
                         let len = t.spec.content.len();
-                        let a = if ord == first_ord { first_byte.min(len) } else { 0 };
-                        let b = if ord == last_ord { last_byte.min(len) } else { len };
-                        if a >= b { continue; }
+                        let a = if ord == first_ord {
+                            first_byte.min(len)
+                        } else {
+                            0
+                        };
+                        let b = if ord == last_ord {
+                            last_byte.min(len)
+                        } else {
+                            len
+                        };
+                        if a >= b {
+                            continue;
+                        }
                         let piece = offscreen_piece(t, a..b, base_path);
-                        let capped = out.push(&t.spec, a..b, piece.text(), !first_in_row && t.tab_before, MAX_VIRTUAL_COPY_BYTES);
+                        let capped = out.push(
+                            &t.spec,
+                            a..b,
+                            piece.text(),
+                            !first_in_row && t.tab_before,
+                            MAX_VIRTUAL_COPY_BYTES,
+                        );
                         texts.push(piece);
                         first_in_row = false;
                         if capped {
@@ -251,13 +385,18 @@ impl RuntimeCore {
                             break;
                         }
                     }
-                    if hit_cap { break; }
+                    if hit_cap {
+                        break;
+                    }
                 }
             }
 
             // 3. Mounted group members after the virtual list's subtree.
             if !hit_cap {
-                for j in (list_end + 1..self.nodes.len()).take_while(|&j| inside_g(j)).filter(|&j| self.member(j, g)) {
+                for j in (list_end + 1..self.nodes.len())
+                    .take_while(|&j| inside_g(j))
+                    .filter(|&j| self.member(j, g))
+                {
                     if append_mounted(j, &mut out, &mut texts, &mut prev_mounted) {
                         break;
                     }
@@ -266,19 +405,25 @@ impl RuntimeCore {
         }
 
         let text = out.finish();
-        (!text.is_empty()).then_some(TextSelection { texts, text, backward: self.selection_backward() })
+        (!text.is_empty()).then_some(TextSelection {
+            texts,
+            text,
+            backward: self.selection_backward(),
+        })
     }
 
     /// Finds the first and last selectable texts inside mounted node `root` (including unbuilt rows
     /// of any virtual list under `root`), pinning offscreen end rows as needed.
     pub(crate) fn virtual_span_under(&mut self, root: usize) -> Option<(EndRef, EndRef)> {
         let inside = |nodes: &[Node], j: usize| {
-            j == root || std::iter::successors(nodes[j].parent, |&p| nodes[p].parent).any(|p| p == root)
+            j == root
+                || std::iter::successors(nodes[j].parent, |&p| nodes[p].parent).any(|p| p == root)
         };
         let list_path = (root..self.nodes.len())
             .take_while(|&j| inside(&self.nodes, j))
             .find_map(|j| {
-                self.virtuals.get(&self.nodes[j].path)
+                self.virtuals
+                    .get(&self.nodes[j].path)
                     .filter(|v| !v.keys.is_empty())
                     .map(|_| self.nodes[j].path.clone())
             })?;
@@ -291,7 +436,12 @@ impl RuntimeCore {
 
         // 1. Find the first selectable text under `root`.
         let first_before = (root..list_node)
-            .filter(|&j| inside(&self.nodes, j) && self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j))
+            .filter(|&j| {
+                inside(&self.nodes, j)
+                    && self.is_selectable(j)
+                    && !self.subtree_exiting(j)
+                    && self.allowed(j)
+            })
             .find(|&j| match &g_path {
                 Some(gp) => self.group_of(j).is_some_and(|g| &self.nodes[g].path == gp),
                 None => true,
@@ -312,8 +462,13 @@ impl RuntimeCore {
                         .take_while(|&j| inside(&self.nodes, j))
                         .filter(|&j| {
                             (self.nodes[j].path == row_path
-                                || self.nodes[j].path.strip_prefix(&row_path).is_some_and(|s| s.starts_with('/')))
-                                && self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j)
+                                || self.nodes[j]
+                                    .path
+                                    .strip_prefix(&row_path)
+                                    .is_some_and(|s| s.starts_with('/')))
+                                && self.is_selectable(j)
+                                && !self.subtree_exiting(j)
+                                && self.allowed(j)
                         })
                         .find(|&j| match &g_path {
                             Some(gp) => self.group_of(j).is_some_and(|g| &self.nodes[g].path == gp),
@@ -348,12 +503,20 @@ impl RuntimeCore {
         };
 
         // 2. Find the last selectable text under `root` in `gp`.
-        let inside_list = |j: usize| std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == list_node);
-        let list_end = (list_node + 1..self.nodes.len()).take_while(|&j| inside_list(j)).last().unwrap_or(list_node);
+        let inside_list = |j: usize| {
+            std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                .any(|p| p == list_node)
+        };
+        let list_end = (list_node + 1..self.nodes.len())
+            .take_while(|&j| inside_list(j))
+            .last()
+            .unwrap_or(list_node);
         let last_after = (list_end + 1..self.nodes.len())
             .take_while(|&j| inside(&self.nodes, j))
             .filter(|&j| {
-                self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j)
+                self.is_selectable(j)
+                    && !self.subtree_exiting(j)
+                    && self.allowed(j)
                     && self.group_of(j).is_some_and(|g| self.nodes[g].path == gp)
             })
             .last()
@@ -372,8 +535,13 @@ impl RuntimeCore {
                     if let Some(j) = (list_node + 1..=list_end)
                         .filter(|&j| {
                             (self.nodes[j].path == row_path
-                                || self.nodes[j].path.strip_prefix(&row_path).is_some_and(|s| s.starts_with('/')))
-                                && self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j)
+                                || self.nodes[j]
+                                    .path
+                                    .strip_prefix(&row_path)
+                                    .is_some_and(|s| s.starts_with('/')))
+                                && self.is_selectable(j)
+                                && !self.subtree_exiting(j)
+                                && self.allowed(j)
                                 && self.group_of(j).is_some_and(|g| self.nodes[g].path == gp)
                         })
                         .last()
@@ -384,7 +552,11 @@ impl RuntimeCore {
                 } else {
                     let (mut texts, mut providers) = (Vec::new(), Vec::new());
                     self.build_unmounted_row(&list_path, r, &mut texts, &mut providers);
-                    if let Some(t) = texts.iter().rev().find(|t| t.group_path.as_deref() == Some(gp.as_str())) {
+                    if let Some(t) = texts
+                        .iter()
+                        .rev()
+                        .find(|t| t.group_path.as_deref() == Some(gp.as_str()))
+                    {
                         last_row_pin = Some((r, t.path.clone()));
                         break;
                     }
@@ -399,12 +571,18 @@ impl RuntimeCore {
 
         let first_path = self.end_path(first_end).to_owned();
         let last_path = self.end_path(last_end).to_owned();
-        Some((self.resolve_end(&first_path, None)?, self.resolve_end(&last_path, None)?))
+        Some((
+            self.resolve_end(&first_path, None)?,
+            self.resolve_end(&last_path, None)?,
+        ))
     }
 
     /// Carries out a `Tx::select_text`, `select_all_text` or `clear_text_selection`.
     pub(crate) fn select_request(&mut self, request: SelectRequest) {
-        let named = |key: &str| (0..self.nodes.len()).find(|&i| self.nodes[i].named(key) && !self.subtree_exiting(i) && self.allowed(i));
+        let named = |key: &str| {
+            (0..self.nodes.len())
+                .find(|&i| self.nodes[i].named(key) && !self.subtree_exiting(i) && self.allowed(i))
+        };
         match request {
             SelectRequest::Clear => self.clear_text_selection(),
             SelectRequest::Range(key, range) => {
@@ -413,9 +591,17 @@ impl RuntimeCore {
                     return;
                 };
                 let content = self.content_of(i).to_owned();
-                let (a, b) = (floor_boundary(&content, range.start), floor_boundary(&content, range.end.max(range.start)));
+                let (a, b) = (
+                    floor_boundary(&content, range.start),
+                    floor_boundary(&content, range.end.max(range.start)),
+                );
                 let path = self.nodes[i].path.clone();
-                self.select_step(phase::Event::Select(Selection::new(path, content, (a, b), (a, b))));
+                self.select_step(phase::Event::Select(Selection::new(
+                    path,
+                    content,
+                    (a, b),
+                    (a, b),
+                )));
             }
             SelectRequest::All(key) => {
                 let Some(i) = named(&key) else {
@@ -433,12 +619,24 @@ impl RuntimeCore {
                         return;
                     }
                 }
-                let inside = |j: usize| j == i || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == i);
-                let texts = || (i..self.nodes.len()).take_while(|&j| inside(j))
-                    .filter(|&j| self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j));
+                let inside = |j: usize| {
+                    j == i
+                        || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                            .any(|p| p == i)
+                };
+                let texts = || {
+                    (i..self.nodes.len())
+                        .take_while(|&j| inside(j))
+                        .filter(|&j| {
+                            self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j)
+                        })
+                };
                 let Some(first) = texts().next() else { return };
                 let last = match self.group_of(first) {
-                    Some(g) => texts().filter(|&j| self.group_of(j) == Some(g)).last().unwrap_or(first),
+                    Some(g) => texts()
+                        .filter(|&j| self.group_of(j) == Some(g))
+                        .last()
+                        .unwrap_or(first),
                     None => first,
                 };
                 self.select_span(first, last);
@@ -462,13 +660,17 @@ impl RuntimeCore {
             SelectRequest::Clear => return false,
             SelectRequest::Range(k, _) | SelectRequest::All(k) => k.as_str(),
         };
-        let lists: Vec<String> = self.virtuals.keys()
+        let lists: Vec<String> = self
+            .virtuals
+            .keys()
             .filter(|lp| self.virtual_list_allowed(lp))
             .cloned()
             .collect();
 
         for list_path in lists {
-            let Some(v) = self.virtuals.get(&list_path) else { continue };
+            let Some(v) = self.virtuals.get(&list_path) else {
+                continue;
+            };
             let count = v.keys.len();
             let range = v.range.clone();
             let mut candidate_rows: Vec<usize> = (0..count)
@@ -476,19 +678,28 @@ impl RuntimeCore {
                 .filter(|&r| {
                     let rk = &v.keys[r];
                     selector == rk
-                        || selector.strip_prefix(rk.as_str()).is_some_and(|s| s.starts_with('/'))
+                        || selector
+                            .strip_prefix(rk.as_str())
+                            .is_some_and(|s| s.starts_with('/'))
                         || selector.rsplit('/').any(|seg| seg == rk)
                 })
                 .collect();
             if candidate_rows.is_empty() {
-                candidate_rows.extend((0..count).filter(|r| !range.contains(r)).take(MAX_VIRTUAL_COPY_ROWS));
+                candidate_rows.extend(
+                    (0..count)
+                        .filter(|r| !range.contains(r))
+                        .take(MAX_VIRTUAL_COPY_ROWS),
+                );
             }
             for r in candidate_rows {
                 let (mut texts, mut providers) = (Vec::new(), Vec::new());
                 self.build_unmounted_row(&list_path, r, &mut texts, &mut providers);
                 match request {
                     SelectRequest::Range(_, byte_range) => {
-                        if let Some(t) = texts.iter().find(|t| t.path == selector || crate::flight::selects(selector, &t.path, t.key.as_deref())) {
+                        if let Some(t) = texts.iter().find(|t| {
+                            t.path == selector
+                                || crate::flight::selects(selector, &t.path, t.key.as_deref())
+                        }) {
                             let target_path = t.path.clone();
                             let content = t.spec.content.clone();
                             let (a, b) = (
@@ -496,7 +707,9 @@ impl RuntimeCore {
                                 floor_boundary(&content, byte_range.end.max(byte_range.start)),
                             );
                             self.pin_offscreen_row(&list_path, r);
-                            let Some(end_ref) = self.resolve_end(&target_path, None) else { return false };
+                            let Some(end_ref) = self.resolve_end(&target_path, None) else {
+                                return false;
+                            };
                             let mut sel = Selection::new(target_path, content, (a, b), (a, b));
                             sel.anchor_end = self.virtual_end_of(end_ref, a);
                             self.select_step(phase::Event::Select(sel));
@@ -506,21 +719,41 @@ impl RuntimeCore {
                     SelectRequest::All(_) => {
                         let row_path = format!("{list_path}/{}", self.virtuals[&list_path].keys[r]);
                         let row_key = &self.virtuals[&list_path].keys[r];
-                        let row_matches = row_path == selector || crate::flight::selects(selector, &row_path, Some(row_key));
+                        let row_matches = row_path == selector
+                            || crate::flight::selects(selector, &row_path, Some(row_key));
                         let matching: Vec<&OffscreenText> = if row_matches {
                             texts.iter().collect()
                         } else {
-                            texts.iter().filter(|t| t.path == selector || crate::flight::selects(selector, &t.path, t.key.as_deref())).collect()
+                            texts
+                                .iter()
+                                .filter(|t| {
+                                    t.path == selector
+                                        || crate::flight::selects(
+                                            selector,
+                                            &t.path,
+                                            t.key.as_deref(),
+                                        )
+                                })
+                                .collect()
                         };
                         if let Some(&first_t) = matching.first() {
                             let gp = first_t.group_path.as_deref();
                             let last_t = match gp {
-                                Some(g) => matching.iter().copied().filter(|t| t.group_path.as_deref() == Some(g)).last().unwrap_or(first_t),
+                                Some(g) => matching
+                                    .iter()
+                                    .copied()
+                                    .filter(|t| t.group_path.as_deref() == Some(g))
+                                    .last()
+                                    .unwrap_or(first_t),
                                 None => first_t,
                             };
                             let (p0, p1) = (first_t.path.clone(), last_t.path.clone());
                             self.pin_offscreen_row(&list_path, r);
-                            let (Some(e0), Some(e1)) = (self.resolve_end(&p0, None), self.resolve_end(&p1, None)) else { return false };
+                            let (Some(e0), Some(e1)) =
+                                (self.resolve_end(&p0, None), self.resolve_end(&p1, None))
+                            else {
+                                return false;
+                            };
                             self.select_span_ends(e0, e1);
                             return true;
                         }

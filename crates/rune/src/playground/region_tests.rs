@@ -24,7 +24,9 @@ impl Old {
     }
 
     fn see_focus(&mut self, focused: Option<&'static str>) -> bool {
-        if self.region_seen == focused { return false; }
+        if self.region_seen == focused {
+            return false;
+        }
         self.region_seen = focused;
         true
     }
@@ -41,7 +43,9 @@ impl Old {
 
     /// `sync_region`, `at` being the column of the focused element when there is one.
     fn sync_region(&mut self, focused: Option<&'static str>, hover: bool, at: Option<OldRegion>) {
-        if !self.see_focus(focused) || hover { return; }
+        if !self.see_focus(focused) || hover {
+            return;
+        }
         let Some(region) = at else { return };
         self.set_region(region);
     }
@@ -62,10 +66,30 @@ struct Node {
     highlight: bool,
 }
 
-const LIST_ROW: Node = Node { path: "list/row", column: OldRegion::List, slot: false, highlight: true };
-const SIDE_ROW: Node = Node { path: "side/row", column: OldRegion::Side, slot: false, highlight: true };
-const SLOT: Node = Node { path: "side/slot", column: OldRegion::Side, slot: true, highlight: false };
-const FIELD: Node = Node { path: "stage/field", column: OldRegion::Stage, slot: false, highlight: false };
+const LIST_ROW: Node = Node {
+    path: "list/row",
+    column: OldRegion::List,
+    slot: false,
+    highlight: true,
+};
+const SIDE_ROW: Node = Node {
+    path: "side/row",
+    column: OldRegion::Side,
+    slot: false,
+    highlight: true,
+};
+const SLOT: Node = Node {
+    path: "side/slot",
+    column: OldRegion::Side,
+    slot: true,
+    highlight: false,
+};
+const FIELD: Node = Node {
+    path: "stage/field",
+    column: OldRegion::Stage,
+    slot: false,
+    highlight: false,
+};
 
 /// An event as the runtime meets it.
 #[derive(Clone, Copy, Debug)]
@@ -145,7 +169,11 @@ impl Sim {
     fn new() -> Self {
         Self {
             keys: Keyboard::default(),
-            old: Old { region: OldRegion::List, side_active: false, region_seen: None },
+            old: Old {
+                region: OldRegion::List,
+                side_active: false,
+                region_seen: None,
+            },
             focus: None,
             hovered: false,
             route: None,
@@ -168,7 +196,9 @@ impl Sim {
         let routing = self.route.is_some();
         match feed {
             Feed::Focus(_) | Feed::Look => true,
-            Feed::Hover(lit) => !routing && self.hovered != lit && self.focus.is_some_and(|n| n.highlight),
+            Feed::Hover(lit) => {
+                !routing && self.hovered != lit && self.focus.is_some_and(|n| n.highlight)
+            }
             Feed::Press(_) => true,
             Feed::Close | Feed::RouteStart => !routing,
             Feed::RouteEnd => routing,
@@ -179,7 +209,9 @@ impl Sim {
     fn feed(&mut self, feed: Feed, reached: &mut Reached) -> bool {
         match feed {
             Feed::Focus(next) => {
-                if self.path() != next.map(|n| n.path) { self.hovered = false; }
+                if self.path() != next.map(|n| n.path) {
+                    self.hovered = false;
+                }
                 self.focus = next;
                 self.old_flag_stale = false;
                 let slot = self.on_slot();
@@ -192,26 +224,43 @@ impl Sim {
             }
             Feed::Look => {
                 let at = if self.hovered { None } else { self.focus };
-                self.old.sync_region(self.path(), self.hovered, self.focus.map(|n| n.column));
-                if self.keys.saw(self.path()) { return false; }
+                self.old
+                    .sync_region(self.path(), self.hovered, self.focus.map(|n| n.column));
+                if self.keys.saw(self.path()) {
+                    return false;
+                }
                 self.keys.step(Moved::Focus {
                     focus: self.path().map(str::to_owned),
                     region: at.map(|n| new_region(n.column)),
                 })
             }
             Feed::Press(region) => {
-                if region == OldRegion::Stage && self.focus == Some(SLOT) { reached.retained_clicks += 1; }
+                if region == OldRegion::Stage && self.focus == Some(SLOT) {
+                    reached.retained_clicks += 1;
+                }
                 self.old.give_region(region, self.path());
-                self.keys.step(Moved::Give { region: new_region(region), seen: self.path().map(str::to_owned) })
+                self.keys.step(Moved::Give {
+                    region: new_region(region),
+                    seen: self.path().map(str::to_owned),
+                })
             }
             Feed::Close => {
-                if self.focus == Some(SLOT) { reached.closes_on_the_slot += 1; }
+                if self.focus == Some(SLOT) {
+                    reached.closes_on_the_slot += 1;
+                }
                 self.old.close();
                 self.keys.step(Moved::Closed)
             }
             Feed::RouteStart => {
-                let aside = self.focus.filter(|n| n.column != OldRegion::Stage).map(|n| (n, self.hovered));
-                self.route = Some(Route { old: self.old.region, new: self.keys.region(), aside });
+                let aside = self
+                    .focus
+                    .filter(|n| n.column != OldRegion::Stage)
+                    .map(|n| (n, self.hovered));
+                self.route = Some(Route {
+                    old: self.old.region,
+                    new: self.keys.region(),
+                    aside,
+                });
                 if aside.is_some() {
                     self.focus = None;
                     self.hovered = false;
@@ -222,16 +271,28 @@ impl Sim {
             Feed::RouteEnd => {
                 let route = self.route.take().expect("a route is running");
                 let back = route.aside.filter(|_| self.focus.is_none());
-                if route.aside.is_some() && back.is_none() { reached.routes_moving_focus += 1; }
-                if back.is_some_and(|(n, _)| self.old.region_seen != Some(n.path)) { reached.restored_unseen += 1; }
+                if route.aside.is_some() && back.is_none() {
+                    reached.routes_moving_focus += 1;
+                }
+                if back.is_some_and(|(n, _)| self.old.region_seen != Some(n.path)) {
+                    reached.restored_unseen += 1;
+                }
                 self.old.set_region(route.old);
-                if let Some((node, _)) = back { self.old.see_focus(Some(node.path)); }
-                let mut changed = self.keys.step(Moved::Resume { region: route.new, back: back.map(|(n, _)| n.path.to_owned()) });
+                if let Some((node, _)) = back {
+                    self.old.see_focus(Some(node.path));
+                }
+                let mut changed = self.keys.step(Moved::Resume {
+                    region: route.new,
+                    back: back.map(|(n, _)| n.path.to_owned()),
+                });
                 if let Some((node, hovered)) = back {
                     self.focus = Some(node);
                     self.hovered = hovered;
                     self.old_flag_stale = self.old.side_active != self.on_slot();
-                    assert!(!self.old_flag_stale || self.on_slot(), "the one difference keeps a mark, never drops one");
+                    assert!(
+                        !self.old_flag_stale || self.on_slot(),
+                        "the one difference keeps a mark, never drops one"
+                    );
                     changed |= self.keys.step(Moved::Slot(self.on_slot()));
                 }
                 changed
@@ -248,23 +309,39 @@ impl Sim {
             Region::Side => OldRegion::Side,
         };
         assert_eq!(region, self.old.region, "{trail:?}: the column");
-        assert_eq!(self.keys.slot_focused(), self.old.side_active || self.old_flag_stale, "{trail:?}: what looks active");
-        assert!(self.keys.saw(self.old.region_seen), "{trail:?}: the focus last taken, {:?}", self.old.region_seen);
+        assert_eq!(
+            self.keys.slot_focused(),
+            self.old.side_active || self.old_flag_stale,
+            "{trail:?}: what looks active"
+        );
+        assert!(
+            self.keys.saw(self.old.region_seen),
+            "{trail:?}: the focus last taken, {:?}",
+            self.old.region_seen
+        );
     }
 }
 
 fn walk(sim: &Sim, depth: usize, trail: &mut Vec<Feed>, reached: &mut Reached) -> u64 {
     let mut checked = 0;
     for feed in FEEDS {
-        if !sim.allows(feed) { continue; }
+        if !sim.allows(feed) {
+            continue;
+        }
         let mut next = sim.clone();
         let before = (next.keys.region(), next.keys.slot_focused());
         let changed = next.feed(feed, reached);
         trail.push(feed);
-        assert_eq!(changed, before != (next.keys.region(), next.keys.slot_focused()), "{trail:?}: says whether it changed");
+        assert_eq!(
+            changed,
+            before != (next.keys.region(), next.keys.slot_focused()),
+            "{trail:?}: says whether it changed"
+        );
         next.check(trail);
         checked += 1;
-        if depth > 1 { checked += walk(&next, depth - 1, trail, reached); }
+        if depth > 1 {
+            checked += walk(&next, depth - 1, trail, reached);
+        }
         trail.pop();
     }
     checked
@@ -275,29 +352,56 @@ fn any_order_of_keyboard_events_leaves_the_column_slot_and_seen_focus_the_old_ca
     let mut reached = Reached::default();
     let checked = walk(&Sim::new(), 7, &mut Vec::new(), &mut reached);
     assert!(checked > 1_000_000, "walked {checked}");
-    assert!(reached.retained_clicks > 0, "a stage click that keeps the slot's focus");
-    assert!(reached.restored_unseen > 0, "a route restoring a focus the keyboard hadn't seen");
-    assert!(reached.routes_moving_focus > 0, "a route whose key moved focus");
-    assert!(reached.closes_on_the_slot > 0, "a close with focus on the slot");
+    assert!(
+        reached.retained_clicks > 0,
+        "a stage click that keeps the slot's focus"
+    );
+    assert!(
+        reached.restored_unseen > 0,
+        "a route restoring a focus the keyboard hadn't seen"
+    );
+    assert!(
+        reached.routes_moving_focus > 0,
+        "a route whose key moved focus"
+    );
+    assert!(
+        reached.closes_on_the_slot > 0,
+        "a close with focus on the slot"
+    );
 }
 
 #[test]
 fn a_look_at_focus_it_already_took_has_nothing_to_do() {
     let mut keys = Keyboard::default();
     assert!(keys.saw(None));
-    keys.step(Moved::Focus { focus: Some("side/row".into()), region: None });
-    assert!(keys.saw(Some("side/row")), "a hover is taken as seen too, so it isn't looked at again");
+    keys.step(Moved::Focus {
+        focus: Some("side/row".into()),
+        region: None,
+    });
+    assert!(
+        keys.saw(Some("side/row")),
+        "a hover is taken as seen too, so it isn't looked at again"
+    );
     assert!(!keys.saw(None));
 }
 
 #[test]
 fn a_clicked_column_keeps_the_keyboard_until_focus_moves() {
     let mut keys = Keyboard::default();
-    keys.step(Moved::Give { region: Region::Stage, seen: None });
+    keys.step(Moved::Give {
+        region: Region::Stage,
+        seen: None,
+    });
     // A frame's look at focus, which nothing has: the stage keeps the keyboard.
-    keys.step(Moved::Focus { focus: None, region: None });
+    keys.step(Moved::Focus {
+        focus: None,
+        region: None,
+    });
     assert_eq!(keys.region(), Region::Stage);
-    keys.step(Moved::Focus { focus: Some("list/story".into()), region: Some(Region::List) });
+    keys.step(Moved::Focus {
+        focus: Some("list/story".into()),
+        region: Some(Region::List),
+    });
     assert_eq!(keys.region(), Region::List);
 }
 
@@ -305,17 +409,36 @@ fn a_clicked_column_keeps_the_keyboard_until_focus_moves() {
 fn a_stage_click_that_keeps_the_slots_focus_keeps_its_mark() {
     let mut keys = Keyboard::default();
     keys.step(Moved::Slot(true));
-    keys.step(Moved::Give { region: Region::Side, seen: Some("side/slot".into()) });
-    keys.step(Moved::Give { region: Region::Stage, seen: Some("side/slot".into()) });
-    keys.step(Moved::Focus { focus: Some("side/slot".into()), region: Some(Region::Side) });
-    assert_eq!(keys.region(), Region::Stage, "focus didn't move, so the click stands");
-    assert!(keys.slot_focused(), "and the slot it left focused stays marked");
+    keys.step(Moved::Give {
+        region: Region::Side,
+        seen: Some("side/slot".into()),
+    });
+    keys.step(Moved::Give {
+        region: Region::Stage,
+        seen: Some("side/slot".into()),
+    });
+    keys.step(Moved::Focus {
+        focus: Some("side/slot".into()),
+        region: Some(Region::Side),
+    });
+    assert_eq!(
+        keys.region(),
+        Region::Stage,
+        "focus didn't move, so the click stands"
+    );
+    assert!(
+        keys.slot_focused(),
+        "and the slot it left focused stays marked"
+    );
 }
 
 #[test]
 fn the_slot_goes_by_focus_whatever_the_column() {
     let mut keys = Keyboard::default();
-    keys.step(Moved::Give { region: Region::Stage, seen: None });
+    keys.step(Moved::Give {
+        region: Region::Stage,
+        seen: None,
+    });
     assert!(keys.step(Moved::Slot(true)), "a change redraws its view");
     assert_eq!(keys.region(), Region::Stage, "and moves no column");
     assert!(keys.step(Moved::Slot(false)));
@@ -325,34 +448,62 @@ fn the_slot_goes_by_focus_whatever_the_column() {
 #[test]
 fn a_route_that_moves_focus_gives_the_column_it_landed_in_the_keyboard() {
     let mut keys = Keyboard::default();
-    keys.step(Moved::Give { region: Region::List, seen: Some("list/story".into()) });
+    keys.step(Moved::Give {
+        region: Region::List,
+        seen: Some("list/story".into()),
+    });
     // A key a step pressed holds the stage, then gives the list back: focus was set aside, so
     // nothing new is seen.
     keys.step(Moved::Hold(Region::Stage));
-    keys.step(Moved::Resume { region: Region::List, back: None });
+    keys.step(Moved::Resume {
+        region: Region::List,
+        back: None,
+    });
     assert_eq!(keys.region(), Region::List);
     // The stage's key focused a control in the side column: the next look at focus gives it the
     // keyboard, because the route restored nothing.
-    keys.step(Moved::Focus { focus: Some("side/variant".into()), region: Some(Region::Side) });
-    assert_eq!(keys.region(), Region::Side, "focus where the route left it takes the keyboard");
+    keys.step(Moved::Focus {
+        focus: Some("side/variant".into()),
+        region: Some(Region::Side),
+    });
+    assert_eq!(
+        keys.region(),
+        Region::Side,
+        "focus where the route left it takes the keyboard"
+    );
 }
 
 #[test]
 fn a_route_that_puts_focus_back_keeps_the_column_it_had() {
     let mut keys = Keyboard::default();
-    keys.step(Moved::Give { region: Region::Stage, seen: Some("stage/old".into()) });
+    keys.step(Moved::Give {
+        region: Region::Stage,
+        seen: Some("stage/old".into()),
+    });
     keys.step(Moved::Hold(Region::Stage));
-    keys.step(Moved::Resume { region: Region::Stage, back: Some("stage/field".into()) });
-    assert!(keys.saw(Some("stage/field")), "the focus it put back is the one it has seen");
+    keys.step(Moved::Resume {
+        region: Region::Stage,
+        back: Some("stage/field".into()),
+    });
+    assert!(
+        keys.saw(Some("stage/field")),
+        "the focus it put back is the one it has seen"
+    );
     // The focus that came back isn't a move.
-    keys.step(Moved::Focus { focus: Some("stage/field".into()), region: Some(Region::List) });
+    keys.step(Moved::Focus {
+        focus: Some("stage/field".into()),
+        region: Some(Region::List),
+    });
     assert_eq!(keys.region(), Region::Stage);
 }
 
 #[test]
 fn closing_gives_the_list_the_keyboard_and_keeps_the_focus_it_saw() {
     let mut keys = Keyboard::default();
-    keys.step(Moved::Give { region: Region::Side, seen: Some("side/slot".into()) });
+    keys.step(Moved::Give {
+        region: Region::Side,
+        seen: Some("side/slot".into()),
+    });
     assert!(keys.step(Moved::Closed));
     assert_eq!(keys.region(), Region::List);
     assert!(keys.saw(Some("side/slot")));
@@ -362,10 +513,19 @@ fn closing_gives_the_list_the_keyboard_and_keeps_the_focus_it_saw() {
 fn a_route_that_blurs_the_focus_it_puts_back_keeps_the_slots_mark() {
     let mut sim = Sim::new();
     let mut reached = Reached::default();
-    for feed in [Feed::Focus(Some(SLOT)), Feed::Press(OldRegion::Side), Feed::RouteStart, Feed::Focus(None), Feed::RouteEnd] {
+    for feed in [
+        Feed::Focus(Some(SLOT)),
+        Feed::Press(OldRegion::Side),
+        Feed::RouteStart,
+        Feed::Focus(None),
+        Feed::RouteEnd,
+    ] {
         sim.feed(feed, &mut reached);
     }
     assert_eq!(sim.focus, Some(SLOT));
-    assert!(!sim.old.side_active, "the old flag stayed off with the slot focused");
+    assert!(
+        !sim.old.side_active,
+        "the old flag stayed off with the slot focused"
+    );
     assert!(sim.keys.slot_focused(), "the keyboard follows focus");
 }

@@ -40,8 +40,14 @@ pub(super) fn render(path: &[Command], ctm: Transform, width: f32, px: u32, out:
     let w = width.clamp(0.0, 1.0);
     for piece in &pieces {
         let (lo, hi) = bounds(&piece.pts);
-        let (x0, y0) = ((lo.x - 1.5).floor().max(0.0) as usize, (lo.y - 1.5).floor().max(0.0) as usize);
-        let (x1, y1) = (((hi.x + 1.5).ceil().max(0.0) as usize).min(n), ((hi.y + 1.5).ceil().max(0.0) as usize).min(n));
+        let (x0, y0) = (
+            (lo.x - 1.5).floor().max(0.0) as usize,
+            (lo.y - 1.5).floor().max(0.0) as usize,
+        );
+        let (x1, y1) = (
+            ((hi.x + 1.5).ceil().max(0.0) as usize).min(n),
+            ((hi.y + 1.5).ceil().max(0.0) as usize).min(n),
+        );
         for y in y0..y1 {
             for x in x0..x1 {
                 let c = w * coverage(piece, Point::new(x as f32 + 0.5, y as f32 + 0.5));
@@ -67,10 +73,14 @@ pub(super) fn draws_as_rect(path: &[Command], ctm: Transform) -> bool {
     if ctm.xy != 0.0 || ctm.yx != 0.0 {
         return false;
     }
-    let [Command::MoveTo(start), lines @ .., Command::Close] = path else { return false };
+    let [Command::MoveTo(start), lines @ .., Command::Close] = path else {
+        return false;
+    };
     let mut pts = vec![*start];
     for cmd in lines {
-        let Command::LineTo(p) = cmd else { return false };
+        let Command::LineTo(p) = cmd else {
+            return false;
+        };
         pts.push(*p);
     }
     if pts.len() == 5 && pts[4] == pts[0] {
@@ -92,9 +102,18 @@ pub(super) fn draws_as_rect(path: &[Command], ctm: Transform) -> bool {
 }
 
 fn bounds(pts: &[Point]) -> (Point, Point) {
-    pts.iter().fold((Point::new(f32::MAX, f32::MAX), Point::new(f32::MIN, f32::MIN)), |(lo, hi), p| {
-        (Point::new(lo.x.min(p.x), lo.y.min(p.y)), Point::new(hi.x.max(p.x), hi.y.max(p.y)))
-    })
+    pts.iter().fold(
+        (
+            Point::new(f32::MAX, f32::MAX),
+            Point::new(f32::MIN, f32::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    )
 }
 
 /// `path` under `ctm` as hairline pieces.
@@ -106,7 +125,9 @@ fn pieces(path: &[Command], ctm: Transform) -> Vec<Piece> {
     let mut run: Option<Vec<Point>> = None;
     let mut only_curves = true;
     let flush = |run: &mut Option<Vec<Point>>, out: &mut Vec<Piece>| {
-        if let Some(pts) = run.take() && pts.len() > 1 {
+        if let Some(pts) = run.take()
+            && pts.len() > 1
+        {
             out.push(Piece { pts, ends: true });
         }
     };
@@ -119,7 +140,10 @@ fn pieces(path: &[Command], ctm: Transform) -> Vec<Piece> {
             Command::LineTo(p) => {
                 flush(&mut run, &mut out);
                 let p = at(p);
-                out.push(Piece { pts: vec![cur, p], ends: true });
+                out.push(Piece {
+                    pts: vec![cur, p],
+                    ends: true,
+                });
                 only_curves = false;
                 cur = p;
             }
@@ -141,11 +165,18 @@ fn pieces(path: &[Command], ctm: Transform) -> Vec<Piece> {
                 let back = (cur.x - start.x).hypot(cur.y - start.y) > 1e-3;
                 match run.take() {
                     // A closed run of curves alone (a circle) has no ends.
-                    Some(pts) if only_curves && !back && pts.len() > 1 => out.push(Piece { pts, ends: false }),
+                    Some(pts) if only_curves && !back && pts.len() > 1 => {
+                        out.push(Piece { pts, ends: false })
+                    }
                     other => {
                         run = other;
                         flush(&mut run, &mut out);
-                        if back { out.push(Piece { pts: vec![cur, start], ends: true }); }
+                        if back {
+                            out.push(Piece {
+                                pts: vec![cur, start],
+                                ends: true,
+                            });
+                        }
                     }
                 }
                 cur = start;
@@ -158,20 +189,29 @@ fn pieces(path: &[Command], ctm: Transform) -> Vec<Piece> {
 }
 
 fn steps(poly: &[Point]) -> usize {
-    let len: f32 = poly.windows(2).map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y)).sum();
+    let len: f32 = poly
+        .windows(2)
+        .map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y))
+        .sum();
     ((len * STEPS_PER_PX).ceil() as usize).max(MIN_STEPS)
 }
 
 fn cubic(p0: Point, p1: Point, p2: Point, p3: Point, t: f32) -> Point {
     let u = 1.0 - t;
     let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
-    Point::new(a * p0.x + b * p1.x + c * p2.x + d * p3.x, a * p0.y + b * p1.y + c * p2.y + d * p3.y)
+    Point::new(
+        a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+        a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+    )
 }
 
 fn quad(p0: Point, p1: Point, p2: Point, t: f32) -> Point {
     let u = 1.0 - t;
     let (a, b, c) = (u * u, 2.0 * u * t, t * t);
-    Point::new(a * p0.x + b * p1.x + c * p2.x, a * p0.y + b * p1.y + c * p2.y)
+    Point::new(
+        a * p0.x + b * p1.x + c * p2.x,
+        a * p0.y + b * p1.y + c * p2.y,
+    )
 }
 
 /// Piece `piece`'s coverage at `q`: one less the distance to it, and, past or near an open end,
@@ -179,18 +219,25 @@ fn quad(p0: Point, p1: Point, p2: Point, t: f32) -> Point {
 fn coverage(piece: &Piece, q: Point) -> f32 {
     let cl = |v: f32| v.clamp(0.0, 1.0);
     let segs = piece.pts.len() - 1;
-    let total: f32 = piece.pts.windows(2).map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y)).sum();
+    let total: f32 = piece
+        .pts
+        .windows(2)
+        .map(|w| (w[1].x - w[0].x).hypot(w[1].y - w[0].y))
+        .sum();
     let mut best = 0f32;
     let mut run = 0f32;
     for (i, w) in piece.pts.windows(2).enumerate() {
         let (a, b) = (w[0], w[1]);
         let len = (b.x - a.x).hypot(b.y - a.y);
-        if len < 1e-6 { continue; }
+        if len < 1e-6 {
+            continue;
+        }
         let (ux, uy) = ((b.x - a.x) / len, (b.y - a.y) / len);
         let t = (q.x - a.x) * ux + (q.y - a.y) * uy;
         // Beyond this segment's span only an open piece's first and last segments reach, along
         // their own lines (their ends fade there); elsewhere a neighbour or the joint covers it.
-        let reach = (t >= 0.0 || (i == 0 && piece.ends)) && (t <= len || (i + 1 == segs && piece.ends));
+        let reach =
+            (t >= 0.0 || (i == 0 && piece.ends)) && (t <= len || (i + 1 == segs && piece.ends));
         let d = if reach {
             ((q.x - a.x) * uy - (q.y - a.y) * ux).abs()
         } else {
@@ -198,7 +245,11 @@ fn coverage(piece: &Piece, q: Point) -> f32 {
             (q.x - p.x).hypot(q.y - p.y)
         };
         let s = run + t;
-        let ends = if piece.ends { cl(s + 0.5).min(cl(total - s + 0.5)) } else { 1.0 };
+        let ends = if piece.ends {
+            cl(s + 0.5).min(cl(total - s + 0.5))
+        } else {
+            1.0
+        };
         best = best.max(cl(1.0 - d).min(ends));
         run += len;
     }

@@ -73,7 +73,8 @@ impl El {
     /// Replaces any `border`, and `border` replaces it.
     pub fn border_sides(mut self, widths: [f32; 4], c: Color) -> Self {
         let widths = widths.map(|w| if w.is_finite() { w.max(0.0) } else { 0.0 });
-        self.vis.set_border(widths.into_iter().fold(0.0, f32::max), c);
+        self.vis
+            .set_border(widths.into_iter().fold(0.0, f32::max), c);
         let uniform = widths.iter().all(|&w| w == widths[0]);
         if !uniform || self.vis.cold.get_mut_if_some().is_some() {
             let cold = self.vis.cold_mut();
@@ -137,7 +138,12 @@ impl El {
     /// An outer drop shadow offset by `(0, y)` with CSS `blur` radius (`blur = 2σ`; pass
     /// `2.0 * r` to match `CALayer.shadowRadius`). Springs like [`Self::box_shadow`].
     pub fn shadow(mut self, y: f32, blur: f32, color: Color) -> Self {
-        self.vis.cold_mut().shadows.push(Shadow { y, blur, color, ..Shadow::default() });
+        self.vis.cold_mut().shadows.push(Shadow {
+            y,
+            blur,
+            color,
+            ..Shadow::default()
+        });
         self
     }
     /// A full box shadow (offset, spread, inset), e.g. one layer of a CSS elevation token.
@@ -175,7 +181,15 @@ impl El {
             && rx > 0.0
             && ry > 0.0;
         let r = valid
-            .then(|| normalize_gradient_stops(GradientGeometry::Radial { center, radius: [rx, ry] }, stops.as_ref()))
+            .then(|| {
+                normalize_gradient_stops(
+                    GradientGeometry::Radial {
+                        center,
+                        radius: [rx, ry],
+                    },
+                    stops.as_ref(),
+                )
+            })
             .flatten()
             .map(Box::new);
         if r.is_some() || !self.vis.cold.is_empty() {
@@ -229,7 +243,11 @@ impl El {
     /// A ring `offset` points outside the border box (CSS `outline` + `outline-offset`). Width
     /// and offset snap to device pixels as [`Self::border`]'s width does.
     pub fn outline(mut self, width: f32, offset: f32, color: Color) -> Self {
-        self.vis.cold_mut().outline = Some(Outline { width, offset, color });
+        self.vis.cold_mut().outline = Some(Outline {
+            width,
+            offset,
+            color,
+        });
         self
     }
     #[inline]
@@ -269,7 +287,9 @@ impl El {
             if alpha < 1.0 || !e.vis.cold.is_empty() {
                 e.vis.cold_mut().paint_alpha *= alpha;
             }
-            for child in &mut e.children { apply(child, alpha); }
+            for child in &mut e.children {
+                apply(child, alpha);
+            }
         }
         apply(&mut self, alpha.clamp(0.0, 1.0));
         self
@@ -623,7 +643,10 @@ pub(crate) struct RadialGradient {
     pub(crate) stops: Vec<(f32, Color)>,
 }
 
-fn normalize_gradient_stops(geometry: GradientGeometry, raw: &[(f32, Color)]) -> Option<RadialGradient> {
+fn normalize_gradient_stops(
+    geometry: GradientGeometry,
+    raw: &[(f32, Color)],
+) -> Option<RadialGradient> {
     let mut stops: Vec<(f32, Color)> = raw
         .iter()
         .copied()
@@ -649,7 +672,13 @@ impl Shadow {
     /// from 1.5 to 32 pt), so `blur` is twice the radius. Corners stay circular, as with a
     /// `CGPath(roundedRect:)` shadow path. With `srgb_blend(true)` it also composites as one.
     pub fn core_animation(x: f32, y: f32, radius: f32, color: Color) -> Shadow {
-        Shadow { x, y, blur: 2.0 * radius, color, ..Shadow::default() }
+        Shadow {
+            x,
+            y,
+            blur: 2.0 * radius,
+            color,
+            ..Shadow::default()
+        }
     }
 }
 
@@ -663,7 +692,11 @@ pub struct Outline {
 
 impl El {
     /// Paint the newest video frame inside this node. Node dimensions are in points.
-    pub fn native_surface(mut self, surface: &crate::NativeSurface, fit: crate::SurfaceFit) -> Self {
+    pub fn native_surface(
+        mut self,
+        surface: &crate::NativeSurface,
+        fit: crate::SurfaceFit,
+    ) -> Self {
         self.vis.cold_mut().surface = Some((surface.clone(), fit));
         self
     }

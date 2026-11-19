@@ -11,9 +11,9 @@
 //! Recording costs a lock the first time a name is reached and nothing after; the totals stop
 //! once the first frame presents.
 
+use crate::time::Instant;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use crate::time::Instant;
 
 #[derive(Default)]
 struct Book {
@@ -22,7 +22,11 @@ struct Book {
     notes: Vec<(&'static str, &'static str)>,
 }
 
-static BOOK: Mutex<Book> = Mutex::new(Book { marks: Vec::new(), metrics: Vec::new(), notes: Vec::new() });
+static BOOK: Mutex<Book> = Mutex::new(Book {
+    marks: Vec::new(),
+    metrics: Vec::new(),
+    notes: Vec::new(),
+});
 /// Totals stop at the first presented frame.
 static TOTALS_DONE: AtomicBool = AtomicBool::new(false);
 
@@ -96,7 +100,10 @@ impl Timed {
 impl Drop for Timed {
     fn drop(&mut self) {
         if let Some((name, started)) = self.0 {
-            add(name, u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
+            add(
+                name,
+                u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            );
         }
     }
 }

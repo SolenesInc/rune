@@ -33,7 +33,11 @@ pub(super) fn pad_room(style: &mut CompactStyle, room: f32, taken: [bool; 2], si
 
 /// The strips the last layout gave viewport `id` with `room` asked, which this commit's style
 /// starts from.
-pub(super) fn room_taken_before(memo_ctx: &memo_reuse::MemoFlattenCtx<'_>, id: NodeId, room: f32) -> [bool; 2] {
+pub(super) fn room_taken_before(
+    memo_ctx: &memo_reuse::MemoFlattenCtx<'_>,
+    id: NodeId,
+    room: f32,
+) -> [bool; 2] {
     if room <= 0.0 {
         return [false; 2];
     }
@@ -51,7 +55,10 @@ pub(super) fn overflow_past_room(nodes: &[Node], i: usize) -> [f32; 2] {
     let view = nodes[i].target;
     let [end, bottom] = room_sides(nodes[i].scroll_edges.room, nodes[i].room_taken);
     let (mut w, mut h) = (0.0f32, 0.0f32);
-    for c in (i + 1..nodes.len()).take_while(|&j| nodes[j].parent >= Some(i)).filter(|&j| nodes[j].parent == Some(i)) {
+    for c in (i + 1..nodes.len())
+        .take_while(|&j| nodes[j].parent >= Some(i))
+        .filter(|&j| nodes[j].parent == Some(i))
+    {
         let t = nodes[c].target;
         w = w.max(match nodes[i].flow {
             crate::el::Flow::Ltr => t[2] - view[0],
@@ -59,7 +66,10 @@ pub(super) fn overflow_past_room(nodes: &[Node], i: usize) -> [f32; 2] {
         });
         h = h.max(t[3] - view[1]);
     }
-    [w - (view[2] - view[0] - end), h - (view[3] - view[1] - bottom)]
+    [
+        w - (view[2] - view[0] - end),
+        h - (view[3] - view[1] - bottom),
+    ]
 }
 
 impl Measurement<'_> {
@@ -86,7 +96,8 @@ impl Measurement<'_> {
             taffy.set_style_and_mark_ancestors(
                 nodes[i].taffy,
                 style,
-                std::iter::successors(nodes[i].parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
+                std::iter::successors(nodes[i].parent, |&p| nodes[p].parent)
+                    .map(|p| nodes[p].taffy),
             );
             if let Some(c) = nodes[i].cold.get_mut_if_some() {
                 c.room_taken = taken;

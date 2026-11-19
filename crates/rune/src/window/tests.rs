@@ -12,21 +12,64 @@ fn updates_that_change_nothing_ask_no_window_for_a_frame() {
         handle.update_if(|_, _| false);
         let mut requests = shared.take();
         let mut updated = false;
-        for f in std::mem::take(&mut requests.updates) { updated |= rt.update_if(f); }
-        let quiet = !updated && requests.only_updates() && !rt.patch_pending() && !rt.needs_commit();
+        for f in std::mem::take(&mut requests.updates) {
+            updated |= rt.update_if(f);
+        }
+        let quiet =
+            !updated && requests.only_updates() && !rt.patch_pending() && !rt.needs_commit();
         for (launcher, visible) in [(false, true), (true, true), (true, false), (false, false)] {
-            let work = WakeWork::of(WakeFacts { window: true, launcher, visible, was_shown: visible, changed: updated, quiet, ..WakeFacts::default() }, || false);
-            assert_eq!(work, WakeWork::Nothing, "launcher {launcher} visible {visible}");
+            let work = WakeWork::of(
+                WakeFacts {
+                    window: true,
+                    launcher,
+                    visible,
+                    was_shown: visible,
+                    changed: updated,
+                    quiet,
+                    ..WakeFacts::default()
+                },
+                || false,
+            );
+            assert_eq!(
+                work,
+                WakeWork::Nothing,
+                "launcher {launcher} visible {visible}"
+            );
         }
     }
     handle.update_if(|_, _| false);
     handle.wake();
-    assert!(!shared.take().only_updates(), "`wake` still runs a shown window's poll");
+    assert!(
+        !shared.take().only_updates(),
+        "`wake` still runs a shown window's poll"
+    );
     handle.update_if(|_, _| false);
     setup_waker(&shared)();
     assert!(!shared.take().only_updates(), "so does `setup`'s waker");
-    assert_eq!(WakeWork::of(WakeFacts { window: true, visible: true, was_shown: true, ..WakeFacts::default() }, || false), WakeWork::Paint);
-    assert_eq!(WakeWork::of(WakeFacts { window: true, launcher: true, changed: true, ..WakeFacts::default() }, || false), WakeWork::HiddenFrame);
+    assert_eq!(
+        WakeWork::of(
+            WakeFacts {
+                window: true,
+                visible: true,
+                was_shown: true,
+                ..WakeFacts::default()
+            },
+            || false
+        ),
+        WakeWork::Paint
+    );
+    assert_eq!(
+        WakeWork::of(
+            WakeFacts {
+                window: true,
+                launcher: true,
+                changed: true,
+                ..WakeFacts::default()
+            },
+            || false
+        ),
+        WakeWork::HiddenFrame
+    );
 }
 
 /// A stream of updates that change nothing, faster than a frame, on a host that neither polls
@@ -34,16 +77,27 @@ fn updates_that_change_nothing_ask_no_window_for_a_frame() {
 /// idle is due at once.
 #[test]
 fn updates_that_change_nothing_do_not_delay_due_timers() {
-    let mut rt = Runtime::new(0u32, |_, _| crate::el(), (10.0, 10.0), crate::Env::default());
+    let mut rt = Runtime::new(
+        0u32,
+        |_, _| crate::el(),
+        (10.0, 10.0),
+        crate::Env::default(),
+    );
     rt.wall_start = Some(Instant::now());
     rt.frame(0.0);
     // A second idle since that frame.
     rt.wall_start = rt.wall_start.map(|t| t - Duration::from_secs(1));
     let polled = rt.polled_at();
-    rt.update_if(|_, tx| { tx.wake_after(Duration::ZERO); false });
+    rt.update_if(|_, tx| {
+        tx.wake_after(Duration::ZERO);
+        false
+    });
     rt.schedule_pending_wakes();
     let due = timer_deadline(&rt).expect("armed");
-    assert!(due <= Instant::now(), "due now, not a frame interval from now");
+    assert!(
+        due <= Instant::now(),
+        "due now, not a frame interval from now"
+    );
     for _ in 0..20 {
         std::thread::sleep(Duration::from_millis(2));
         rt.update_if(|_, _| false);
@@ -57,8 +111,17 @@ fn updates_that_change_nothing_do_not_delay_due_timers() {
 /// frame; any host without one waits a frame interval from the poll, never `now`.
 #[test]
 fn a_timer_asking_for_the_next_frame_waits_a_frame_without_a_display_link() {
-    fn poll(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(Duration::ZERO); false }
-    let mut rt = Runtime::new(0u32, |_, _| crate::el(), (10.0, 10.0), crate::Env::default());
+    fn poll(polls: &mut u32, _: f64, tx: &mut Tx) -> bool {
+        *polls += 1;
+        tx.wake_after(Duration::ZERO);
+        false
+    }
+    let mut rt = Runtime::new(
+        0u32,
+        |_, _| crate::el(),
+        (10.0, 10.0),
+        crate::Env::default(),
+    );
     rt.app_mut().poll = Some(poll);
     let start = Instant::now() - Duration::from_secs(1);
     rt.wall_start = Some(start);
@@ -66,13 +129,30 @@ fn a_timer_asking_for_the_next_frame_waits_a_frame_without_a_display_link() {
     assert_eq!(*rt.state(), 1);
     let due = wall_wake_deadline(&rt).expect("armed");
     let polled = start + Duration::from_secs_f64(rt.polled_at());
-    assert!(due <= polled + Duration::from_micros(1), "due at once on the runtime's clock");
+    assert!(
+        due <= polled + Duration::from_micros(1),
+        "due at once on the runtime's clock"
+    );
     let wait = timer_deadline(&rt).expect("armed");
-    assert!(wait >= polled + TIMER_FRAME - Duration::from_micros(1) && wait <= polled + TIMER_FRAME + Duration::from_micros(1));
-    assert!(timer_wants_frame(&rt, Some(polled + Duration::from_millis(8))), "a paced surface draws it next tick");
-    assert!(!timer_wants_frame(&rt, None), "an unpaced one doesn't keep the loop turning");
+    assert!(
+        wait >= polled + TIMER_FRAME - Duration::from_micros(1)
+            && wait <= polled + TIMER_FRAME + Duration::from_micros(1)
+    );
+    assert!(
+        timer_wants_frame(&rt, Some(polled + Duration::from_millis(8))),
+        "a paced surface draws it next tick"
+    );
+    assert!(
+        !timer_wants_frame(&rt, None),
+        "an unpaced one doesn't keep the loop turning"
+    );
     // A timer longer than a frame keeps its own time.
-    let mut rt = Runtime::new(0u32, |_, _| crate::el(), (10.0, 10.0), crate::Env::default());
+    let mut rt = Runtime::new(
+        0u32,
+        |_, _| crate::el(),
+        (10.0, 10.0),
+        crate::Env::default(),
+    );
     rt.wall_start = Some(start);
     rt.update(|_, tx| tx.wake_after(Duration::from_millis(100)));
     rt.frame(0.0);
@@ -83,7 +163,14 @@ fn a_timer_asking_for_the_next_frame_waits_a_frame_without_a_display_link() {
 fn a_frame_that_draws_the_same_pixels_is_the_same() {
     use crate::{Color, el};
     fn view(n: &u32, _: &mut crate::Cx<u32>) -> crate::El {
-        el().key("root").size(200.0, 100.0).child(el().key("box").size(40.0 + *n as f32, 40.0).fill(Color { r: 0.3, g: 0.5, b: 0.9, a: 1.0 }))
+        el().key("root").size(200.0, 100.0).child(
+            el().key("box").size(40.0 + *n as f32, 40.0).fill(Color {
+                r: 0.3,
+                g: 0.5,
+                b: 0.9,
+                a: 1.0,
+            }),
+        )
     }
     let mut rt = Runtime::new(0u32, view, (200.0, 100.0), crate::Env::new(false, 2.0));
     rt.frame(0.0);
@@ -105,9 +192,15 @@ fn a_frame_that_draws_the_same_pixels_is_the_same() {
     // A poll that says it changed state, but the view draws the same.
     rt.update(|_, _| {});
     rt.frame(0.0);
-    assert!(p.same(&rt, &config), "a rebuild that draws the same pixels presents nothing");
+    assert!(
+        p.same(&rt, &config),
+        "a rebuild that draws the same pixels presents nothing"
+    );
 
-    let resized = wgpu::SurfaceConfiguration { width: 402, ..config.clone() };
+    let resized = wgpu::SurfaceConfiguration {
+        width: 402,
+        ..config.clone()
+    };
     assert!(!p.same(&rt, &resized), "a resized surface draws again");
     rt.text.atlas.dirty = Some((0, 1));
     assert!(!p.same(&rt, &config), "a glyph upload draws again");
@@ -124,10 +217,19 @@ fn a_frame_that_draws_the_same_pixels_is_the_same() {
 #[test]
 fn a_timer_frame_that_draws_the_same_still_draws_while_a_poll_steps() {
     fn poll(step: &mut bool, _: f64, tx: &mut Tx) -> bool {
-        tx.wake_after(if *step { Duration::ZERO } else { Duration::from_secs(5) });
+        tx.wake_after(if *step {
+            Duration::ZERO
+        } else {
+            Duration::from_secs(5)
+        });
         false
     }
-    let mut rt = Runtime::new(false, |_, _| crate::el().size(20.0, 20.0), (20.0, 20.0), crate::Env::default());
+    let mut rt = Runtime::new(
+        false,
+        |_, _| crate::el().size(20.0, 20.0),
+        (20.0, 20.0),
+        crate::Env::default(),
+    );
     rt.app_mut().poll = Some(poll);
     rt.wall_start = Some(Instant::now());
     rt.frame(0.0);
@@ -146,12 +248,21 @@ fn a_timer_frame_that_draws_the_same_still_draws_while_a_poll_steps() {
     Presented::record(&mut presented, &rt, &config);
     let p = presented.as_ref().unwrap();
     let next_tick = Some(Instant::now() + Duration::from_millis(8));
-    assert!(p.unchanged(&rt, &config, false, next_tick, None), "a slow timer leaves the drawable");
+    assert!(
+        p.unchanged(&rt, &config, false, next_tick, None),
+        "a slow timer leaves the drawable"
+    );
     *rt.state_mut() = true;
     rt.frame(0.0);
     assert!(p.same(&rt, &config));
-    assert!(!p.unchanged(&rt, &config, false, next_tick, None), "a step due by the next tick draws");
-    assert!(p.unchanged(&rt, &config, false, None, None), "without a running link the timer paces it");
+    assert!(
+        !p.unchanged(&rt, &config, false, next_tick, None),
+        "a step due by the next tick draws"
+    );
+    assert!(
+        p.unchanged(&rt, &config, false, None, None),
+        "without a running link the timer paces it"
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -170,20 +281,45 @@ fn launch_frames_hold_two_drawables_until_the_window_rests() {
     };
     let t0 = Instant::now();
     let mut launch = LaunchDrawables::cap(&mut config);
-    assert_eq!(config.desired_maximum_frame_latency, 1, "Metal makes latency + 1 drawables");
+    assert_eq!(
+        config.desired_maximum_frame_latency, 1,
+        "Metal makes latency + 1 drawables"
+    );
     assert_eq!(launch.settle(false, t0), None);
-    assert_eq!(launch.settle(false, t0 + Duration::from_millis(500)), None, "frames back to back stay capped");
-    assert_eq!(launch.settle(true, t0 + Duration::from_millis(600)), Some(2), "resting restores the configured latency");
-    assert_eq!(launch.settle(true, t0 + Duration::from_millis(700)), None, "once");
+    assert_eq!(
+        launch.settle(false, t0 + Duration::from_millis(500)),
+        None,
+        "frames back to back stay capped"
+    );
+    assert_eq!(
+        launch.settle(true, t0 + Duration::from_millis(600)),
+        Some(2),
+        "resting restores the configured latency"
+    );
+    assert_eq!(
+        launch.settle(true, t0 + Duration::from_millis(700)),
+        None,
+        "once"
+    );
     assert_eq!(launch.settle(false, t0 + Duration::from_secs(5)), None);
 
     // A window that never rests gets its third drawable after its first second on screen.
     config.desired_maximum_frame_latency = 2;
     let mut launch = LaunchDrawables::cap(&mut config);
     let shown = t0 + Duration::from_secs(3);
-    assert_eq!(launch.settle(false, shown), None, "the second counts from the first frame on screen");
-    assert_eq!(launch.settle(false, shown + Duration::from_millis(999)), None);
-    assert_eq!(launch.settle(false, shown + LaunchDrawables::LAUNCH), Some(2));
+    assert_eq!(
+        launch.settle(false, shown),
+        None,
+        "the second counts from the first frame on screen"
+    );
+    assert_eq!(
+        launch.settle(false, shown + Duration::from_millis(999)),
+        None
+    );
+    assert_eq!(
+        launch.settle(false, shown + LaunchDrawables::LAUNCH),
+        Some(2)
+    );
 
     // Nothing to restore when the configuration already asks for two.
     config.desired_maximum_frame_latency = 1;
@@ -195,17 +331,38 @@ fn launch_frames_hold_two_drawables_until_the_window_rests() {
 /// The poll's timer on the runtime's logical clock.
 const COMP_PERIOD: Duration = Duration::from_secs(5);
 
-fn still(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(COMP_PERIOD); false }
-fn every_third(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(COMP_PERIOD); *polls % 3 == 0 }
-fn changed(polls: &mut u32, _: f64, tx: &mut Tx) -> bool { *polls += 1; tx.wake_after(COMP_PERIOD); true }
+fn still(polls: &mut u32, _: f64, tx: &mut Tx) -> bool {
+    *polls += 1;
+    tx.wake_after(COMP_PERIOD);
+    false
+}
+fn every_third(polls: &mut u32, _: f64, tx: &mut Tx) -> bool {
+    *polls += 1;
+    tx.wake_after(COMP_PERIOD);
+    *polls % 3 == 0
+}
+fn changed(polls: &mut u32, _: f64, tx: &mut Tx) -> bool {
+    *polls += 1;
+    tx.wake_after(COMP_PERIOD);
+    true
+}
 
 /// A compositor whose `animating` and `redraws` follow shared flags, as one driven by app state.
-struct FlagComp { animates: std::rc::Rc<std::cell::Cell<bool>>, redraws: std::rc::Rc<std::cell::Cell<bool>> }
+struct FlagComp {
+    animates: std::rc::Rc<std::cell::Cell<bool>>,
+    redraws: std::rc::Rc<std::cell::Cell<bool>>,
+}
 
 impl crate::Compositor<u32> for FlagComp {
-    fn render(&mut self, f: &mut crate::Frame<'_, u32>) { f.draw_ui(); }
-    fn animating(&self) -> bool { self.animates.get() }
-    fn redraws(&self, _: &Runtime<u32>) -> bool { self.redraws.get() }
+    fn render(&mut self, f: &mut crate::Frame<'_, u32>) {
+        f.draw_ui();
+    }
+    fn animating(&self) -> bool {
+        self.animates.get()
+    }
+    fn redraws(&self, _: &Runtime<u32>) -> bool {
+        self.redraws.get()
+    }
 }
 
 /// A window as the host runs it, with or without a compositor, counting its frames.
@@ -227,7 +384,12 @@ struct CompHost {
 impl CompHost {
     /// The first frame draws before `poll` is set, so one timer is armed at a time.
     fn new(comp: Option<bool>, poll: fn(&mut u32, f64, &mut Tx) -> bool) -> Self {
-        fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El { crate::el().key("box").size(20.0, 20.0).fill(crate::Color::WHITE) }
+        fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
+            crate::el()
+                .key("box")
+                .size(20.0, 20.0)
+                .fill(crate::Color::WHITE)
+        }
         let mut rt = Runtime::new(0u32, view, (20.0, 20.0), crate::Env::default());
         rt.test_clock = Some(crate::Clock::manual(1.0 / crate::frame::clock::RESUME_STEP));
         let config = wgpu::SurfaceConfiguration {
@@ -243,8 +405,23 @@ impl CompHost {
         };
         let comp_animates = std::rc::Rc::new(std::cell::Cell::new(comp == Some(true)));
         let comp_redraws = std::rc::Rc::new(std::cell::Cell::new(true));
-        let comp = comp.map(|_| Box::new(FlagComp { animates: comp_animates.clone(), redraws: comp_redraws.clone() }) as Box<dyn crate::Compositor<u32>>);
-        let mut host = Self { rt, presented: None, config, idle: false, comp, comp_animates, comp_redraws, frames: 0, reports: Default::default() };
+        let comp = comp.map(|_| {
+            Box::new(FlagComp {
+                animates: comp_animates.clone(),
+                redraws: comp_redraws.clone(),
+            }) as Box<dyn crate::Compositor<u32>>
+        });
+        let mut host = Self {
+            rt,
+            presented: None,
+            config,
+            idle: false,
+            comp,
+            comp_animates,
+            comp_redraws,
+            frames: 0,
+            reports: Default::default(),
+        };
         host.frame(false);
         host.rt.app_mut().poll = Some(poll);
         host.frame(false);
@@ -258,14 +435,31 @@ impl CompHost {
         self.rt.test_clock.as_mut().unwrap().step();
         let animating = self.rt.frame(crate::frame::clock::RESUME_STEP);
         let update_ms = started.elapsed().as_secs_f64() * 1000.0;
-        if quiet && !composing(self.comp.as_deref())
-            && self.presented.as_ref().is_some_and(|p| p.unchanged(&self.rt, &self.config, animating, None, self.comp.as_deref())) {
+        if quiet
+            && !composing(self.comp.as_deref())
+            && self.presented.as_ref().is_some_and(|p| {
+                p.unchanged(
+                    &self.rt,
+                    &self.config,
+                    animating,
+                    None,
+                    self.comp.as_deref(),
+                )
+            })
+        {
             self.reports.unchanged(None, &self.rt);
             return false;
         }
         let moving = animating || composing(self.comp.as_deref());
         let encoded = self.reports.stamp();
-        self.idle = Presented::settle(&mut self.presented, &self.rt, &self.config, moving, None, true);
+        self.idle = Presented::settle(
+            &mut self.presented,
+            &self.rt,
+            &self.config,
+            moving,
+            None,
+            true,
+        );
         self.frames += 1;
         self.reports.drawn(encoded, None, started, update_ms);
         true
@@ -275,8 +469,18 @@ impl CompHost {
     /// for (`TimerFrame::asked_by_key`). Returns whether it presented.
     fn key(&mut self) -> bool {
         let mods = crate::Mods::default();
-        self.rt.physical_with_fallback(crate::PhysicalInput::Key { key: crate::PhysicalKeyCode::KeyA, mods, pressed: true, repeat: false },
-            Some(crate::KeyEvent { key: crate::Key::Text("a".into()), mods }));
+        self.rt.physical_with_fallback(
+            crate::PhysicalInput::Key {
+                key: crate::PhysicalKeyCode::KeyA,
+                mods,
+                pressed: true,
+                repeat: false,
+            },
+            Some(crate::KeyEvent {
+                key: crate::Key::Text("a".into()),
+                mods,
+            }),
+        );
         self.frame(true)
     }
 
@@ -303,9 +507,17 @@ impl CompHost {
 #[test]
 fn a_still_compositor_s_window_rests_and_polls_its_timers_first() {
     let mut host = CompHost::new(Some(false), still);
-    assert!(host.idle && host.presented.is_some(), "a still compositor lets the window rest");
+    assert!(
+        host.idle && host.presented.is_some(),
+        "a still compositor lets the window rest"
+    );
     let (frames, commits, polls) = (host.frames, host.rt.stats.commits, *host.rt.state());
-    for _ in 0..8 { assert!(!host.timer_wake(), "a poll that returns false builds and presents nothing"); }
+    for _ in 0..8 {
+        assert!(
+            !host.timer_wake(),
+            "a poll that returns false builds and presents nothing"
+        );
+    }
     assert_eq!(host.frames, frames);
     assert_eq!(host.rt.stats.commits, commits, "and runs no view");
     assert_eq!(*host.rt.state(), polls + 8, "each timer still polls");
@@ -319,15 +531,24 @@ fn a_still_compositor_s_poll_that_changes_something_gets_one_frame() {
     let changes = (polls + 1..=polls + 6).filter(|p| p % 3 == 0).count();
     assert_eq!(drew, changes, "one frame for each poll that returns true");
     assert_eq!(host.frames - frames, changes as u32);
-    assert_eq!(*host.rt.state(), polls + 6, "one poll a wake: the frame doesn't poll again");
+    assert_eq!(
+        *host.rt.state(),
+        polls + 6,
+        "one poll a wake: the frame doesn't poll again"
+    );
 }
 
 #[test]
 fn an_animating_compositor_draws_every_frame() {
     let mut host = CompHost::new(Some(true), still);
-    assert!(!host.idle && host.presented.is_none(), "an animating compositor never rests");
+    assert!(
+        !host.idle && host.presented.is_none(),
+        "an animating compositor never rests"
+    );
     let (frames, polls) = (host.frames, *host.rt.state());
-    for _ in 0..5 { assert!(host.timer_wake()); }
+    for _ in 0..5 {
+        assert!(host.timer_wake());
+    }
     assert_eq!(host.frames - frames, 5);
     assert_eq!(*host.rt.state(), polls + 5, "the frames poll");
 }
@@ -339,11 +560,17 @@ fn a_compositor_that_redraws_never_counts_as_unchanged() {
     host.rt.frame(crate::frame::clock::RESUME_STEP);
     let p = host.presented.as_ref().unwrap();
     assert!(p.same(&host.rt, &host.config));
-    assert!(!p.unchanged(&host.rt, &host.config, false, None, host.comp.as_deref()), "the same instances may composite differently");
+    assert!(
+        !p.unchanged(&host.rt, &host.config, false, None, host.comp.as_deref()),
+        "the same instances may composite differently"
+    );
     // A changed poll's quiet frame presents.
     let mut host = CompHost::new(Some(false), changed);
     assert!(host.idle && host.presented.is_some());
-    assert!(host.timer_wake(), "a poll that changed nothing on screen still presents a compositor's frame");
+    assert!(
+        host.timer_wake(),
+        "a poll that changed nothing on screen still presents a compositor's frame"
+    );
 
     // Without a compositor, the same frame presents nothing.
     let mut host = CompHost::new(None, still);
@@ -354,7 +581,10 @@ fn a_compositor_that_redraws_never_counts_as_unchanged() {
 }
 
 /// A terminal's key handler: the key goes to the shell, and only its echo changes the screen.
-fn sends_the_key_away(_: &mut u32, _: &crate::KeyEvent, tx: &mut Tx) -> bool { tx.live_only(); true }
+fn sends_the_key_away(_: &mut u32, _: &crate::KeyEvent, tx: &mut Tx) -> bool {
+    tx.live_only();
+    true
+}
 
 #[test]
 fn a_key_that_changes_nothing_on_screen_presents_no_frame() {
@@ -363,10 +593,18 @@ fn a_key_that_changes_nothing_on_screen_presents_no_frame() {
     host.rt.check_live_only(false);
     host.comp_redraws.set(false);
     let frames = host.frames;
-    for _ in 0..5 { assert!(!host.key(), "the compositor draws nothing new, so the key's frame takes no drawable"); }
+    for _ in 0..5 {
+        assert!(
+            !host.key(),
+            "the compositor draws nothing new, so the key's frame takes no drawable"
+        );
+    }
     assert_eq!(host.frames, frames);
     assert_eq!(host.rt.live_only_events(), 5, "the handler heard each key");
-    assert!(host.idle && host.presented.is_some(), "the window still rests on the frame on screen");
+    assert!(
+        host.idle && host.presented.is_some(),
+        "the window still rests on the frame on screen"
+    );
     // The echo changes what the compositor draws: its frame presents.
     host.comp_redraws.set(true);
     assert!(host.frame(false));
@@ -389,8 +627,14 @@ fn a_compositor_that_starts_animating_while_the_window_rests_draws_its_next_time
     let mut host = CompHost::new(Some(false), still);
     assert!(!host.timer_wake());
     host.comp_animates.set(true);
-    assert!(host.timer_wake(), "a due timer draws once the compositor animates");
-    assert!(!host.idle && host.presented.is_none(), "and the window stops resting");
+    assert!(
+        host.timer_wake(),
+        "a due timer draws once the compositor animates"
+    );
+    assert!(
+        !host.idle && host.presented.is_none(),
+        "and the window stops resting"
+    );
     host.comp_animates.set(false);
     assert!(host.timer_wake());
     assert!(!host.timer_wake(), "still again, it rests");
@@ -402,12 +646,32 @@ fn a_frame_that_leaves_work_for_the_next_does_not_settle() {
     assert!(host.idle);
     // The compositor invalidated the view while drawing, as one ending its own motion may.
     host.rt.invalidate();
-    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, true);
-    assert!(!idle && host.presented.is_none(), "a frame with a commit pending isn't idle");
+    let idle = Presented::settle(
+        &mut host.presented,
+        &host.rt,
+        &host.config,
+        false,
+        None,
+        true,
+    );
+    assert!(
+        !idle && host.presented.is_none(),
+        "a frame with a commit pending isn't idle"
+    );
     host.frame(false);
-    assert!(host.idle && host.presented.is_some(), "the frame that commits it settles");
+    assert!(
+        host.idle && host.presented.is_some(),
+        "the frame that commits it settles"
+    );
     // A frame the window may not rest on (hidden, or a trace counting frames) records nothing.
-    let idle = Presented::settle(&mut host.presented, &host.rt, &host.config, false, None, false);
+    let idle = Presented::settle(
+        &mut host.presented,
+        &host.rt,
+        &host.config,
+        false,
+        None,
+        false,
+    );
     assert!(idle && host.presented.is_none());
 }
 
@@ -415,16 +679,36 @@ fn a_frame_that_leaves_work_for_the_next_does_not_settle() {
 /// reports what it decided and nothing it decides reads the reports.
 #[test]
 fn reporting_frames_changes_no_frame_skip_or_redraw() {
-    fn run(hook: bool) -> (Vec<(bool, bool, bool, bool, u32)>, u64, u32, Vec<crate::FrameOutcome>) {
+    fn run(
+        hook: bool,
+    ) -> (
+        Vec<(bool, bool, bool, bool, u32)>,
+        u64,
+        u32,
+        Vec<crate::FrameOutcome>,
+    ) {
         let log = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
         let sink = log.clone();
         let mut host = CompHost::new(None, every_third);
-        let hook = hook.then(|| Box::new(move |f: &crate::FrameEncoded| sink.borrow_mut().push(f.outcome())) as crate::frame::encoded::OnFrameEncoded);
+        let hook = hook.then(|| {
+            Box::new(move |f: &crate::FrameEncoded| sink.borrow_mut().push(f.outcome()))
+                as crate::frame::encoded::OnFrameEncoded
+        });
         host.reports = crate::frame::encoded::FrameReports::new(hook, Some("main"));
         let mut steps = Vec::new();
         for i in 0..12 {
-            let presented = if i % 5 == 0 { host.frame(false) } else { host.timer_wake() };
-            steps.push((presented, host.idle, host.rt.stale(), host.rt.wake_deadline().is_some(), host.frames));
+            let presented = if i % 5 == 0 {
+                host.frame(false)
+            } else {
+                host.timer_wake()
+            };
+            steps.push((
+                presented,
+                host.idle,
+                host.rt.stale(),
+                host.rt.wake_deadline().is_some(),
+                host.frames,
+            ));
         }
         let outcomes = log.borrow().clone();
         (steps, host.rt.stats.commits, *host.rt.state(), outcomes)
@@ -434,9 +718,20 @@ fn reporting_frames_changes_no_frame_skip_or_redraw() {
     assert_eq!(plain, hooked);
     assert_eq!((plain_commits, plain_polls), (hooked_commits, hooked_polls));
     assert!(none.is_empty());
-    assert!(outcomes.contains(&crate::FrameOutcome::Drawn) && outcomes.contains(&crate::FrameOutcome::Unchanged), "{outcomes:?}");
-    let drawn = outcomes.iter().filter(|o| **o == crate::FrameOutcome::Drawn).count() as u32;
-    assert_eq!(drawn, hooked.last().unwrap().4 - 2, "one Drawn per presented frame after the two `new` drew");
+    assert!(
+        outcomes.contains(&crate::FrameOutcome::Drawn)
+            && outcomes.contains(&crate::FrameOutcome::Unchanged),
+        "{outcomes:?}"
+    );
+    let drawn = outcomes
+        .iter()
+        .filter(|o| **o == crate::FrameOutcome::Drawn)
+        .count() as u32;
+    assert_eq!(
+        drawn,
+        hooked.last().unwrap().4 - 2,
+        "one Drawn per presented frame after the two `new` drew"
+    );
 }
 
 #[test]
@@ -448,14 +743,25 @@ fn hidden_pace_renders_a_change_at_once_then_at_most_every_refresh() {
     assert_eq!(pace.deadline(), None);
     assert!(!pace.changed(t0 + Duration::from_millis(100)));
     assert!(!pace.changed(t0 + Duration::from_millis(200)));
-    assert_eq!(pace.deadline(), Some(t0 + HIDDEN_REFRESH), "later ones wait for one render");
+    assert_eq!(
+        pace.deadline(),
+        Some(t0 + HIDDEN_REFRESH),
+        "later ones wait for one render"
+    );
     assert!(!pace.take_due(t0 + Duration::from_millis(249)));
     assert!(pace.take_due(t0 + HIDDEN_REFRESH));
-    assert_eq!(pace.deadline(), None, "a due render asked for doesn't wake the loop again");
+    assert_eq!(
+        pace.deadline(),
+        None,
+        "a due render asked for doesn't wake the loop again"
+    );
     assert!(pace.changed(t0 + HIDDEN_REFRESH));
     pace.rendered(t0 + HIDDEN_REFRESH);
     assert_eq!(pace.deadline(), None);
-    assert!(pace.changed(t0 + Duration::from_secs(5)), "after a quiet spell, at once again");
+    assert!(
+        pace.changed(t0 + Duration::from_secs(5)),
+        "after a quiet spell, at once again"
+    );
     pace.reset();
     assert!(pace.changed(t0 + Duration::from_secs(5)));
 }
@@ -472,31 +778,73 @@ fn missed_frames_never_poll() {
                 backoff.step(BackoffEvent::Missed { missed, paced, now });
                 // A retry deadline at or before now would spin like a poll.
                 let flow = match backoff.deadline() {
-                    Some(at) => { assert!(at > now, "{missed:?} retries later, not now"); ControlFlow::WaitUntil(at) }
+                    Some(at) => {
+                        assert!(at > now, "{missed:?} retries later, not now");
+                        ControlFlow::WaitUntil(at)
+                    }
                     None => ControlFlow::Wait,
                 };
-                assert_ne!(flow, ControlFlow::Poll, "{missed:?} (paced: {paced}) must not poll");
+                assert_ne!(
+                    flow,
+                    ControlFlow::Poll,
+                    "{missed:?} (paced: {paced}) must not poll"
+                );
             }
         }
     }
     let occluded = |wait| {
         let mut backoff = Backoff::seeded(wait, TIMEOUT_RETRY);
-        backoff.step(BackoffEvent::Missed { missed: Missed::Occluded, paced: true, now });
+        backoff.step(BackoffEvent::Missed {
+            missed: Missed::Occluded,
+            paced: true,
+            now,
+        });
         backoff.deadline()
     };
-    assert_eq!(occluded(Duration::ZERO), Some(now + OCCLUDED_RETRY), "the safety net is slow");
+    assert_eq!(
+        occluded(Duration::ZERO),
+        Some(now + OCCLUDED_RETRY),
+        "the safety net is slow"
+    );
     assert_eq!(occluded(Duration::from_secs(60)), Some(now + OCCLUDED_MAX));
     let miss = |backoff: &mut Backoff, missed| {
-        backoff.step(BackoffEvent::Missed { missed, paced: true, now });
+        backoff.step(BackoffEvent::Missed {
+            missed,
+            paced: true,
+            now,
+        });
         backoff.deadline()
     };
     let mut backoff = Backoff::default();
-    assert_eq!(miss(&mut backoff, Missed::Timeout), None, "a running display link retries on its tick");
-    assert_eq!(miss(&mut backoff, Missed::Outdated), Some(now + OCCLUDED_RETRY));
-    assert_eq!(miss(&mut backoff, Missed::Occluded), Some(now + OCCLUDED_RETRY), "an occluded miss waits its backoff");
-    assert_eq!(miss(&mut backoff, Missed::Occluded), Some(now + OCCLUDED_RETRY * 2), "and backs off");
-    assert_eq!(miss(&mut backoff, Missed::Outdated), Some(now + OCCLUDED_RETRY), "other misses leave the backoff");
-    assert_eq!(miss(&mut backoff, Missed::Occluded), Some(now + OCCLUDED_RETRY * 4), "which carries on");
+    assert_eq!(
+        miss(&mut backoff, Missed::Timeout),
+        None,
+        "a running display link retries on its tick"
+    );
+    assert_eq!(
+        miss(&mut backoff, Missed::Outdated),
+        Some(now + OCCLUDED_RETRY)
+    );
+    assert_eq!(
+        miss(&mut backoff, Missed::Occluded),
+        Some(now + OCCLUDED_RETRY),
+        "an occluded miss waits its backoff"
+    );
+    assert_eq!(
+        miss(&mut backoff, Missed::Occluded),
+        Some(now + OCCLUDED_RETRY * 2),
+        "and backs off"
+    );
+    assert_eq!(
+        miss(&mut backoff, Missed::Outdated),
+        Some(now + OCCLUDED_RETRY),
+        "other misses leave the backoff"
+    );
+    assert_eq!(
+        miss(&mut backoff, Missed::Occluded),
+        Some(now + OCCLUDED_RETRY * 4),
+        "which carries on"
+    );
 }
 
 /// A shown window's due timer asks for a frame. On Wayland a surface that is covered before its
@@ -506,31 +854,52 @@ fn missed_frames_never_poll() {
 #[test]
 fn a_timer_frame_that_never_comes_runs_its_timer_covered_instead_of_spinning() {
     #[derive(Default)]
-    struct Due { polls: u32 }
+    struct Due {
+        polls: u32,
+    }
     fn poll(app: &mut Due, _: f64, tx: &mut Tx) -> bool {
         app.polls += 1;
         tx.wake_after(Duration::from_millis(100));
         true
     }
-    let mut rt = Runtime::new(Due::default(), |_, _| crate::el().size(20.0, 20.0), (20.0, 20.0), crate::Env::default());
+    let mut rt = Runtime::new(
+        Due::default(),
+        |_, _| crate::el().size(20.0, 20.0),
+        (20.0, 20.0),
+        crate::Env::default(),
+    );
     rt.app_mut().poll = Some(poll);
     rt.wall_start = Some(Instant::now());
     rt.frame(0.0);
     // A change since that frame, as a `wake` whose poll it hasn't drawn leaves it.
     rt.invalidate();
-    assert!(rt.stale() && !rt.rests(), "the window doesn't rest: its frame is still to come");
+    assert!(
+        rt.stale() && !rt.rests(),
+        "the window doesn't rest: its frame is still to come"
+    );
     // As `new_events` at the timer, which is due by the time the loop runs for it.
     let due = timer_deadline(&rt).expect("a timer is armed");
-    rt.wall_start = rt.wall_start.map(|t| t - due.saturating_duration_since(Instant::now()) - Duration::from_millis(1));
+    rt.wall_start = rt
+        .wall_start
+        .map(|t| t - due.saturating_duration_since(Instant::now()) - Duration::from_millis(1));
     let now = Instant::now();
-    assert!(timer_deadline(&rt).expect("armed") <= now, "the timer is due: this is what turned the loop");
+    assert!(
+        timer_deadline(&rt).expect("armed") <= now,
+        "the timer is due: this is what turned the loop"
+    );
 
     let mut frame = TimerFrame::default();
     frame.asked_quiet(now);
-    assert_eq!(frame.wait(timer_deadline(&rt), now), Some(now + TIMER_FRAME_STALL),
-        "the frame the timer asked for keeps the loop asleep until the bound");
+    assert_eq!(
+        frame.wait(timer_deadline(&rt), now),
+        Some(now + TIMER_FRAME_STALL),
+        "the frame the timer asked for keeps the loop asleep until the bound"
+    );
     assert!(!frame.stalled(now + TIMER_FRAME_STALL - Duration::from_millis(1)));
-    assert!(frame.stalled(now + TIMER_FRAME_STALL), "after the bound the timer runs covered");
+    assert!(
+        frame.stalled(now + TIMER_FRAME_STALL),
+        "after the bound the timer runs covered"
+    );
 
     let polls = rt.state().polls;
     covered_step(&mut rt);
@@ -540,27 +909,53 @@ fn a_timer_frame_that_never_comes_runs_its_timer_covered_instead_of_spinning() {
     // The covered step takes the frame's place, and a timer still ahead keeps its own time.
     frame.drawn();
     frame.asked_quiet(Instant::now());
-    assert_eq!(frame.wait(timer_deadline(&rt), Instant::now()), Some(next), "the loop sleeps until its next timer");
+    assert_eq!(
+        frame.wait(timer_deadline(&rt), Instant::now()),
+        Some(next),
+        "the loop sleeps until its next timer"
+    );
     frame.drawn();
-    assert!(!frame.stalled(now + TIMER_FRAME_STALL), "a frame that comes clears it");
+    assert!(
+        !frame.stalled(now + TIMER_FRAME_STALL),
+        "a frame that comes clears it"
+    );
 }
 
 #[test]
 fn a_window_s_first_updates_can_register_on_a_later_window() {
     use crate::{App, AppSpec, MenuItem, el};
     type S = Vec<String>;
-    let apps: Vec<App<S>> = ["first", "second"].map(|title| App::new(AppSpec::new(title, (10.0, 10.0), Vec::new, |_, _| el()))).into();
+    let apps: Vec<App<S>> = ["first", "second"]
+        .map(|title| App::new(AppSpec::new(title, (10.0, 10.0), Vec::new, |_, _| el())))
+        .into();
     let second = apps[1].handle();
     apps[0].handle().update(move |s: &mut S, _| {
-        s.push(format!("{:?}", second.register_shortcut("ctrl+alt+shift+f18".parse().unwrap(), |_, _| {}).map(|_| ())));
-        s.push(format!("{:?}", second.set_menu([MenuItem::new("Item", |_: &mut S, _| {})])));
+        s.push(format!(
+            "{:?}",
+            second
+                .register_shortcut("ctrl+alt+shift+f18".parse().unwrap(), |_, _| {})
+                .map(|_| ())
+        ));
+        s.push(format!(
+            "{:?}",
+            second.set_menu([MenuItem::new("Item", |_: &mut S, _| {})])
+        ));
     });
     // As Host::new and Host::resumed: attach the guards, then drain the first updates.
-    let hosts = start_all(apps.into(), |_, app| {
-        let shortcuts = crate::shortcuts::Guard::attach(&app.shared, Arc::new(|| {}), true, false);
-        let menus = crate::native_menu::Guard::attach(&app.shared, true);
-        Some((app, shortcuts, menus, S::new()))
-    }, |(app, _, _, state)| for f in app.shared.take().updates { f(state, &mut Tx::default()); });
+    let hosts = start_all(
+        apps.into(),
+        |_, app| {
+            let shortcuts =
+                crate::shortcuts::Guard::attach(&app.shared, Arc::new(|| {}), true, false);
+            let menus = crate::native_menu::Guard::attach(&app.shared, true);
+            Some((app, shortcuts, menus, S::new()))
+        },
+        |(app, _, _, state)| {
+            for f in app.shared.take().updates {
+                f(state, &mut Tx::default());
+            }
+        },
+    );
     assert_eq!(hosts[0].as_ref().unwrap().3, ["Ok(())", "Ok(())"]);
 }
 
@@ -568,8 +963,15 @@ fn a_window_s_first_updates_can_register_on_a_later_window() {
 fn drag_region_policy_preserves_titled_windows_and_panels() {
     for enabled in [false, true] {
         for full_size in [false, true] {
-            let chrome = Chrome { drag_regions: enabled, full_size_content: full_size, ..Chrome::DEFAULT };
-            assert_eq!(uses_drag_regions(chrome, false, false), enabled && full_size);
+            let chrome = Chrome {
+                drag_regions: enabled,
+                full_size_content: full_size,
+                ..Chrome::DEFAULT
+            };
+            assert_eq!(
+                uses_drag_regions(chrome, false, false),
+                enabled && full_size
+            );
             assert_eq!(uses_drag_regions(chrome, true, false), enabled);
             assert!(!uses_drag_regions(chrome, false, true));
             assert!(!uses_drag_regions(chrome, true, true));
@@ -591,18 +993,31 @@ fn noop_instance() -> wgpu::Instance {
 fn noop_gpu(instance: &wgpu::Instance) -> (Gpu, wgpu::Surface<'static>) {
     use std::num::NonZeroU32;
     use std::ptr::NonNull;
-    use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle, XcbDisplayHandle, XcbWindowHandle};
+    use winit::raw_window_handle::{
+        RawDisplayHandle, RawWindowHandle, XcbDisplayHandle, XcbWindowHandle,
+    };
     // The noop backend takes any handle and reports no capabilities, so configuring fails.
     let surface = unsafe {
         instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-            raw_display_handle: Some(RawDisplayHandle::Xcb(XcbDisplayHandle::new(Some(NonNull::dangling()), 0))),
-            raw_window_handle: RawWindowHandle::Xcb(XcbWindowHandle::new(NonZeroU32::new(1).unwrap())),
+            raw_display_handle: Some(RawDisplayHandle::Xcb(XcbDisplayHandle::new(
+                Some(NonNull::dangling()),
+                0,
+            ))),
+            raw_window_handle: RawWindowHandle::Xcb(XcbWindowHandle::new(
+                NonZeroU32::new(1).unwrap(),
+            )),
         })
     }
     .unwrap();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
-    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
-    (Gpu::from_device(instance.clone(), adapter, device, queue), surface)
+    let adapter =
+        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .unwrap();
+    let (device, queue) =
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    (
+        Gpu::from_device(instance.clone(), adapter, device, queue),
+        surface,
+    )
 }
 
 /// What the noop backend takes for a surface: the format the test configures it in.
@@ -630,8 +1045,14 @@ fn a_refused_surface_configuration_is_an_error_not_a_panic() {
     let (gpu, surface) = noop_gpu(&instance);
     let config = noop_config();
     let error = configure(&surface, &gpu, &config).unwrap_err();
-    assert!(error.starts_with("Validation Error: In Surface::configure"), "{error}");
-    assert!(error.ends_with("(200x80, Bgra8UnormSrgb, PreMultiplied, AutoVsync)"), "{error}");
+    assert!(
+        error.starts_with("Validation Error: In Surface::configure"),
+        "{error}"
+    );
+    assert!(
+        error.ends_with("(200x80, Bgra8UnormSrgb, PreMultiplied, AutoVsync)"),
+        "{error}"
+    );
 }
 
 /// A surface whose configuration failed has no presentation, and wgpu panics
@@ -646,7 +1067,10 @@ fn a_surface_with_no_presentation_is_never_asked_for_a_drawable() {
     let config = noop_config();
     configure(&surface, &gpu, &config).expect_err("the noop surface refuses its configuration");
     let mut meter = SurfaceMeter::new("unconfigured", Arc::default());
-    assert_eq!(acquire(&surface, &gpu, &config, false, 1, &mut meter), Err(Missed::Unconfigured));
+    assert_eq!(
+        acquire(&surface, &gpu, &config, false, 1, &mut meter),
+        Err(Missed::Unconfigured)
+    );
     assert_eq!(meter.totals().failed(), 1, "the miss is counted");
 }
 
@@ -661,12 +1085,18 @@ fn a_destroyed_device_that_has_not_reported_its_loss_is_not_configured() {
     let (gpu, surface) = noop_gpu(&instance);
     let config = noop_config();
     gpu.device.destroy();
-    assert!(!gpu.is_lost(), "the callback waits for the device's next maintain");
+    assert!(
+        !gpu.is_lost(),
+        "the callback waits for the device's next maintain"
+    );
     let error = configure(&surface, &gpu, &config).unwrap_err();
     assert!(error.starts_with("the GPU device was lost"), "{error}");
     assert!(gpu.is_lost());
     let mut meter = SurfaceMeter::new("destroyed", Arc::default());
-    assert_eq!(acquire(&surface, &gpu, &config, true, 1, &mut meter), Err(Missed::Unconfigured));
+    assert_eq!(
+        acquire(&surface, &gpu, &config, true, 1, &mut meter),
+        Err(Missed::Unconfigured)
+    );
 }
 
 /// A surface that won't come back is replaced a bounded number of times, waiting longer after
@@ -674,7 +1104,7 @@ fn a_destroyed_device_that_has_not_reported_its_loss_is_not_configured() {
 /// frame must not ask again forever.
 #[test]
 fn surface_replacements_give_up_after_a_bounded_number_of_tries() {
-    use super::win::{SurfaceStep, SURFACE_TRIES};
+    use super::win::{SURFACE_TRIES, SurfaceStep};
     let now = Instant::now();
     let mut retries = SurfaceRetries::default();
     let mut waits = Vec::new();
@@ -684,10 +1114,20 @@ fn surface_replacements_give_up_after_a_bounded_number_of_tries() {
             Some(at) => waits.push(at - now),
             None => break,
         }
-        assert!(waits.len() < 100, "a replacement that keeps failing never gives up");
+        assert!(
+            waits.len() < 100,
+            "a replacement that keeps failing never gives up"
+        );
     }
-    assert_eq!(waits.len() as u8, SURFACE_TRIES - 1, "one try, then bounded retries");
-    assert!(waits.windows(2).all(|pair| pair[1] > pair[0]), "each wait is longer: {waits:?}");
+    assert_eq!(
+        waits.len() as u8,
+        SURFACE_TRIES - 1,
+        "one try, then bounded retries"
+    );
+    assert!(
+        waits.windows(2).all(|pair| pair[1] > pair[0]),
+        "each wait is longer: {waits:?}"
+    );
     assert_eq!(retries.failures(), SURFACE_TRIES);
     assert_eq!(retries.attempt(), SurfaceStep::GiveUp);
 
@@ -703,15 +1143,21 @@ fn surface_replacements_give_up_after_a_bounded_number_of_tries() {
 /// calls `worked`.
 #[test]
 fn a_surface_lost_after_every_replacement_gives_up_after_the_tries() {
-    use super::win::{SurfaceStep, SURFACE_TRIES};
+    use super::win::{SURFACE_TRIES, SurfaceStep};
     let mut retries = SurfaceRetries::default();
     let mut replaced = 0;
     while retries.attempt() == SurfaceStep::Replace {
         // The replacement worked, and the frame it made was lost before it presented.
         replaced += 1;
-        assert!(replaced < 100, "a surface lost before it presents never stops being replaced");
+        assert!(
+            replaced < 100,
+            "a surface lost before it presents never stops being replaced"
+        );
     }
-    assert_eq!(replaced, SURFACE_TRIES, "the window gives up after a bounded number of replacements");
+    assert_eq!(
+        replaced, SURFACE_TRIES,
+        "the window gives up after a bounded number of replacements"
+    );
 
     // One frame reaches the screen: the next loss starts over.
     retries.worked();
@@ -735,8 +1181,15 @@ fn a_lost_device_is_reported_and_never_drawn_with() {
     let error = configure(&surface, &gpu, &config).unwrap_err();
     assert!(error.starts_with("the GPU device was lost"), "{error}");
     let mut meter = SurfaceMeter::new("lost", Arc::default());
-    assert_eq!(acquire(&surface, &gpu, &config, true, 1, &mut meter), Err(Missed::Unconfigured));
-    assert_eq!(meter.totals().failed(), 1, "a lost device is a miss, not a panic");
+    assert_eq!(
+        acquire(&surface, &gpu, &config, true, 1, &mut meter),
+        Err(Missed::Unconfigured)
+    );
+    assert_eq!(
+        meter.totals().failed(),
+        1,
+        "a lost device is a miss, not a panic"
+    );
 }
 
 /// Each Rune GPU has its own wgpu instance, and wgpu compares devices by an id each instance
@@ -746,13 +1199,24 @@ fn a_lost_device_is_reported_and_never_drawn_with() {
 #[test]
 fn a_new_gpus_device_equals_the_old_one_but_its_key_differs() {
     let device = || {
-        let adapter = pollster::block_on(noop_instance().request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap().0
+        let adapter = pollster::block_on(
+            noop_instance().request_adapter(&wgpu::RequestAdapterOptions::default()),
+        )
+        .unwrap();
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+            .unwrap()
+            .0
     };
     let (old, new) = (device(), device());
-    assert!(old == new, "wgpu tells devices of separate instances apart by now: device equality may do");
+    assert!(
+        old == new,
+        "wgpu tells devices of separate instances apart by now: device equality may do"
+    );
     let format = wgpu::TextureFormat::Bgra8Unorm;
-    let (old, new) = (crate::render::Renderer::new(&old, format), crate::render::Renderer::new(&new, format));
+    let (old, new) = (
+        crate::render::Renderer::new(&old, format),
+        crate::render::Renderer::new(&new, format),
+    );
     assert_ne!(old.device_key(), new.device_key());
 }
 
@@ -763,7 +1227,10 @@ fn a_new_gpus_device_equals_the_old_one_but_its_key_differs() {
 fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     use crate::{App, AppSpec, el};
     fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
-        el().key("button").w(40.0).h(20.0).on_press(|n: &mut u32| *n += 1)
+        el().key("button")
+            .w(40.0)
+            .h(20.0)
+            .on_press(|n: &mut u32| *n += 1)
     }
     let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
     let (handle, shared) = (app.handle(), app.shared.clone());
@@ -777,9 +1244,19 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
     });
     handle.inspect(move |rt| read.send(*rt.state()).unwrap());
     let mut inspections = shared.take().inspections.into_iter();
-    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the press asks for a frame");
-    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the read asks for none");
-    assert_eq!(seen.recv().unwrap(), 1, "the second inspection saw the press");
+    assert!(
+        lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the press asks for a frame"
+    );
+    assert!(
+        !lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the read asks for none"
+    );
+    assert_eq!(
+        seen.recv().unwrap(),
+        1,
+        "the second inspection saw the press"
+    );
 }
 
 /// A wheel an inspection feeds moves the scroll view at once, without queueing input or
@@ -789,7 +1266,13 @@ fn an_inspection_s_input_is_handled_before_the_next_inspection_reads() {
 fn an_inspection_s_wheel_asks_for_a_frame_to_show_the_rows_it_scrolled() {
     use crate::{App, AppSpec, ScrollSpec, col, el};
     fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
-        col().key("list").w(100.0).h(100.0).scroll(ScrollSpec { stick_bottom: false })
+        col()
+            .key("list")
+            .w(100.0)
+            .h(100.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
             .children((0..10).map(|i| el().key(format!("row-{i}")).w(100.0).h(40.0)))
     }
     let app = App::new(AppSpec::new("t", (100.0, 100.0), || 0u32, view));
@@ -799,11 +1282,24 @@ fn an_inspection_s_wheel_asks_for_a_frame_to_show_the_rows_it_scrolled() {
     handle.inspect(|rt| rt.wheel(50.0, 50.0, -120.0));
     handle.inspect(|_| {});
     let mut inspections = shared.take().inspections.into_iter();
-    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the wheel asks for a frame");
+    assert!(
+        lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the wheel asks for a frame"
+    );
     rt.frame(1.0 / 60.0);
-    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read after that frame asks for none");
-    let row = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("row-3")).expect("row 3 is laid out");
-    assert_eq!(row.rect[1], 0.0, "the frame laid row 3 out at the top, where the wheel scrolled it");
+    assert!(
+        !lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "a read after that frame asks for none"
+    );
+    let row = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("row-3"))
+        .expect("row 3 is laid out");
+    assert_eq!(
+        row.rect[1], 0.0,
+        "the frame laid row 3 out at the top, where the wheel scrolled it"
+    );
 }
 
 /// A selection drag that an inspection feeds over the text the pointer already rests on changes
@@ -814,15 +1310,32 @@ fn an_inspection_s_wheel_asks_for_a_frame_to_show_the_rows_it_scrolled() {
 fn an_inspection_s_selection_drag_asks_for_a_frame_and_its_release_is_heard() {
     use crate::{App, AppSpec, TextStyle, col, text};
     fn view(_: &u32, _: &mut crate::Cx<u32>) -> crate::El {
-        col().w_full().selection_group(true)
-            .on_selection_change(|n: &mut u32, c, _| if !c.dragging() && c.selection().is_some() { *n += 1 })
-            .child(text("select these words, then these ones").key("t").font(TextStyle::new(14.0, 400.0)).w(380.0).selectable(true))
+        col()
+            .w_full()
+            .selection_group(true)
+            .on_selection_change(|n: &mut u32, c, _| {
+                if !c.dragging() && c.selection().is_some() {
+                    *n += 1
+                }
+            })
+            .child(
+                text("select these words, then these ones")
+                    .key("t")
+                    .font(TextStyle::new(14.0, 400.0))
+                    .w(380.0)
+                    .selectable(true),
+            )
     }
     let app = App::new(AppSpec::new("t", (400.0, 100.0), || 0u32, view));
     let (handle, shared) = (app.handle(), app.shared.clone());
     let mut rt = Runtime::new(0u32, view, (400.0, 100.0), crate::Env::new(true, 1.0));
     let mut t = 0.0;
-    let mut settle = |rt: &mut Runtime<u32>| for _ in 0..3 { t += 1.0 / 60.0; rt.frame(t); };
+    let mut settle = |rt: &mut Runtime<u32>| {
+        for _ in 0..3 {
+            t += 1.0 / 60.0;
+            rt.frame(t);
+        }
+    };
     settle(&mut rt);
     let (x, y) = rt.find("t").expect("laid out");
     rt.pointer_move(x - 100.0, y);
@@ -837,10 +1350,16 @@ fn an_inspection_s_selection_drag_asks_for_a_frame_and_its_release_is_heard() {
     handle.inspect(drag);
     handle.inspect(drag);
     let mut inspections = shared.take().inspections.into_iter();
-    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the drag asks for a frame");
+    assert!(
+        lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the drag asks for a frame"
+    );
     settle(&mut rt);
     assert_eq!(*rt.state(), 1, "the release reached on_selection_change");
-    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the same drag again asks for a frame");
+    assert!(
+        lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the same drag again asks for a frame"
+    );
     settle(&mut rt);
     assert_eq!(*rt.state(), 2, "its release was heard once more");
 }
@@ -862,13 +1381,22 @@ fn an_inspection_reads_the_view_an_update_built_without_a_frame() {
     handle.inspect(move |rt| read.send(rt.find("count-1").is_some()).unwrap());
     handle.inspect(|_| {});
     let mut inspections = shared.take().inspections.into_iter();
-    assert!(lifecycle::inspect(&mut rt, inspections.next().unwrap()), "the update asks for a frame to show it");
+    assert!(
+        lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "the update asks for a frame to show it"
+    );
     assert!(seen.recv().unwrap(), "the inspection read the updated view");
-    assert!(!lifecycle::inspect(&mut rt, inspections.next().unwrap()), "a read of a built view asks for none");
+    assert!(
+        !lifecycle::inspect(&mut rt, inspections.next().unwrap()),
+        "a read of a built view asks for none"
+    );
 }
 
 #[derive(Default)]
-struct RightClicks { drags: Vec<crate::Phase>, menus: Vec<&'static str> }
+struct RightClicks {
+    drags: Vec<crate::Phase>,
+    menus: Vec<&'static str>,
+}
 
 /// The window's right button reaches an element that takes the secondary button as a press,
 /// drag and release, and still opens the menu of one that does not.
@@ -877,24 +1405,66 @@ fn the_right_button_reaches_an_element_that_takes_it_and_opens_the_menu_of_one_t
     use crate::{PointerButton, el};
     use winit::event::{ElementState, MouseButton};
     let view = |_: &RightClicks, _: &mut crate::Cx<RightClicks>| {
-        el().w_full().h_full()
-            .child(el().key("takes").size(40.0, 40.0).pointer_buttons([PointerButton::Secondary])
-                .on_drag(|s: &mut RightClicks, d: &mut crate::Drag, _: &mut crate::Tx| s.drags.push(d.phase)))
-            .child(el().key("menu").size(40.0, 40.0).on_secondary_press(|s: &mut RightClicks, _, _| s.menus.push("menu")))
+        el().w_full()
+            .h_full()
+            .child(
+                el().key("takes")
+                    .size(40.0, 40.0)
+                    .pointer_buttons([PointerButton::Secondary])
+                    .on_drag(
+                        |s: &mut RightClicks, d: &mut crate::Drag, _: &mut crate::Tx| {
+                            s.drags.push(d.phase)
+                        },
+                    ),
+            )
+            .child(
+                el().key("menu")
+                    .size(40.0, 40.0)
+                    .on_secondary_press(|s: &mut RightClicks, _, _| s.menus.push("menu")),
+            )
     };
-    let mut rt = Runtime::new(RightClicks::default(), view, (100.0, 100.0), crate::Env::default());
+    let mut rt = Runtime::new(
+        RightClicks::default(),
+        view,
+        (100.0, 100.0),
+        crate::Env::default(),
+    );
     rt.frame(0.0);
     let (x, y) = rt.find("takes").unwrap();
-    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Pressed);
+    mouse_button(
+        &mut rt,
+        x + 5.0,
+        y + 5.0,
+        MouseButton::Right,
+        ElementState::Pressed,
+    );
     rt.frame(0.0);
-    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
+    mouse_button(
+        &mut rt,
+        x + 5.0,
+        y + 5.0,
+        MouseButton::Right,
+        ElementState::Released,
+    );
     rt.frame(0.0);
     assert_eq!(rt.state().drags, [crate::Phase::Down, crate::Phase::Up]);
     assert!(rt.state().menus.is_empty());
 
     let (x, y) = rt.find("menu").unwrap();
-    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Pressed);
-    mouse_button(&mut rt, x + 5.0, y + 5.0, MouseButton::Right, ElementState::Released);
+    mouse_button(
+        &mut rt,
+        x + 5.0,
+        y + 5.0,
+        MouseButton::Right,
+        ElementState::Pressed,
+    );
+    mouse_button(
+        &mut rt,
+        x + 5.0,
+        y + 5.0,
+        MouseButton::Right,
+        ElementState::Released,
+    );
     rt.frame(0.0);
     assert_eq!(rt.state().menus, ["menu"]);
 }

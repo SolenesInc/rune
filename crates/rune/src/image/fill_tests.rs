@@ -1,14 +1,25 @@
 use super::*;
 
 fn png(width: u32, height: u32) -> Vec<u8> {
-    let source = image::RgbaImage::from_fn(width, height, |x, y| image::Rgba([(x % 251) as u8, (y % 241) as u8, ((x ^ y) % 239) as u8, 255]));
+    let source = image::RgbaImage::from_fn(width, height, |x, y| {
+        image::Rgba([(x % 251) as u8, (y % 241) as u8, ((x ^ y) % 239) as u8, 255])
+    });
     let mut encoded = std::io::Cursor::new(Vec::new());
-    source.write_to(&mut encoded, image::ImageFormat::Png).unwrap();
+    source
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .unwrap();
     encoded.into_inner()
 }
 
 fn held(image: &Image) -> usize {
-    image.decoded().unwrap().unwrap().mips.iter().map(|m| m.pixels.len()).sum()
+    image
+        .decoded()
+        .unwrap()
+        .unwrap()
+        .mips
+        .iter()
+        .map(|m| m.pixels.len())
+        .sum()
 }
 
 fn top(image: &Image) -> [u32; 2] {
@@ -23,19 +34,54 @@ fn a_large_image_asked_for_small_holds_only_the_mips_that_fill_its_size() {
     let whole = cache.load(bytes.clone());
     let thumbnail = cache.load_mime(bytes, "image/png", 66.0, 2.0);
     assert_eq!(whole.wait(), Ok([4000, 2400]));
-    assert_eq!(thumbnail.wait(), Ok([4000, 2400]), "the image keeps its own size");
+    assert_eq!(
+        thumbnail.wait(),
+        Ok([4000, 2400]),
+        "the image keeps its own size"
+    );
     assert_eq!(top(&whole), [4000, 2400]);
-    assert_eq!(top(&thumbnail), [250, 150], "the smallest level that fills 132 pixels square");
-    assert!(held(&thumbnail) < 250 * 150 * 4 * 2, "{} bytes held", held(&thumbnail));
+    assert_eq!(
+        top(&thumbnail),
+        [250, 150],
+        "the smallest level that fills 132 pixels square"
+    );
+    assert!(
+        held(&thumbnail) < 250 * 150 * 4 * 2,
+        "{} bytes held",
+        held(&thumbnail)
+    );
     assert!(held(&whole) > 4000 * 2400 * 4);
 
-    let level = whole.decoded().unwrap().unwrap().mips.iter().position(|m| m.width == 250).unwrap();
-    for (kept, full) in thumbnail.decoded().unwrap().unwrap().mips.iter().zip(&whole.decoded().unwrap().unwrap().mips[level..]) {
-        assert_eq!(kept.pixels, full.pixels, "the same pixels the whole chain draws at that size");
+    let level = whole
+        .decoded()
+        .unwrap()
+        .unwrap()
+        .mips
+        .iter()
+        .position(|m| m.width == 250)
+        .unwrap();
+    for (kept, full) in thumbnail
+        .decoded()
+        .unwrap()
+        .unwrap()
+        .mips
+        .iter()
+        .zip(&whole.decoded().unwrap().unwrap().mips[level..])
+    {
+        assert_eq!(
+            kept.pixels, full.pixels,
+            "the same pixels the whole chain draws at that size"
+        );
     }
     let mut atlas = crate::image::pixels::ImageAtlas::default();
     let covering_132_square = [220.0, 132.0];
-    let drawn = |atlas: &mut crate::image::pixels::ImageAtlas, image: &Image| atlas.place(image.pixels(), covering_132_square).unwrap().rect[2..].to_vec();
+    let drawn = |atlas: &mut crate::image::pixels::ImageAtlas, image: &Image| {
+        atlas
+            .place(image.pixels(), covering_132_square)
+            .unwrap()
+            .rect[2..]
+            .to_vec()
+    };
     assert_eq!(drawn(&mut atlas, &thumbnail), drawn(&mut atlas, &whole));
     assert_eq!(thumbnail.pixels().size(), (4000, 2400));
 }
@@ -49,13 +95,27 @@ fn a_file_asked_for_larger_decodes_again_and_a_small_image_keeps_every_level() {
     let cache = ImageCache::new(Arc::new(|| {}));
     let small = cache.file(&path, 66.0, 2.0);
     let large = cache.file(&path, 400.0, 2.0);
-    assert!(!Arc::ptr_eq(&small.0, &large.0), "a larger size is a picture of its own");
-    assert_eq!((small.wait(), large.wait()), (Ok([2000, 1200]), Ok([2000, 1200])));
+    assert!(
+        !Arc::ptr_eq(&small.0, &large.0),
+        "a larger size is a picture of its own"
+    );
+    assert_eq!(
+        (small.wait(), large.wait()),
+        (Ok([2000, 1200]), Ok([2000, 1200]))
+    );
     assert_eq!(top(&small), [250, 150]);
-    assert_eq!(top(&large), [2000, 1200], "no smaller level fills 800 pixels square");
+    assert_eq!(
+        top(&large),
+        [2000, 1200],
+        "no smaller level fills 800 pixels square"
+    );
     let icon = cache.load_mime(png(40, 20), "image/png", 66.0, 2.0);
     assert_eq!(icon.wait(), Ok([40, 20]));
-    assert_eq!(icon.decoded().unwrap().unwrap().mips.len(), 6, "smaller than asked, it keeps every level");
+    assert_eq!(
+        icon.decoded().unwrap().unwrap().mips.len(),
+        6,
+        "smaller than asked, it keeps every level"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -75,14 +135,33 @@ fn a_wide_image_asked_across_keeps_the_level_as_wide_as_it_draws_not_as_tall() {
     let bytes = png(5120, 2880);
     let screenshot = cache.load_across(bytes.clone(), 760.0, 2.0);
     let square = cache.load_mime(bytes, "image/png", 760.0, 2.0);
-    assert_eq!((screenshot.wait(), square.wait()), (Ok([5120, 2880]), Ok([5120, 2880])));
-    assert_eq!(top(&screenshot), [2560, 1440], "the smallest level at least 1520 pixels across");
-    assert_eq!(top(&square), [5120, 2880], "a 1520 pixel square needs the whole height");
-    assert!(held(&screenshot) < 2560 * 1440 * 4 * 2, "{} bytes held", held(&screenshot));
+    assert_eq!(
+        (screenshot.wait(), square.wait()),
+        (Ok([5120, 2880]), Ok([5120, 2880]))
+    );
+    assert_eq!(
+        top(&screenshot),
+        [2560, 1440],
+        "the smallest level at least 1520 pixels across"
+    );
+    assert_eq!(
+        top(&square),
+        [5120, 2880],
+        "a 1520 pixel square needs the whole height"
+    );
+    assert!(
+        held(&screenshot) < 2560 * 1440 * 4 * 2,
+        "{} bytes held",
+        held(&screenshot)
+    );
     assert_eq!(screenshot.pixels().sharpest(), Some((2560, 1440)));
     assert_eq!(square.pixels().sharpest(), Some((5120, 2880)));
 
     let tall = cache.load_across(png(1000, 4000), 200.0, 2.0);
     assert_eq!(tall.wait(), Ok([1000, 4000]));
-    assert_eq!(top(&tall), [500, 2000], "a tall image is kept by its width too");
+    assert_eq!(
+        top(&tall),
+        [500, 2000],
+        "a tall image is kept by its width too"
+    );
 }

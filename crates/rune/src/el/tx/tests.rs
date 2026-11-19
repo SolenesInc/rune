@@ -12,7 +12,10 @@ const NODE: Spring = Spring::new(0.4, 0.1);
 const MATCHED: Spring = Spring::new(0.2, 0.0);
 
 fn tween() -> Anim {
-    Anim { delay: 0.05, ..Anim::new(Curve::tween(0.35, Easing::cubic(0.16, 1.0, 0.3, 1.0))) }
+    Anim {
+        delay: 0.05,
+        ..Anim::new(Curve::tween(0.35, Easing::cubic(0.16, 1.0, 0.3, 1.0)))
+    }
 }
 
 fn glide() -> Anim {
@@ -96,9 +99,16 @@ fn seen(tx: &Tx) -> Seen {
         snaps: tx.commit.snaps(),
         lands: tx.commit.lands(),
         scale: tx.motion.map_or(0.0, |m| m.spring().duration * 1.15),
-        layout: tx.motion.map_or((NODE, NODE.into()), |m| (m.spring(), m.anim())),
-        flight: tx.motion.map(MotionSource::spring).or(Some(MATCHED)).unwrap_or(motion::REFLOW),
-        window: (!tx.commit.snaps()).then(|| tx.motion.map_or(motion::DEFAULT, MotionSource::spring)),
+        layout: tx
+            .motion
+            .map_or((NODE, NODE.into()), |m| (m.spring(), m.anim())),
+        flight: tx
+            .motion
+            .map(MotionSource::spring)
+            .or(Some(MATCHED))
+            .unwrap_or(motion::REFLOW),
+        window: (!tx.commit.snaps())
+            .then(|| tx.motion.map_or(motion::DEFAULT, MotionSource::spring)),
     }
 }
 
@@ -128,7 +138,15 @@ enum Op {
     LiveOnly,
 }
 
-const OPS: [Op; 7] = [Op::Instant, Op::Animated, Op::Settle, Op::Motion, Op::Curve, Op::Tween, Op::LiveOnly];
+const OPS: [Op; 7] = [
+    Op::Instant,
+    Op::Animated,
+    Op::Settle,
+    Op::Motion,
+    Op::Curve,
+    Op::Tween,
+    Op::LiveOnly,
+];
 
 impl Op {
     fn call(self, tx: &mut Tx) {
@@ -183,7 +201,10 @@ fn walk(seq: &[Op]) -> (Tx, Dev) {
         op.call(&mut tx);
         op.dev(&mut dev);
         assert_eq!(seen(&tx), seen_dev(&dev), "after {i} of {seq:?}");
-        assert_eq!(tx.live_only, dev.live_only, "live_only after {i} of {seq:?}");
+        assert_eq!(
+            tx.live_only, dev.live_only,
+            "live_only after {i} of {seq:?}"
+        );
     }
     (tx, dev)
 }
@@ -222,21 +243,48 @@ fn two_handlers_merge_as_dev_did() {
 /// its event clears the whole intent (`action.rs`).
 #[test]
 fn a_direct_write_of_the_intent_matches_devs_flags() {
-    let starts = [Commit::Animate, Commit::Instant, Commit::Settle, Commit::SettleAnimated];
+    let starts = [
+        Commit::Animate,
+        Commit::Instant,
+        Commit::Settle,
+        Commit::SettleAnimated,
+    ];
     for start in starts {
         for animate_layout in [true, false] {
-            let mut tx = Tx { commit: start, ..Tx::default() };
-            let mut dev = Dev { instant: start.snaps(), settle: start.lands(), ..Dev::default() };
+            let mut tx = Tx {
+                commit: start,
+                ..Tx::default()
+            };
+            let mut dev = Dev {
+                instant: start.snaps(),
+                settle: start.lands(),
+                ..Dev::default()
+            };
             tx.commit = tx.commit.snap(!animate_layout);
             dev.instant = !animate_layout;
-            assert_eq!((tx.commit.snaps(), tx.commit.lands()), (dev.instant, dev.settle), "{start:?} typing");
+            assert_eq!(
+                (tx.commit.snaps(), tx.commit.lands()),
+                (dev.instant, dev.settle),
+                "{start:?} typing"
+            );
 
-            let mut tx = Tx { commit: start, ..Tx::default() };
-            let mut dev = Dev { instant: start.snaps(), settle: start.lands(), ..Dev::default() };
+            let mut tx = Tx {
+                commit: start,
+                ..Tx::default()
+            };
+            let mut dev = Dev {
+                instant: start.snaps(),
+                settle: start.lands(),
+                ..Dev::default()
+            };
             tx.commit = Commit::Animate;
             dev.instant = false;
             dev.settle = false;
-            assert_eq!((tx.commit.snaps(), tx.commit.lands()), (dev.instant, dev.settle), "{start:?} declined");
+            assert_eq!(
+                (tx.commit.snaps(), tx.commit.lands()),
+                (dev.instant, dev.settle),
+                "{start:?} declined"
+            );
         }
     }
 }

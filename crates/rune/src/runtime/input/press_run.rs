@@ -10,7 +10,13 @@ pub(super) fn within_slop(a: (f32, f32), b: (f32, f32)) -> bool {
 
 /// A press at `point` at `now` (clock seconds) carries on a run whose last press went down at
 /// `then` at `was`: within `interval` of it and within the click slop.
-pub(super) fn follows(then: f64, was: (f32, f32), now: f64, point: (f32, f32), interval: f64) -> bool {
+pub(super) fn follows(
+    then: f64,
+    was: (f32, f32),
+    now: f64,
+    point: (f32, f32),
+    interval: f64,
+) -> bool {
     now - then <= interval && within_slop(was, point)
 }
 
@@ -32,24 +38,39 @@ impl PressRun {
     /// element and the press [`follows`] it, else 1.
     pub(super) fn press(&mut self, path: &str, now: f64, point: (f32, f32), interval: f64) -> u32 {
         match &mut self.last {
-            Some(last) if last.path == path && follows(last.at, last.point, now, point, interval) => {
+            Some(last)
+                if last.path == path && follows(last.at, last.point, now, point, interval) =>
+            {
                 (last.at, last.point) = (now, point);
                 last.count += 1;
                 last.count
             }
             _ => {
-                self.last = Some(Last { path: path.to_owned(), at: now, point, count: 1 });
+                self.last = Some(Last {
+                    path: path.to_owned(),
+                    at: now,
+                    point,
+                    count: 1,
+                });
                 1
             }
         }
     }
 
     /// A press that dragged, another button's press, a press elsewhere or a reset ends the run.
-    pub(super) fn clear(&mut self) { self.last = None; }
+    pub(super) fn clear(&mut self) {
+        self.last = None;
+    }
 
     /// Ends the run unless its last press was on `path`.
     pub(super) fn keep_on(&mut self, path: Option<&str>) {
-        if self.last.as_ref().is_some_and(|l| Some(l.path.as_str()) != path) { self.last = None; }
+        if self
+            .last
+            .as_ref()
+            .is_some_and(|l| Some(l.path.as_str()) != path)
+        {
+            self.last = None;
+        }
     }
 }
 

@@ -11,13 +11,17 @@ const LIBRARY: &[u8] = include_bytes!("../uber_windfoil.metallib");
 const NATIVE_LIBRARY: &[u8] = include_bytes!("../uber_windfoil_native.metallib");
 
 /// Whether the libraries were built from the WGSL this build joined (render/uber_wgsl.rs).
-const WGSL_MATCHES: bool = super::uber_wgsl::same(super::uber_wgsl::WINDFOIL_BLAKE3, WINDFOIL_WGSL_BLAKE3);
+const WGSL_MATCHES: bool =
+    super::uber_wgsl::same(super::uber_wgsl::WINDFOIL_BLAKE3, WINDFOIL_WGSL_BLAKE3);
 /// Whether they were built for Windfoil's layout as this build has it.
 const ABI_MATCHES: bool = super::variant::windfoil_abi_hash() == WINDFOIL_ABI_FNV64;
 
 /// The Windfoil shader from the library for `device`'s backend and its pipeline, when the
 /// library matches Windfoil's WGSL and layout and the device takes it.
-pub(super) fn load<T>(device: &wgpu::Device, make_pipeline: impl FnOnce(&wgpu::ShaderModule) -> T) -> Option<(wgpu::ShaderModule, T)> {
+pub(super) fn load<T>(
+    device: &wgpu::Device,
+    make_pipeline: impl FnOnce(&wgpu::ShaderModule) -> T,
+) -> Option<(wgpu::ShaderModule, T)> {
     #[cfg(feature = "metal-backend")]
     let native = crate::gpu::metal::raw_device(device).is_some();
     #[cfg(not(feature = "metal-backend"))]
@@ -36,7 +40,11 @@ pub(super) fn load<T>(device: &wgpu::Device, make_pipeline: impl FnOnce(&wgpu::S
         return None;
     }
     // Rune's backend takes a library without the feature, which promises arbitrary passthrough.
-    if !native && !device.features().contains(wgpu::Features::PASSTHROUGH_SHADERS) {
+    if !native
+        && !device
+            .features()
+            .contains(wgpu::Features::PASSTHROUGH_SHADERS)
+    {
         return None;
     }
     let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -47,8 +55,14 @@ pub(super) fn load<T>(device: &wgpu::Device, make_pipeline: impl FnOnce(&wgpu::S
         device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
             label: Some("uber"),
             entry_points: std::borrow::Cow::Borrowed(&[
-                wgpu::PassthroughShaderEntryPoint { name: std::borrow::Cow::Borrowed("vs"), workgroup_size: (0, 0, 0) },
-                wgpu::PassthroughShaderEntryPoint { name: std::borrow::Cow::Borrowed("fs"), workgroup_size: (0, 0, 0) },
+                wgpu::PassthroughShaderEntryPoint {
+                    name: std::borrow::Cow::Borrowed("vs"),
+                    workgroup_size: (0, 0, 0),
+                },
+                wgpu::PassthroughShaderEntryPoint {
+                    name: std::borrow::Cow::Borrowed("fs"),
+                    workgroup_size: (0, 0, 0),
+                },
             ]),
             metallib: Some(std::borrow::Cow::Borrowed(library)),
             ..Default::default()
@@ -57,13 +71,21 @@ pub(super) fn load<T>(device: &wgpu::Device, make_pipeline: impl FnOnce(&wgpu::S
     // Rune's backend reports no errors to scopes, so check it loaded and has both functions.
     #[cfg(feature = "metal-backend")]
     if native && !crate::gpu::metal::module_ready(&shader) {
-        let _ = (pollster::block_on(internal.pop()), pollster::block_on(validation.pop()));
-        eprintln!("rune: uber_windfoil_native.metallib didn't load; Windfoil text compiles its shader from WGSL");
+        let _ = (
+            pollster::block_on(internal.pop()),
+            pollster::block_on(validation.pop()),
+        );
+        eprintln!(
+            "rune: uber_windfoil_native.metallib didn't load; Windfoil text compiles its shader from WGSL"
+        );
         return None;
     }
     let pipeline = make_pipeline(&shader);
-    if let Some(error) = pollster::block_on(internal.pop()).or(pollster::block_on(validation.pop())) {
-        eprintln!("rune: uber_windfoil.metallib was refused ({error}); Windfoil text compiles its shader from WGSL");
+    if let Some(error) = pollster::block_on(internal.pop()).or(pollster::block_on(validation.pop()))
+    {
+        eprintln!(
+            "rune: uber_windfoil.metallib was refused ({error}); Windfoil text compiles its shader from WGSL"
+        );
         return None;
     }
     Some((shader, pipeline))

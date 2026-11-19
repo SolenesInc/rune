@@ -10,7 +10,11 @@ pub(crate) const HELP_ROW: char = '\u{1e}';
 
 /// A help text as words: each row's keycaps after it, a space apart, and its rows a line apart.
 pub(crate) fn help_words(help: &str) -> std::borrow::Cow<'_, str> {
-    if help.contains([HELP_KEY, HELP_ROW]) { help.replace(HELP_KEY, " ").replace(HELP_ROW, "\n").into() } else { help.into() }
+    if help.contains([HELP_KEY, HELP_ROW]) {
+        help.replace(HELP_KEY, " ").replace(HELP_ROW, "\n").into()
+    } else {
+        help.into()
+    }
 }
 
 impl El {

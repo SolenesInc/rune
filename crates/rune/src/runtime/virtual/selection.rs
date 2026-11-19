@@ -69,8 +69,17 @@ pub(crate) fn collect_virtual_row_selection(
     let mut order_in_row = 0usize;
     let row_path = format!("{list_path}/{row_key}");
     walk_row_el(
-        row_el, list_path, row_key, row_index, &row_path, "",
-        list_group, list_inert, &mut order_in_row, texts, copy_providers,
+        row_el,
+        list_path,
+        row_key,
+        row_index,
+        &row_path,
+        "",
+        list_group,
+        list_inert,
+        &mut order_in_row,
+        texts,
+        copy_providers,
     );
 }
 
@@ -108,14 +117,26 @@ fn walk_row_el<'a>(
     copy_providers: &mut Vec<(String, SelectionCopy)>,
 ) {
     let inert = parent_inert || el.flags.has(crate::el::ElFlags::INERT);
-    let group = if el.flags.has(crate::el::ElFlags::SELECTION_GROUP) { Some(path) } else { parent_group };
+    let group = if el.flags.has(crate::el::ElFlags::SELECTION_GROUP) {
+        Some(path)
+    } else {
+        parent_group
+    };
     if !inert && let Some(f) = el.handlers.get().and_then(|h| h.selection_copy.as_ref()) {
         copy_providers.push((path.to_owned(), f.clone()));
     }
     let is_row = el.style.display() == Display::Flex
-        && matches!(el.style.flex_direction(), FlexDirection::Row | FlexDirection::RowReverse);
+        && matches!(
+            el.style.flex_direction(),
+            FlexDirection::Row | FlexDirection::RowReverse
+        );
     let mut had_child_text = false;
-    if !inert && el.cold.input.is_none() && let Some(t) = &el.text && t.selectable && !t.redacted {
+    if !inert
+        && el.cold.input.is_none()
+        && let Some(t) = &el.text
+        && t.selectable
+        && !t.redacted
+    {
         let mut spec = TextSpec::clone(t);
         spec.apply_isolates();
         spec.apply_case();
@@ -139,8 +160,17 @@ fn walk_row_el<'a>(
         let child_rel = crate::runtime::flatten::node_path(rel_path, child.key.as_deref(), i);
         let before_len = texts.len();
         walk_row_el(
-            child, list_path, row_key, row_index, &child_path, &child_rel,
-            group, inert, order_in_row, texts, copy_providers,
+            child,
+            list_path,
+            row_key,
+            row_index,
+            &child_path,
+            &child_rel,
+            group,
+            inert,
+            order_in_row,
+            texts,
+            copy_providers,
         );
         if texts.len() > before_len {
             if had_child_text {
@@ -151,10 +181,19 @@ fn walk_row_el<'a>(
     }
 }
 
-pub(super) fn offscreen_piece(t: &OffscreenText, range: Range<usize>, base: Option<&str>) -> SelectedText {
+pub(super) fn offscreen_piece(
+    t: &OffscreenText,
+    range: Range<usize>,
+    base: Option<&str>,
+) -> SelectedText {
     let path = match base {
         Some(b) if b == t.path => String::new(),
-        Some(b) => t.path.strip_prefix(b).and_then(|p| p.strip_prefix('/')).unwrap_or(&t.path).to_owned(),
+        Some(b) => t
+            .path
+            .strip_prefix(b)
+            .and_then(|p| p.strip_prefix('/'))
+            .unwrap_or(&t.path)
+            .to_owned(),
         None => t.path.clone(),
     };
     let len = t.spec.content.len();
@@ -164,20 +203,48 @@ pub(super) fn offscreen_piece(t: &OffscreenText, range: Range<usize>, base: Opti
         trim_uncopied(&t.spec.cold.uncopied, (0, len))
     };
     let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
-    let text = t.spec.copy_slice(range.start as u32, range.end as u32).unwrap_or_default();
-    let content = t.spec.content.get(range.clone()).unwrap_or_default().to_owned();
+    let text = t
+        .spec
+        .copy_slice(range.start as u32, range.end as u32)
+        .unwrap_or_default();
+    let content = t
+        .spec
+        .content
+        .get(range.clone())
+        .unwrap_or_default()
+        .to_owned();
     let authored = t.spec.authored(range.start)..t.spec.authored(range.end);
-    SelectedText { path, key: t.key.clone(), range, authored, len, whole, text, content }
+    SelectedText {
+        path,
+        key: t.key.clone(),
+        range,
+        authored,
+        len,
+        whole,
+        text,
+        content,
+    }
 }
 
 impl RuntimeCore {
     pub(crate) fn virtual_list_allowed(&self, list_path: &str) -> bool {
         self.live(list_path).is_some()
-            && !self.virtuals.get(list_path).is_some_and(|v| v.selection.scope.inert)
+            && !self
+                .virtuals
+                .get(list_path)
+                .is_some_and(|v| v.selection.scope.inert)
     }
 
     pub(crate) fn offscreen_text(&self, vi: usize, ti: usize) -> &OffscreenText {
-        &self.virtuals.iter().nth(vi).unwrap().1.selection.pins.texts()[ti]
+        &self
+            .virtuals
+            .iter()
+            .nth(vi)
+            .unwrap()
+            .1
+            .selection
+            .pins
+            .texts()[ti]
     }
 
     pub(crate) fn end_path(&self, end: EndRef) -> &str {
@@ -202,7 +269,8 @@ impl RuntimeCore {
     }
 
     pub(crate) fn end_same_group(&self, a: EndRef, b: EndRef) -> bool {
-        self.end_group_path(a).is_some_and(|ga| self.end_group_path(b) == Some(ga))
+        self.end_group_path(a)
+            .is_some_and(|ga| self.end_group_path(b) == Some(ga))
     }
 
     /// Canonical pre-order key `(list_or_node_slot, row_index, in_row_order)` for any mounted or
@@ -212,7 +280,9 @@ impl RuntimeCore {
             EndRef::Offscreen(vi, ti) => {
                 let t = self.offscreen_text(vi, ti);
                 let list_node = self.live(&t.list_path).unwrap_or(0);
-                let row_index = self.virtuals.get(&t.list_path)
+                let row_index = self
+                    .virtuals
+                    .get(&t.list_path)
                     .and_then(|v| v.index_of(&t.row_key))
                     .unwrap_or(t.row_index);
                 (list_node * 2 + 1, row_index, t.order_in_row)
@@ -221,7 +291,9 @@ impl RuntimeCore {
                 let mut cur = i;
                 while let Some(p) = self.nodes[cur].parent {
                     if let Some(v) = self.virtuals.get(&self.nodes[p].path) {
-                        let row_index = self.nodes[cur].key.as_deref()
+                        let row_index = self.nodes[cur]
+                            .key
+                            .as_deref()
                             .and_then(|k| v.index_of(k))
                             .unwrap_or(0);
                         return (p * 2 + 1, row_index, i);
@@ -238,7 +310,9 @@ impl RuntimeCore {
         match end {
             EndRef::Offscreen(vi, ti) => {
                 let t = self.offscreen_text(vi, ti);
-                let row_index = self.virtuals.get(&t.list_path)
+                let row_index = self
+                    .virtuals
+                    .get(&t.list_path)
                     .and_then(|v| v.index_of(&t.row_key))
                     .unwrap_or(t.row_index);
                 Some(VirtualEnd {
@@ -259,7 +333,11 @@ impl RuntimeCore {
                         let rel_path = if i == cur {
                             String::new()
                         } else {
-                            self.nodes[i].path.strip_prefix(row_path)?.strip_prefix('/')?.to_owned()
+                            self.nodes[i]
+                                .path
+                                .strip_prefix(row_path)?
+                                .strip_prefix('/')?
+                                .to_owned()
                         };
                         return Some(VirtualEnd {
                             list_path: self.nodes[p].path.clone(),
@@ -277,7 +355,9 @@ impl RuntimeCore {
     }
 
     pub(crate) fn resolve_end(&self, path: &str, v_end: Option<&VirtualEnd>) -> Option<EndRef> {
-        if let Some(end) = v_end && let Some(r) = self.resolve_virtual_end(end) {
+        if let Some(end) = v_end
+            && let Some(r) = self.resolve_virtual_end(end)
+        {
             return Some(r);
         }
         if let Some(i) = self.live(path).filter(|&i| self.is_selectable(i)) {
@@ -288,7 +368,10 @@ impl RuntimeCore {
                 continue;
             }
             for (ti, t) in v.selection.pins.texts().iter().enumerate() {
-                if t.path == path && v.index_of(&t.row_key).is_some_and(|r| !v.range.contains(&r)) {
+                if t.path == path
+                    && v.index_of(&t.row_key)
+                        .is_some_and(|r| !v.range.contains(&r))
+                {
                     return Some(EndRef::Offscreen(vi, ti));
                 }
             }
@@ -304,7 +387,10 @@ impl RuntimeCore {
             let row_idx = v.index_of(&end.row_key)?;
             if v.range.contains(&row_idx) {
                 let full = end.full_path();
-                return self.live(&full).filter(|&i| self.is_selectable(i)).map(EndRef::Mounted);
+                return self
+                    .live(&full)
+                    .filter(|&i| self.is_selectable(i))
+                    .map(EndRef::Mounted);
             }
             for (ti, t) in v.selection.pins.texts().iter().enumerate() {
                 if t.row_key == end.row_key && t.rel_path == end.rel_path {
@@ -321,7 +407,8 @@ impl RuntimeCore {
         let upto = match &sel.far {
             None => sel.anchor.max(sel.focus).max(sel.origin.1),
             Some(far)
-                if self.resolve_end(&far.path, far.end.as_ref())
+                if self
+                    .resolve_end(&far.path, far.end.as_ref())
                     .is_some_and(|f| self.tree_order(f) > self.tree_order(h)) =>
             {
                 sel.content.len()
@@ -333,10 +420,17 @@ impl RuntimeCore {
 
     pub(crate) fn focus_holder_end(&self, holder: EndRef) -> Option<EndRef> {
         let sel = self.selectable.phase.selection()?;
-        let Some(far) = &sel.far else { return Some(holder) };
+        let Some(far) = &sel.far else {
+            return Some(holder);
+        };
         let f = self.resolve_end(&far.path, far.end.as_ref())?;
-        let upto = if self.tree_order(f) > self.tree_order(holder) { sel.focus } else { far.content.len() };
-        (self.end_same_group(f, holder) && kept(&far.content, self.end_content(f), upto)).then_some(f)
+        let upto = if self.tree_order(f) > self.tree_order(holder) {
+            sel.focus
+        } else {
+            far.content.len()
+        };
+        (self.end_same_group(f, holder) && kept(&far.content, self.end_content(f), upto))
+            .then_some(f)
     }
 
     /// Updates the selection's `anchor_end` and far `end`, and each list's pins.
@@ -351,19 +445,34 @@ impl RuntimeCore {
         };
         let (anchor, focus, far) = (sel.anchor, sel.focus, sel.far.is_some());
         let ends = self.selection_holder_end().map(|h| {
-            let focus_end = if far { self.focus_holder_end(h).and_then(|f| self.virtual_end_of(f, focus)) } else { None };
+            let focus_end = if far {
+                self.focus_holder_end(h)
+                    .and_then(|f| self.virtual_end_of(f, focus))
+            } else {
+                None
+            };
             (self.virtual_end_of(h, anchor), focus_end)
         });
-        let Some(sel) = self.selectable.phase.selection_mut() else { return };
+        let Some(sel) = self.selectable.phase.selection_mut() else {
+            return;
+        };
         if let Some((anchor_end, focus_end)) = ends {
             sel.anchor_end = anchor_end;
-            if let Some(far) = &mut sel.far { far.end = focus_end; }
+            if let Some(far) = &mut sel.far {
+                far.end = focus_end;
+            }
         }
         let a_end = sel.anchor_end.clone();
         let f_end = sel.far.as_ref().and_then(|f| f.end.clone());
         for (list_path, v) in &mut self.virtuals {
-            let anchor = a_end.as_ref().filter(|a| &a.list_path == list_path).map(|a| a.row_key.as_str());
-            let focus = f_end.as_ref().filter(|f| &f.list_path == list_path).map(|f| f.row_key.as_str());
+            let anchor = a_end
+                .as_ref()
+                .filter(|a| &a.list_path == list_path)
+                .map(|a| a.row_key.as_str());
+            let focus = f_end
+                .as_ref()
+                .filter(|f| &f.list_path == list_path)
+                .map(|f| f.row_key.as_str());
             v.selection.pins.sync(PinsEvent::Select { anchor, focus });
         }
     }
@@ -371,13 +480,22 @@ impl RuntimeCore {
     /// Whether `h` and `f` span across virtual rows (either between different rows of a virtual
     /// list, or between an element outside the virtual list and a row inside or past it).
     fn is_cross_row_virtual(&self, h: EndRef, f: EndRef) -> Option<(String, usize, usize)> {
-        let (first, last) = if self.tree_order(h) <= self.tree_order(f) { (h, f) } else { (f, h) };
+        let (first, last) = if self.tree_order(h) <= self.tree_order(f) {
+            (h, f)
+        } else {
+            (f, h)
+        };
         let va = self.virtual_end_of(first, 0);
         let vb = self.virtual_end_of(last, 0);
         match (va, vb) {
             (Some(a), Some(b)) => {
-                (a.list_path == b.list_path && a.row_index != b.row_index)
-                    .then(|| (a.list_path, a.row_index.min(b.row_index), a.row_index.max(b.row_index)))
+                (a.list_path == b.list_path && a.row_index != b.row_index).then(|| {
+                    (
+                        a.list_path,
+                        a.row_index.min(b.row_index),
+                        a.row_index.max(b.row_index),
+                    )
+                })
             }
             (Some(a), None) => {
                 let v = self.virtuals.get(&a.list_path)?;
@@ -387,7 +505,9 @@ impl RuntimeCore {
             (None, None) => {
                 let (first_ord, last_ord) = (self.tree_order(first), self.tree_order(last));
                 self.virtuals.iter().find_map(|(lp, v)| {
-                    if v.keys.is_empty() { return None; }
+                    if v.keys.is_empty() {
+                        return None;
+                    }
                     let ln = self.live(lp)?;
                     let list_ord = (ln * 2 + 1, 0, 0);
                     (first_ord < list_ord && last_ord > list_ord)
@@ -404,14 +524,17 @@ impl RuntimeCore {
             .find(|&j| self.nodes[j].parent == Some(list_node) && self.nodes[j].path == row_path)?;
         let inside_row = |j: usize| {
             j == row_node
-                || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == row_node)
+                || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                    .any(|p| p == row_node)
         };
         let mut hasher = rustc_hash::FxHasher::default();
         for j in (row_node..self.nodes.len()).take_while(|&j| inside_row(j)) {
             if self.is_selectable(j)
                 && !self.subtree_exiting(j)
                 && self.allowed(j)
-                && self.group_of(j).is_some_and(|g| self.nodes[g].path == g_path)
+                && self
+                    .group_of(j)
+                    .is_some_and(|g| self.nodes[g].path == g_path)
             {
                 (&self.nodes[j].path, self.content_of(j)).hash(&mut hasher);
             }
@@ -424,21 +547,32 @@ impl RuntimeCore {
         let Some(g_path) = self.end_group_path(h).filter(|_| h != f) else {
             return hasher.finish();
         };
-        let (first, last) = if self.tree_order(h) < self.tree_order(f) { (h, f) } else { (f, h) };
+        let (first, last) = if self.tree_order(h) < self.tree_order(f) {
+            (h, f)
+        } else {
+            (f, h)
+        };
         if let Some((list_path, r0, r1)) = self.is_cross_row_virtual(first, last) {
-            if let Some(g) = self.live(g_path) && let Some(ln) = self.live(&list_path) {
+            if let Some(g) = self.live(g_path)
+                && let Some(ln) = self.live(&list_path)
+            {
                 let (first_ord, last_ord) = (self.tree_order(first), self.tree_order(last));
                 let inside_list = |j: usize| {
-                    j == ln || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == ln)
+                    j == ln
+                        || std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent)
+                            .any(|p| p == ln)
                 };
-                for j in (g + 1..self.nodes.len()).filter(|&j| !inside_list(j) && self.member(j, g)) {
+                for j in (g + 1..self.nodes.len()).filter(|&j| !inside_list(j) && self.member(j, g))
+                {
                     let ord = self.tree_order(EndRef::Mounted(j));
                     if ord > first_ord && ord < last_ord {
                         (&self.nodes[j].path, self.content_of(j)).hash(&mut hasher);
                     }
                 }
             }
-            if let Some(v) = self.virtuals.get(&list_path) && r1 < v.keys.len() {
+            if let Some(v) = self.virtuals.get(&list_path)
+                && r1 < v.keys.len()
+            {
                 v.keys[r0..=r1].hash(&mut hasher);
             }
             return hasher.finish();
@@ -457,7 +591,11 @@ impl RuntimeCore {
                 let row_key = &texts[ti0].row_key;
                 let (o0, o1) = (texts[ti0].order_in_row, texts[ti1].order_in_row);
                 for t in texts {
-                    if &t.row_key == row_key && t.order_in_row > o0 && t.order_in_row < o1 && t.group_path.as_deref() == Some(g_path) {
+                    if &t.row_key == row_key
+                        && t.order_in_row > o0
+                        && t.order_in_row < o1
+                        && t.group_path.as_deref() == Some(g_path)
+                    {
                         (&t.path, t.spec.content.as_str()).hash(&mut hasher);
                     }
                 }
@@ -470,13 +608,20 @@ impl RuntimeCore {
     pub(crate) fn seal_between(&mut self) {
         self.sync_selection_pins();
         self.selectable.mounted_between.clear();
-        let Some((h, f)) = self.selection_holder_end().and_then(|h| Some((h, self.focus_holder_end(h)?))) else {
-            if let Some(sel) = self.selectable.phase.selection_mut() { sel.between = 0; }
+        let Some((h, f)) = self
+            .selection_holder_end()
+            .and_then(|h| Some((h, self.focus_holder_end(h)?)))
+        else {
+            if let Some(sel) = self.selectable.phase.selection_mut() {
+                sel.between = 0;
+            }
             self.remember_pick();
             return;
         };
         let between = self.between_hash_ends(h, f);
-        if let Some(sel) = self.selectable.phase.selection_mut() { sel.between = between; }
+        if let Some(sel) = self.selectable.phase.selection_mut() {
+            sel.between = between;
+        }
         if let Some(g_path) = self.end_group_path(h).map(str::to_owned)
             && let Some((list_path, r0, r1)) = self.is_cross_row_virtual(h, f)
             && let Some(v) = self.virtuals.get(&list_path)
@@ -496,7 +641,13 @@ impl RuntimeCore {
     }
 
     pub(crate) fn between_matches(&mut self, h: EndRef, f: EndRef) -> bool {
-        let Some(sealed) = self.selectable.phase.selection().filter(|s| s.far.is_some()).map(|s| s.between) else {
+        let Some(sealed) = self
+            .selectable
+            .phase
+            .selection()
+            .filter(|s| s.far.is_some())
+            .map(|s| s.between)
+        else {
             return true;
         };
         if self.between_hash_ends(h, f) != sealed {
@@ -528,10 +679,16 @@ impl RuntimeCore {
 
     /// True when the current selection is non-empty (mounted or offscreen).
     pub(crate) fn has_nonempty_selection(&self) -> bool {
-        let Some(h) = self.selection_holder_end() else { return false };
-        let Some(f) = self.focus_holder_end(h) else { return false };
+        let Some(h) = self.selection_holder_end() else {
+            return false;
+        };
+        let Some(f) = self.focus_holder_end(h) else {
+            return false;
+        };
         if h == f {
-            let Some(sel) = self.selectable.phase.selection() else { return false };
+            let Some(sel) = self.selectable.phase.selection() else {
+                return false;
+            };
             let (a, b) = (sel.anchor.min(sel.focus), sel.anchor.max(sel.focus));
             a < b && b <= self.end_content(h).len()
         } else {
@@ -541,21 +698,32 @@ impl RuntimeCore {
 
     /// True when the selection touches any offscreen/unbuilt virtual row.
     pub(crate) fn selection_spans_unmounted(&self) -> bool {
-        let Some(h) = self.selection_holder_end() else { return false };
-        let Some(f) = self.focus_holder_end(h) else { return false };
+        let Some(h) = self.selection_holder_end() else {
+            return false;
+        };
+        let Some(f) = self.focus_holder_end(h) else {
+            return false;
+        };
         if matches!(h, EndRef::Offscreen(..)) || matches!(f, EndRef::Offscreen(..)) {
             return true;
         }
-        let (EndRef::Mounted(i0), EndRef::Mounted(i1)) = (h, f) else { return true };
+        let (EndRef::Mounted(i0), EndRef::Mounted(i1)) = (h, f) else {
+            return true;
+        };
         if i0 == i1 {
             return false;
         }
-        let (first_ord, last_ord) = (self.tree_order(EndRef::Mounted(i0.min(i1))), self.tree_order(EndRef::Mounted(i0.max(i1))));
+        let (first_ord, last_ord) = (
+            self.tree_order(EndRef::Mounted(i0.min(i1))),
+            self.tree_order(EndRef::Mounted(i0.max(i1))),
+        );
         self.virtuals.iter().any(|(list_path, v)| {
             if v.keys.is_empty() || (v.range.start == 0 && v.range.end >= v.keys.len()) {
                 return false;
             }
-            let Some(ln) = self.live(list_path) else { return false };
+            let Some(ln) = self.live(list_path) else {
+                return false;
+            };
             let head_unmounted = v.range.start > 0
                 && (ln * 2 + 1, 0, usize::MAX) >= first_ord
                 && (ln * 2 + 1, 0, 0) <= last_ord;
@@ -570,8 +738,11 @@ impl RuntimeCore {
     /// A unique live selectable node at `path`'s keyed identity when an unkeyed ancestor moved.
     fn rebound(&self, path: &str, content: &str, upto: usize) -> Option<usize> {
         let mut hits = (0..self.nodes.len()).filter(|&i| {
-            self.is_selectable(i) && !self.subtree_exiting(i) && self.allowed(i)
-                && same_keyed_path(path, &self.nodes[i].path) && kept(content, self.content_of(i), upto)
+            self.is_selectable(i)
+                && !self.subtree_exiting(i)
+                && self.allowed(i)
+                && same_keyed_path(path, &self.nodes[i].path)
+                && kept(content, self.content_of(i), upto)
         });
         let first = hits.next()?;
         hits.next().is_none().then_some(first)
@@ -580,22 +751,36 @@ impl RuntimeCore {
     /// After a commit: drop a selection whose texts went away, stopped being selectable or
     /// changed what it selected, or whose texts between its ends changed.
     pub(crate) fn prune_text_selection(&mut self) {
-        if self.selectable.phase.selection().is_none() { return; }
+        if self.selectable.phase.selection().is_none() {
+            return;
+        }
         let mut rebind = false;
         if self.selection_holder_end().is_none()
-            && let Some(sel) = self.selectable.phase.selection().filter(|s| s.anchor_end.is_none())
+            && let Some(sel) = self
+                .selectable
+                .phase
+                .selection()
+                .filter(|s| s.anchor_end.is_none())
         {
             let old_path = sel.path.clone();
             let upto = sel.anchor.max(sel.focus).max(sel.origin.1);
             if let Some(i) = self.rebound(&old_path, &sel.content, upto) {
-                let old_ancs: Vec<&str> = std::iter::successors(Some(old_path.as_str()), |p| p.rsplit_once('/').map(|(a, _)| a)).collect();
-                let new_ancs: Vec<usize> = std::iter::successors(Some(i), |&p| self.nodes[p].parent).collect();
+                let old_ancs: Vec<&str> = std::iter::successors(Some(old_path.as_str()), |p| {
+                    p.rsplit_once('/').map(|(a, _)| a)
+                })
+                .collect();
+                let new_ancs: Vec<usize> =
+                    std::iter::successors(Some(i), |&p| self.nodes[p].parent).collect();
                 for (&old_anc, &new_anc) in old_ancs.iter().zip(&new_ancs) {
                     if let Some(v) = self.sel_heard.by_path.remove(old_anc) {
-                        self.sel_heard.by_path.insert(self.nodes[new_anc].path.clone(), v);
+                        self.sel_heard
+                            .by_path
+                            .insert(self.nodes[new_anc].path.clone(), v);
                     }
                 }
-                if let Some(sel) = self.selectable.phase.selection_mut() { sel.path = self.nodes[i].path.clone(); }
+                if let Some(sel) = self.selectable.phase.selection_mut() {
+                    sel.path = self.nodes[i].path.clone();
+                }
                 rebind = true;
             }
         }
@@ -605,14 +790,30 @@ impl RuntimeCore {
             && let Some(far) = sel.far.as_ref().filter(|f| f.end.is_none())
             && let Some(j) = self.rebound(&far.path, &far.content, sel.focus)
         {
-            if let Some(far) = self.selectable.phase.selection_mut().and_then(|s| s.far.as_mut()) { far.path = self.nodes[j].path.clone(); }
+            if let Some(far) = self
+                .selectable
+                .phase
+                .selection_mut()
+                .and_then(|s| s.far.as_mut())
+            {
+                far.path = self.nodes[j].path.clone();
+            }
             rebind = true;
         }
-        if rebind && let Some((h, f)) = self.selection_holder_end().and_then(|h| Some((h, self.focus_holder_end(h)?))) {
+        if rebind
+            && let Some((h, f)) = self
+                .selection_holder_end()
+                .and_then(|h| Some((h, self.focus_holder_end(h)?)))
+        {
             let between = self.between_hash_ends(h, f);
-            if let Some(sel) = self.selectable.phase.selection_mut() { sel.between = between; }
+            if let Some(sel) = self.selectable.phase.selection_mut() {
+                sel.between = between;
+            }
         }
-        let Some((h, f)) = self.selection_holder_end().and_then(|h| Some((h, self.focus_holder_end(h)?))) else {
+        let Some((h, f)) = self
+            .selection_holder_end()
+            .and_then(|h| Some((h, self.focus_holder_end(h)?)))
+        else {
             self.clear_text_selection();
             return;
         };
@@ -623,11 +824,21 @@ impl RuntimeCore {
         let (h_path, h_content) = (self.end_path(h).to_owned(), self.end_content(h).to_owned());
         let far = (f != h).then(|| (self.end_path(f).to_owned(), self.end_content(f).to_owned()));
         if let Some(sel) = self.selectable.phase.selection_mut() {
-            if sel.path != h_path { sel.path = h_path; }
-            if sel.content != h_content { sel.content = h_content; }
-            if let Some((f_path, f_content)) = far && let Some(far) = &mut sel.far {
-                if far.path != f_path { far.path = f_path; }
-                if far.content != f_content { far.content = f_content; }
+            if sel.path != h_path {
+                sel.path = h_path;
+            }
+            if sel.content != h_content {
+                sel.content = h_content;
+            }
+            if let Some((f_path, f_content)) = far
+                && let Some(far) = &mut sel.far
+            {
+                if far.path != f_path {
+                    far.path = f_path;
+                }
+                if far.content != f_content {
+                    far.content = f_content;
+                }
             }
         }
         self.sync_selection_pins();
@@ -637,14 +848,24 @@ impl RuntimeCore {
     pub(crate) fn select_span_ends(&mut self, first: EndRef, last: EndRef) {
         let head = self.end_path(first).to_owned();
         let content = self.end_content(first).to_owned();
-        let far = (first != last).then(|| Far::new(self.end_path(last).to_owned(), self.end_content(last).to_owned()));
+        let far = (first != last).then(|| {
+            Far::new(
+                self.end_path(last).to_owned(),
+                self.end_content(last).to_owned(),
+            )
+        });
         let end = far.as_ref().map_or(content.len(), |f| f.content.len());
         let origin = if far.is_some() { (0, 0) } else { (0, end) };
         let anchor_end = self.virtual_end_of(first, 0);
-        let focus_end = (first != last).then(|| self.virtual_end_of(last, end)).flatten();
+        let focus_end = (first != last)
+            .then(|| self.virtual_end_of(last, end))
+            .flatten();
         let mut sel = Selection::new(head, content, (0, end), origin);
         sel.anchor_end = anchor_end;
-        sel.far = far.map(|far| Far { end: focus_end, ..far });
+        sel.far = far.map(|far| Far {
+            end: focus_end,
+            ..far
+        });
         self.select_step(phase::Event::Select(sel));
     }
 }

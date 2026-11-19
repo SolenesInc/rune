@@ -39,10 +39,14 @@ pub fn single_instance(id: &str) -> bool {
 /// digits, `+`, `-` or `.`, starting with a letter. A path and a flag aren't.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn is_link(arg: &str) -> bool {
-    let Some((scheme, _)) = arg.split_once("://") else { return false };
+    let Some((scheme, _)) = arg.split_once("://") else {
+        return false;
+    };
     scheme.len() >= 2
         && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
-        && scheme.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
 }
 
 /// The links among this process's launch arguments: Linux passes a link to the process it
@@ -109,12 +113,17 @@ mod linux {
     }
 
     pub(super) fn claim(id: &str) -> bool {
-        let launch = Launch { token: activation_token(), links: super::launch_links() };
+        let launch = Launch {
+            token: activation_token(),
+            links: super::launch_links(),
+        };
         match claim_as(&name(id), &launch, arrived) {
             Claim::First => true,
             Claim::Handed => false,
             Claim::Unreachable(e) => {
-                eprintln!("rune: couldn't reach the running {id}, so this launch runs on its own: {e}");
+                eprintln!(
+                    "rune: couldn't reach the running {id}, so this launch runs on its own: {e}"
+                );
                 true
             }
         }
@@ -127,7 +136,9 @@ mod linux {
     }
 
     fn activation_token() -> Option<String> {
-        ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"].into_iter().find_map(|k| std::env::var(k).ok().filter(|t| !t.is_empty()))
+        ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"]
+            .into_iter()
+            .find_map(|k| std::env::var(k).ok().filter(|t| !t.is_empty()))
     }
 
     #[derive(Debug)]
@@ -142,18 +153,20 @@ mod linux {
 
     /// Claims `name` and serves the launches that follow to `arrived`, or hands `launch` to the
     /// process that holds it.
-    pub(super) fn claim_as(name: &str, launch: &Launch, arrived: impl Fn(Launch) + Send + 'static) -> Claim {
+    pub(super) fn claim_as(
+        name: &str,
+        launch: &Launch,
+        arrived: impl Fn(Launch) + Send + 'static,
+    ) -> Claim {
         let addr = match SocketAddr::from_abstract_name(name) {
             Ok(addr) => addr,
             Err(e) => return Claim::Unreachable(e),
         };
         match UnixListener::bind_addr(&addr) {
-            Ok(listener) => {
-                std::thread::Builder::new()
-                    .name("rune-instance".into())
-                    .spawn(move || serve(listener, arrived))
-                    .map_or_else(Claim::Unreachable, |_| Claim::First)
-            }
+            Ok(listener) => std::thread::Builder::new()
+                .name("rune-instance".into())
+                .spawn(move || serve(listener, arrived))
+                .map_or_else(Claim::Unreachable, |_| Claim::First),
             Err(e) if e.kind() == io::ErrorKind::AddrInUse => match hand_off(&addr, launch) {
                 Ok(()) => Claim::Handed,
                 Err(e) => Claim::Unreachable(e),
@@ -173,7 +186,11 @@ mod linux {
         stream.shutdown(std::net::Shutdown::Write)?;
         let mut answer = [0];
         stream.read_exact(&mut answer)?;
-        if answer[0] == ACCEPTED { Ok(()) } else { Err(io::Error::other("the running process refused the launch")) }
+        if answer[0] == ACCEPTED {
+            Ok(())
+        } else {
+            Err(io::Error::other("the running process refused the launch"))
+        }
     }
 
     fn serve(listener: UnixListener, arrived: impl Fn(Launch)) {
@@ -195,7 +212,10 @@ mod linux {
             return None;
         }
         let mut message = Vec::new();
-        stream.take(MAX_MESSAGE + 1).read_to_end(&mut message).ok()?;
+        stream
+            .take(MAX_MESSAGE + 1)
+            .read_to_end(&mut message)
+            .ok()?;
         if message.len() as u64 > MAX_MESSAGE {
             return None;
         }
@@ -208,18 +228,34 @@ mod linux {
     }
 
     fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
-        let mut cred = libc::ucred { pid: 0, uid: 0, gid: 0 };
+        let mut cred = libc::ucred {
+            pid: 0,
+            uid: 0,
+            gid: 0,
+        };
         let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
         // SAFETY: SO_PEERCRED fills a `ucred` of `len` bytes on a connected Unix socket.
         let got = unsafe {
-            libc::getsockopt(stream.as_raw_fd(), libc::SOL_SOCKET, libc::SO_PEERCRED, (&raw mut cred).cast(), &mut len)
+            libc::getsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_PEERCRED,
+                (&raw mut cred).cast(),
+                &mut len,
+            )
         };
-        if got == 0 { Ok(cred.uid) } else { Err(io::Error::last_os_error()) }
+        if got == 0 {
+            Ok(cred.uid)
+        } else {
+            Err(io::Error::last_os_error())
+        }
     }
 
     pub(super) fn encode(launch: &Launch) -> Vec<u8> {
         let mut message = MAGIC.to_vec();
-        for field in std::iter::once(launch.token.as_deref().unwrap_or("")).chain(launch.links.iter().map(String::as_str)) {
+        for field in std::iter::once(launch.token.as_deref().unwrap_or(""))
+            .chain(launch.links.iter().map(String::as_str))
+        {
             message.extend(field.bytes().filter(|&b| b != 0));
             message.push(0);
         }
@@ -230,7 +266,10 @@ mod linux {
         let body = std::str::from_utf8(message.strip_prefix(MAGIC)?).ok()?;
         let mut fields = body.strip_suffix('\0')?.split('\0');
         let token = fields.next().filter(|t| !t.is_empty()).map(str::to_owned);
-        Some(Launch { token, links: fields.map(str::to_owned).collect() })
+        Some(Launch {
+            token,
+            links: fields.map(str::to_owned).collect(),
+        })
     }
 }
 

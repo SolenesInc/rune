@@ -27,15 +27,30 @@ pub(super) fn share_later(fonts: &'static [&'static [u8]]) {
 
 /// Adds each font file's faces to the page under the family names Rune knows them by.
 pub(super) fn share<'a>(fonts: impl IntoIterator<Item = &'a [u8]>) {
-    let mut collection = Collection::new(CollectionOptions { shared: false, system_fonts: false });
+    let mut collection = Collection::new(CollectionOptions {
+        shared: false,
+        system_fonts: false,
+    });
     for bytes in fonts {
         for (id, faces) in collection.register_fonts(Blob::new(Arc::new(bytes.to_vec())), None) {
-            let Some(family) = collection.family_name(id).map(str::to_owned) else { continue };
+            let Some(family) = collection.family_name(id).map(str::to_owned) else {
+                continue;
+            };
             // A collection file's later faces would need their own file; its first is the one.
             for face in faces.iter().filter(|f| f.index() == 0) {
-                let weight = face.axes().iter().find(|a| a.tag.to_string() == "wght")
-                    .map_or_else(|| face.weight().value().to_string(), |a| format!("{} {}", a.min, a.max));
-                let style = match face.style() { FontStyle::Normal => "normal", FontStyle::Italic => "italic", FontStyle::Oblique(_) => "oblique" };
+                let weight = face
+                    .axes()
+                    .iter()
+                    .find(|a| a.tag.to_string() == "wght")
+                    .map_or_else(
+                        || face.weight().value().to_string(),
+                        |a| format!("{} {}", a.min, a.max),
+                    );
+                let style = match face.style() {
+                    FontStyle::Normal => "normal",
+                    FontStyle::Italic => "italic",
+                    FontStyle::Oblique(_) => "oblique",
+                };
                 add_font_face(&family, bytes, &weight, style);
             }
         }

@@ -24,12 +24,21 @@ impl Watched {
         let wake = Wake::new({
             let (fired, fired_hidden, shown) = (fired.clone(), fired_hidden.clone(), shown.clone());
             Arc::new(move || {
-                if !shown.load(Ordering::SeqCst) { fired_hidden.fetch_add(1, Ordering::SeqCst); }
+                if !shown.load(Ordering::SeqCst) {
+                    fired_hidden.fetch_add(1, Ordering::SeqCst);
+                }
                 fired.fetch_add(1, Ordering::SeqCst);
             })
         });
-        if !visible { wake.visible(false); }
-        Self { wake, fired, fired_hidden, visible: shown }
+        if !visible {
+            wake.visible(false);
+        }
+        Self {
+            wake,
+            fired,
+            fired_hidden,
+            visible: shown,
+        }
     }
 
     fn show(&self, visible: bool) {
@@ -47,7 +56,11 @@ fn hiding_during_publication_stays_silent_until_the_show() {
     w.show(false);
     // The publisher resumes.
     w.wake.wake_after_publish(stored);
-    assert_eq!(w.fired.load(Ordering::SeqCst), 0, "a hidden window is never woken");
+    assert_eq!(
+        w.fired.load(Ordering::SeqCst),
+        0,
+        "a hidden window is never woken"
+    );
     assert_eq!(w.fired_hidden.load(Ordering::SeqCst), 0);
     assert!(w.wake.probe().1, "the publish still waits for the show");
     // The show delivers exactly that one wake.
@@ -71,7 +84,11 @@ fn showing_during_publication_wakes_once() {
             w.wake.notify();
             w.wake.wake_after_visibility(true, stored);
         }
-        assert_eq!(w.fired.load(Ordering::SeqCst), 1, "publisher first: {publisher_first}");
+        assert_eq!(
+            w.fired.load(Ordering::SeqCst),
+            1,
+            "publisher first: {publisher_first}"
+        );
         assert_eq!(w.fired_hidden.load(Ordering::SeqCst), 0);
     }
 }
@@ -93,7 +110,12 @@ const HIDE: [Step; 2] = [Step::HideStore, Step::HideWake];
 const SHOW: [Step; 2] = [Step::ShowStore, Step::ShowWake];
 /// The host's own run: a hide and a later show. Its steps are one thread's, so only a
 /// publisher's can land between them, never another hide or show.
-const HOST: [Step; 4] = [Step::HideStore, Step::HideWake, Step::ShowStore, Step::ShowWake];
+const HOST: [Step; 4] = [
+    Step::HideStore,
+    Step::HideWake,
+    Step::ShowStore,
+    Step::ShowWake,
+];
 
 /// What the wake owes: a hidden window is never woken, and a visible one with pending work
 /// gets a wake — from the publisher that found it idle, or from the show that brought it back.
@@ -112,7 +134,14 @@ struct Expected {
 
 impl Expected {
     fn new(visible: bool, programs: usize) -> Self {
-        Self { visible, pending: false, fresh: vec![false; programs], was_visible: vec![visible; programs], armed: false, fired: 0 }
+        Self {
+            visible,
+            pending: false,
+            fresh: vec![false; programs],
+            was_visible: vec![visible; programs],
+            armed: false,
+            fired: 0,
+        }
     }
 
     fn play(&mut self, program: usize, step: Step) {
@@ -127,7 +156,9 @@ impl Expected {
             // host after a show had already delivered that wake. Only a publisher that found an
             // idle, visible window wakes; a hidden one leaves the wake to the show.
             Step::PublishWake => {
-                if self.fresh[program] && self.was_visible[program] && self.visible { self.fired += 1; }
+                if self.fresh[program] && self.was_visible[program] && self.visible {
+                    self.fired += 1;
+                }
             }
             Step::HideStore => self.visible = false,
             Step::HideWake => {}
@@ -136,10 +167,14 @@ impl Expected {
                 self.visible = true;
             }
             Step::ShowWake => {
-                if self.armed { self.fired += 1; }
+                if self.armed {
+                    self.fired += 1;
+                }
             }
             Step::Take => {
-                if self.visible { self.pending = false; }
+                if self.visible {
+                    self.pending = false;
+                }
             }
         }
     }
@@ -158,7 +193,13 @@ struct Run {
 
 impl Run {
     fn new(visible: bool, programs: usize) -> Self {
-        Self { w: Watched::new(visible), expected: Expected::new(visible, programs), held: vec![None; programs], steps: Vec::new(), stretch: 0 }
+        Self {
+            w: Watched::new(visible),
+            expected: Expected::new(visible, programs),
+            held: vec![None; programs],
+            steps: Vec::new(),
+            stretch: 0,
+        }
     }
 
     fn play(&mut self, program: usize, step: Step) {
@@ -166,36 +207,61 @@ impl Run {
         let was_visible = self.w.wake.probe().0;
         match step {
             Step::PublishStore => self.held[program] = Some(self.w.wake.set_pending()),
-            Step::PublishWake => self.w.wake.wake_after_publish(self.held[program].take().expect(&where_)),
+            Step::PublishWake => self
+                .w
+                .wake
+                .wake_after_publish(self.held[program].take().expect(&where_)),
             Step::HideStore => {
                 self.w.visible.store(false, Ordering::SeqCst);
                 self.held[program] = Some(self.w.wake.set_visible(false));
             }
-            Step::HideWake => self.w.wake.wake_after_visibility(false, self.held[program].take().expect(&where_)),
+            Step::HideWake => self
+                .w
+                .wake
+                .wake_after_visibility(false, self.held[program].take().expect(&where_)),
             Step::ShowStore => {
                 self.w.visible.store(true, Ordering::SeqCst);
                 self.held[program] = Some(self.w.wake.set_visible(true));
             }
-            Step::ShowWake => self.w.wake.wake_after_visibility(true, self.held[program].take().expect(&where_)),
+            Step::ShowWake => self
+                .w
+                .wake
+                .wake_after_visibility(true, self.held[program].take().expect(&where_)),
             // The host takes only a visible window's wake; a hidden one keeps it for show.
-            Step::Take if self.w.wake.probe().0 => { self.w.wake.take_visible(); }
+            Step::Take if self.w.wake.probe().0 => {
+                self.w.wake.take_visible();
+            }
             Step::Take => {}
         }
         self.steps.push((program, step));
         self.expected.play(program, step);
         let fired = self.w.fired.load(Ordering::SeqCst);
         assert_eq!(fired, self.expected.fired, "wakes {where_}");
-        assert_eq!(self.w.fired_hidden.load(Ordering::SeqCst), 0, "a hidden window woke {where_}");
+        assert_eq!(
+            self.w.fired_hidden.load(Ordering::SeqCst),
+            0,
+            "a hidden window woke {where_}"
+        );
         let (visible, pending) = self.w.wake.probe();
-        assert_eq!((visible, pending), (self.expected.visible, self.expected.pending), "state {where_}");
+        assert_eq!(
+            (visible, pending),
+            (self.expected.visible, self.expected.pending),
+            "state {where_}"
+        );
         // A show, a take, or a publish that starts new work opens a stretch that owes a wake.
-        if (step == Step::ShowStore && !was_visible) || step == Step::Take || (step == Step::PublishStore && self.expected.fresh[program]) {
+        if (step == Step::ShowStore && !was_visible)
+            || step == Step::Take
+            || (step == Step::PublishStore && self.expected.fresh[program])
+        {
             self.stretch = fired;
         }
         // Work waiting with every writer at a resting point has its wake: never zero, and a
         // second one is dev's own behaviour when a show and a publisher both find it.
         if self.held.iter().all(Option::is_none) && visible && pending {
-            assert!(fired > self.stretch, "pending work with no wake due {where_}");
+            assert!(
+                fired > self.stretch,
+                "pending work with no wake due {where_}"
+            );
         }
     }
 }
@@ -203,8 +269,18 @@ impl Run {
 /// Every interleaving of `programs`' steps, in each program's own order, with up to `takes` takes
 /// inserted anywhere: each program is one thread's run of steps.
 fn interleave(visible: bool, programs: &[&[Step]], takes: usize) {
-    fn visit(programs: &[&[Step]], at: &mut [usize], takes: usize, path: &mut Vec<(usize, Step)>, out: &mut Vec<Vec<(usize, Step)>>) {
-        if at.iter().zip(programs).all(|(&i, program)| i == program.len()) {
+    fn visit(
+        programs: &[&[Step]],
+        at: &mut [usize],
+        takes: usize,
+        path: &mut Vec<(usize, Step)>,
+        out: &mut Vec<Vec<(usize, Step)>>,
+    ) {
+        if at
+            .iter()
+            .zip(programs)
+            .all(|(&i, program)| i == program.len())
+        {
             out.push(path.clone());
             return;
         }
@@ -214,7 +290,9 @@ fn interleave(visible: bool, programs: &[&[Step]], takes: usize) {
             path.pop();
         }
         for (p, program) in programs.iter().enumerate() {
-            if at[p] == program.len() { continue; }
+            if at[p] == program.len() {
+                continue;
+            }
             path.push((p, program[at[p]]));
             at[p] += 1;
             visit(programs, at, takes, path, out);
@@ -223,10 +301,18 @@ fn interleave(visible: bool, programs: &[&[Step]], takes: usize) {
         }
     }
     let mut out = Vec::new();
-    visit(programs, &mut vec![0; programs.len()], takes, &mut Vec::new(), &mut out);
+    visit(
+        programs,
+        &mut vec![0; programs.len()],
+        takes,
+        &mut Vec::new(),
+        &mut out,
+    );
     for path in &out {
         let mut run = Run::new(visible, programs.len());
-        for &(program, step) in path { run.play(program, step); }
+        for &(program, step) in path {
+            run.play(program, step);
+        }
     }
 }
 

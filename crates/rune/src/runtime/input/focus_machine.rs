@@ -25,20 +25,35 @@ pub(crate) enum Focus {
     /// taking focus, as a browser's sequential focus navigation starting point). `blurred` is
     /// the focus the gesture or commit underway took away: a scrim that blurs on pointer-down
     /// and closes its overlay on pointer-up still returns focus through `El::focus_return`.
-    None { from: Option<String>, blurred: Option<String> },
+    None {
+        from: Option<String>,
+        blurred: Option<String>,
+    },
     /// `path` has focus. `hovered`: the pointer lit it as a `focus_highlight` row, so its
     /// highlight shows without a key. `from`: a press on content that takes no focus queued a
     /// blur, and Tab starts there once it lands.
-    On { path: String, hovered: bool, from: Option<String> },
+    On {
+        path: String,
+        hovered: bool,
+        from: Option<String>,
+    },
 }
 
 impl Default for Focus {
-    fn default() -> Self { Self::None { from: None, blurred: None } }
+    fn default() -> Self {
+        Self::None {
+            from: None,
+            blurred: None,
+        }
+    }
 }
 
 pub(crate) enum FocusEvent {
     /// Focus moves to `path`, or nowhere, and shows as `keyboard` says.
-    Set { path: Option<String>, keyboard: bool },
+    Set {
+        path: Option<String>,
+        keyboard: bool,
+    },
     /// The pointer lit (`true`) or left (`false`) the focused `focus_highlight` row.
     Hover(bool),
     /// A key that navigates (Tab, an arrow): focus shows from now on.
@@ -79,21 +94,37 @@ impl FocusState {
         }
     }
 
-    pub(crate) fn owned(&self) -> Option<String> { self.path().map(str::to_owned) }
+    pub(crate) fn owned(&self) -> Option<String> {
+        self.path().map(str::to_owned)
+    }
 
-    pub(crate) fn is(&self, path: &str) -> bool { self.path() == Some(path) }
+    pub(crate) fn is(&self, path: &str) -> bool {
+        self.path() == Some(path)
+    }
 
-    pub(crate) fn keyboard(&self) -> bool { self.modality == Modality::Keyboard }
+    pub(crate) fn keyboard(&self) -> bool {
+        self.modality == Modality::Keyboard
+    }
 
     /// The pointer lit the focused row.
-    pub(crate) fn hovered(&self) -> bool { matches!(self.focus, Focus::On { hovered: true, .. }) }
+    pub(crate) fn hovered(&self) -> bool {
+        matches!(self.focus, Focus::On { hovered: true, .. })
+    }
 
     /// Focus shows, by the keyboard or the pointer's light on a row.
-    pub(crate) fn shown(&self) -> bool { self.keyboard() || self.hovered() }
+    pub(crate) fn shown(&self) -> bool {
+        self.keyboard() || self.hovered()
+    }
 
     /// Notes that `path` has focus inside landmark `scope`.
     pub(crate) fn remember_scope(&mut self, scope: String, path: String) {
-        if self.scopes.first().is_some_and(|(s, p)| *s == scope && *p == path) { return; }
+        if self
+            .scopes
+            .first()
+            .is_some_and(|(s, p)| *s == scope && *p == path)
+        {
+            return;
+        }
         self.scopes.retain(|(s, _)| *s != scope);
         self.scopes.insert(0, (scope, path));
         self.scopes.truncate(SCOPES);
@@ -101,7 +132,10 @@ impl FocusState {
 
     /// The element focused last inside landmark `scope`.
     pub(crate) fn scope_memory(&self, scope: &str) -> Option<&str> {
-        self.scopes.iter().find(|(s, _)| s == scope).map(|(_, p)| p.as_str())
+        self.scopes
+            .iter()
+            .find(|(s, _)| s == scope)
+            .map(|(_, p)| p.as_str())
     }
 
     /// Where Tab starts while nothing is focused.
@@ -123,18 +157,49 @@ impl FocusState {
     pub(crate) fn step(&mut self, event: FocusEvent) -> Effects<FocusEffect> {
         match event {
             FocusEvent::Set { path, keyboard } => {
-                self.modality = if keyboard { Modality::Keyboard } else { Modality::Pointer };
+                self.modality = if keyboard {
+                    Modality::Keyboard
+                } else {
+                    Modality::Pointer
+                };
                 let moved = self.path() != path.as_deref();
                 self.focus = match (std::mem::take(&mut self.focus), path) {
-                    (Focus::On { path: old, hovered, .. }, Some(path)) if old == path => Focus::On { path, hovered, from: None },
-                    (_, Some(path)) => Focus::On { path, hovered: false, from: None },
-                    (Focus::On { path: old, from, .. }, None) => Focus::None { from: from.or_else(|| Some(old.clone())), blurred: Some(old) },
+                    (
+                        Focus::On {
+                            path: old, hovered, ..
+                        },
+                        Some(path),
+                    ) if old == path => Focus::On {
+                        path,
+                        hovered,
+                        from: None,
+                    },
+                    (_, Some(path)) => Focus::On {
+                        path,
+                        hovered: false,
+                        from: None,
+                    },
+                    (
+                        Focus::On {
+                            path: old, from, ..
+                        },
+                        None,
+                    ) => Focus::None {
+                        from: from.or_else(|| Some(old.clone())),
+                        blurred: Some(old),
+                    },
                     (none @ Focus::None { .. }, None) => none,
                 };
-                if moved { Effects::one(FocusEffect::Moved) } else { Effects::none() }
+                if moved {
+                    Effects::one(FocusEffect::Moved)
+                } else {
+                    Effects::none()
+                }
             }
             FocusEvent::Hover(lit) => {
-                if let Focus::On { hovered, .. } = &mut self.focus { *hovered = lit; }
+                if let Focus::On { hovered, .. } = &mut self.focus {
+                    *hovered = lit;
+                }
                 Effects::none()
             }
             FocusEvent::Navigated => {
@@ -152,7 +217,9 @@ impl FocusState {
                 Effects::none()
             }
             FocusEvent::Settled => {
-                if let Focus::None { blurred, .. } = &mut self.focus { *blurred = None; }
+                if let Focus::None { blurred, .. } = &mut self.focus {
+                    *blurred = None;
+                }
                 Effects::none()
             }
         }
@@ -161,13 +228,20 @@ impl FocusState {
     /// Sets focus aside for a key the playground's stage presses, without a transition: nothing
     /// moves, and [`Self::put_back`] restores it if nothing took focus meanwhile.
     pub(crate) fn set_aside(&mut self) -> Option<Focus> {
-        let Focus::On { path, from, .. } = &self.focus else { return None };
-        let rest = Focus::None { from: from.clone(), blurred: Some(path.clone()) };
+        let Focus::On { path, from, .. } = &self.focus else {
+            return None;
+        };
+        let rest = Focus::None {
+            from: from.clone(),
+            blurred: Some(path.clone()),
+        };
         Some(std::mem::replace(&mut self.focus, rest))
     }
 
     pub(crate) fn put_back(&mut self, aside: Focus) {
-        if matches!(self.focus, Focus::None { .. }) { self.focus = aside; }
+        if matches!(self.focus, Focus::None { .. }) {
+            self.focus = aside;
+        }
     }
 }
 
@@ -179,7 +253,10 @@ pub(crate) const TYPE_SELECT_PAUSE: f64 = 1.0;
 pub(crate) enum TypeSelect {
     #[default]
     Idle,
-    Typing { prefix: String, at: f64 },
+    Typing {
+        prefix: String,
+        at: f64,
+    },
 }
 
 impl TypeSelect {
@@ -189,7 +266,10 @@ impl TypeSelect {
             Self::Typing { prefix, at } if now - at <= TYPE_SELECT_PAUSE => prefix,
             _ => String::new(),
         };
-        *self = Self::Typing { prefix: prefix + &typed.to_lowercase(), at: now };
+        *self = Self::Typing {
+            prefix: prefix + &typed.to_lowercase(),
+            at: now,
+        };
         match self {
             Self::Typing { prefix, .. } => prefix,
             Self::Idle => "",
@@ -197,5 +277,7 @@ impl TypeSelect {
     }
 
     /// A key that moves by position (an arrow, Home, End) ends the prefix.
-    pub(crate) fn reset(&mut self) { *self = Self::Idle; }
+    pub(crate) fn reset(&mut self) {
+        *self = Self::Idle;
+    }
 }

@@ -31,7 +31,9 @@ enum SlidePhase {
 
 impl SlidePhase {
     fn dy(self) -> f32 {
-        match self { SlidePhase::Following { dy, .. } | SlidePhase::Settling { dy, .. } => dy }
+        match self {
+            SlidePhase::Following { dy, .. } | SlidePhase::Settling { dy, .. } => dy,
+        }
     }
 
     /// The phase after row growth `g` stepped `steps` substeps.
@@ -43,7 +45,11 @@ impl SlidePhase {
                 if was * dy < 0.0 && was.abs() > 1.0 / 64.0 {
                     let next = dy * (left / was).clamp(0.0, 1.0);
                     let v = if dt > 0.0 { (next - dy) / dt } else { v };
-                    return SlidePhase::Following { dy: next, v, at: g.h };
+                    return SlidePhase::Following {
+                        dy: next,
+                        v,
+                        at: g.h,
+                    };
                 }
                 (dy, v)
             }
@@ -74,10 +80,23 @@ impl ContentSlides {
     /// row `row`'s growth `g`, if that growth opens toward its layout. Otherwise it stops
     /// following and the whole amount is returned, for the caller to slide some other way.
     fn follow(&mut self, node: NodeId, row: NodeId, g: &GrowTrack, dy: f32) -> f32 {
-        let dy = dy + self.0.iter().position(|s| s.node == node).map_or(0.0, |k| self.0.swap_remove(k).phase.dy());
+        let dy = dy
+            + self
+                .0
+                .iter()
+                .position(|s| s.node == node)
+                .map_or(0.0, |k| self.0.swap_remove(k).phase.dy());
         let left = g.target - g.h;
         if left * dy < 0.0 && left.abs() > 1.0 / 64.0 {
-            self.0.push(Slide { node, row, phase: SlidePhase::Following { dy, v: 0.0, at: g.h } });
+            self.0.push(Slide {
+                node,
+                row,
+                phase: SlidePhase::Following {
+                    dy,
+                    v: 0.0,
+                    at: g.h,
+                },
+            });
             return 0.0;
         }
         dy
@@ -90,7 +109,13 @@ impl ContentSlides {
 
     /// Steps row `row`'s slides after its growth `g` stepped `steps` substeps. Whether any still
     /// moves.
-    pub(super) fn step(&mut self, row: NodeId, g: &GrowTrack, spring: Spring, steps: usize) -> bool {
+    pub(super) fn step(
+        &mut self,
+        row: NodeId,
+        g: &GrowTrack,
+        spring: Spring,
+        steps: usize,
+    ) -> bool {
         for s in self.0.iter_mut().filter(|s| s.row == row) {
             s.phase = s.phase.step(g, spring, steps);
         }
@@ -108,12 +133,27 @@ impl RuntimeCore {
     /// Before node `id`, a child of `parent` whose contents' top moved `dy` points down in its
     /// growth row (drawn less new), takes that slide: with the row's growth where it opens
     /// toward them. How far it still has to slide from where it was drawn.
-    pub(super) fn slide_with_row(&mut self, nodes: &[Node], parent: usize, id: NodeId, dy: f32) -> f32 {
+    pub(super) fn slide_with_row(
+        &mut self,
+        nodes: &[Node],
+        parent: usize,
+        id: NodeId,
+        dy: f32,
+    ) -> f32 {
         let Some(row) = std::iter::successors(Some(parent), |&p| nodes[p].parent)
             .find(|&r| nodes[r].parent.is_some_and(|c| nodes[c].growth.is_some()))
-        else { return dy };
-        let Some(c) = nodes[row].parent else { return dy };
-        let (Some(stack), Some(g)) = (self.stacks.get_mut(&nodes[c].id), self.grows.get(&nodes[row].id)) else { return dy };
+        else {
+            return dy;
+        };
+        let Some(c) = nodes[row].parent else {
+            return dy;
+        };
+        let (Some(stack), Some(g)) = (
+            self.stacks.get_mut(&nodes[c].id),
+            self.grows.get(&nodes[row].id),
+        ) else {
+            return dy;
+        };
         stack.slides.follow(id, nodes[row].id, g, dy)
     }
 }

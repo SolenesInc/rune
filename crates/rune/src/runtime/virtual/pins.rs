@@ -149,7 +149,10 @@ impl Pins {
     /// Clears the kept texts and providers in place at the start of a commit. The vectors keep
     /// their allocations, and a builder that panics partway leaves what it already collected.
     pub(crate) fn clear_texts(&mut self) {
-        if let Pins::Pinned { texts, providers, .. } = self {
+        if let Pins::Pinned {
+            texts, providers, ..
+        } = self
+        {
             texts.clear();
             providers.clear();
         }
@@ -162,7 +165,9 @@ impl Pins {
     ) -> Option<(&mut Vec<OffscreenText>, &mut Vec<(String, SelectionCopy)>)> {
         match self {
             Pins::None => None,
-            Pins::Pinned { texts, providers, .. } => Some((texts, providers)),
+            Pins::Pinned {
+                texts, providers, ..
+            } => Some((texts, providers)),
         }
     }
 
@@ -177,7 +182,9 @@ impl Pins {
                     source,
                 };
             }
-            Pins::Pinned { source: current, .. } => *current = source,
+            Pins::Pinned {
+                source: current, ..
+            } => *current = source,
         }
     }
 
@@ -186,7 +193,13 @@ impl Pins {
     pub(crate) fn sync(&mut self, event: PinsEvent<'_>) {
         match event {
             PinsEvent::Clear => {
-                if let Pins::Pinned { rows, texts, providers, .. } = self {
+                if let Pins::Pinned {
+                    rows,
+                    texts,
+                    providers,
+                    ..
+                } = self
+                {
                     rows.clear();
                     texts.clear();
                     providers.clear();
@@ -207,7 +220,11 @@ impl Pins {
                 // cleared selection drop them.
                 texts.retain(|t| rows.iter().any(|r| r == &t.row_key));
             }
-            PinsEvent::Pin { key, texts, providers } => {
+            PinsEvent::Pin {
+                key,
+                texts,
+                providers,
+            } => {
                 let (rows, current, current_providers, _) = self.fields();
                 if !rows.iter().any(|r| r == &key) {
                     rows.push(key);
@@ -236,7 +253,15 @@ impl Pins {
                 source: Source::default(),
             };
         }
-        let Pins::Pinned { rows, texts, providers, source } = self else { unreachable!() };
+        let Pins::Pinned {
+            rows,
+            texts,
+            providers,
+            source,
+        } = self
+        else {
+            unreachable!()
+        };
         (rows, texts, providers, source)
     }
 }

@@ -1,21 +1,25 @@
 //! AppKit activation policy, overlay windows, and visibility without activation.
 
-use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
-use objc2_foundation::MainThreadMarker;
-use objc2::{ClassType, DeclaredClass, declare_class, msg_send, msg_send_id, mutability};
-use objc2::rc::Retained;
-use objc2_app_kit::{NSEvent, NSPanel, NSWindow, NSResponder, NSScreen, NSView};
-use objc2_foundation::{NSObject, NSPoint, NSRect, NSSize};
 use crate::{KeyPolicy, OverlayInput, OverlayLevel, OverlayOptions, OverlaySupport};
-use std::{cell::{Cell, RefCell}, rc::Rc, time::Instant};
+use objc2::rc::Retained;
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send, msg_send_id, mutability};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+use objc2_app_kit::{NSEvent, NSPanel, NSResponder, NSScreen, NSView, NSWindow};
+use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{NSObject, NSPoint, NSRect, NSSize};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    time::Instant,
+};
 
 #[doc(hidden)]
 pub mod appearance;
 pub(crate) mod cursor;
 pub(crate) mod drop;
 mod geometry;
-mod hold;
 pub(crate) mod help;
+mod hold;
 #[doc(hidden)]
 pub mod panel_bridge;
 mod pointer;
@@ -25,17 +29,27 @@ mod surface;
 pub(crate) mod traffic_lights;
 pub(crate) mod window_shape;
 
-pub(crate) use geometry::{backing_scale, content_origin, display_bounds, outer_size, overlay_rect, place_window, pointer_display, set_window_frame, window_geometry};
-pub(crate) use pointer::PointerState;
-#[cfg(test)]
-pub(crate) use surface::layer_occluded;
-pub(crate) use surface::{PresumeShown, detach_layer, pin_contents_top_left, present_with_transaction, surface_occluded, window_occluded};
+pub(crate) use geometry::{
+    backing_scale, content_origin, display_bounds, outer_size, overlay_rect, place_window,
+    pointer_display, set_window_frame, window_geometry,
+};
 use geometry::{overlay_rect_on, screen_id};
 use pointer::MouseMonitors;
+pub(crate) use pointer::PointerState;
 use presence::Presence;
+#[cfg(test)]
+pub(crate) use surface::layer_occluded;
 use surface::occlusion_hidden;
+pub(crate) use surface::{
+    PresumeShown, detach_layer, pin_contents_top_left, present_with_transaction, surface_occluded,
+    window_occluded,
+};
 
-struct PanelFlags { keys: bool, presence: Rc<Cell<Presence>>, constrain: bool }
+struct PanelFlags {
+    keys: bool,
+    presence: Rc<Cell<Presence>>,
+    constrain: bool,
+}
 
 // Initialized nonactivating panel. No application activation call.
 declare_class!(
@@ -84,17 +98,29 @@ pub(crate) fn in_live_resize(window: &winit::window::Window) -> bool {
 
 /// Regular (Dock icon and app menu) or accessory (menu-bar only). Called on the main thread.
 pub(crate) fn set_dock_icon(visible: bool) {
-    let Some(mtm) = MainThreadMarker::new() else { return };
-    let policy = if visible { NSApplicationActivationPolicy::Regular } else { NSApplicationActivationPolicy::Accessory };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let policy = if visible {
+        NSApplicationActivationPolicy::Regular
+    } else {
+        NSApplicationActivationPolicy::Accessory
+    };
     let app = NSApplication::sharedApplication(mtm);
-    if visible { crate::native_menu::promote_default_menu(&app); }
+    if visible {
+        crate::native_menu::promote_default_menu(&app);
+    }
     app.setActivationPolicy(policy);
 }
 
 /// winit's content view. Once a [`Panel`] adopts it, its window is the panel.
-pub(crate) fn content_view(window: &winit::window::Window) -> Option<Retained<objc2_app_kit::NSView>> {
+pub(crate) fn content_view(
+    window: &winit::window::Window,
+) -> Option<Retained<objc2_app_kit::NSView>> {
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let RawWindowHandle::AppKit(handle) = window.window_handle().ok()?.as_raw() else { return None };
+    let RawWindowHandle::AppKit(handle) = window.window_handle().ok()?.as_raw() else {
+        return None;
+    };
     // SAFETY: winit's content view is alive as long as its window, which the caller holds.
     unsafe { Retained::retain(handle.ns_view.as_ptr().cast()) }
 }
@@ -105,19 +131,27 @@ pub(crate) fn ns_window(window: &winit::window::Window) -> Option<Retained<NSWin
 
 pub(crate) fn configure_window(window: &winit::window::Window, options: &crate::MacWindowOptions) {
     crate::platform::macos::appearance::install();
-    if let Some(window) = ns_window(window) { configure_native(&window, options); }
+    if let Some(window) = ns_window(window) {
+        configure_native(&window, options);
+    }
 }
 
 fn configure_native(window: &NSWindow, options: &crate::MacWindowOptions) {
-    if let Some(shadow) = options.shadow { window.setHasShadow(shadow); }
-    if let Some(level) = options.level { window.setLevel(level); }
+    if let Some(shadow) = options.shadow {
+        window.setHasShadow(shadow);
+    }
+    if let Some(level) = options.level {
+        window.setLevel(level);
+    }
     // SAFETY: every caller runs on the AppKit main thread.
     unsafe {
         if let Some(bits) = options.collection_behavior {
             let _: () = msg_send![window, setCollectionBehavior: bits];
         }
     }
-    if let Some(exclude) = options.exclude_from_capture { set_sharing(window, exclude); }
+    if let Some(exclude) = options.exclude_from_capture {
+        set_sharing(window, exclude);
+    }
 }
 
 /// `sharingType` none keeps the window out of captures; read-only lets recorders see it.
@@ -126,7 +160,9 @@ fn configure_native(window: &NSWindow, options: &crate::MacWindowOptions) {
 /// neither confirms a toggle.
 fn set_sharing(window: &NSWindow, exclude: bool) {
     // SAFETY: every caller runs on the AppKit main thread.
-    unsafe { let _: () = msg_send![window, setSharingType: if exclude { 0usize } else { 1usize }]; }
+    unsafe {
+        let _: () = msg_send![window, setSharingType: if exclude { 0usize } else { 1usize }];
+    }
 }
 
 /// Orders a window front without making it key or activating the app.
@@ -163,29 +199,69 @@ pub(crate) struct Panel {
 }
 
 impl Panel {
-    pub fn adopt(window: &winit::window::Window, at: crate::overlay::Placement, interactive: bool, options: &OverlayOptions, wake: Option<crate::Waker>) -> Option<Panel> {
+    pub fn adopt(
+        window: &winit::window::Window,
+        at: crate::overlay::Placement,
+        interactive: bool,
+        options: &OverlayOptions,
+        wake: Option<crate::Waker>,
+    ) -> Option<Panel> {
         Self::adopt_kind(window, at, interactive, options, wake, false)
     }
 
-    pub fn adopt_window(window: &winit::window::Window, size: (f32, f32), native: &crate::MacWindowOptions) -> Option<Panel> {
-        let options = OverlayOptions { input: OverlayInput::All, keys: KeyPolicy::OnDemand, prewarm: native.launcher, ..Default::default() };
-        let panel = Self::adopt_kind(window, crate::windows::PlaceRequest::at(size), true, &options, None, true)?;
+    pub fn adopt_window(
+        window: &winit::window::Window,
+        size: (f32, f32),
+        native: &crate::MacWindowOptions,
+    ) -> Option<Panel> {
+        let options = OverlayOptions {
+            input: OverlayInput::All,
+            keys: KeyPolicy::OnDemand,
+            prewarm: native.launcher,
+            ..Default::default()
+        };
+        let panel = Self::adopt_kind(
+            window,
+            crate::windows::PlaceRequest::at(size),
+            true,
+            &options,
+            None,
+            true,
+        )?;
         let mut native = native.clone();
-        if let Some(exclude) = native.exclude_from_capture.take() { panel.set_capture_exclusion(exclude); }
+        if let Some(exclude) = native.exclude_from_capture.take() {
+            panel.set_capture_exclusion(exclude);
+        }
         configure_native(&panel.panel, &native);
         Some(panel)
     }
 
-    fn adopt_kind(window: &winit::window::Window, at: crate::overlay::Placement, interactive: bool, options: &OverlayOptions, wake: Option<crate::Waker>, ordinary: bool) -> Option<Panel> {
-        use objc2_app_kit::{NSBackingStoreType, NSColor, NSWindowCollectionBehavior, NSWindowStyleMask};
+    fn adopt_kind(
+        window: &winit::window::Window,
+        at: crate::overlay::Placement,
+        interactive: bool,
+        options: &OverlayOptions,
+        wake: Option<crate::Waker>,
+        ordinary: bool,
+    ) -> Option<Panel> {
+        use objc2_app_kit::{
+            NSBackingStoreType, NSColor, NSWindowCollectionBehavior, NSWindowStyleMask,
+        };
         let mtm = MainThreadMarker::new()?;
         crate::platform::macos::appearance::install();
         let view = content_view(window)?;
         let ns_window = view.window()?;
-        let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(at.size.0 as f64, at.size.1 as f64));
+        let rect = NSRect::new(
+            NSPoint::new(0.0, 0.0),
+            NSSize::new(at.size.0 as f64, at.size.1 as f64),
+        );
         // SAFETY: AppKit calls on the main thread; the panel is retained by `Panel`.
         let presence = Rc::new(Cell::new(Presence::new(options.exclude_from_capture)));
-        let style = if ordinary { ns_window.styleMask() } else { NSWindowStyleMask::Borderless };
+        let style = if ordinary {
+            ns_window.styleMask()
+        } else {
+            NSWindowStyleMask::Borderless
+        };
         let panel = unsafe {
             let panel: Retained<OverlayPanel> = msg_send_id![super(mtm.alloc().set_ivars(PanelFlags { keys: options.keys == KeyPolicy::OnDemand, presence: presence.clone(), constrain: ordinary })),
                 initWithContentRect: rect,
@@ -210,8 +286,13 @@ impl Panel {
                     | NSWindowCollectionBehavior::CanJoinAllApplications,
             );
         }
-        let native = crate::MacWindowOptions::default().shadow(false)
-            .level(match options.level { OverlayLevel::Status => 25, OverlayLevel::AboveStatus => 26, OverlayLevel::AboveOverlays => 27 });
+        let native = crate::MacWindowOptions::default()
+            .shadow(false)
+            .level(match options.level {
+                OverlayLevel::Status => 25,
+                OverlayLevel::AboveStatus => 26,
+                OverlayLevel::AboveOverlays => 27,
+            });
         configure_native(&panel, &native);
         if ordinary {
             panel.setTitle(&ns_window.title());
@@ -228,33 +309,64 @@ impl Panel {
         panel.setIgnoresMouseEvents(options.input.resolved(interactive) != OverlayInput::All);
         panel.setAcceptsMouseMovedEvents(true);
         if options.prewarm {
-            unsafe { panel.setAlphaValue(0.0); }
+            unsafe {
+                panel.setAlphaValue(0.0);
+            }
             panel.setIgnoresMouseEvents(true);
         }
         // defer:NO creates the WindowServer identity while hidden. Never publish a sentinel
         // (-1/0) cast to CGWindowID as a successful native creation.
-        if unsafe { panel.windowNumber() } <= 0 { return None; }
+        if unsafe { panel.windowNumber() } <= 0 {
+            return None;
+        }
         ns_window.setContentView(None);
         panel.setContentView(Some(&view));
-        let pointer = Rc::new(PointerState::new(options.input.resolved(interactive), options.follow_pointer));
-        let bridge = if ordinary { crate::platform::macos::panel_bridge::Bridge::new_window(&ns_window, &panel, &view) }
-            else { crate::platform::macos::panel_bridge::Bridge::new(&ns_window, &panel, &view, Some(pointer.clone())) };
+        let pointer = Rc::new(PointerState::new(
+            options.input.resolved(interactive),
+            options.follow_pointer,
+        ));
+        let bridge = if ordinary {
+            crate::platform::macos::panel_bridge::Bridge::new_window(&ns_window, &panel, &view)
+        } else {
+            crate::platform::macos::panel_bridge::Bridge::new(
+                &ns_window,
+                &panel,
+                &view,
+                Some(pointer.clone()),
+            )
+        };
         if bridge.is_none() {
             panel.setContentView(None);
             ns_window.setContentView(Some(&view));
             return None;
         }
         panel.setDelegate(unsafe { ns_window.delegate() }.as_deref());
-        Some(Panel { bridge, monitors: RefCell::new(None), pointer, options: options.clone(), follow_pointer: Cell::new(options.follow_pointer), pointer_poll: Cell::new(None), presence, wake, panel, window: ns_window, view })
+        Some(Panel {
+            bridge,
+            monitors: RefCell::new(None),
+            pointer,
+            options: options.clone(),
+            follow_pointer: Cell::new(options.follow_pointer),
+            pointer_poll: Cell::new(None),
+            presence,
+            wake,
+            panel,
+            window: ns_window,
+            view,
+        })
     }
 
     /// On the primary screen (the one with the menu bar), in AppKit's bottom-left coordinates.
     pub fn place(&self, at: crate::overlay::Placement, options: &OverlayOptions) {
-        let Some(rect) = self.rect(at, options) else { return };
+        let Some(rect) = self.rect(at, options) else {
+            return;
+        };
         if self.panel.frame() != rect {
             self.window.setFrame_display(rect, false);
             self.panel.setFrame_display(rect, true);
-            if self.presence.get().visible() { self.pointer.observe(&self.panel, self.wake.as_ref()); }
+            if self.presence.get().visible() {
+                self.pointer.observe(&self.panel, self.wake.as_ref());
+            }
         }
     }
 
@@ -268,11 +380,19 @@ impl Panel {
     fn keep_view(&self) {
         // SAFETY: plain readbacks on the main thread; nothing is retained.
         let (content, window): (*const NSView, *const NSWindow) = unsafe {
-            (msg_send![&*self.panel, contentView], msg_send![&*self.view, window])
+            (
+                msg_send![&*self.panel, contentView],
+                msg_send![&*self.view, window],
+            )
         };
-        let attached = std::ptr::eq(content, &*self.view) && std::ptr::eq(window.cast::<NSPanel>(), &*self.panel);
-        if !attached && crate::platform::macos::panel_bridge::reattach(&self.panel) { eprintln!("rune: panel lost its view; reattached"); }
-        if crate::platform::macos::panel_bridge::take_reattached(&self.panel) { self.pointer.view_lost(); }
+        let attached = std::ptr::eq(content, &*self.view)
+            && std::ptr::eq(window.cast::<NSPanel>(), &*self.panel);
+        if !attached && crate::platform::macos::panel_bridge::reattach(&self.panel) {
+            eprintln!("rune: panel lost its view; reattached");
+        }
+        if crate::platform::macos::panel_bridge::take_reattached(&self.panel) {
+            self.pointer.view_lost();
+        }
     }
 
     /// Whether none of the panel is on screen: covered, or its displays asleep. Reads as
@@ -282,31 +402,55 @@ impl Panel {
     }
 
     /// The panel's AppKit window level (`NSWindow.Level`), changeable while shown.
-    pub fn set_level(&self, level: isize) { self.panel.setLevel(level); }
+    pub fn set_level(&self, level: isize) {
+        self.panel.setLevel(level);
+    }
 
     /// The moved view, for a new wgpu surface (winit's window handle would look for the view
     /// in winit's window, where it no longer is).
-    pub fn raw_handles(&self) -> (winit::raw_window_handle::RawDisplayHandle, winit::raw_window_handle::RawWindowHandle) {
-        use winit::raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
+    pub fn raw_handles(
+        &self,
+    ) -> (
+        winit::raw_window_handle::RawDisplayHandle,
+        winit::raw_window_handle::RawWindowHandle,
+    ) {
+        use winit::raw_window_handle::{
+            AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
+        };
         let view = std::ptr::NonNull::from(&*self.view).cast();
-        (RawDisplayHandle::AppKit(AppKitDisplayHandle::new()), RawWindowHandle::AppKit(AppKitWindowHandle::new(view)))
+        (
+            RawDisplayHandle::AppKit(AppKitDisplayHandle::new()),
+            RawWindowHandle::AppKit(AppKitWindowHandle::new(view)),
+        )
     }
 
-    pub fn window_number(&self) -> u32 { unsafe { self.panel.windowNumber() as u32 } }
+    pub fn window_number(&self) -> u32 {
+        unsafe { self.panel.windowNumber() as u32 }
+    }
     pub fn capture_exclusion(&self) -> OverlaySupport {
-        if self.presence.get().requested() { OverlaySupport::Requested } else { OverlaySupport::Unknown }
+        if self.presence.get().requested() {
+            OverlaySupport::Requested
+        } else {
+            OverlaySupport::Unknown
+        }
     }
     pub fn request_keys(&self) {
         if self.options.keys == KeyPolicy::OnDemand {
             self.panel.makeFirstResponder(Some(&self.view));
-            unsafe { self.panel.makeKeyWindow(); }
+            unsafe {
+                self.panel.makeKeyWindow();
+            }
         }
     }
-    pub fn is_key(&self) -> bool { self.panel.isKeyWindow() }
+    pub fn is_key(&self) -> bool {
+        self.panel.isKeyWindow()
+    }
 
     /// Moves the panel with the pointer, from inside the mouse-down AppKit is handling.
     pub fn drag(&self) {
-        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
         if let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() {
             self.panel.performWindowDragWithEvent(&event);
         }
@@ -332,7 +476,9 @@ thread_local! {
 /// `window`'s count for the Dock icon's badge, which is the app's: the sum over its windows, none
 /// at 0. Main thread.
 pub(crate) fn dock_badge(window: &winit::window::Window, count: u32) {
-    let Some(mtm) = MainThreadMarker::new() else { return };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
     let total: u32 = BADGES.with_borrow_mut(|b| {
         b.insert(u64::from(window.id()), count);
         b.values().sum()
@@ -341,9 +487,14 @@ pub(crate) fn dock_badge(window: &winit::window::Window, count: u32) {
     // SAFETY: AppKit's Dock tile, on the main thread; nil clears the badge.
     unsafe {
         let tile: *mut objc2::runtime::AnyObject = msg_send![&app, dockTile];
-        if tile.is_null() { return; }
+        if tile.is_null() {
+            return;
+        }
         let label = (total > 0).then(|| objc2_foundation::NSString::from_str(&total.to_string()));
-        let label: *const objc2::runtime::AnyObject = label.as_deref().map_or(std::ptr::null(), |l| (l as *const objc2_foundation::NSString).cast());
+        let label: *const objc2::runtime::AnyObject =
+            label.as_deref().map_or(std::ptr::null(), |l| {
+                (l as *const objc2_foundation::NSString).cast()
+            });
         let _: () = msg_send![tile, setBadgeLabel: label];
     }
 }

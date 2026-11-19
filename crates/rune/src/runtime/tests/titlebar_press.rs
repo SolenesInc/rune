@@ -47,8 +47,16 @@ enum Letter {
 }
 
 const ALPHABET: [Letter; 10] = [
-    Letter::Region, Letter::RegionFar, Letter::Button, Letter::EmptyBand, Letter::EmptyBelow,
-    Letter::SecDown, Letter::SecUp, Letter::Clear, Letter::Tick, Letter::TakeAction,
+    Letter::Region,
+    Letter::RegionFar,
+    Letter::Button,
+    Letter::EmptyBand,
+    Letter::EmptyBelow,
+    Letter::SecDown,
+    Letter::SecUp,
+    Letter::Clear,
+    Letter::Tick,
+    Letter::TakeAction,
 ];
 
 /// Whether a press at `point` is this press's second: `press_run::follows`, transcribed.
@@ -73,11 +81,19 @@ struct Dev {
 
 impl Dev {
     fn new(native_band: f32) -> Self {
-        Self { action: None, run: None, native_band }
+        Self {
+            action: None,
+            run: None,
+            native_band,
+        }
     }
 
     fn press_region(&mut self, now: f64, x: f32, y: f32, interval: f64) {
-        self.action = Some(if self.double(now, x, y, interval) { TitlebarAction::DoubleClick } else { TitlebarAction::Drag });
+        self.action = Some(if self.double(now, x, y, interval) {
+            TitlebarAction::DoubleClick
+        } else {
+            TitlebarAction::Drag
+        });
     }
 
     fn press_empty(&mut self, now: f64, x: f32, y: f32, interval: f64) {
@@ -99,15 +115,23 @@ impl Dev {
                 last.count
             }
             _ => {
-                self.run = Some(Run { at: now, point: (x, y), count: 1 });
+                self.run = Some(Run {
+                    at: now,
+                    point: (x, y),
+                    count: 1,
+                });
                 1
             }
         };
-        if count >= 2 { self.run = None; }
+        if count >= 2 {
+            self.run = None;
+        }
         count >= 2
     }
 
-    fn take_action(&mut self) -> Option<TitlebarAction> { self.action.take() }
+    fn take_action(&mut self) -> Option<TitlebarAction> {
+        self.action.take()
+    }
 
     /// The press the next one would pair with.
     fn state(&self) -> Option<(f64, (f32, f32))> {
@@ -134,18 +158,32 @@ struct Walk {
 impl Walk {
     fn new() -> Self {
         fn view(_: &(), _: &mut Cx<()>) -> El {
-            col().size(200.0, 200.0)
+            col()
+                .size(200.0, 200.0)
                 // The band the system drags.
                 .child(el().key("top").size(200.0, 32.0))
-                .child(crate::el::row().key("titlebar").size(200.0, 40.0).window_drag()
-                    .child(el().key("button").size(40.0, 40.0).on_press(|_: &mut ()| {})))
+                .child(
+                    crate::el::row()
+                        .key("titlebar")
+                        .size(200.0, 40.0)
+                        .window_drag()
+                        .child(
+                            el().key("button")
+                                .size(40.0, 40.0)
+                                .on_press(|_: &mut ()| {}),
+                        ),
+                )
                 .child(el().key("body").size(200.0, 40.0))
         }
         let mut rt = Runtime::new((), view, (200.0, 200.0), Env::new(true, 1.0));
         rt.double_click_interval = INTERVAL;
         rt.set_native_titlebar_band(BAND);
         rt.frame(0.0);
-        Self { rt, dev: Dev::new(BAND), now: 0.0 }
+        Self {
+            rt,
+            dev: Dev::new(BAND),
+            now: 0.0,
+        }
     }
 
     /// Whatever the last sequence left goes, without stepping: the next starts at `Rest`.
@@ -172,11 +210,19 @@ impl Walk {
     fn play(&mut self, letter: Letter) -> Result<(), String> {
         let now = self.now;
         match letter {
-            Letter::Region => self.press(REGION, |dev| dev.press_region(now, REGION.0, REGION.1, INTERVAL)),
-            Letter::RegionFar => self.press(REGION_FAR, |dev| dev.press_region(now, REGION_FAR.0, REGION_FAR.1, INTERVAL)),
+            Letter::Region => self.press(REGION, |dev| {
+                dev.press_region(now, REGION.0, REGION.1, INTERVAL)
+            }),
+            Letter::RegionFar => self.press(REGION_FAR, |dev| {
+                dev.press_region(now, REGION_FAR.0, REGION_FAR.1, INTERVAL)
+            }),
             Letter::Button => self.press(BUTTON, |_| {}),
-            Letter::EmptyBand => self.press(EMPTY_BAND, |dev| dev.press_empty(now, EMPTY_BAND.0, EMPTY_BAND.1, INTERVAL)),
-            Letter::EmptyBelow => self.press(EMPTY_BELOW, |dev| dev.press_empty(now, EMPTY_BELOW.0, EMPTY_BELOW.1, INTERVAL)),
+            Letter::EmptyBand => self.press(EMPTY_BAND, |dev| {
+                dev.press_empty(now, EMPTY_BAND.0, EMPTY_BAND.1, INTERVAL)
+            }),
+            Letter::EmptyBelow => self.press(EMPTY_BELOW, |dev| {
+                dev.press_empty(now, EMPTY_BELOW.0, EMPTY_BELOW.1, INTERVAL)
+            }),
             Letter::SecDown => self.rt.secondary_down(REGION.0, REGION.1),
             Letter::SecUp => self.rt.secondary_up(REGION.0, REGION.1),
             Letter::Clear => {
@@ -189,7 +235,9 @@ impl Walk {
             }
             Letter::TakeAction => {
                 let (ours, reference) = (self.rt.take_titlebar_action(), self.dev.take_action());
-                if ours != reference { return Err(format!("take action {ours:?}, dev {reference:?}")); }
+                if ours != reference {
+                    return Err(format!("take action {ours:?}, dev {reference:?}"));
+                }
             }
         }
         self.compare(letter)
@@ -197,11 +245,17 @@ impl Walk {
 
     fn compare(&self, letter: Letter) -> Result<(), String> {
         if self.rt.titlebar.action != self.dev.action {
-            return Err(format!("after {letter:?}: action {:?}, dev {:?}, press {:?}", self.rt.titlebar.action,
-                self.dev.action, self.rt.titlebar.press));
+            return Err(format!(
+                "after {letter:?}: action {:?}, dev {:?}, press {:?}",
+                self.rt.titlebar.action, self.dev.action, self.rt.titlebar.press
+            ));
         }
         let (ours, reference) = (state_of(self.rt.titlebar.press), self.dev.state());
-        if ours != reference { return Err(format!("after {letter:?}: press {ours:?}, dev {reference:?}")); }
+        if ours != reference {
+            return Err(format!(
+                "after {letter:?}: press {ours:?}, dev {reference:?}"
+            ));
+        }
         Ok(())
     }
 }
@@ -221,8 +275,15 @@ fn focus_loss_cancels_titlebar_press() {
 }
 
 /// Plays every sequence that starts with `sequence`, recording the first one that differs.
-fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: &mut Option<String>) {
-    if failure.is_some() { return; }
+fn visit(
+    walk: &mut Walk,
+    sequence: &mut Vec<Letter>,
+    ran: &mut usize,
+    failure: &mut Option<String>,
+) {
+    if failure.is_some() {
+        return;
+    }
     *ran += 1;
     walk.reset();
     for &letter in sequence.iter() {
@@ -231,7 +292,9 @@ fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: 
             return;
         }
     }
-    if sequence.len() == LENGTH { return; }
+    if sequence.len() == LENGTH {
+        return;
+    }
     for letter in ALPHABET {
         sequence.push(letter);
         visit(walk, sequence, ran, failure);
@@ -244,7 +307,9 @@ fn every_short_sequence_of_titlebar_presses_leaves_what_dev_left() {
     let jobs = ALPHABET;
     let next = AtomicUsize::new(0);
     let results = Mutex::new(Vec::new());
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(8);
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
@@ -264,6 +329,9 @@ fn every_short_sequence_of_titlebar_presses_leaves_what_dev_left() {
         failures.extend(failure);
     }
     println!("{total} sequences up to length {LENGTH}");
-    assert!(failures.is_empty(), "sequences differ from dev: {failures:#?}");
+    assert!(
+        failures.is_empty(),
+        "sequences differ from dev: {failures:#?}"
+    );
     assert!(total > 100_000, "only {total} sequences ran");
 }

@@ -11,7 +11,10 @@ fn showing_uncovers_and_hiding_stamps_only_a_shown_window() {
     life.hide(|| 7);
     assert_eq!(life.hidden_at(), Some(7));
     life.hide(|| panic!("hiding again keeps the first stamp"));
-    assert!(!life.cover(Cover::System, true), "a hidden window has nothing to cover");
+    assert!(
+        !life.cover(Cover::System, true),
+        "a hidden window has nothing to cover"
+    );
     assert_eq!(life, Life::Hidden { at: 7 });
     assert!(life.show() && life.uncovered(), "showing uncovers");
 }
@@ -33,7 +36,12 @@ fn a_hidden_window_closes_alike_whether_or_not_it_kept_its_window() {
     assert!(hidden.closes(false, false));
     assert!(hidden.closes(false, true));
     assert!(!hidden.closes(true, false) && !hidden.closes(true, true));
-    assert!(Life::Shown { sight: Sight::Seen.step(Cover::System, true) }.closes(true, true));
+    assert!(
+        Life::Shown {
+            sight: Sight::Seen.step(Cover::System, true)
+        }
+        .closes(true, true)
+    );
     assert!(!Life::Unopened.closes(false, false), "nothing to close");
     assert!(Life::Unopened.closes(false, true) && !Life::Unopened.closes(true, true));
 }

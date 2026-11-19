@@ -28,7 +28,10 @@ impl El {
             return self;
         }
         let Some(t) = &mut self.text else { return self };
-        let ok = range.start < range.end && range.end <= t.content.len() && t.content.is_char_boundary(range.start) && t.content.is_char_boundary(range.end);
+        let ok = range.start < range.end
+            && range.end <= t.content.len()
+            && t.content.is_char_boundary(range.start)
+            && t.content.is_char_boundary(range.end);
         let (a, b) = (range.start as u32, range.end as u32);
         if !ok || t.cold.isolates.iter().any(|&(s, e, _)| s < b && a < e) {
             return self;
@@ -45,15 +48,24 @@ impl TextSpec {
     /// every byte range onto the marked text, and leaves the marks out of copies. Pills without
     /// an isolate over them become `Auto` isolates. Once applied there are none left to apply.
     pub(crate) fn apply_isolates(&mut self) {
-        if self.redacted || self.cold.advance_in.is_some() || (self.cold.isolates.is_empty() && self.cold.pills.iter().all(|p| p.bare.is_some())) {
+        if self.redacted
+            || self.cold.advance_in.is_some()
+            || (self.cold.isolates.is_empty() && self.cold.pills.iter().all(|p| p.bare.is_some()))
+        {
             return;
         }
         let mut isolates = std::mem::take(&mut self.cold.isolates);
         // A text laid out again keeps the marks it has.
         let marked_pill = |p: &crate::text::PillChip| {
-            self.content[..p.start as usize].ends_with(['\u{2066}', '\u{2067}', '\u{2068}']) && self.content[p.end as usize..].starts_with('\u{2069}')
+            self.content[..p.start as usize].ends_with(['\u{2066}', '\u{2067}', '\u{2068}'])
+                && self.content[p.end as usize..].starts_with('\u{2069}')
         };
-        for p in self.cold.pills.iter().filter(|p| p.bare.is_none() && !marked_pill(p)) {
+        for p in self
+            .cold
+            .pills
+            .iter()
+            .filter(|p| p.bare.is_none() && !marked_pill(p))
+        {
             if !isolates.iter().any(|&(a, b, _)| a < p.end && p.start < b) {
                 let at = isolates.partition_point(|r| r.0 < p.start);
                 isolates.insert(at, (p.start, p.end, Direction::Auto));
@@ -63,7 +75,8 @@ impl TextSpec {
             return;
         }
         let marked = Marks(&isolates);
-        let mut content = String::with_capacity(self.content.len() + (2 * MARK as usize) * isolates.len());
+        let mut content =
+            String::with_capacity(self.content.len() + (2 * MARK as usize) * isolates.len());
         let mut at = 0;
         for &(a, b, dir) in &isolates {
             content.push_str(&self.content[at..a as usize]);
@@ -105,7 +118,8 @@ impl TextSpec {
             let at = cold.uncopied.partition_point(|r| r.0 < a + before);
             cold.uncopied.insert(at, (a + before, a + before + MARK));
             let at = cold.uncopied.partition_point(|r| r.0 < b + before + MARK);
-            cold.uncopied.insert(at, (b + before + MARK, b + before + 2 * MARK));
+            cold.uncopied
+                .insert(at, (b + before + MARK, b + before + 2 * MARK));
         }
         self.content = content;
         self.shape = None;
@@ -117,9 +131,19 @@ impl TextSpec {
     /// before `p`, which copies leave out.
     pub(crate) fn authored(&self, p: usize) -> usize {
         let mark = |&&(a, b): &&(u32, u32)| {
-            (b as usize) <= p && self.content.get(a as usize..b as usize).is_some_and(|m| matches!(m, "\u{2066}" | "\u{2067}" | "\u{2068}" | "\u{2069}"))
+            (b as usize) <= p
+                && self
+                    .content
+                    .get(a as usize..b as usize)
+                    .is_some_and(|m| matches!(m, "\u{2066}" | "\u{2067}" | "\u{2068}" | "\u{2069}"))
         };
-        p - self.cold.uncopied.iter().filter(mark).map(|&(a, b)| (b - a) as usize).sum::<usize>()
+        p - self
+            .cold
+            .uncopied
+            .iter()
+            .filter(mark)
+            .map(|&(a, b)| (b - a) as usize)
+            .sum::<usize>()
     }
 }
 
@@ -132,8 +156,16 @@ impl Marks<'_> {
     /// isolate's start without ending inside it starts before the opening mark.
     fn range(&self, start: u32, end: u32) -> (u32, u32) {
         let shift = |p: u32, open_at_p: bool, close_at_p: bool| {
-            let opens = self.0.iter().filter(|r| r.0 < p || (open_at_p && r.0 == p)).count() as u32;
-            let closes = self.0.iter().filter(|r| r.1 < p || (close_at_p && r.1 == p)).count() as u32;
+            let opens = self
+                .0
+                .iter()
+                .filter(|r| r.0 < p || (open_at_p && r.0 == p))
+                .count() as u32;
+            let closes = self
+                .0
+                .iter()
+                .filter(|r| r.1 < p || (close_at_p && r.1 == p))
+                .count() as u32;
             p + MARK * (opens + closes)
         };
         let inside = |r: &&(u32, u32, Direction)| r.0 <= start && end <= r.1;

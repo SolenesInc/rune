@@ -67,7 +67,12 @@ pub(crate) struct Inbox {
 
 impl Inbox {
     pub(crate) const fn new() -> Self {
-        Inbox { state: Mutex::new(State { funnel: Funnel::Unprepared { kept: Vec::new() }, next: 0 }) }
+        Inbox {
+            state: Mutex::new(State {
+                funnel: Funnel::Unprepared { kept: Vec::new() },
+                next: 0,
+            }),
+        }
     }
 
     /// Before the event loop: install the handler and keep links until a window listens,
@@ -75,7 +80,9 @@ impl Inbox {
     pub(crate) fn prepare(&self, glue: &dyn Glue) {
         let mut state = self.state.lock().unwrap();
         state.funnel = match std::mem::replace(&mut state.funnel, Funnel::Closed) {
-            Funnel::Unprepared { kept } if !glue.handled_elsewhere() && glue.install() => Funnel::Launch { kept },
+            Funnel::Unprepared { kept } if !glue.handled_elsewhere() && glue.install() => {
+                Funnel::Launch { kept }
+            }
             funnel => funnel,
         };
     }
@@ -83,14 +90,22 @@ impl Inbox {
     /// The links the app was launched with, ahead of any that arrived since.
     #[cfg_attr(not(any(test, target_os = "linux")), allow(dead_code))]
     pub(crate) fn launched(&self, urls: Vec<String>) {
-        if urls.is_empty() { return; }
+        if urls.is_empty() {
+            return;
+        }
         let mut state = self.state.lock().unwrap();
-        if let Funnel::Unprepared { kept } | Funnel::Launch { kept } = &mut state.funnel { kept.splice(0..0, urls); }
+        if let Funnel::Unprepared { kept } | Funnel::Launch { kept } = &mut state.funnel {
+            kept.splice(0..0, urls);
+        }
     }
 
     /// Sends links to `app`'s hook while the returned guard lives, after the links kept so far,
     /// if the app has the hook. Installs the handler if `prepare` didn't.
-    pub(crate) fn listen<S: 'static>(&'static self, app: &App<S>, glue: &dyn Glue) -> Option<Listening> {
+    pub(crate) fn listen<S: 'static>(
+        &'static self,
+        app: &App<S>,
+        glue: &dyn Glue,
+    ) -> Option<Listening> {
         let hook = app.on_open_url?;
         let mut state = self.state.lock().unwrap();
         let (mut listeners, kept) = match std::mem::replace(&mut state.funnel, Funnel::Closed) {
@@ -120,7 +135,9 @@ impl Inbox {
         listeners.push((id, sink.clone()));
         state.funnel = Funnel::Listening { listeners };
         drop(state);
-        for url in kept { sink(url); }
+        for url in kept {
+            sink(url);
+        }
         Some(Listening { inbox: self, id })
     }
 
@@ -128,14 +145,22 @@ impl Inbox {
     pub(crate) fn settle(&self, glue: &dyn Glue) {
         let mut state = self.state.lock().unwrap();
         state.funnel = match std::mem::replace(&mut state.funnel, Funnel::Closed) {
-            Funnel::Listening { listeners } if !listeners.is_empty() => Funnel::Listening { listeners },
-            Funnel::Launch { .. } | Funnel::Listening { .. } => { glue.remove(); Funnel::Closed },
+            Funnel::Listening { listeners } if !listeners.is_empty() => {
+                Funnel::Listening { listeners }
+            }
+            Funnel::Launch { .. } | Funnel::Listening { .. } => {
+                glue.remove();
+                Funnel::Closed
+            }
             Funnel::Unprepared { .. } | Funnel::Closed => Funnel::Closed,
         };
     }
 
     /// A link arrived: to the first listener, kept before one exists, else dropped.
-    #[cfg_attr(not(any(test, target_os = "macos", target_os = "linux")), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, target_os = "macos", target_os = "linux")),
+        allow(dead_code)
+    )]
     pub(crate) fn receive(&self, url: String) {
         let sink = {
             let mut state = self.state.lock().unwrap();
@@ -164,7 +189,8 @@ pub(crate) struct Listening {
 impl Drop for Listening {
     fn drop(&mut self) {
         if let Ok(mut state) = self.inbox.state.lock()
-            && let Funnel::Listening { listeners } = &mut state.funnel {
+            && let Funnel::Listening { listeners } = &mut state.funnel
+        {
             listeners.retain(|(id, _)| *id != self.id);
         }
     }
@@ -175,9 +201,15 @@ static INBOX: Inbox = Inbox::new();
 struct Native;
 
 impl Glue for Native {
-    fn handled_elsewhere(&self) -> bool { platform::handled_elsewhere() }
-    fn install(&self) -> bool { platform::install() }
-    fn remove(&self) { platform::remove() }
+    fn handled_elsewhere(&self) -> bool {
+        platform::handled_elsewhere()
+    }
+    fn install(&self) -> bool {
+        platform::install()
+    }
+    fn remove(&self) {
+        platform::remove()
+    }
 }
 
 /// Before the event loop starts (see the module docs).
@@ -190,13 +222,19 @@ pub(crate) fn prepare() {
 /// A link from a later launch of the app (Linux, `single_instance`), or the Dock menu's jump
 /// list entry (macOS, `native_menu`).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-pub(crate) fn receive(url: String) { INBOX.receive(url); }
+pub(crate) fn receive(url: String) {
+    INBOX.receive(url);
+}
 
 /// For a starting window: its app's links, while the guard lives.
-pub(crate) fn listen<S: 'static>(app: &App<S>) -> Option<Listening> { INBOX.listen(app, &Native) }
+pub(crate) fn listen<S: 'static>(app: &App<S>) -> Option<Listening> {
+    INBOX.listen(app, &Native)
+}
 
 /// After every window at launch has started.
-pub(crate) fn settle() { INBOX.settle(&Native); }
+pub(crate) fn settle() {
+    INBOX.settle(&Native);
+}
 
 #[cfg(target_os = "macos")]
 use mac as platform;
@@ -205,26 +243,34 @@ use mac as platform;
 /// handler to install, and nothing else can have taken it.
 #[cfg(target_os = "linux")]
 mod platform {
-    pub(super) fn handled_elsewhere() -> bool { false }
-    pub(super) fn install() -> bool { true }
+    pub(super) fn handled_elsewhere() -> bool {
+        false
+    }
+    pub(super) fn install() -> bool {
+        true
+    }
     pub(super) fn remove() {}
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod platform {
-    pub(super) fn handled_elsewhere() -> bool { false }
-    pub(super) fn install() -> bool { false }
+    pub(super) fn handled_elsewhere() -> bool {
+        false
+    }
+    pub(super) fn install() -> bool {
+        false
+    }
     pub(super) fn remove() {}
 }
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use std::ffi::c_void;
-    use std::sync::OnceLock;
     use objc2::rc::autoreleasepool;
     use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, NSObject, Sel};
     use objc2::{ClassType, class, msg_send, sel};
     use objc2_foundation::{MainThreadMarker, NSString};
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
 
     /// `'GURL'`: `kInternetEventClass` and `kAEGetURL`.
     const GET_URL: u32 = u32::from_be_bytes(*b"GURL");
@@ -233,7 +279,13 @@ mod mac {
 
     #[link(name = "CoreServices", kind = "framework")]
     unsafe extern "C" {
-        fn AEGetEventHandler(class: u32, id: u32, handler: *mut *const c_void, refcon: *mut *mut c_void, system: u8) -> i16;
+        fn AEGetEventHandler(
+            class: u32,
+            id: u32,
+            handler: *mut *const c_void,
+            refcon: *mut *mut c_void,
+            system: u8,
+        ) -> i16;
     }
 
     /// The URL string of a get-URL event.
@@ -250,9 +302,13 @@ mod mac {
     extern "C" fn get_url(_: &AnyObject, _: Sel, event: *mut AnyObject, _reply: *mut AnyObject) {
         let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // SAFETY: AppKit passes the event, or nil.
-            if let Some(url) = unsafe { event.as_ref() }.and_then(url_of) { super::INBOX.receive(url); }
+            if let Some(url) = unsafe { event.as_ref() }.and_then(url_of) {
+                super::INBOX.receive(url);
+            }
         }));
-        if caught.is_err() { eprintln!("rune: open-url handler panicked"); }
+        if caught.is_err() {
+            eprintln!("rune: open-url handler panicked");
+        }
     }
 
     pub(super) fn handled_elsewhere() -> bool {
@@ -269,7 +325,12 @@ mod mac {
             let class = AnyClass::get(NAME).or_else(|| {
                 let mut builder = ClassBuilder::new(NAME, NSObject::class())?;
                 // SAFETY: the function matches `handleGetURLEvent:withReplyEvent:` (two objects, void).
-                unsafe { builder.add_method(sel!(handleGetURLEvent:withReplyEvent:), get_url as extern "C" fn(_, _, _, _)); }
+                unsafe {
+                    builder.add_method(
+                        sel!(handleGetURLEvent:withReplyEvent:),
+                        get_url as extern "C" fn(_, _, _, _),
+                    );
+                }
                 Some(builder.register())
             });
             let Some(class) = class else { return 0 };
@@ -287,11 +348,17 @@ mod mac {
 
     /// Makes Rune's object the handler of get-URL Apple events. Main thread only.
     pub(super) fn install() -> bool {
-        if MainThreadMarker::new().is_none() { return false; }
-        let Some(handler) = handler() else { return false };
+        if MainThreadMarker::new().is_none() {
+            return false;
+        }
+        let Some(handler) = handler() else {
+            return false;
+        };
         // SAFETY: Foundation calls on the main thread, with the handler alive for the process.
         autoreleasepool(|_| unsafe {
-            let Some(manager) = manager().as_ref() else { return false };
+            let Some(manager) = manager().as_ref() else {
+                return false;
+            };
             let _: () = msg_send![manager, setEventHandler: handler, andSelector: sel!(handleGetURLEvent:withReplyEvent:),
                 forEventClass: GET_URL, andEventID: GET_URL];
             true
@@ -299,7 +366,9 @@ mod mac {
     }
 
     pub(super) fn remove() {
-        if MainThreadMarker::new().is_none() { return; }
+        if MainThreadMarker::new().is_none() {
+            return;
+        }
         // SAFETY: Foundation calls on the main thread.
         autoreleasepool(|_| unsafe {
             if let Some(manager) = manager().as_ref() {

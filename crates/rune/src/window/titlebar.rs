@@ -27,7 +27,10 @@ pub struct Titlebar {
 
 impl Titlebar {
     pub const fn new(height: f32) -> Self {
-        Self { height, traffic_lights: None }
+        Self {
+            height,
+            traffic_lights: None,
+        }
     }
 
     /// macOS: the close button's top-left, in points from the window's top-left, for this
@@ -51,9 +54,18 @@ impl Titlebar {
     /// only, and the traffic lights where this titlebar or the app placed them, else in the
     /// band's middle.
     pub(crate) fn mac_chrome(&self, chrome: Chrome) -> Chrome {
-        let y = ((self.height - Chrome::TRAFFIC_LIGHT) / 2.0).max(0.0).round();
-        let lights = self.traffic_lights.or(chrome.traffic_lights).or(Some((16.0, y)));
-        Chrome { full_size_content: true, drag_regions: true, traffic_lights: lights }
+        let y = ((self.height - Chrome::TRAFFIC_LIGHT) / 2.0)
+            .max(0.0)
+            .round();
+        let lights = self
+            .traffic_lights
+            .or(chrome.traffic_lights)
+            .or(Some((16.0, y)));
+        Chrome {
+            full_size_content: true,
+            drag_regions: true,
+            traffic_lights: lights,
+        }
     }
 }
 
@@ -69,7 +81,8 @@ impl TitlebarSet {
     /// The titlebar the window draws in place of the app's `base`.
     pub(crate) fn over(self, base: Titlebar) -> Titlebar {
         let titlebar = self.titlebar.unwrap_or(base);
-        self.height.map_or(titlebar, |height| Titlebar { height, ..titlebar })
+        self.height
+            .map_or(titlebar, |height| Titlebar { height, ..titlebar })
     }
 }
 
@@ -96,7 +109,10 @@ impl ChromeInsets {
 
     /// The insets, in window points, in the points of a view zoomed `k` times (`Cx::zoom`).
     pub(crate) fn zoomed(self, k: f32) -> Self {
-        Self { leading: self.leading / k, height: self.height / k }
+        Self {
+            leading: self.leading / k,
+            height: self.height / k,
+        }
     }
 
     /// The bits a memo scope hashes, so memos rebuild when the insets change.

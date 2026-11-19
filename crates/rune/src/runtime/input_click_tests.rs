@@ -1,5 +1,8 @@
 use super::*;
-use crate::{Cx, El, Env, Ime, Key, KeyEvent, Mods, PhysicalInput, Runtime, TextEdit, TextStyle, col, text_input};
+use crate::{
+    Cx, El, Env, Ime, Key, KeyEvent, Mods, PhysicalInput, Runtime, TextEdit, TextStyle, col,
+    text_input,
+};
 
 struct Form {
     single: TextEdit,
@@ -97,13 +100,25 @@ fn runtime() -> Runtime<Form> {
 }
 
 fn rect_of(rt: &Runtime<Form>, key: &str) -> [f32; 4] {
-    rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap().rect
+    rt.elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some(key))
+        .unwrap()
+        .rect
 }
 
 /// Window point `(x, y)` at `frac` (`0.0..1.0`) across the glyph cluster at `byte` in `key`.
 fn point_in_cluster(rt: &Runtime<Form>, key: &str, byte: usize, frac: f32) -> (f32, f32) {
-    let n = rt.nodes.iter().find(|n| n.key.as_deref() == Some(key)).unwrap();
-    let l = n.text_layout.as_ref().and_then(crate::text::TextLayout::single).unwrap();
+    let n = rt
+        .nodes
+        .iter()
+        .find(|n| n.key.as_deref() == Some(key))
+        .unwrap();
+    let l = n
+        .text_layout
+        .as_ref()
+        .and_then(crate::text::TextLayout::single)
+        .unwrap();
     let s = rt.env.scale;
     let cl = parley::Cluster::from_byte_index(l, byte).unwrap();
     let x0 = cl.visual_offset().unwrap();
@@ -139,7 +154,10 @@ fn double_and_triple_click_select_word_and_line_in_single_line_input() {
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
     assert!(rt.state().single.focused);
-    assert!(!rt.focus.keyboard(), "pointer focus does not turn on keyboard focus ring");
+    assert!(
+        !rt.focus.keyboard(),
+        "pointer focus does not turn on keyboard focus ring"
+    );
     assert_eq!(rt.state().single.anchor, rt.state().single.focus);
     assert!(rt.state().single.focus > 0 && rt.state().single.focus < 4);
 
@@ -154,11 +172,17 @@ fn double_and_triple_click_select_word_and_line_in_single_line_input() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().single.anchor, rt.state().single.focus), (0, rt.state().single.text.len()));
+    assert_eq!(
+        (rt.state().single.anchor, rt.state().single.focus),
+        (0, rt.state().single.text.len())
+    );
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().single.anchor, rt.state().single.focus), (0, rt.state().single.text.len()));
+    assert_eq!(
+        (rt.state().single.anchor, rt.state().single.focus),
+        (0, rt.state().single.text.len())
+    );
 }
 
 #[test]
@@ -170,16 +194,25 @@ fn triple_click_in_multiline_input_selects_hard_line_paragraph() {
 
     click(&mut rt, pt);
     click(&mut rt, pt);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (second, second + 6));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (second, second + 6)
+    );
     assert_eq!(rt.state().multi.selected(), "second");
 
     click(&mut rt, pt);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (second, third));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (second, third)
+    );
     assert_eq!(rt.state().multi.selected(), "second line there\n");
 
     // Fourth click stays at three.
     click(&mut rt, pt);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (second, third));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (second, third)
+    );
 }
 
 #[test]
@@ -230,14 +263,23 @@ fn click_drag_double_drag_and_triple_drag_extend_by_unit_in_both_directions() {
     click(&mut rt, l2);
     rt.pointer_down(l2.0, l2.1);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (second, third));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (second, third)
+    );
     rt.pointer_move(l3.0, l3.1);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (second, len));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (second, len)
+    );
     rt.pointer_move(l1.0, l1.1);
     rt.pointer_up(l1.0, l1.1);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().multi.anchor, rt.state().multi.focus), (third, 0));
+    assert_eq!(
+        (rt.state().multi.anchor, rt.state().multi.focus),
+        (third, 0)
+    );
 }
 
 #[test]
@@ -251,9 +293,15 @@ fn shift_click_extends_from_anchor_and_does_not_start_multiclick() {
     assert!(anchor > 0 && anchor < 4);
 
     // Shift+click at the same point right after a click extends (empty at anchor) instead of double-clicking.
-    rt.physical_input(PhysicalInput::Modifiers(Mods { shift: true, ..Mods::default() }));
+    rt.physical_input(PhysicalInput::Modifiers(Mods {
+        shift: true,
+        ..Mods::default()
+    }));
     click(&mut rt, p_make);
-    assert_eq!((rt.state().single.anchor, rt.state().single.focus), (anchor, anchor));
+    assert_eq!(
+        (rt.state().single.anchor, rt.state().single.focus),
+        (anchor, anchor)
+    );
 
     // Shift+click further right extends from anchor to the clicked byte.
     click(&mut rt, p_title);
@@ -278,24 +326,51 @@ fn secure_inputs_select_all_on_double_and_triple_click_and_stay_pristine() {
     assert!(rt.state().secret.is_pristine());
     assert_eq!(rt.state().secret.anchor, rt.state().secret.focus);
     click(&mut rt, pt1);
-    assert_eq!((rt.state().secret.anchor, rt.state().secret.focus), (0, rt.state().secret.text.len()));
-    assert!(rt.state().secret.is_pristine(), "double-click selection must not mark a secure input edited");
+    assert_eq!(
+        (rt.state().secret.anchor, rt.state().secret.focus),
+        (0, rt.state().secret.text.len())
+    );
+    assert!(
+        rt.state().secret.is_pristine(),
+        "double-click selection must not mark a secure input edited"
+    );
     click(&mut rt, pt1);
-    assert_eq!((rt.state().secret.anchor, rt.state().secret.focus), (0, rt.state().secret.text.len()));
+    assert_eq!(
+        (rt.state().secret.anchor, rt.state().secret.focus),
+        (0, rt.state().secret.text.len())
+    );
     assert!(rt.state().secret.is_pristine());
 
     let r2 = rect_of(&rt, "secret-multi");
     let pt2 = (r2[0] + 12.0, r2[1] + 12.0);
     click(&mut rt, pt2);
     assert_eq!(
-        (rt.state().secret_multi.anchor, rt.state().secret_multi.focus),
-        (rt.state().secret_multi.text.len(), rt.state().secret_multi.text.len()),
+        (
+            rt.state().secret_multi.anchor,
+            rt.state().secret_multi.focus
+        ),
+        (
+            rt.state().secret_multi.text.len(),
+            rt.state().secret_multi.text.len()
+        ),
     );
     click(&mut rt, pt2);
-    assert_eq!((rt.state().secret_multi.anchor, rt.state().secret_multi.focus), (0, rt.state().secret_multi.text.len()));
+    assert_eq!(
+        (
+            rt.state().secret_multi.anchor,
+            rt.state().secret_multi.focus
+        ),
+        (0, rt.state().secret_multi.text.len())
+    );
     assert!(rt.state().secret_multi.is_pristine());
     click(&mut rt, pt2);
-    assert_eq!((rt.state().secret_multi.anchor, rt.state().secret_multi.focus), (0, rt.state().secret_multi.text.len()));
+    assert_eq!(
+        (
+            rt.state().secret_multi.anchor,
+            rt.state().secret_multi.focus
+        ),
+        (0, rt.state().secret_multi.text.len())
+    );
     assert!(rt.state().secret_multi.is_pristine());
 }
 
@@ -310,13 +385,21 @@ fn timing_slop_and_target_changes_reset_multiclick_count_and_preedit_ignores_it(
     let slow = rt.double_click_interval + 0.05;
     rt.frame(slow);
     click(&mut rt, pt);
-    assert_eq!(rt.state().single.anchor, rt.state().single.focus, "press after double_click_interval is a single click");
+    assert_eq!(
+        rt.state().single.anchor,
+        rt.state().single.focus,
+        "press after double_click_interval is a single click"
+    );
 
     // 2. Moving outside CLICK_SLOP resets count to 1.
     rt.frame(1.0);
     click(&mut rt, pt);
     click(&mut rt, (pt.0 + CLICK_SLOP + 1.0, pt.1));
-    assert_eq!(rt.state().single.anchor, rt.state().single.focus, "press outside CLICK_SLOP is a single click");
+    assert_eq!(
+        rt.state().single.anchor,
+        rt.state().single.focus,
+        "press outside CLICK_SLOP is a single click"
+    );
 
     // 3. Pressing another input in between resets count to 1.
     rt.frame(1.0);
@@ -325,7 +408,11 @@ fn timing_slop_and_target_changes_reset_multiclick_count_and_preedit_ignores_it(
     click(&mut rt, pt);
     click(&mut rt, pt_other);
     click(&mut rt, pt);
-    assert_eq!(rt.state().single.anchor, rt.state().single.focus, "pressing another input resets the click count");
+    assert_eq!(
+        rt.state().single.anchor,
+        rt.state().single.focus,
+        "pressing another input resets the click count"
+    );
 
     // 4. A press mid-composition writes the composition into the text, as a browser's field
     // does, and puts the caret where it landed.
@@ -350,8 +437,16 @@ fn right_half_of_char_and_pill_trailing_padding_select_the_hit_word_and_pill() {
     assert_eq!(rt.state().single.selected(), "make");
 
     // In "pills" ("@maya hello" where 0..5 is a pill), find the trailing inline box of "@maya".
-    let n = rt.nodes.iter().find(|n| n.key.as_deref() == Some("pills")).unwrap();
-    let l = n.text_layout.as_ref().and_then(crate::text::TextLayout::single).unwrap();
+    let n = rt
+        .nodes
+        .iter()
+        .find(|n| n.key.as_deref() == Some("pills"))
+        .unwrap();
+    let l = n
+        .text_layout
+        .as_ref()
+        .and_then(crate::text::TextLayout::single)
+        .unwrap();
     let s = rt.env.scale;
     let line = l.get(0).unwrap();
     let trail = line
@@ -362,7 +457,10 @@ fn right_half_of_char_and_pill_trailing_padding_select_the_hit_word_and_pill() {
         })
         .expect("pill trailing inline box");
     let r = rect_of(&rt, "pills");
-    let trail_pt = (r[0] + n.inset[0] + (trail.x + trail.width * 0.5) / s, r[1] + r[3] * 0.5);
+    let trail_pt = (
+        r[0] + n.inset[0] + (trail.x + trail.width * 0.5) / s,
+        r[1] + r[3] * 0.5,
+    );
 
     // Single click on trailing pill padding puts caret at pill end (5); double-click selects the pill (0..5).
     click(&mut rt, trail_pt);
@@ -405,7 +503,10 @@ fn focus_loss_and_input_removal_clear_active_drag_and_drop_queued_drag_steps() {
     // 1. Shift-click (which leaves `last = None`) + drag move queued, then focus changes before the drag runs.
     click(&mut rt, p_make);
     let anchor = rt.state().single.anchor;
-    rt.physical_input(PhysicalInput::Modifiers(Mods { shift: true, ..Mods::default() }));
+    rt.physical_input(PhysicalInput::Modifiers(Mods {
+        shift: true,
+        ..Mods::default()
+    }));
     rt.pointer_down(p_the.0, p_the.1);
     rt.frame(1.0 / 60.0);
     rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
@@ -415,10 +516,13 @@ fn focus_loss_and_input_removal_clear_active_drag_and_drop_queued_drag_steps() {
 
     // Queue a drag move, then lose focus before the frame drains the queue: the queued drag step is dropped.
     rt.pointer_move(p_smaller.0, p_smaller.1);
-    rt. set_focus(None, false);
+    rt.set_focus(None, false);
     rt.frame(1.0 / 60.0);
     assert!(rt.input_click.dragging_path().is_none());
-    assert_eq!((rt.state().single.anchor, rt.state().single.focus), after_shift);
+    assert_eq!(
+        (rt.state().single.anchor, rt.state().single.focus),
+        after_shift
+    );
     rt.pointer_up(p_smaller.0, p_smaller.1);
     rt.frame(1.0 / 60.0);
 
@@ -436,7 +540,10 @@ fn focus_loss_and_input_removal_clear_active_drag_and_drop_queued_drag_steps() {
         tx.instant();
     });
     rt.frame(1.0 / 60.0);
-    assert!(rt.input_click.dragging_path().is_none(), "unmounting the dragged input clears dragging");
+    assert!(
+        rt.input_click.dragging_path().is_none(),
+        "unmounting the dragged input clears dragging"
+    );
 
     rt.update(|s, tx| {
         s.show_single = true;
@@ -447,7 +554,10 @@ fn focus_loss_and_input_removal_clear_active_drag_and_drop_queued_drag_steps() {
     rt.pointer_move(p_smaller.0, p_smaller.1);
     rt.pointer_up(p_smaller.0, p_smaller.1);
     rt.frame(1.0 / 60.0);
-    assert_eq!((rt.state().single.anchor, rt.state().single.focus), before_unmount);
+    assert_eq!(
+        (rt.state().single.anchor, rt.state().single.focus),
+        before_unmount
+    );
 }
 
 #[test]
@@ -484,7 +594,10 @@ fn custom_input_on_key_handler_resets_multiclick_history() {
     assert_eq!(rt.state().single.anchor, rt.state().single.focus);
 
     // Key::Function(2) is consumed by single's custom `.on_key` handler after inserting "!".
-    rt.key(KeyEvent { key: Key::Function(2), mods: Mods::default() });
+    rt.key(KeyEvent {
+        key: Key::Function(2),
+        mods: Mods::default(),
+    });
     rt.frame(1.0 / 60.0);
     assert!(rt.state().single.text.contains('!'));
 
@@ -496,10 +609,29 @@ fn custom_input_on_key_handler_resets_multiclick_history() {
 #[test]
 fn presses_land_on_targets_inside_a_scrolled_viewport() {
     fn view(_: &Vec<usize>, _: &mut Cx<Vec<usize>>) -> El {
-        let rows = (0..10).map(|i| crate::el().key(format!("row{i}")).w_full().h(50.0).on_press(move |s: &mut Vec<usize>| s.push(i)));
-        col().size(200.0, 100.0).scroll(crate::ScrollSpec { stick_bottom: false }).child(col().w_full().children(rows))
+        let rows = (0..10).map(|i| {
+            crate::el()
+                .key(format!("row{i}"))
+                .w_full()
+                .h(50.0)
+                .on_press(move |s: &mut Vec<usize>| s.push(i))
+        });
+        col()
+            .size(200.0, 100.0)
+            .scroll(crate::ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(col().w_full().children(rows))
     }
-    let mut rt = Runtime::new(Vec::new(), view, (200.0, 100.0), Env { system_dark: true, scale: 1.0 });
+    let mut rt = Runtime::new(
+        Vec::new(),
+        view,
+        (200.0, 100.0),
+        Env {
+            system_dark: true,
+            scale: 1.0,
+        },
+    );
     rt.frame(0.0);
     rt.pointer_move(100.0, 25.0);
     rt.wheel(100.0, 25.0, -200.0);
@@ -516,11 +648,19 @@ fn presses_land_on_targets_inside_a_scrolled_viewport() {
 #[test]
 fn a_field_that_stops_following_its_press_keeps_the_press_until_release() {
     let mut c = InputClick::default();
-    c.capture = Capture::Held { dragging: Some("field".into()) };
+    c.capture = Capture::Held {
+        dragging: Some("field".into()),
+    };
     c.steps.push_back(("field".into(), Step::Drag));
     c.on_focus_change(Some("other"));
-    assert!(c.captured() && c.dragging_path().is_none(), "focus left: the drag stops, the press stays the field's");
-    assert!(matches!(c.steps.front(), Some((_, Step::Cancelled))), "its queued drag step does nothing");
+    assert!(
+        c.captured() && c.dragging_path().is_none(),
+        "focus left: the drag stops, the press stays the field's"
+    );
+    assert!(
+        matches!(c.steps.front(), Some((_, Step::Cancelled))),
+        "its queued drag step does nothing"
+    );
     assert!(c.end_press());
     assert!(!c.captured() && !c.end_press(), "the release ends it once");
 }

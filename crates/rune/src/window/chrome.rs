@@ -24,19 +24,35 @@ pub(super) fn place_chrome(window: &Window, chrome: Chrome) -> f32 {
 /// (`Cx::set_titlebar`, `Cx::titlebar_height`): on macOS a titlebar is a full-size content
 /// view with the traffic lights where the titlebar or the app placed them, else in the band's
 /// middle.
-pub(super) fn frame_chrome(chrome: Chrome, titlebar: Option<crate::Titlebar>, set: crate::titlebar::TitlebarSet) -> Chrome {
+pub(super) fn frame_chrome(
+    chrome: Chrome,
+    titlebar: Option<crate::Titlebar>,
+    set: crate::titlebar::TitlebarSet,
+) -> Chrome {
     #[cfg(target_os = "macos")]
-    return titlebar.map(|t| set.over(t)).map_or(chrome, |t| t.mac_chrome(chrome));
+    return titlebar
+        .map(|t| set.over(t))
+        .map_or(chrome, |t| t.mac_chrome(chrome));
     #[cfg(not(target_os = "macos"))]
-    { let _ = (titlebar, set); chrome }
+    {
+        let _ = (titlebar, set);
+        chrome
+    }
 }
 
 /// Places the traffic lights, and tells the runtime what the window's controls take of the
 /// titlebar. A change re-runs the view.
-pub(super) fn sync_chrome<S: 'static>(rt: &mut Runtime<S>, w: &Win, chrome: Chrome, titlebar: Option<crate::Titlebar>) {
+pub(super) fn sync_chrome<S: 'static>(
+    rt: &mut Runtime<S>,
+    w: &Win,
+    chrome: Chrome,
+    titlebar: Option<crate::Titlebar>,
+) {
     let leading = place_chrome(&w.window, frame_chrome(chrome, titlebar, rt.titlebar_set()));
     rt.set_titlebar_inset(leading);
-    let height = titlebar.filter(|_| cfg!(target_os = "macos")).map_or(0.0, |t| rt.titlebar_set().over(t).height());
+    let height = titlebar
+        .filter(|_| cfg!(target_os = "macos"))
+        .map_or(0.0, |t| rt.titlebar_set().over(t).height());
     rt.set_chrome_insets(crate::ChromeInsets::new(leading, height));
 }
 
@@ -53,7 +69,11 @@ pub(super) fn titlebar_double_click(window: &Window) {
 /// button (one that isn't resizable) only restores.
 pub(super) fn toggle_maximized(window: &Window) {
     let maximized = window.is_maximized();
-    if maximized || window.enabled_buttons().contains(winit::window::WindowButtons::MAXIMIZE) {
+    if maximized
+        || window
+            .enabled_buttons()
+            .contains(winit::window::WindowButtons::MAXIMIZE)
+    {
         window.set_maximized(!maximized);
     }
 }

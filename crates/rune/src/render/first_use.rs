@@ -17,13 +17,40 @@ impl Renderer {
             start.elapsed().as_secs_f64() * 1e3
         }
         use crate::gpu::springs::{Node, Track};
-        let node = Node { x: Track::constant(0.0), y: Track::constant(0.0), opacity: Track::constant(1.0) };
+        let node = Node {
+            x: Track::constant(0.0),
+            y: Track::constant(0.0),
+            opacity: Track::constant(1.0),
+        };
         vec![
-            ("backdrop_blur", ms(|| BackdropBlur::new(device, &self.bind_layout).ensure_composite(device, self.format))),
-            ("layer_blur", ms(|| drop(layer_blur::Pipeline::new(device, super::layers::FORMAT)))),
-            ("video", ms(|| drop(crate::native_surface::SurfaceRenderer::new(device, self.format)))),
-            ("alpha", ms(|| drop(AlphaSurface::new(device, self.format, (16, 16))))),
-            ("springs", ms(|| drop(Renderer::with_springs(device, self.format, &[node], &[0])))),
+            (
+                "backdrop_blur",
+                ms(|| {
+                    BackdropBlur::new(device, &self.bind_layout)
+                        .ensure_composite(device, self.format)
+                }),
+            ),
+            (
+                "layer_blur",
+                ms(|| drop(layer_blur::Pipeline::new(device, super::layers::FORMAT))),
+            ),
+            (
+                "video",
+                ms(|| {
+                    drop(crate::native_surface::SurfaceRenderer::new(
+                        device,
+                        self.format,
+                    ))
+                }),
+            ),
+            (
+                "alpha",
+                ms(|| drop(AlphaSurface::new(device, self.format, (16, 16)))),
+            ),
+            (
+                "springs",
+                ms(|| drop(Renderer::with_springs(device, self.format, &[node], &[0]))),
+            ),
         ]
     }
 }

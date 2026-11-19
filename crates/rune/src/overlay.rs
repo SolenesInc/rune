@@ -16,27 +16,30 @@
 //!   focus unless explicitly requested. Its window number is available for capture filters.
 //! - With `release_gpu_when_hidden`, hidden means destroyed on macOS too.
 
+use crate::time::Instant;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
-use crate::time::Instant;
 
 use winit::dpi::LogicalSize;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowLevel};
 
-use crate::el::{Align, El, Tx};
 use crate::compose::{Compositor, Frame};
+use crate::el::{Align, El, Tx};
 use crate::frame::clock::FrameClock;
 use crate::render::{Gpu, Renderer};
 use crate::runtime::{Cx, Env, Runtime, Waker};
 use crate::text::TextSystem;
 use crate::tooling::AppSpec;
 use crate::window::{AnyHost, WakeEvent};
-use crate::{ConfiguredOverlay, DisplayTarget, KeyPolicy, OverlayInput, OverlayOptions, OverlayPlacement, OverlaySupport};
+use crate::{
+    ConfiguredOverlay, DisplayTarget, KeyPolicy, OverlayInput, OverlayOptions, OverlayPlacement,
+    OverlaySupport,
+};
 
 #[path = "overlay/draw.rs"]
 mod draw;
@@ -135,45 +138,71 @@ pub struct OverlayHandle<T: 'static> {
 
 impl<T> Clone for OverlayHandle<T> {
     fn clone(&self) -> Self {
-        OverlayHandle { shared: self.shared.clone() }
+        OverlayHandle {
+            shared: self.shared.clone(),
+        }
     }
 }
 
 impl<T: 'static> OverlayHandle<T> {
     /// Takes effect on the next event-loop turn, or after the current owned drag releases.
-    pub fn set_input(&self, input: OverlayInput) { self.request(|q| q.input = Some(input)); }
-    pub fn set_follow_pointer(&self, follow: bool) { self.request(|q| q.follow_pointer = Some(follow)); }
+    pub fn set_input(&self, input: OverlayInput) {
+        self.request(|q| q.input = Some(input));
+    }
+    pub fn set_follow_pointer(&self, follow: bool) {
+        self.request(|q| q.follow_pointer = Some(follow));
+    }
     /// Moves a shown [`DisplayTarget::UnderPointer`] overlay to the display under the pointer
     /// when two calls in a row find it on the same other display; at once, without taking
     /// focus. A caller's own pace
     /// (a HUD's few checks a second) instead of `follow_pointer`'s pointer watch. X11 only;
     /// elsewhere it does nothing.
-    pub fn refollow_pointer(&self) { self.request(|q| q.refollow = true); }
+    pub fn refollow_pointer(&self) {
+        self.request(|q| q.refollow = true);
+    }
     /// None restores the spec's legacy edge placement.
-    pub fn set_placement(&self, placement: Option<OverlayPlacement>) { self.request(|q| q.placement = Some(placement)); }
-    pub fn set_display(&self, display: DisplayTarget) { self.request(|q| q.display = Some(display)); }
+    pub fn set_placement(&self, placement: Option<OverlayPlacement>) {
+        self.request(|q| q.placement = Some(placement));
+    }
+    pub fn set_display(&self, display: DisplayTarget) {
+        self.request(|q| q.display = Some(display));
+    }
 
     /// Request keyboard focus without application activation, where supported.
-    pub fn request_keys(&self) { self.request(|q| q.request_keys = true); }
+    pub fn request_keys(&self) {
+        self.request(|q| q.request_keys = true);
+    }
 
     /// macOS panel CGWindowID for an explicit ScreenCaptureKit exclusion filter. Available
     /// at native creation (see `on_created`/`prewarm`); a new one with each window made.
-    pub fn window_number(&self) -> Option<u32> { self.shared.native.lock().unwrap().0 }
+    pub fn window_number(&self) -> Option<u32> {
+        self.shared.native.lock().unwrap().0
+    }
 
     /// Result of the native capture-exclusion request. Linux reports Unsupported.
-    pub fn capture_exclusion(&self) -> OverlaySupport { self.capabilities().capture_exclusion }
-    pub fn capabilities(&self) -> crate::OverlayCapabilities { self.shared.native.lock().unwrap().1 }
+    pub fn capture_exclusion(&self) -> OverlaySupport {
+        self.capabilities().capture_exclusion
+    }
+    pub fn capabilities(&self) -> crate::OverlayCapabilities {
+        self.shared.native.lock().unwrap().1
+    }
     /// Changes `OverlayOptions::exclude_from_capture` on the live window. It applies only while
     /// the overlay is shown; set while hidden, it takes effect at the next show, so there is no
     /// need to toggle it around show and hide.
-    pub fn set_exclude_from_capture(&self, exclude: bool) { self.request(|q| q.exclude_from_capture = Some(exclude)); }
+    pub fn set_exclude_from_capture(&self, exclude: bool) {
+        self.request(|q| q.exclude_from_capture = Some(exclude));
+    }
     /// Changes `OverlayOptions::xwayland_input`. It applies when the surface is next made, so
     /// a call before `show` in the same turn covers that show.
-    pub fn set_xwayland_input(&self, allow: bool) { self.request(|q| q.xwayland_input = Some(allow)); }
+    pub fn set_xwayland_input(&self, allow: bool) {
+        self.request(|q| q.xwayland_input = Some(allow));
+    }
 
     /// The overlay's frame counts: redraws, presents, failed drawable acquisitions, loop turns
     /// and pacing: current totals, and per-second rates updated once a second while it draws.
-    pub fn surface_stats(&self) -> crate::SurfaceStats { crate::frame::surface_stats::read(&self.shared.stats) }
+    pub fn surface_stats(&self) -> crate::SurfaceStats {
+        crate::frame::surface_stats::read(&self.shared.stats)
+    }
 
     /// Reveal the overlay. Prewarmed macOS overlays refresh hidden changes before reveal,
     /// preserving motion elapsed since each commit, even when show arrives in a later turn.
@@ -236,7 +265,10 @@ impl<T: 'static> OverlayHandle<T> {
     /// once, with the latest state. A prewarmed macOS overlay commits hidden changes at most
     /// every 250 ms to keep its retained frame close.
     pub fn update(&self, f: impl FnOnce(&mut T, &mut Tx) + Send + 'static) {
-        self.update_if(move |s, tx| { f(s, tx); true });
+        self.update_if(move |s, tx| {
+            f(s, tx);
+            true
+        });
     }
 
     /// `update` for a timer or feed that often finds nothing new: `f` returns whether it changed
@@ -282,11 +314,21 @@ pub(crate) trait PendingOverlay: AnyHost {
 
 enum Backing {
     Window(Arc<Window>),
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
     Layer(crate::platform::layer_shell::LayerSurface),
     /// Wayland without layer-shell: an X11 window on XWayland, for overlays that take no input
     /// or whose host opted in to pointer input there.
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
     Xwayland(crate::platform::x11::xwayland::XwaylandSurface),
 }
 
@@ -337,7 +379,12 @@ pub(crate) struct Overlay<T: 'static> {
     /// before the window so the view goes back to it first.
     #[cfg(target_os = "macos")]
     panel: Option<crate::platform::macos::Panel>,
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
     x11: Option<crate::platform::x11::overlay::InputWindow>,
     surface: surface::Surface,
     /// `ConfiguredOverlay::release_gpu_when_hidden` or `release_gpu_after`.
@@ -373,9 +420,35 @@ pub(crate) struct Overlay<T: 'static> {
 }
 
 impl<T: 'static> Overlay<T> {
-    pub(crate) fn new<S>(configured: impl Into<ConfiguredOverlay<T>>, state: T, app: &AppSpec<S>) -> (Self, OverlayHandle<T>) {
-        let ConfiguredOverlay { spec, options, on_key, on_created, poll, on_focus, compositor, setup, srgb_blend, macos_level, modifier_keys, animate_reveal, release_after } = configured.into();
-        let shared = Arc::new(Shared { native: Mutex::default(), requests: Mutex::default(), availability: AtomicU8::new(0), failure: Mutex::default(), surface: Mutex::default(), wake: Mutex::new(None), stats: Arc::default() });
+    pub(crate) fn new<S>(
+        configured: impl Into<ConfiguredOverlay<T>>,
+        state: T,
+        app: &AppSpec<S>,
+    ) -> (Self, OverlayHandle<T>) {
+        let ConfiguredOverlay {
+            spec,
+            options,
+            on_key,
+            on_created,
+            poll,
+            on_focus,
+            compositor,
+            setup,
+            srgb_blend,
+            macos_level,
+            modifier_keys,
+            animate_reveal,
+            release_after,
+        } = configured.into();
+        let shared = Arc::new(Shared {
+            native: Mutex::default(),
+            requests: Mutex::default(),
+            availability: AtomicU8::new(0),
+            failure: Mutex::default(),
+            surface: Mutex::default(),
+            wake: Mutex::new(None),
+            stats: Arc::default(),
+        });
         let meter = crate::frame::surface_stats::SurfaceMeter::new(spec.name, shared.stats.clone());
         let text = TextSystem::for_window(app.fonts, app.families);
         let mut rt = Runtime::with_text(state, spec.view, spec.size, Env::default(), text);
@@ -395,9 +468,13 @@ impl<T: 'static> Overlay<T> {
         rt.surface_stats = Some(meter.shared());
         // App and overlay may use different state types. Downcast the function pointer
         // once, without a per-frame adapter or changing App::overlay's generic API.
-        rt.app_mut().poll = poll.or_else(|| app.poll.and_then(|f| {
-            (&f as &dyn std::any::Any).downcast_ref::<fn(&mut T, f64, &mut Tx) -> bool>().copied()
-        }));
+        rt.app_mut().poll = poll.or_else(|| {
+            app.poll.and_then(|f| {
+                (&f as &dyn std::any::Any)
+                    .downcast_ref::<fn(&mut T, f64, &mut Tx) -> bool>()
+                    .copied()
+            })
+        });
         let overlay = Overlay {
             on_created,
             setup,
@@ -407,7 +484,13 @@ impl<T: 'static> Overlay<T> {
             options,
             canvas_size: spec.size,
             name: spec.name,
-            at: Placement { size: spec.size, edge: spec.edge, margin: spec.margin, align: spec.align, inset: spec.inset },
+            at: Placement {
+                size: spec.size,
+                edge: spec.edge,
+                margin: spec.margin,
+                align: spec.align,
+                inset: spec.inset,
+            },
             origin: None,
             interactive: spec.interactive,
             macos_level,
@@ -421,7 +504,12 @@ impl<T: 'static> Overlay<T> {
             cursor: None,
             #[cfg(target_os = "macos")]
             panel: None,
-            #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+            #[cfg(all(
+                unix,
+                not(target_os = "macos"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
             x11: None,
             mods: Default::default(),
             renderer: None,
@@ -463,13 +551,17 @@ impl<T: 'static> Overlay<T> {
     }
 
     fn accent_changed(&mut self, accent: crate::SystemAccent) {
-        if accent == self.rt.system_accent() { return; }
+        if accent == self.rt.system_accent() {
+            return;
+        }
         self.rt.set_system_accent(accent);
         self.dirty = true;
     }
 
     fn scroll_bars_changed(&mut self, bars: crate::platform::scroll_bars::SystemScrollBars) {
-        if bars == self.rt.system_scroll_bars_state() { return; }
+        if bars == self.rt.system_scroll_bars_state() {
+            return;
+        }
         self.rt.set_system_scroll_bars_state(bars);
         self.dirty = true;
     }
@@ -488,22 +580,32 @@ impl<T: 'static> Overlay<T> {
         self.position_window(event_loop, window);
         // From the window itself: `window()` places it before it's live.
         self.sync_origin(window);
-        let Ok(origin) = window.outer_position() else { return };
-        if let Some(before) = self.origin.replace(origin) && before != origin {
+        let Ok(origin) = window.outer_position() else {
+            return;
+        };
+        if let Some(before) = self.origin.replace(origin)
+            && before != origin
+        {
             let scale = window.scale_factor();
             let points = |a: i32, b: i32| (f64::from(a - b) / scale) as f32;
-            self.rt.window_moved(points(origin.x, before.x), points(origin.y, before.y));
+            self.rt
+                .window_moved(points(origin.x, before.x), points(origin.y, before.y));
         }
     }
 
     /// Tells the runtime where the overlay's content is on screen (see `El::on_screen_layout`).
     fn sync_origin(&mut self, window: &Window) {
-        self.rt.set_window_pixels(window.inner_position().ok().map(|p| (p.x, p.y)));
-        if let Some(origin) = crate::window::screen_origin(window) { self.origin_moved(origin); }
+        self.rt
+            .set_window_pixels(window.inner_position().ok().map(|p| (p.x, p.y)));
+        if let Some(origin) = crate::window::screen_origin(window) {
+            self.origin_moved(origin);
+        }
     }
 
     fn sync_live_origin(&mut self) {
-        let Some(Backing::Window(window)) = self.surface.live().map(|l| &l.backing) else { return };
+        let Some(Backing::Window(window)) = self.surface.live().map(|l| &l.backing) else {
+            return;
+        };
         let window = window.clone();
         self.sync_origin(&window);
     }
@@ -512,9 +614,13 @@ impl<T: 'static> Overlay<T> {
     /// reveal steps once (`refresh_for_reveal_at`) and delivers them; only a drawing overlay
     /// turns the loop for them now.
     fn origin_moved(&mut self, origin: (f32, f32)) {
-        if !self.rt.set_window_origin(origin) { return; }
+        if !self.rt.set_window_origin(origin) {
+            return;
+        }
         self.dirty = true;
-        if self.presence.drawing() { self.idle = false; }
+        if self.presence.drawing() {
+            self.idle = false;
+        }
     }
 
     fn position_window(&self, event_loop: &ActiveEventLoop, window: &Window) {
@@ -526,8 +632,15 @@ impl<T: 'static> Overlay<T> {
         if let Some(p) = position(event_loop, self.at, &self.options) {
             window.set_outer_position(p);
         }
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
-        if let Some(x11) = &self.x11 { x11.update_geometry(); }
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
+        if let Some(x11) = &self.x11 {
+            x11.update_geometry();
+        }
     }
 
     /// Puts the window on screen without focusing it or activating the app.
@@ -539,28 +652,53 @@ impl<T: 'static> Overlay<T> {
         }
         let _ = fade;
         window.set_visible(true);
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
-        if let Some(x11) = &self.x11 { x11.show(self.options.level); }
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
+        if let Some(x11) = &self.x11 {
+            x11.show(self.options.level);
+        }
     }
 
     fn resized(&mut self, event_loop: &ActiveEventLoop) {
         // A parked window takes the size now; its surface is made at it.
         if let Some(Backing::Window(w)) = self.surface.parked() {
             let w = w.clone();
-            let _ = w.request_inner_size(LogicalSize::new(self.at.size.0 as f64, self.at.size.1 as f64));
+            let _ = w.request_inner_size(LogicalSize::new(
+                self.at.size.0 as f64,
+                self.at.size.1 as f64,
+            ));
             return self.place_window(event_loop, &w);
         }
-        let Some(live) = self.surface.live_mut() else { return };
+        let Some(live) = self.surface.live_mut() else {
+            return;
+        };
         match &mut live.backing {
             Backing::Window(w) => {
-                let _ = w.request_inner_size(LogicalSize::new(self.at.size.0 as f64, self.at.size.1 as f64));
+                let _ = w.request_inner_size(LogicalSize::new(
+                    self.at.size.0 as f64,
+                    self.at.size.1 as f64,
+                ));
             }
-            #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+            #[cfg(all(
+                unix,
+                not(target_os = "macos"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
             Backing::Layer(layer) => {
                 layer.place(self.at);
                 layer.commit();
             }
-            #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+            #[cfg(all(
+                unix,
+                not(target_os = "macos"),
+                not(target_os = "ios"),
+                not(target_os = "android")
+            ))]
             Backing::Xwayland(surface) => surface.place(self.at, &self.options),
         }
         if let Some(gpu) = self.gpu.clone() {
@@ -571,36 +709,62 @@ impl<T: 'static> Overlay<T> {
         if let Some(Backing::Window(w)) = self.surface.live().map(|l| &l.backing) {
             let w = w.clone();
             self.place_window(event_loop, &w);
-            if let Some(gpu) = self.gpu.clone() { self.rescale(&gpu, crate::window::backing_scale(&w)); }
+            if let Some(gpu) = self.gpu.clone() {
+                self.rescale(&gpu, crate::window::backing_scale(&w));
+            }
         }
     }
 
     fn resolve_size(&mut self, event_loop: &ActiveEventLoop) {
-        let at = Placement { size: self.canvas_size, ..self.at };
+        let at = Placement {
+            size: self.canvas_size,
+            ..self.at
+        };
         #[cfg(target_os = "macos")]
-        if let Some(rect) = self.panel.as_ref().map_or_else(|| crate::platform::macos::overlay_rect(at, &self.options), |panel| panel.rect(at, &self.options)) {
+        if let Some(rect) = self.panel.as_ref().map_or_else(
+            || crate::platform::macos::overlay_rect(at, &self.options),
+            |panel| panel.rect(at, &self.options),
+        ) {
             self.at.size = (rect.size.width as f32, rect.size.height as f32);
             return;
         }
         if let Some(monitor) = monitor(event_loop, &self.options.display) {
             let area = monitor.size().to_logical::<f32>(monitor.scale_factor());
-            let rect = crate::overlay::options::local_rect(at, self.options.placement, (area.width, area.height));
+            let rect = crate::overlay::options::local_rect(
+                at,
+                self.options.placement,
+                (area.width, area.height),
+            );
             self.at.size = (rect[2], rect[3]);
         }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
     fn follow_pointer(&mut self, event_loop: &ActiveEventLoop, point: (i32, i32)) {
-        if !self.options.follow_pointer { return; }
+        if !self.options.follow_pointer {
+            return;
+        }
         self.move_to_pointer_display(event_loop, point);
     }
 
-    #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    ))]
     fn sample_pointer(event_loop: &ActiveEventLoop) -> Option<(i32, i32)> {
-        (!crate::window::is_wayland(event_loop)).then(crate::platform::x11::overlay::pointer_position).flatten()
+        (!crate::window::is_wayland(event_loop))
+            .then(crate::platform::x11::overlay::pointer_position)
+            .flatten()
     }
 
-    #[cfg(not(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
+    #[cfg(not(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "ios"),
+        not(target_os = "android")
+    )))]
     fn sample_pointer(_: &ActiveEventLoop) -> Option<(i32, i32)> {
         None
     }
@@ -608,14 +772,27 @@ impl<T: 'static> Overlay<T> {
     /// Moves a window-backed `UnderPointer` overlay to the display containing `point` when it
     /// isn't there.
     /// The display containing `point` when a window-backed `UnderPointer` overlay isn't on it.
-    fn pointer_display_away(&self, event_loop: &ActiveEventLoop, point: (i32, i32)) -> Option<winit::monitor::MonitorHandle> {
-        if self.options.display != DisplayTarget::UnderPointer { return None; }
-        let Some(Backing::Window(window)) = self.surface.live().map(|l| &l.backing) else { return None };
-        event_loop.available_monitors().find(|m| {
-            let (p, s) = (m.position(), m.size());
-            point.0 >= p.x && point.1 >= p.y && i64::from(point.0) < i64::from(p.x) + i64::from(s.width)
-                && i64::from(point.1) < i64::from(p.y) + i64::from(s.height)
-        }).filter(|target| window.current_monitor().as_ref() != Some(target))
+    fn pointer_display_away(
+        &self,
+        event_loop: &ActiveEventLoop,
+        point: (i32, i32),
+    ) -> Option<winit::monitor::MonitorHandle> {
+        if self.options.display != DisplayTarget::UnderPointer {
+            return None;
+        }
+        let Some(Backing::Window(window)) = self.surface.live().map(|l| &l.backing) else {
+            return None;
+        };
+        event_loop
+            .available_monitors()
+            .find(|m| {
+                let (p, s) = (m.position(), m.size());
+                point.0 >= p.x
+                    && point.1 >= p.y
+                    && i64::from(point.0) < i64::from(p.x) + i64::from(s.width)
+                    && i64::from(point.1) < i64::from(p.y) + i64::from(s.height)
+            })
+            .filter(|target| window.current_monitor().as_ref() != Some(target))
     }
 
     /// `refollow_pointer`'s check: the overlay moves once two checks in a row find the pointer
@@ -634,7 +811,10 @@ impl<T: 'static> Overlay<T> {
     fn move_to_pointer_display(&mut self, event_loop: &ActiveEventLoop, point: (i32, i32)) {
         if let Some(target) = self.pointer_display_away(event_loop, point) {
             // Pin the sampled target across size and position resolution, then resume following.
-            self.options.display = DisplayTarget::Id(crate::DisplayId::from_monitor(target, crate::window::is_wayland(event_loop)));
+            self.options.display = DisplayTarget::Id(crate::DisplayId::from_monitor(
+                target,
+                crate::window::is_wayland(event_loop),
+            ));
             self.resolve_size(event_loop);
             self.resized(event_loop);
             self.options.display = DisplayTarget::UnderPointer;

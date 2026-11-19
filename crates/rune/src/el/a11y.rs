@@ -90,8 +90,15 @@ pub(crate) struct A11y {
 
 impl A11y {
     pub(crate) const EMPTY: A11y = A11y {
-        level: None, expanded: None, secure: false, checked: None, disabled: false, hidden: false, unselectable: false,
-        live: None, more: None,
+        level: None,
+        expanded: None,
+        secure: false,
+        checked: None,
+        disabled: false,
+        hidden: false,
+        unselectable: false,
+        live: None,
+        more: None,
     };
 
     fn more(&mut self) -> &mut A11yMore {
@@ -111,7 +118,9 @@ impl El {
         self.cold_mut().a11y.more().href = Some(url.clone());
         self.set_role_name("link");
         self.handlers.on_press = Some(std::rc::Rc::new(move |_, tx: &mut crate::Tx| {
-            if url.contains(':') { let _ = tx.open_url(&url); }
+            if url.contains(':') {
+                let _ = tx.open_url(&url);
+            }
         }));
         self
     }
@@ -133,7 +142,9 @@ impl El {
     /// focus, assistive technology treats the first such element in the tree as focused, so
     /// a screen reader names it and follows its [`El::active_descendant`].
     pub fn holds_keys(mut self, holds: bool) -> Self {
-        if holds { self.cold_mut().a11y.more().holds_keys = true; }
+        if holds {
+            self.cold_mut().a11y.more().holds_keys = true;
+        }
         self
     }
     /// The element whose content is active while this one keeps keyboard focus (ARIA
@@ -161,7 +172,9 @@ impl El {
     /// The element is still changing and a reader should wait for it to settle (ARIA
     /// `aria-busy`): a turn while the reply streams, a tool call while it runs.
     pub fn busy(mut self, busy: bool) -> Self {
-        if busy || self.cold.a11y.more.is_some() { self.cold_mut().a11y.more().busy = busy; }
+        if busy || self.cold.a11y.more.is_some() {
+            self.cold_mut().a11y.more().busy = busy;
+        }
         self
     }
     /// Whether the value entered here fails validation (ARIA `aria-invalid`).
@@ -194,8 +207,19 @@ impl El {
     /// wraps without a newline, so a line is the line the reader sees. A `"textbox"` with it is
     /// an editable text area, which a screen reader reads the line or word the caret moves to
     /// in, and echoes typing into.
-    pub fn a11y_text(self, text: impl Into<String>, anchor: usize, focus: usize, wraps: Vec<usize>) -> Self {
-        let drawn = DrawnText { text: text.into(), anchor, focus, wraps };
+    pub fn a11y_text(
+        self,
+        text: impl Into<String>,
+        anchor: usize,
+        focus: usize,
+        wraps: Vec<usize>,
+    ) -> Self {
+        let drawn = DrawnText {
+            text: text.into(),
+            anchor,
+            focus,
+            wraps,
+        };
         self.a11y_own_text(std::rc::Rc::new(move |_| Some(drawn.clone())))
     }
     /// [`Self::a11y_text`] read from the state only while assistive technology reads the tree,
@@ -208,7 +232,10 @@ impl El {
     /// el().role("terminal").a11y_text_from(|s: &App| Some(DrawnText { text: s.screen.clone(), anchor: 0, focus: 0, wraps: Vec::new() }));
     /// ```
     pub fn a11y_text_from<S: 'static>(self, f: impl Fn(&S) -> Option<DrawnText> + 'static) -> Self {
-        self.a11y_own_text(std::rc::Rc::new(move |s| f(s.cast::<S>().expect("handler registered for a different state type than the app's"))))
+        self.a11y_own_text(std::rc::Rc::new(move |s| {
+            f(s.cast::<S>()
+                .expect("handler registered for a different state type than the app's"))
+        }))
     }
     fn a11y_own_text(mut self, f: crate::el::OwnTextFn) -> Self {
         self.handlers.own_text = Some(f);
@@ -218,14 +245,30 @@ impl El {
     /// `aria-valuemin` and `aria-valuemax`). Assistive technology increments it through
     /// [`El::on_step`].
     pub fn range_value(mut self, value: f64, min: f64, max: f64) -> Self {
-        let step = self.cold.a11y.more.as_ref().and_then(|m| m.range).and_then(|r| r.step);
-        self.cold_mut().a11y.more().range = Some(Range { value, min, max, step });
+        let step = self
+            .cold
+            .a11y
+            .more
+            .as_ref()
+            .and_then(|m| m.range)
+            .and_then(|r| r.step);
+        self.cold_mut().a11y.more().range = Some(Range {
+            value,
+            min,
+            max,
+            step,
+        });
         self
     }
     /// The amount one step of [`El::on_step`] moves a [`range_value`](Self::range_value).
     pub fn range_step(mut self, step: f64) -> Self {
         let more = self.cold_mut().a11y.more();
-        let range = more.range.get_or_insert(Range { value: 0.0, min: 0.0, max: 0.0, step: None });
+        let range = more.range.get_or_insert(Range {
+            value: 0.0,
+            min: 0.0,
+            max: 0.0,
+            step: None,
+        });
         range.step = Some(step);
         self
     }
@@ -246,7 +289,11 @@ impl El {
         if disabled || !self.cold.is_empty() {
             let cold = self.cold_mut();
             cold.a11y.disabled = disabled;
-            if disabled { let f = &mut *cold.focus; f.enabled = false; f.opt_out = true; }
+            if disabled {
+                let f = &mut *cold.focus;
+                f.enabled = false;
+                f.opt_out = true;
+            }
         }
         self
     }

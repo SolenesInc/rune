@@ -1,27 +1,33 @@
 //! AVFoundation: AVPlayer + AVPlayerItemVideoOutput for windows, AVAssetImageGenerator for
 //! posters and headless frames, and a bare AVPlayer for audio.
+use super::phases::Item;
+use super::turn::{self, Port, Turn};
 use super::*;
-use crate::platform::main_queue::on_main;
+use crate::machine::{Attempt, Effects};
 use crate::native_surface::Orient;
 use crate::native_surface::macos::PixelBuffer;
+use crate::platform::main_queue::on_main;
 use objc2_av_foundation::{
-    AVAsset, AVAssetImageGenerator, AVMediaTypeAudio, AVMediaTypeVideo, AVPlayer, AVPlayerItem, AVPlayerItemStatus, AVPlayerItemVideoOutput,
-    AVURLAsset,
+    AVAsset, AVAssetImageGenerator, AVMediaTypeAudio, AVMediaTypeVideo, AVPlayer, AVPlayerItem,
+    AVPlayerItemStatus, AVPlayerItemVideoOutput, AVURLAsset,
 };
-use objc2_core_foundation::{CFBoolean, CFDictionary, CFNumber, CFRetained, CFString, CFType, CGPoint, CGRect, CGSize};
-use objc2_core_graphics::{CGBitmapContextCreate, CGColorSpace, CGContext, CGImage, CGImageAlphaInfo, CGImageByteOrderInfo, kCGColorSpaceSRGB};
+use objc2_core_foundation::{
+    CFBoolean, CFDictionary, CFNumber, CFRetained, CFString, CFType, CGPoint, CGRect, CGSize,
+};
+use objc2_core_graphics::{
+    CGBitmapContextCreate, CGColorSpace, CGContext, CGImage, CGImageAlphaInfo,
+    CGImageByteOrderInfo, kCGColorSpaceSRGB,
+};
 use objc2_core_media::{CMTime, CMTimeFlags};
 use objc2_core_video::{
-    CVGetCurrentHostTime, CVGetHostClockFrequency, kCVPixelBufferIOSurfacePropertiesKey, kCVPixelBufferMetalCompatibilityKey,
-    kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+    CVGetCurrentHostTime, CVGetHostClockFrequency, kCVPixelBufferIOSurfacePropertiesKey,
+    kCVPixelBufferMetalCompatibilityKey, kCVPixelBufferPixelFormatTypeKey,
+    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
 };
 use objc2_foundation_video::{NSDictionary, NSString, NSURL};
 use objc2_video::rc::Retained;
 use objc2_video::runtime::AnyObject;
 use objc2_video::{AnyThread, MainThreadMarker};
-use super::phases::Item;
-use crate::machine::{Attempt, Effects};
-use super::turn::{self, Port, Turn};
 use std::time::Duration;
 
 /// Paused players that keep a native player (and its decoder) for a quick resume. Older paused
@@ -74,13 +80,18 @@ struct Objects {
 
 impl Player {
     fn new(objects: Objects) -> Self {
-        Self { objects: Some(objects), orient: Orient::UP }
+        Self {
+            objects: Some(objects),
+            orient: Orient::UP,
+        }
     }
 }
 
 impl Drop for Player {
     fn drop(&mut self) {
-        let Some(objects) = self.objects.take() else { return };
+        let Some(objects) = self.objects.take() else {
+            return;
+        };
         if MainThreadMarker::new().is_some() {
             unsafe { objects.player.pause() };
             return;
@@ -112,7 +123,9 @@ pub(super) fn extension(source: &MediaSource) -> Option<String> {
         MediaSource::Url(url) => {
             let path = url.split(['?', '#']).next().unwrap_or_default();
             // The last segment of the path, never the host.
-            let path = path.split_once("://").map_or(path, |(_, rest)| rest.split_once('/').map_or("", |(_, path)| path));
+            let path = path.split_once("://").map_or(path, |(_, rest)| {
+                rest.split_once('/').map_or("", |(_, path)| path)
+            });
             path.rsplit('/').next().unwrap_or_default().to_string()
         }
     };
@@ -123,7 +136,12 @@ pub(super) fn extension(source: &MediaSource) -> Option<String> {
 fn foreign_audio(source: &MediaSource, kind: Kind) -> bool {
     cfg!(feature = "ogg-audio")
         && kind == Kind::Audio
-        && extension(source).is_some_and(|ext| matches!(ext.as_str(), "ogg" | "oga" | "opus" | "webm" | "mka" | "mkv"))
+        && extension(source).is_some_and(|ext| {
+            matches!(
+                ext.as_str(),
+                "ogg" | "oga" | "opus" | "webm" | "mka" | "mkv"
+            )
+        })
 }
 
 /// AVFoundation has no Ogg, WebM or Matroska demuxer; fail at once rather than wait on a load
@@ -149,7 +167,12 @@ pub(super) fn created(shared: &Arc<Shared>) {
 
 /// The window loop is starting: load audio clips made before it.
 pub(super) fn enable() {
-    let clips: Vec<Arc<Shared>> = AUDIO.lock().unwrap().iter().filter_map(Weak::upgrade).collect();
+    let clips: Vec<Arc<Shared>> = AUDIO
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(Weak::upgrade)
+        .collect();
     for clip in clips {
         load_audio(&clip);
         on_main(move || drive(&clip));
@@ -172,20 +195,35 @@ fn url(source: &MediaSource) -> Result<Retained<NSURL>, String> {
                 return Err(format!("no such file: {}", path.display()));
             }
             let path = std::path::absolute(path).unwrap_or_else(|_| path.clone());
-            Ok(NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy())))
+            Ok(NSURL::fileURLWithPath(&NSString::from_str(
+                &path.to_string_lossy(),
+            )))
         }
-        MediaSource::Url(url) => NSURL::URLWithString(&NSString::from_str(url)).ok_or_else(|| format!("invalid URL: {url}")),
+        MediaSource::Url(url) => NSURL::URLWithString(&NSString::from_str(url))
+            .ok_or_else(|| format!("invalid URL: {url}")),
     }
 }
 
-fn asset(source: &MediaSource, headers: &[(String, String)]) -> Result<Retained<AVURLAsset>, String> {
+fn asset(
+    source: &MediaSource,
+    headers: &[(String, String)],
+) -> Result<Retained<AVURLAsset>, String> {
     let url = url(source)?;
     if headers.is_empty() {
         return Ok(unsafe { AVURLAsset::URLAssetWithURL_options(&url, None) });
     }
-    let names: Vec<_> = headers.iter().map(|(name, _)| NSString::from_str(name)).collect();
-    let values: Vec<_> = headers.iter().map(|(_, value)| NSString::from_str(value)).collect();
-    let fields = NSDictionary::from_slices(&names.iter().map(|n| &**n).collect::<Vec<_>>(), &values.iter().map(|v| &**v).collect::<Vec<_>>());
+    let names: Vec<_> = headers
+        .iter()
+        .map(|(name, _)| NSString::from_str(name))
+        .collect();
+    let values: Vec<_> = headers
+        .iter()
+        .map(|(_, value)| NSString::from_str(value))
+        .collect();
+    let fields = NSDictionary::from_slices(
+        &names.iter().map(|n| &**n).collect::<Vec<_>>(),
+        &values.iter().map(|v| &**v).collect::<Vec<_>>(),
+    );
     // Long-standing and widely used, though missing from AVFoundation's headers.
     let key = NSString::from_str("AVURLAssetHTTPHeaderFieldsKey");
     let fields: &AnyObject = &fields;
@@ -196,7 +234,12 @@ fn asset(source: &MediaSource, headers: &[(String, String)]) -> Result<Retained<
 /// Opens a clip and reads its facts, blocking. Audio AVFoundation can't read plays from a WAV
 /// decoded from it: up front for a foreign extension, or when its own asset has no audio track
 /// and its bytes are Ogg or WebM.
-fn open(source: &MediaSource, headers: &[(String, String)], kind: Kind, decoded: &Decoded) -> Result<(Retained<AVURLAsset>, Meta), String> {
+fn open(
+    source: &MediaSource,
+    headers: &[(String, String)],
+    kind: Kind,
+    decoded: &Decoded,
+) -> Result<(Retained<AVURLAsset>, Meta), String> {
     let opened = |asset: Retained<AVURLAsset>| meta(&asset, kind).map(|meta| (asset, meta));
     #[cfg(feature = "ogg-audio")]
     {
@@ -227,7 +270,11 @@ fn open(source: &MediaSource, headers: &[(String, String)], kind: Kind, decoded:
 }
 
 /// The asset a player opens: the decoded WAV once there is one.
-fn player_asset(source: &MediaSource, headers: &[(String, String)], decoded: &Decoded) -> Result<Retained<AVURLAsset>, String> {
+fn player_asset(
+    source: &MediaSource,
+    headers: &[(String, String)],
+    decoded: &Decoded,
+) -> Result<Retained<AVURLAsset>, String> {
     #[cfg(feature = "ogg-audio")]
     if let Some(Ok(Some(wav))) = decoded.get() {
         return asset(&MediaSource::File(wav.path().into()), &[]);
@@ -240,7 +287,11 @@ fn player_asset(source: &MediaSource, headers: &[(String, String)], decoded: &De
 /// Fetches a clip and decodes it to a WAV. When sniffing, bytes that aren't Ogg or WebM give
 /// `None`, and a fetch that fails gives `None` too, leaving AVFoundation's error to report.
 #[cfg(feature = "ogg-audio")]
-fn decode_foreign(source: &MediaSource, headers: &[(String, String)], sniff: bool) -> Result<Option<foreign::Wav>, String> {
+fn decode_foreign(
+    source: &MediaSource,
+    headers: &[(String, String)],
+    sniff: bool,
+) -> Result<Option<foreign::Wav>, String> {
     let bytes = match fetch(source, headers) {
         Ok(bytes) => bytes,
         Err(_) if sniff => return Ok(None),
@@ -262,12 +313,20 @@ fn fetch(source: &MediaSource, headers: &[(String, String)]) -> Result<Vec<u8>, 
     }
     let request = NSMutableURLRequest::requestWithURL(&*url(source)?);
     for (name, value) in headers {
-        request.setValue_forHTTPHeaderField(Some(&NSString::from_str(value)), &NSString::from_str(name));
+        request.setValue_forHTTPHeaderField(
+            Some(&NSString::from_str(value)),
+            &NSString::from_str(name),
+        );
     }
     let mut response = None;
-    let data = NSURLConnection::sendSynchronousRequest_returningResponse_error(&request, Some(&mut response))
-        .map_err(|e| e.localizedDescription().to_string())?;
-    let status = response.and_then(|r| r.downcast::<NSHTTPURLResponse>().ok()).map(|r| r.statusCode());
+    let data = NSURLConnection::sendSynchronousRequest_returningResponse_error(
+        &request,
+        Some(&mut response),
+    )
+    .map_err(|e| e.localizedDescription().to_string())?;
+    let status = response
+        .and_then(|r| r.downcast::<NSHTTPURLResponse>().ok())
+        .map(|r| r.statusCode());
     if let Some(status) = status.filter(|s| !(200..300).contains(s)) {
         return Err(format!("HTTP {status}"));
     }
@@ -282,7 +341,12 @@ fn cm(seconds: f64) -> CMTime {
     unsafe { CMTime::with_seconds(seconds, 600_000) }
 }
 fn zero() -> CMTime {
-    CMTime { value: 0, timescale: 1, flags: CMTimeFlags::Valid, epoch: 0 }
+    CMTime {
+        value: 0,
+        timescale: 1,
+        flags: CMTimeFlags::Valid,
+        epoch: 0,
+    }
 }
 
 /// Blocks until the asset's tracks load (a network fetch for URLs).
@@ -291,10 +355,20 @@ fn meta(asset: &AVURLAsset, kind: Kind) -> Result<Meta, String> {
     let duration = || seconds(unsafe { asset.duration() });
     if kind == Kind::Audio {
         let audio = unsafe { AVMediaTypeAudio }.ok_or("AVMediaTypeAudio unavailable")?;
-        if unsafe { asset.tracksWithMediaType(audio) }.firstObject().is_none() {
-            return Err("no playable audio track (unreachable, or a format AVFoundation can't read)".into());
+        if unsafe { asset.tracksWithMediaType(audio) }
+            .firstObject()
+            .is_none()
+        {
+            return Err(
+                "no playable audio track (unreachable, or a format AVFoundation can't read)".into(),
+            );
         }
-        return Ok(Meta { duration: duration(), size: None, frame: 1.0 / 30.0, sound: true });
+        return Ok(Meta {
+            duration: duration(),
+            size: None,
+            frame: 1.0 / 30.0,
+            sound: true,
+        });
     }
     let video = unsafe { AVMediaTypeVideo }.ok_or("AVMediaTypeVideo unavailable")?;
     let tracks = unsafe { asset.tracksWithMediaType(video) };
@@ -307,25 +381,44 @@ fn meta(asset: &AVURLAsset, kind: Kind) -> Result<Meta, String> {
     let h = (size.width * t.b + size.height * t.d).abs().round();
     let min = seconds(unsafe { track.minFrameDuration() });
     let nominal = unsafe { track.nominalFrameRate() } as f64;
-    let frame = if min > 0.0 { min } else if nominal > 0.0 { 1.0 / nominal } else { 1.0 / 30.0 };
+    let frame = if min > 0.0 {
+        min
+    } else if nominal > 0.0 {
+        1.0 / nominal
+    } else {
+        1.0 / 30.0
+    };
     if w < 1.0 || h < 1.0 {
         return Err("video track has no size".into());
     }
-    Ok(Meta { duration: duration(), size: Some((w as u32, h as u32)), frame, sound: has_sound(asset) })
+    Ok(Meta {
+        duration: duration(),
+        size: Some((w as u32, h as u32)),
+        frame,
+        sound: has_sound(asset),
+    })
 }
 
 /// Whether the asset has a sound track. Blocks until its tracks load.
 #[allow(deprecated)] // As `meta`: the synchronous loader.
 fn has_sound(asset: &AVAsset) -> bool {
-    unsafe { AVMediaTypeAudio }.is_some_and(|audio| unsafe { asset.tracksWithMediaType(audio) }.firstObject().is_some())
+    unsafe { AVMediaTypeAudio }.is_some_and(|audio| {
+        unsafe { asset.tracksWithMediaType(audio) }
+            .firstObject()
+            .is_some()
+    })
 }
 
 /// How the first video track's buffers turn upright. Blocks until tracks load; free once an
 /// item using the asset is ready to play.
 #[allow(deprecated)]
 fn orient(asset: &AVAsset) -> Orient {
-    let Some(video) = (unsafe { AVMediaTypeVideo }) else { return Orient::UP };
-    let Some(track) = unsafe { asset.tracksWithMediaType(video) }.firstObject() else { return Orient::UP };
+    let Some(video) = (unsafe { AVMediaTypeVideo }) else {
+        return Orient::UP;
+    };
+    let Some(track) = unsafe { asset.tracksWithMediaType(video) }.firstObject() else {
+        return Orient::UP;
+    };
     let t = unsafe { track.preferredTransform() };
     Orient::from_transform(t.a, t.b, t.c, t.d)
 }
@@ -345,8 +438,9 @@ fn generator(asset: &AVURLAsset, max: Option<f64>) -> Retained<AVAssetImageGener
 
 #[allow(deprecated)] // copyCGImageAtTime is the synchronous form.
 fn image(generator: &AVAssetImageGenerator, at: f64) -> Result<ByteFrame, String> {
-    let image = unsafe { generator.copyCGImageAtTime_actualTime_error(cm(at), std::ptr::null_mut()) }
-        .map_err(|e| e.localizedDescription().to_string())?;
+    let image =
+        unsafe { generator.copyCGImageAtTime_actualTime_error(cm(at), std::ptr::null_mut()) }
+            .map_err(|e| e.localizedDescription().to_string())?;
     bgra(&image)
 }
 
@@ -359,20 +453,42 @@ fn bgra(image: &CGImage) -> Result<ByteFrame, String> {
     let mut bytes = vec![0u8; w * h * 4];
     let space = CGColorSpace::with_name(Some(unsafe { kCGColorSpaceSRGB }));
     let info = CGImageAlphaInfo::PremultipliedFirst.0 | CGImageByteOrderInfo::Order32Little.0;
-    let context = unsafe { CGBitmapContextCreate(bytes.as_mut_ptr().cast(), w, h, 8, w * 4, space.as_deref(), info) }
-        .ok_or("CGBitmapContextCreate failed")?;
-    CGContext::draw_image(Some(&context), CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(w as f64, h as f64)), Some(image));
+    let context = unsafe {
+        CGBitmapContextCreate(
+            bytes.as_mut_ptr().cast(),
+            w,
+            h,
+            8,
+            w * 4,
+            space.as_deref(),
+            info,
+        )
+    }
+    .ok_or("CGBitmapContextCreate failed")?;
+    CGContext::draw_image(
+        Some(&context),
+        CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(w as f64, h as f64)),
+        Some(image),
+    );
     drop(context);
     Ok(ByteFrame {
         width: w as u32,
         height: h as u32,
         format: Format::Bgra,
-        color: ColorInfo { matrix: crate::native_surface::Matrix::Bt709, transfer: crate::native_surface::Transfer::Srgb },
+        color: ColorInfo {
+            matrix: crate::native_surface::Matrix::Bt709,
+            transfer: crate::native_surface::Transfer::Srgb,
+        },
         planes: [bytes, Vec::new()],
     })
 }
 
-pub(super) fn probe(native: &mut Native, source: &MediaSource, headers: &[(String, String)], kind: Kind) -> Result<Meta, String> {
+pub(super) fn probe(
+    native: &mut Native,
+    source: &MediaSource,
+    headers: &[(String, String)],
+    kind: Kind,
+) -> Result<Meta, String> {
     let (asset, meta) = open(source, headers, kind, &native.decoded)?;
     if kind == Kind::Video {
         native.generator = Some(generator(&asset, None));
@@ -380,7 +496,12 @@ pub(super) fn probe(native: &mut Native, source: &MediaSource, headers: &[(Strin
     Ok(meta)
 }
 
-pub(super) fn decode(native: &mut Native, source: &MediaSource, headers: &[(String, String)], at: f64) -> Result<ByteFrame, String> {
+pub(super) fn decode(
+    native: &mut Native,
+    source: &MediaSource,
+    headers: &[(String, String)],
+    at: f64,
+) -> Result<ByteFrame, String> {
     if native.generator.is_none() {
         let asset = asset(source, headers)?;
         native.generator = Some(generator(&asset, None));
@@ -391,11 +512,18 @@ pub(super) fn decode(native: &mut Native, source: &MediaSource, headers: &[(Stri
 /// A clip's frame at `at` upright (as posters and headless runs show it), and as its buffer
 /// stores it (as the player hands it out) with how that turns upright.
 #[cfg(test)]
-pub(crate) fn test_frames(source: &MediaSource, at: f64) -> Result<(ByteFrame, ByteFrame, Orient), String> {
+pub(crate) fn test_frames(
+    source: &MediaSource,
+    at: f64,
+) -> Result<(ByteFrame, ByteFrame, Orient), String> {
     let asset = asset(source, &[])?;
     let raw = generator(&asset, None);
     unsafe { raw.setAppliesPreferredTrackTransform(false) };
-    Ok((image(&generator(&asset, None), at)?, image(&raw, at)?, orient(&asset)))
+    Ok((
+        image(&generator(&asset, None), at)?,
+        image(&raw, at)?,
+        orient(&asset),
+    ))
 }
 
 /// Whether a poster decode has landed, and with a picture.
@@ -403,7 +531,10 @@ pub(crate) fn test_frames(source: &MediaSource, at: f64) -> Result<(ByteFrame, B
 pub(crate) fn test_poster(shared: &Shared) -> Option<bool> {
     let native = shared.native.lock().unwrap();
     let posters = native.posters.lock().unwrap();
-    posters.done.as_ref().map(|(_, d)| matches!(d, Ok((Some(_), _))))
+    posters
+        .done
+        .as_ref()
+        .map(|(_, d)| matches!(d, Ok((Some(_), _))))
 }
 
 /// An app warming the page it shows next: decode the clip's first frame now, so the first frame
@@ -437,7 +568,12 @@ fn request_poster(shared: &Arc<Shared>, native: &mut Native, at: f64, attempt: A
     slot.busy = true;
     let posters = native.posters.clone();
     let clip = Arc::downgrade(shared);
-    let (source, headers, kind, decoded) = (shared.source.clone(), shared.headers.clone(), shared.kind, native.decoded.clone());
+    let (source, headers, kind, decoded) = (
+        shared.source.clone(),
+        shared.headers.clone(),
+        shared.kind,
+        native.decoded.clone(),
+    );
     std::thread::Builder::new()
         .name("rune-media-poster".into())
         .spawn(move || {
@@ -460,7 +596,10 @@ fn request_poster(shared: &Arc<Shared>, native: &mut Native, at: f64, attempt: A
                 let result = objc2_video::rc::autoreleasepool(|_| {
                     if opened.is_none() {
                         let (asset, meta) = open(&source, &headers, kind, &decoded)?;
-                        opened = Some(((kind == Kind::Video).then(|| generator(&asset, Some(POSTER_MAX))), meta));
+                        opened = Some((
+                            (kind == Kind::Video).then(|| generator(&asset, Some(POSTER_MAX))),
+                            meta,
+                        ));
                     }
                     let (generator, meta) = opened.as_ref().unwrap();
                     let frame = match generator {
@@ -480,7 +619,13 @@ fn request_poster(shared: &Arc<Shared>, native: &mut Native, at: f64, attempt: A
         .expect("spawn media poster worker");
 }
 
-fn create_player(source: &MediaSource, headers: &[(String, String)], kind: Kind, decoded: &Decoded, mtm: MainThreadMarker) -> Result<Objects, String> {
+fn create_player(
+    source: &MediaSource,
+    headers: &[(String, String)],
+    kind: Kind,
+    decoded: &Decoded,
+    mtm: MainThreadMarker,
+) -> Result<Objects, String> {
     let asset = player_asset(source, headers, decoded)?;
     let item = unsafe { AVPlayerItem::playerItemWithAsset(&asset, mtm) };
     let output = (kind == Kind::Video).then(|| {
@@ -488,28 +633,49 @@ fn create_player(source: &MediaSource, headers: &[(String, String)], kind: Kind,
         let format = CFNumber::new_i32(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange as i32);
         let attributes = unsafe {
             CFDictionary::<CFString, CFType>::from_slices(
-                &[kCVPixelBufferPixelFormatTypeKey, kCVPixelBufferIOSurfacePropertiesKey, kCVPixelBufferMetalCompatibilityKey],
-                &[format.as_ref(), AsRef::<CFType>::as_ref(&*empty), CFBoolean::new(true).as_ref()],
+                &[
+                    kCVPixelBufferPixelFormatTypeKey,
+                    kCVPixelBufferIOSurfacePropertiesKey,
+                    kCVPixelBufferMetalCompatibilityKey,
+                ],
+                &[
+                    format.as_ref(),
+                    AsRef::<CFType>::as_ref(&*empty),
+                    CFBoolean::new(true).as_ref(),
+                ],
             )
         };
         // CFDictionary and NSDictionary are toll-free bridged.
-        let attributes = unsafe { &*(CFRetained::as_ptr(&attributes).as_ptr() as *const NSDictionary<NSString, AnyObject>) };
+        let attributes = unsafe {
+            &*(CFRetained::as_ptr(&attributes).as_ptr() as *const NSDictionary<NSString, AnyObject>)
+        };
         unsafe {
-            let output = AVPlayerItemVideoOutput::initWithPixelBufferAttributes(AVPlayerItemVideoOutput::alloc(), Some(attributes));
+            let output = AVPlayerItemVideoOutput::initWithPixelBufferAttributes(
+                AVPlayerItemVideoOutput::alloc(),
+                Some(attributes),
+            );
             output.setSuppressesPlayerRendering(true);
             item.addOutput(&output);
             output
         }
     });
     let player = unsafe { AVPlayer::playerWithPlayerItem(Some(&item), mtm) };
-    Ok(Objects { player, item, output })
+    Ok(Objects {
+        player,
+        item,
+        output,
+    })
 }
 
 /// Seconds on the host clock (`CACurrentMediaTime`'s) for an `Instant`.
 fn host_seconds(at: Instant) -> f64 {
     let now = Instant::now();
     let host = CVGetCurrentHostTime() as f64 / CVGetHostClockFrequency();
-    if at >= now { host + (at - now).as_secs_f64() } else { host - (now - at).as_secs_f64() }
+    if at >= now {
+        host + (at - now).as_secs_f64()
+    } else {
+        host - (now - at).as_secs_f64()
+    }
 }
 
 /// Applies a handle edit at once on the main thread, so a paused, undrawn video stops (and goes
@@ -532,13 +698,19 @@ pub(super) fn apply(shared: &Arc<Shared>) {
         return;
     }
     // Already being pulled further up this stack; that pull reconciles.
-    let Ok(mut native) = shared.native.try_lock() else { return };
+    let Ok(mut native) = shared.native.try_lock() else {
+        return;
+    };
     if native.player.is_none() {
         return;
     }
     let playing = {
         let mut c = shared.ctl.lock().unwrap();
-        turn::reconcile(&mut c, &mut Av::new(shared, &mut native, Some(mtm), None), Instant::now());
+        turn::reconcile(
+            &mut c,
+            &mut Av::new(shared, &mut native, Some(mtm), None),
+            Instant::now(),
+        );
         c.playing()
     };
     drop(native);
@@ -558,7 +730,8 @@ pub(super) fn live_time(shared: &Shared, live: bool) -> Option<f64> {
     let p = native.player.as_ref()?;
     let time = seconds(unsafe { p.objects.as_ref()?.player.currentTime() });
     let c = shared.ctl.lock().unwrap();
-    c.playing().then(|| c.duration.map_or(time, |d| time.clamp(0.0, d)))
+    c.playing()
+        .then(|| c.duration.map_or(time, |d| time.clamp(0.0, d)))
 }
 
 /// A clip's native side for one turn, with its locks held. Reads and does what it's asked.
@@ -576,8 +749,20 @@ struct Av<'a> {
 }
 
 impl<'a> Av<'a> {
-    fn new(shared: &'a Arc<Shared>, native: &'a mut Native, mtm: Option<MainThreadMarker>, target: Option<(&'a NativeSurface, Instant)>) -> Self {
-        Self { shared, native, mtm, target, poster: None, asked: None }
+    fn new(
+        shared: &'a Arc<Shared>,
+        native: &'a mut Native,
+        mtm: Option<MainThreadMarker>,
+        target: Option<(&'a NativeSurface, Instant)>,
+    ) -> Self {
+        Self {
+            shared,
+            native,
+            mtm,
+            target,
+            poster: None,
+            asked: None,
+        }
     }
 
     fn player(&mut self) -> &mut Player {
@@ -585,7 +770,13 @@ impl<'a> Av<'a> {
     }
 
     fn objects(&self) -> &Objects {
-        self.native.player.as_ref().unwrap().objects.as_ref().unwrap()
+        self.native
+            .player
+            .as_ref()
+            .unwrap()
+            .objects
+            .as_ref()
+            .unwrap()
     }
 }
 
@@ -597,14 +788,19 @@ impl Port for Av<'_> {
 
     fn take_poster(&mut self) -> Option<(Attempt, Result<Meta, String>)> {
         let (attempt, done) = self.native.posters.lock().unwrap().done.take()?;
-        Some((attempt, done.map(|(bytes, meta)| {
-            self.poster = bytes;
-            meta
-        })))
+        Some((
+            attempt,
+            done.map(|(bytes, meta)| {
+                self.poster = bytes;
+                meta
+            }),
+        ))
     }
 
     fn show_poster(&mut self, next_id: &mut dyn FnMut() -> u64) -> Result<(), String> {
-        let (Some(bytes), Some((surface, _))) = (self.poster.take(), self.target) else { return Ok(()) };
+        let (Some(bytes), Some((surface, _))) = (self.poster.take(), self.target) else {
+            return Ok(());
+        };
         surface.push_bytes(bytes, next_id())
     }
 
@@ -614,7 +810,13 @@ impl Port for Av<'_> {
 
     fn make_player(&mut self) -> Result<Instant, String> {
         let shared = self.shared;
-        let objects = create_player(&shared.source, &shared.headers, shared.kind, &self.native.decoded, self.mtm.unwrap())?;
+        let objects = create_player(
+            &shared.source,
+            &shared.headers,
+            shared.kind,
+            &self.native.decoded,
+            self.mtm.unwrap(),
+        )?;
         self.native.player = Some(Player::new(objects));
         Ok(Instant::now())
     }
@@ -631,7 +833,10 @@ impl Port for Av<'_> {
         let item = &self.objects().item;
         let status = unsafe { item.status() };
         if status == AVPlayerItemStatus::Failed {
-            Item::Failed(unsafe { item.error() }.map_or_else(|| "playback failed".into(), |e| e.localizedDescription().to_string()))
+            Item::Failed(unsafe { item.error() }.map_or_else(
+                || "playback failed".into(),
+                |e| e.localizedDescription().to_string(),
+            ))
         } else if status == AVPlayerItemStatus::ReadyToPlay {
             Item::Ready
         } else {
@@ -652,12 +857,21 @@ impl Port for Av<'_> {
         let item = &self.objects().item;
         let size = unsafe { item.presentationSize() };
         let duration = seconds(unsafe { item.duration() });
-        let size = (size.width >= 1.0 && size.height >= 1.0).then(|| (size.width.round() as u32, size.height.round() as u32));
-        Meta { duration, size, frame: 1.0 / 30.0, sound: has_sound(&*unsafe { item.asset() }) }
+        let size = (size.width >= 1.0 && size.height >= 1.0)
+            .then(|| (size.width.round() as u32, size.height.round() as u32));
+        Meta {
+            duration,
+            size,
+            frame: 1.0 / 30.0,
+            sound: has_sound(&*unsafe { item.asset() }),
+        }
     }
 
     fn alive(&self) -> bool {
-        self.native.player.as_ref().is_some_and(|p| p.objects.is_some())
+        self.native
+            .player
+            .as_ref()
+            .is_some_and(|p| p.objects.is_some())
     }
 
     fn set_muted(&mut self, muted: bool) {
@@ -669,12 +883,22 @@ impl Port for Av<'_> {
     }
 
     fn seek_to(&mut self, at: f64) {
-        unsafe { self.objects().player.seekToTime_toleranceBefore_toleranceAfter(cm(at), zero(), zero()) };
+        unsafe {
+            self.objects()
+                .player
+                .seekToTime_toleranceBefore_toleranceAfter(cm(at), zero(), zero())
+        };
     }
 
     fn set_rate(&mut self, rate: f32) {
         let player = &self.objects().player;
-        unsafe { if rate > 0.0 { player.setRate(rate) } else { player.pause() } };
+        unsafe {
+            if rate > 0.0 {
+                player.setRate(rate)
+            } else {
+                player.pause()
+            }
+        };
     }
 
     fn restart(&mut self, rate: f32) {
@@ -693,7 +917,9 @@ impl Port for Av<'_> {
         let mut shown = item_time;
         let mut landed = Ok(None);
         if unsafe { output.hasNewPixelBufferForItemTime(item_time) }
-            && let Some(buffer) = unsafe { output.copyPixelBufferForItemTime_itemTimeForDisplay(item_time, &mut shown) }
+            && let Some(buffer) = unsafe {
+                output.copyPixelBufferForItemTime_itemTimeForDisplay(item_time, &mut shown)
+            }
         {
             let id = next_id();
             // SAFETY: AVPlayerItemVideoOutput hands out finished buffers it no longer writes.
@@ -730,7 +956,13 @@ pub(super) fn due(_: &Shared) -> Option<Instant> {
 
 /// Poster requests and parking, shared by video pulls and audio drives. Returns whether the
 /// clip is playing, seeking or loading (a seek waits for it).
-fn finish(shared: &Arc<Shared>, mut native: MutexGuard<'_, Native>, c: MutexGuard<'_, Control>, turn: Turn, asked: Option<(f64, Attempt)>) -> bool {
+fn finish(
+    shared: &Arc<Shared>,
+    mut native: MutexGuard<'_, Native>,
+    c: MutexGuard<'_, Control>,
+    turn: Turn,
+    asked: Option<(f64, Attempt)>,
+) -> bool {
     match turn {
         Turn::Idle => {
             drop(c);
@@ -744,7 +976,11 @@ fn finish(shared: &Arc<Shared>, mut native: MutexGuard<'_, Native>, c: MutexGuar
             let (active, park) = (c.active(), c.parkable());
             drop(c);
             drop(native);
-            if park { self::park(shared) } else { unpark(shared) }
+            if park {
+                self::park(shared)
+            } else {
+                unpark(shared)
+            }
             active
         }
     }
@@ -762,10 +998,14 @@ pub(super) fn drive(shared: &Arc<Shared>) {
 
 /// Returns whether the clip needs ticking.
 fn step_audio(shared: &Arc<Shared>) -> bool {
-    let Some(mtm) = MainThreadMarker::new() else { return false };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
     let now = Instant::now();
     // Already being driven further up this stack (a waker that edits the clip).
-    let Ok(mut native) = shared.native.try_lock() else { return true };
+    let Ok(mut native) = shared.native.try_lock() else {
+        return true;
+    };
     let mut c = shared.ctl.lock().unwrap();
     let mut av = Av::new(shared, &mut native, Some(mtm), None);
     let turn = turn::turn(&mut c, &mut av, now);
@@ -814,7 +1054,10 @@ fn start_ticking() {
 }
 
 fn unpark(shared: &Arc<Shared>) {
-    PARKED.lock().unwrap().retain(|w| w.strong_count() > 0 && !std::ptr::eq(w.as_ptr(), Arc::as_ptr(shared)));
+    PARKED
+        .lock()
+        .unwrap()
+        .retain(|w| w.strong_count() > 0 && !std::ptr::eq(w.as_ptr(), Arc::as_ptr(shared)));
 }
 
 /// Keep at most `PARKED_PLAYERS` paused players; release the oldest. Main thread only.
@@ -851,7 +1094,10 @@ pub(super) fn parked_with(shared: &Arc<Shared>) -> Vec<Arc<Shared>> {
         }
         None => false,
     });
-    if !parked.iter().any(|w| std::ptr::eq(w.as_ptr(), Arc::as_ptr(shared))) {
+    if !parked
+        .iter()
+        .any(|w| std::ptr::eq(w.as_ptr(), Arc::as_ptr(shared)))
+    {
         parked.push(Arc::downgrade(shared));
     }
     let excess = parked.len().saturating_sub(PARKED_PLAYERS);

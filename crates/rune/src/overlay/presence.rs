@@ -42,11 +42,17 @@ pub(super) enum Presence {
     /// `until`. `length` is the whole fade, for its alpha (Windows). A panel fading toward
     /// alpha zero reads as covered, so it never becomes `occluded` mid-fade; one that was
     /// stays so.
-    FadingOut { until: Instant, length: Duration, occluded: bool },
+    FadingOut {
+        until: Instant,
+        length: Duration,
+        occluded: bool,
+    },
 }
 
 impl Default for Presence {
-    fn default() -> Self { Presence::Hidden { release_at: None } }
+    fn default() -> Self {
+        Presence::Hidden { release_at: None }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,14 +84,30 @@ impl Presence {
                 Effects::none()
             }
             // Fading again restarts the fade, and the window's alpha with it.
-            (Presence::Shown { occluded } | Presence::FadingOut { occluded, .. }, Event::Hide { fade, now }) if !fade.is_zero() => {
-                *self = Presence::FadingOut { until: now + fade, length: fade, occluded };
+            (
+                Presence::Shown { occluded } | Presence::FadingOut { occluded, .. },
+                Event::Hide { fade, now },
+            ) if !fade.is_zero() => {
+                *self = Presence::FadingOut {
+                    until: now + fade,
+                    length: fade,
+                    occluded,
+                };
                 Effects::one(Effect::HideWindow { fade })
             }
-            (Presence::Hidden { .. }, Event::Hide { fade, .. }) => Effects::two(Effect::StopDrawing, Effect::HideWindow { fade }),
+            (Presence::Hidden { .. }, Event::Hide { fade, .. }) => {
+                Effects::two(Effect::StopDrawing, Effect::HideWindow { fade })
+            }
             (_, Event::Hide { now, .. }) => self.hide_now(now, release),
-            (Presence::FadingOut { until, .. }, Event::Due { now }) if until <= now => self.hide_now(now, release),
-            (Presence::Hidden { release_at: Some(at) }, Event::Due { now }) if at <= now => {
+            (Presence::FadingOut { until, .. }, Event::Due { now }) if until <= now => {
+                self.hide_now(now, release)
+            }
+            (
+                Presence::Hidden {
+                    release_at: Some(at),
+                },
+                Event::Due { now },
+            ) if at <= now => {
                 *self = Presence::Hidden { release_at: None };
                 Effects::one(Effect::ReleaseGpu)
             }
@@ -102,21 +124,37 @@ impl Presence {
             Release::Keep | Release::Now => None,
         };
         *self = Presence::Hidden { release_at };
-        let mut effects = Effects::two(Effect::StopDrawing, Effect::HideWindow { fade: Duration::ZERO });
-        if release == Release::Now { effects.push(Effect::ReleaseGpu); }
+        let mut effects = Effects::two(
+            Effect::StopDrawing,
+            Effect::HideWindow {
+                fade: Duration::ZERO,
+            },
+        );
+        if release == Release::Now {
+            effects.push(Effect::ReleaseGpu);
+        }
         effects
     }
 
     /// Takes input: shown, not fading out.
-    pub(super) fn shown(&self) -> bool { matches!(self, Presence::Shown { .. }) }
+    pub(super) fn shown(&self) -> bool {
+        matches!(self, Presence::Shown { .. })
+    }
 
     /// Shown, or fading out: frames still draw.
-    pub(super) fn drawing(&self) -> bool { !matches!(self, Presence::Hidden { .. }) }
+    pub(super) fn drawing(&self) -> bool {
+        !matches!(self, Presence::Hidden { .. })
+    }
 
-    pub(super) fn fading(&self) -> bool { matches!(self, Presence::FadingOut { .. }) }
+    pub(super) fn fading(&self) -> bool {
+        matches!(self, Presence::FadingOut { .. })
+    }
 
     pub(super) fn occluded(&self) -> bool {
-        matches!(self, Presence::Shown { occluded: true } | Presence::FadingOut { occluded: true, .. })
+        matches!(
+            self,
+            Presence::Shown { occluded: true } | Presence::FadingOut { occluded: true, .. }
+        )
     }
 
     /// Takes an occlusion reading; false when it doesn't apply: a fading-out panel reads as

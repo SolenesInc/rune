@@ -30,7 +30,14 @@ impl Reuse {
 
 /// The root's size in a viewport; a window that fits its content takes its natural height.
 pub(super) fn root_size(viewport: (f32, f32), fit_height: bool) -> Size<Dimension> {
-    Size { width: length(viewport.0), height: if fit_height { auto() } else { length(viewport.1) } }
+    Size {
+        width: length(viewport.0),
+        height: if fit_height {
+            auto()
+        } else {
+            length(viewport.1)
+        },
+    }
 }
 
 /// Whether a commit can lay `n` out again as it is. Layout rewrites the styles of
@@ -39,7 +46,9 @@ pub(super) fn root_size(viewport: (f32, f32), fit_height: bool) -> Size<Dimensio
 /// values and exact fill, while `apply` leaves their scene tracks alone.
 pub(super) fn reusable(n: &Node) -> bool {
     n.cold.get().is_none_or(|c| {
-        c.aspect_fit.is_none() && c.above.as_ref().is_none_or(|a| !a.fit) && c.pixel_aspect.is_none()
+        c.aspect_fit.is_none()
+            && c.above.as_ref().is_none_or(|a| !a.fit)
+            && c.pixel_aspect.is_none()
     })
 }
 
@@ -63,12 +72,22 @@ impl RuntimeCore {
             && self.app.playground().is_none() && !self.patch_pending()
             // Exiting nodes left the layout tree.
             && self.layout.live_count() == self.nodes.len();
-        if !unchanged { return CommitKind::Rebuild; }
+        if !unchanged {
+            return CommitKind::Rebuild;
+        }
         if self.relayout {
             // The nodes it built are all there, in the layout tree's order.
-            return if self.nodes.iter().all(reusable) { CommitKind::Relayout } else { CommitKind::Rebuild };
+            return if self.nodes.iter().all(reusable) {
+                CommitKind::Relayout
+            } else {
+                CommitKind::Rebuild
+            };
         }
-        if self.virtual_only() { CommitKind::Remount } else { CommitKind::Rebuild }
+        if self.virtual_only() {
+            CommitKind::Remount
+        } else {
+            CommitKind::Rebuild
+        }
     }
 
     /// Measures a commit: lays the last tree out again when only the viewport changed since it
@@ -85,7 +104,10 @@ impl RuntimeCore {
             m.layout_reads = reads;
             m.caret_read = caret_read;
             return match m.relayout() {
-                Some(measured) => Measured { selection, ..measured },
+                Some(measured) => Measured {
+                    selection,
+                    ..measured
+                },
                 None => {
                     self.refresh_layout_seen();
                     self.measure(tx)
@@ -94,7 +116,10 @@ impl RuntimeCore {
         }
         if kind == CommitKind::Remount {
             let _blend = crate::theme::scope(self.srgb_blend);
-            let _bars = crate::platform::scroll_bars::scope(self.scroll_bars.state, self.scroll_bars.runtime_id);
+            let _bars = crate::platform::scroll_bars::scope(
+                self.scroll_bars.state,
+                self.scroll_bars.runtime_id,
+            );
             let reads = self.layout_seen.reads.clone();
             let caret_read = self.caret_watch;
             let selection = self.selection_by_path();
@@ -102,7 +127,10 @@ impl RuntimeCore {
             m.layout_reads = reads;
             m.caret_read = caret_read;
             return match m.remount_virtuals() {
-                commit::remount::RemountOutcome::Measured(measured) => Measured { selection, ..measured },
+                commit::remount::RemountOutcome::Measured(measured) => Measured {
+                    selection,
+                    ..measured
+                },
                 commit::remount::RemountOutcome::Retry => {
                     self.refresh_layout_seen();
                     self.measure_retry(tx)
@@ -132,8 +160,16 @@ impl Measurement<'_> {
             if slot.input.is_some() || slot.is_secure() {
                 // The new nodes lay their text out again; the cache then holds the only reference.
                 // A by-paragraph field's goes with it, to re-break its paragraphs from.
-                let kept = slot.text_layout.take().filter(|l| matches!(l, TextLayout::Paragraphs(_)));
-                let mut copy = Node { elided: None, virtual_mount: false, text_layout: kept, ..slot.clone() };
+                let kept = slot
+                    .text_layout
+                    .take()
+                    .filter(|l| matches!(l, TextLayout::Paragraphs(_)));
+                let mut copy = Node {
+                    elided: None,
+                    virtual_mount: false,
+                    text_layout: kept,
+                    ..slot.clone()
+                };
                 copy.clear_run_layout();
                 nodes.push(copy);
             } else {
@@ -149,14 +185,25 @@ impl Measurement<'_> {
         self.mark_quiet_rows(&mut nodes);
         let mut reused = std::mem::take(&mut self.memo.reused_scratch);
         let mut split = std::mem::take(&mut self.memo.split_scratch);
-        build_relayout_spans(self.nodes, &nodes, self.virtuals, self.path_ids, self.node_index, &mut split, &mut reused);
+        build_relayout_spans(
+            self.nodes,
+            &nodes,
+            self.virtuals,
+            self.path_ids,
+            self.node_index,
+            &mut split,
+            &mut reused,
+        );
         self.memo.split_scratch = split;
         let root = nodes[0].taffy;
         let mut style = taffy.style(root).clone();
         style.set_size(root_size(self.viewport, self.fit_height));
         taffy.set_style_and_mark_ancestors(root, style, std::iter::empty());
         // As flattening does: secure leaves don't keep a measurement.
-        for n in nodes.iter().filter(|n| n.text.as_ref().is_some_and(|t| t.redacted)) {
+        for n in nodes
+            .iter()
+            .filter(|n| n.text.as_ref().is_some_and(|t| t.redacted))
+        {
             taffy.mark_dirty_and_ancestors(
                 n.taffy,
                 std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
@@ -195,11 +242,24 @@ impl Measurement<'_> {
     /// does, so rows above it that rewrap leave it in place.
     fn anchor_virtuals(&mut self) {
         for v in self.virtuals.values_mut() {
-            let scroll = self.path_ids.get(&v.scroll_path).and_then(|id| self.scrolls.get(id));
-            let sticky = || self.nodes.iter().find(|n| n.path == v.scroll_path).and_then(|n| n.scroll).is_some_and(|s| s.stick_bottom);
+            let scroll = self
+                .path_ids
+                .get(&v.scroll_path)
+                .and_then(|id| self.scrolls.get(id));
+            let sticky = || {
+                self.nodes
+                    .iter()
+                    .find(|n| n.path == v.scroll_path)
+                    .and_then(|n| n.scroll)
+                    .is_some_and(|s| s.stick_bottom)
+            };
             let pinned = scroll.map_or_else(sticky, |s| s.pinned());
             let offset = (scroll.map_or(0.0, |s| s.offset as f32) - v.top).max(0.0);
-            v.anchor = if pinned { None } else { v.first_visible(offset.min(v.max_offset()), |_| true) };
+            v.anchor = if pinned {
+                None
+            } else {
+                v.first_visible(offset.min(v.max_offset()), |_| true)
+            };
         }
     }
 
@@ -209,9 +269,23 @@ impl Measurement<'_> {
             return;
         }
         for (path, v) in self.virtuals.iter_mut() {
-            let Some(&list) = self.path_ids.get(path).and_then(|id| self.node_index.get(id)) else { continue };
-            for n in nodes.iter_mut().skip(list + 1).filter(|n| n.parent == Some(list)) {
-                n.virtual_mount = n.key.as_deref().and_then(|k| v.index_of(k)).is_some_and(|row| v.mounts_quietly(row, self.commits));
+            let Some(&list) = self
+                .path_ids
+                .get(path)
+                .and_then(|id| self.node_index.get(id))
+            else {
+                continue;
+            };
+            for n in nodes
+                .iter_mut()
+                .skip(list + 1)
+                .filter(|n| n.parent == Some(list))
+            {
+                n.virtual_mount = n
+                    .key
+                    .as_deref()
+                    .and_then(|k| v.index_of(k))
+                    .is_some_and(|row| v.mounts_quietly(row, self.commits));
             }
         }
     }
@@ -220,22 +294,35 @@ impl Measurement<'_> {
     /// a viewport past the overscan; the view then mounts the window again.
     fn windows_move(&self) -> bool {
         self.virtuals.values().any(|v| {
-            self.path_ids.get(&v.scroll_path).and_then(|id| self.scrolls.get(id)).is_some_and(|s| {
-                let offset = (s.offset as f32 - v.top).max(0.0);
-                v.needs_window(offset, s.pinned()) || v.spare(offset, s.pinned()) > v.viewport
-            })
+            self.path_ids
+                .get(&v.scroll_path)
+                .and_then(|id| self.scrolls.get(id))
+                .is_some_and(|s| {
+                    let offset = (s.offset as f32 - v.top).max(0.0);
+                    v.needs_window(offset, s.pinned()) || v.spare(offset, s.pinned()) > v.viewport
+                })
         })
     }
 
     /// Lays `nodes` out from `root_id` at the viewport, places them, and lays out their text.
-    pub(super) fn solve(&mut self, mut taffy: LayoutEngine, root_id: SlotId, mut nodes: Vec<Node>) -> (LayoutEngine, Vec<Node>) {
+    pub(super) fn solve(
+        &mut self,
+        mut taffy: LayoutEngine,
+        root_id: SlotId,
+        mut nodes: Vec<Node>,
+    ) -> (LayoutEngine, Vec<Node>) {
         let scale = self.env.scale;
         let room = Size {
             width: AvailableSpace::Definite(self.viewport.0),
-            height: if self.fit_height { AvailableSpace::MaxContent } else { AvailableSpace::Definite(self.viewport.1) },
+            height: if self.fit_height {
+                AvailableSpace::MaxContent
+            } else {
+                AvailableSpace::Definite(self.viewport.1)
+            },
         };
         {
-            let _layout_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Layout);
+            let _layout_time =
+                crate::frame::profile::Scope::new(crate::frame::profile::Phase::Layout);
             compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
             // `aspect_fit` elements laid out filling their room; fix each at the largest box
             // at its ratio inside it and lay out again, so siblings and alignment follow.
@@ -246,12 +333,15 @@ impl Measurement<'_> {
                     taffy.set_style_and_mark_ancestors(
                         n.taffy,
                         style,
-                        std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
+                        std::iter::successors(n.parent, |&p| nodes[p].parent)
+                            .map(|p| nodes[p].taffy),
                     );
                     refit = true;
                 }
             }
-            if refit { compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale); }
+            if refit {
+                compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            }
         }
         self.stats.layout_nodes = nodes.len();
         #[cfg(debug_assertions)]
@@ -260,7 +350,9 @@ impl Measurement<'_> {
         self.place(&taffy, &mut nodes);
         // Room one axis takes can make the other overflow, which takes its own: twice at most.
         for _ in 0..2 {
-            if !self.take_scroll_room(&mut taffy, &mut nodes) { break; }
+            if !self.take_scroll_room(&mut taffy, &mut nodes) {
+                break;
+            }
             compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
             self.place(&taffy, &mut nodes);
         }
@@ -315,7 +407,10 @@ fn build_relayout_spans(
             continue;
         }
         let has_children = nodes.get(i + 1).is_some_and(|c| c.parent == Some(i));
-        let shallow = i == 0 || nodes[i].parent.is_some_and(|p| p == 0 || nodes[p].parent == Some(0));
+        let shallow = i == 0
+            || nodes[i]
+                .parent
+                .is_some_and(|p| p == 0 || nodes[p].parent == Some(0));
         if has_children && shallow {
             split[i] = true;
         }
@@ -356,7 +451,11 @@ pub(super) fn lay_out_text_in_place(text: &mut TextSystem, n: &mut Node, scale: 
 pub(super) fn lay_out_text(text: &mut TextSystem, n: &mut Node, w: f32, scale: f32) {
     let Some(spec) = &n.text else { return };
     // A cell of a run draws from the run's layout (and keeps it cached) instead of its own.
-    let run = spec.cold.advance_in.as_ref().map(|(run, at)| (text.run_layout(run, spec.style, scale), *at));
+    let run = spec
+        .cold
+        .advance_in
+        .as_ref()
+        .map(|(run, at)| (text.run_layout(run, spec.style, scale), *at));
     if let Some((r, _)) = run.filter(|(r, at)| r.x(*at).is_some()) {
         n.text_layout = Some(TextLayout::Single(r.layout.clone()));
         n.cold_mut().run_layout = Some(r);
@@ -364,7 +463,14 @@ pub(super) fn lay_out_text(text: &mut TextSystem, n: &mut Node, w: f32, scale: f
     }
     let wrap = spec.wrap.then_some(w * scale);
     // A by-paragraph field keeps what its last layout (still on it) shares with this one.
-    let mut layout = match text.layout_text(spec, n.input.is_some(), scale, wrap, line_alignment(spec), n.text_layout.as_ref()) {
+    let mut layout = match text.layout_text(
+        spec,
+        n.input.is_some(),
+        scale,
+        wrap,
+        line_alignment(spec),
+        n.text_layout.as_ref(),
+    ) {
         TextLayout::Single(l) => l,
         paragraphs => {
             n.text_layout = Some(paragraphs);

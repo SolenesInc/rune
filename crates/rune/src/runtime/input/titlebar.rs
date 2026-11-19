@@ -58,18 +58,34 @@ pub(super) enum TitlebarPress {
 /// What the titlebar's press sees.
 pub(super) enum Event {
     /// A primary press on a bare `.window_drag()` region.
-    Region { now: f64, point: (f32, f32), interval: f64 },
+    Region {
+        now: f64,
+        point: (f32, f32),
+        interval: f64,
+    },
     /// A primary press that hit nothing; `band` when it is in the native titlebar band, where
     /// the system drags the window itself and only the double click is Rune's.
-    Empty { now: f64, point: (f32, f32), interval: f64, band: bool },
+    Empty {
+        now: f64,
+        point: (f32, f32),
+        interval: f64,
+        band: bool,
+    },
     /// Pointer cancellation or stage replacement ends any pending press.
     Clear,
 }
 
 /// The state a `Region` or `Empty` press leaves, and whether it was a double.
-fn pair_of(state: TitlebarPress, now: f64, point: (f32, f32), interval: f64) -> (TitlebarPress, bool) {
+fn pair_of(
+    state: TitlebarPress,
+    now: f64,
+    point: (f32, f32),
+    interval: f64,
+) -> (TitlebarPress, bool) {
     match state {
-        TitlebarPress::Armed(last) if last.second(now, point, interval) => (TitlebarPress::Rest, true),
+        TitlebarPress::Armed(last) if last.second(now, point, interval) => {
+            (TitlebarPress::Rest, true)
+        }
         _ => (TitlebarPress::Armed(Pair { at: now, point }), false),
     }
 }
@@ -79,17 +95,36 @@ fn pair_of(state: TitlebarPress, now: f64, point: (f32, f32), interval: f64) -> 
 pub(super) fn step(state: &mut TitlebarPress, event: Event) -> Effects<TitlebarAction> {
     match event {
         // A press on a drag region always moves the window, unless it is the second of a pair.
-        Event::Region { now, point, interval } => {
+        Event::Region {
+            now,
+            point,
+            interval,
+        } => {
             let (next, double) = pair_of(*state, now, point, interval);
             *state = next;
-            Effects::one(if double { TitlebarAction::DoubleClick } else { TitlebarAction::Drag })
+            Effects::one(if double {
+                TitlebarAction::DoubleClick
+            } else {
+                TitlebarAction::Drag
+            })
         }
         // AppKit drags the band itself and never sees the double click over the content.
-        Event::Empty { now, point, interval, band } => {
-            if !band { return Effects::none(); }
+        Event::Empty {
+            now,
+            point,
+            interval,
+            band,
+        } => {
+            if !band {
+                return Effects::none();
+            }
             let (next, double) = pair_of(*state, now, point, interval);
             *state = next;
-            if double { Effects::one(TitlebarAction::DoubleClick) } else { Effects::none() }
+            if double {
+                Effects::one(TitlebarAction::DoubleClick)
+            } else {
+                Effects::none()
+            }
         }
         Event::Clear => {
             *state = TitlebarPress::Rest;
@@ -101,14 +136,23 @@ pub(super) fn step(state: &mut TitlebarPress, event: Event) -> Effects<TitlebarA
 impl Titlebar {
     /// A press on a `.window_drag()` region: drag, or the double-click action on its second press.
     pub(super) fn press_region(&mut self, now: f64, x: f32, y: f32, interval: f64) {
-        self.act(Event::Region { now, point: (x, y), interval });
+        self.act(Event::Region {
+            now,
+            point: (x, y),
+            interval,
+        });
     }
 
     /// A press that hit nothing. In the native band AppKit moves the window itself but doesn't
     /// see the double click over the content view, so the second press asks for it here.
     pub(super) fn press_empty(&mut self, now: f64, x: f32, y: f32, interval: f64) {
         let band = y < self.native_band;
-        self.act(Event::Empty { now, point: (x, y), interval, band });
+        self.act(Event::Empty {
+            now,
+            point: (x, y),
+            interval,
+            band,
+        });
     }
 
     pub(super) fn clear(&mut self) {
@@ -152,7 +196,12 @@ impl RuntimeCore {
 
     /// What a run without a window reports and draws for `App::titlebar` on this platform, as
     /// its window would at rest: `Cx::titlebar_inset` and `Cx::chrome_insets`. Returns the frame the headless traffic-light checks see.
-    pub(crate) fn headless_chrome(&mut self, chrome: crate::Chrome, titlebar: Option<crate::Titlebar>, borderless: bool) -> crate::Chrome {
+    pub(crate) fn headless_chrome(
+        &mut self,
+        chrome: crate::Chrome,
+        titlebar: Option<crate::Titlebar>,
+        borderless: bool,
+    ) -> crate::Chrome {
         let titlebar = titlebar.filter(|_| !borderless);
         self.titlebar.headless = titlebar.map(|t| (chrome, t));
         let titlebar = titlebar.map(|t| self.titlebar.set.over(t));
@@ -160,10 +209,20 @@ impl RuntimeCore {
             Some(t) if cfg!(target_os = "macos") => t.mac_chrome(chrome),
             _ => chrome,
         };
-        let inset = if borderless { 0.0 } else { chrome.titlebar_inset() };
+        let inset = if borderless {
+            0.0
+        } else {
+            chrome.titlebar_inset()
+        };
         self.set_titlebar_inset(inset);
-        let height = titlebar.filter(|_| cfg!(target_os = "macos")).map_or(0.0, |t| t.height());
-        let leading = if cfg!(target_os = "macos") { inset } else { 0.0 };
+        let height = titlebar
+            .filter(|_| cfg!(target_os = "macos"))
+            .map_or(0.0, |t| t.height());
+        let leading = if cfg!(target_os = "macos") {
+            inset
+        } else {
+            0.0
+        };
         self.set_chrome_insets(crate::ChromeInsets::new(leading, height));
         chrome
     }
@@ -189,7 +248,9 @@ impl RuntimeCore {
     /// Notes the titlebar a view set. A run without a window draws it at once; a window's shell
     /// resizes its frame and moves the traffic lights (`take_titlebar_changed`).
     pub(super) fn set_titlebar(&mut self, set: crate::titlebar::TitlebarSet) {
-        if set == self.titlebar.set { return; }
+        if set == self.titlebar.set {
+            return;
+        }
         self.titlebar.set = set;
         self.titlebar.set_changed = true;
         if let Some((chrome, titlebar)) = self.titlebar.headless {
@@ -207,7 +268,11 @@ impl RuntimeCore {
     /// moves the window.
     pub(super) fn bare_drag_region(&self, t: usize) -> bool {
         let n = &self.nodes[t];
-        n.window_drag == crate::el::WindowDrag::Drag && n.handlers.on_press.is_none() && n.handlers.on_double_press.is_none() && n.handlers.on_drag.is_none()
-            && n.handlers.drag_out.is_none() && self.textbox_input(t).is_none()
+        n.window_drag == crate::el::WindowDrag::Drag
+            && n.handlers.on_press.is_none()
+            && n.handlers.on_double_press.is_none()
+            && n.handlers.on_drag.is_none()
+            && n.handlers.drag_out.is_none()
+            && self.textbox_input(t).is_none()
     }
 }

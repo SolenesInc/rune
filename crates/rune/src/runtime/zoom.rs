@@ -24,20 +24,31 @@ pub(crate) struct Zoom {
 
 impl Default for Zoom {
     fn default() -> Self {
-        Self { k: 1.0, window: (0.0, 0.0), window_scale: 1.0 }
+        Self {
+            k: 1.0,
+            window: (0.0, 0.0),
+            window_scale: 1.0,
+        }
     }
 }
 
 impl Zoom {
     /// The view's viewport and scale for the window's.
     pub(crate) fn view(&self) -> ((f32, f32), f32) {
-        ((self.window.0 / self.k, self.window.1 / self.k), self.window_scale * self.k)
+        (
+            (self.window.0 / self.k, self.window.1 / self.k),
+            self.window_scale * self.k,
+        )
     }
 }
 
 /// A zoom the view may ask for: finite, and within what a page zoom allows.
 pub(crate) fn clamp(k: f32) -> f32 {
-    if k.is_finite() { k.clamp(0.1, 10.0) } else { 1.0 }
+    if k.is_finite() {
+        k.clamp(0.1, 10.0)
+    } else {
+        1.0
+    }
 }
 
 impl RuntimeCore {
@@ -72,7 +83,9 @@ impl RuntimeCore {
     /// already the zoom.
     pub(super) fn apply_zoom(&mut self, k: f32) -> bool {
         let k = clamp(k);
-        if k == self.zoom.k { return false; }
+        if k == self.zoom.k {
+            return false;
+        }
         self.zoom.k = k;
         let (viewport, scale) = self.zoom.view();
         self.change_viewport(viewport, scale);

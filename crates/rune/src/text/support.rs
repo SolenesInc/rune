@@ -37,7 +37,14 @@ pub(crate) fn lcd_ok(outlines: Outlines) -> bool {
 
 /// Records what a renderer can do with outlines, for [`FontSmoothing::support`].
 pub(crate) fn note_outlines(support: Outlines) {
-    OUTLINES.store(match support { Outlines::Untried => 0, Outlines::Drawn => 1, Outlines::Unavailable => 2 }, Ordering::Relaxed);
+    OUTLINES.store(
+        match support {
+            Outlines::Untried => 0,
+            Outlines::Drawn => 1,
+            Outlines::Unavailable => 2,
+        },
+        Ordering::Relaxed,
+    );
 }
 
 impl FontSmoothing {
@@ -58,13 +65,15 @@ impl FontSmoothing {
         let outlines_out = OUTLINES.load(Ordering::Relaxed) == 2;
         let no_dual = DUAL.load(Ordering::Relaxed) == 2;
         match self {
-            FontSmoothing::WindfoilRgb if no_dual || outlines_out => {
-                SmoothingSupport::Fallback("This GPU can't blend subpixel text (dual-source blending), so it draws grayscale")
-            }
-            FontSmoothing::Slug if outlines_out => SmoothingSupport::No("Slug draws on the GPU, and this renderer can't build its shader"),
-            _ if outlines_out && self.look().is_some() => {
-                SmoothingSupport::Fallback("This renderer can't build the outline shader: the CPU fills the same coverage, and moving text scales its masks")
-            }
+            FontSmoothing::WindfoilRgb if no_dual || outlines_out => SmoothingSupport::Fallback(
+                "This GPU can't blend subpixel text (dual-source blending), so it draws grayscale",
+            ),
+            FontSmoothing::Slug if outlines_out => SmoothingSupport::No(
+                "Slug draws on the GPU, and this renderer can't build its shader",
+            ),
+            _ if outlines_out && self.look().is_some() => SmoothingSupport::Fallback(
+                "This renderer can't build the outline shader: the CPU fills the same coverage, and moving text scales its masks",
+            ),
             _ => SmoothingSupport::Yes,
         }
     }

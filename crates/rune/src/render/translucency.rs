@@ -3,18 +3,33 @@
 //! gives a translucent surface the lowest-power adapter that composites it.
 
 /// The alpha mode that composites translucent pixels on `surface` through `adapter`, if any.
-pub(crate) fn mode(surface: &wgpu::Surface<'_>, adapter: &wgpu::Adapter) -> Option<wgpu::CompositeAlphaMode> {
+pub(crate) fn mode(
+    surface: &wgpu::Surface<'_>,
+    adapter: &wgpu::Adapter,
+) -> Option<wgpu::CompositeAlphaMode> {
     let caps = surface.get_capabilities(adapter);
-    [wgpu::CompositeAlphaMode::PreMultiplied, wgpu::CompositeAlphaMode::PostMultiplied, wgpu::CompositeAlphaMode::Inherit]
-        .into_iter()
-        .find(|mode| caps.alpha_modes.contains(mode))
+    [
+        wgpu::CompositeAlphaMode::PreMultiplied,
+        wgpu::CompositeAlphaMode::PostMultiplied,
+        wgpu::CompositeAlphaMode::Inherit,
+    ]
+    .into_iter()
+    .find(|mode| caps.alpha_modes.contains(mode))
 }
 
 /// Whether `gpu` can draw `surface` with `wanted`'s features its adapter supports, and, for a
 /// `translucent` surface, composite translucent pixels on it.
-pub(crate) fn serves(gpu: &crate::render::Gpu, surface: &wgpu::Surface<'_>, wanted: wgpu::Features, translucent: bool) -> bool {
+pub(crate) fn serves(
+    gpu: &crate::render::Gpu,
+    surface: &wgpu::Surface<'_>,
+    wanted: wgpu::Features,
+    translucent: bool,
+) -> bool {
     gpu.adapter.is_surface_supported(surface)
-        && gpu.device.features().contains(wanted & gpu.adapter.features())
+        && gpu
+            .device
+            .features()
+            .contains(wanted & gpu.adapter.features())
         && crate::gpu::backend::serves(&gpu.device, wanted)
         && (!translucent || mode(surface, &gpu.adapter).is_some())
 }
@@ -30,7 +45,11 @@ pub(crate) fn serves(gpu: &crate::render::Gpu, surface: &wgpu::Surface<'_>, want
 /// NVIDIA's Xorg refuses, and the X error lands in whichever window is next (hex#1216). The
 /// hardware adapter draws opaque there, and an X compositor still blends its ARGB window.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn prefer(instance: &wgpu::Instance, surface: &wgpu::Surface<'_>, pick: &crate::gpu::pick::Pick) -> wgpu::Adapter {
+pub(crate) fn prefer(
+    instance: &wgpu::Instance,
+    surface: &wgpu::Surface<'_>,
+    pick: &crate::gpu::pick::Pick,
+) -> wgpu::Adapter {
     if mode(surface, &pick.adapter).is_some() {
         return pick.adapter.clone();
     }
@@ -38,15 +57,22 @@ pub(crate) fn prefer(instance: &wgpu::Instance, surface: &wgpu::Surface<'_>, pic
         .into_iter()
         .filter(|candidate| {
             let info = candidate.get_info();
-            pick.shows(&info) && takes_over(pick.adapter.get_info().device_type, info.device_type)
-                && candidate.is_surface_supported(surface) && mode(surface, candidate).is_some()
+            pick.shows(&info)
+                && takes_over(pick.adapter.get_info().device_type, info.device_type)
+                && candidate.is_surface_supported(surface)
+                && mode(surface, candidate).is_some()
         })
         .collect();
     able.sort_by_key(|candidate| {
         let info = candidate.get_info();
-        (!pick.on_compositor_device(&info), crate::gpu::pick::power_rank(info.device_type))
+        (
+            !pick.on_compositor_device(&info),
+            crate::gpu::pick::power_rank(info.device_type),
+        )
     });
-    able.into_iter().next().unwrap_or_else(|| pick.adapter.clone())
+    able.into_iter()
+        .next()
+        .unwrap_or_else(|| pick.adapter.clone())
 }
 
 /// Whether an adapter of type `candidate` may draw a translucent surface in place of `pick`'s:

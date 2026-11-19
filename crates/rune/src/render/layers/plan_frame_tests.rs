@@ -6,18 +6,46 @@ use super::*;
 
 /// A group that needs a target of its own: half-opaque, and blurred when `sigma` is not zero.
 fn group(bounds: [f32; 4], sigma: f32) -> Vec<Instance> {
-    vec![Instance::begin_layer(bounds, NO_CLIP, LayerSpec { opacity: 0.5, blur: sigma, ..Default::default() }),
-        rect(bounds, [1.0; 4]), Instance::end_layer()]
+    vec![
+        Instance::begin_layer(
+            bounds,
+            NO_CLIP,
+            LayerSpec {
+                opacity: 0.5,
+                blur: sigma,
+                ..Default::default()
+            },
+        ),
+        rect(bounds, [1.0; 4]),
+        Instance::end_layer(),
+    ]
 }
 
 /// 1,024 small groups, each with a target of its own.
 fn burst() -> Vec<Instance> {
-    (0..1024).flat_map(|index| group([(index % 32) as f32 * 8.0, (index / 32) as f32 * 8.0, 8.0, 8.0], 0.0)).collect()
+    (0..1024)
+        .flat_map(|index| {
+            group(
+                [
+                    (index % 32) as f32 * 8.0,
+                    (index / 32) as f32 * 8.0,
+                    8.0,
+                    8.0,
+                ],
+                0.0,
+            )
+        })
+        .collect()
 }
 
 /// Whether every one of the plan's scratch buffers holds no more than an ordinary frame keeps.
 fn warm_sized(renderer: &Renderer) -> bool {
-    renderer.layers.planner.capacities().iter().all(|&capacity| capacity <= 64)
+    renderer
+        .layers
+        .planner
+        .capacities()
+        .iter()
+        .all(|&capacity| capacity <= 64)
 }
 
 /// A frame with no layers draws nothing, so it must plan nothing: dev walked no target and no layer
@@ -28,16 +56,27 @@ fn a_layerless_frame_plans_nothing() {
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let mut atlas = crate::text::TextSystem::default().atlas;
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &burst(), (256, 256));
-    assert_eq!(renderer.layer_stats().targets, 1024, "a frame's worth of layers, every one with a target");
+    assert_eq!(
+        renderer.layer_stats().targets,
+        1024,
+        "a frame's worth of layers, every one with a target"
+    );
 
     // They close: their targets stay parked for the next layer of their size, and the plan's own
     // buffers must not be left behind at a burst's size for every frame after them.
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (256, 256));
     let stats = renderer.layer_stats();
-    assert_eq!((stats.targets, stats.bytes, stats.extra_passes), (0, 0, 0), "nothing is drawn");
+    assert_eq!(
+        (stats.targets, stats.bytes, stats.extra_passes),
+        (0, 0, 0),
+        "nothing is drawn"
+    );
     assert!(renderer.layers.planner.dispositions.is_empty());
     assert!(renderer.layers.planner.moves.is_empty());
-    assert!(warm_sized(&renderer), "a burst's planning buffers go with it");
+    assert!(
+        warm_sized(&renderer),
+        "a burst's planning buffers go with it"
+    );
 }
 
 /// One layer left of a burst keeps its own target, which still fits: dev never looked at the spare
@@ -52,9 +91,19 @@ fn one_layer_left_of_a_burst_reads_no_spare() {
     let visits = renderer.layers.planner.parked.visits;
     for frame in 0..4 {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &burst[..3], (256, 256));
-        assert_eq!(renderer.layers.spare.len(), 1023, "the burst's other targets are parked");
-        assert_eq!(renderer.layers.planner.parked.visits, visits, "frame {frame} read a spare");
-        assert!(warm_sized(&renderer), "a burst's planning buffers go once it ends");
+        assert_eq!(
+            renderer.layers.spare.len(),
+            1023,
+            "the burst's other targets are parked"
+        );
+        assert_eq!(
+            renderer.layers.planner.parked.visits, visits,
+            "frame {frame} read a spare"
+        );
+        assert!(
+            warm_sized(&renderer),
+            "a burst's planning buffers go once it ends"
+        );
     }
 }
 
@@ -70,26 +119,43 @@ fn a_warm_menu_opens_and_closes_without_allocating() {
     for instances in [&menu[..], &[], &menu[..]] {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, instances, (64, 64));
     }
-    let (warm, allocations) = (renderer.layers.planner.capacities(), renderer.layer_stats().allocations);
+    let (warm, allocations) = (
+        renderer.layers.planner.capacities(),
+        renderer.layer_stats().allocations,
+    );
     for toggle in 0..4 {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-        assert_eq!(renderer.layers.planner.capacities(), warm, "closing {toggle}");
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "closing {toggle}"
+        );
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &menu, (64, 64));
-        assert_eq!(renderer.layers.planner.capacities(), warm, "opening {toggle}");
-        assert_eq!(renderer.layer_stats().allocations, allocations, "opening {toggle} made a target");
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "opening {toggle}"
+        );
+        assert_eq!(
+            renderer.layer_stats().allocations,
+            allocations,
+            "opening {toggle} made a target"
+        );
     }
 }
 
 /// A list's cached rows (`El::cache`, one node a row), 64×16 each, the first `count` of them.
 fn rows(count: u64) -> Vec<Instance> {
-    (0..count).flat_map(|row| {
-        let bounds = [0.0, row as f32 * 16.0, 64.0, 16.0];
-        let mut scope = Instance::begin_layer(bounds, NO_CLIP, LayerSpec::default());
-        scope.params[3] = 1.0;
-        scope.radii = pack_u64_f32(row);
-        scope.uv = pack_u64_f32(1);
-        [scope, rect(bounds, [1.0; 4]), Instance::end_layer()]
-    }).collect()
+    (0..count)
+        .flat_map(|row| {
+            let bounds = [0.0, row as f32 * 16.0, 64.0, 16.0];
+            let mut scope = Instance::begin_layer(bounds, NO_CLIP, LayerSpec::default());
+            scope.params[3] = 1.0;
+            scope.radii = pack_u64_f32(row);
+            scope.uv = pack_u64_f32(1);
+            [scope, rect(bounds, [1.0; 4]), Instance::end_layer()]
+        })
+        .collect()
 }
 
 /// A list of 160 cached rows, 13 and then 12 of them showing by turns: the pool keeps every row,
@@ -103,15 +169,40 @@ fn a_list_showing_twelve_and_thirteen_cached_rows_by_turns_allocates_nothing() {
     for instances in [&all, &thirteen, &twelve, &thirteen, &twelve] {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, instances, (64, 2560));
     }
-    assert_eq!(renderer.layers.retained.len(), 148, "every row the list doesn't show is kept");
-    let (warm, allocations) = (renderer.layers.planner.capacities(), renderer.layer_stats().allocations);
+    assert_eq!(
+        renderer.layers.retained.len(),
+        148,
+        "every row the list doesn't show is kept"
+    );
+    let (warm, allocations) = (
+        renderer.layers.planner.capacities(),
+        renderer.layer_stats().allocations,
+    );
     for turn in 0..4 {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &thirteen, (64, 2560));
-        assert!(matches!(renderer.layers.planner.dispositions[12], Disposition::Cached { .. }), "the thirteenth row is a hit");
-        assert_eq!(renderer.layers.planner.capacities(), warm, "thirteen rows, turn {turn}");
+        assert!(
+            matches!(
+                renderer.layers.planner.dispositions[12],
+                Disposition::Cached { .. }
+            ),
+            "the thirteenth row is a hit"
+        );
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "thirteen rows, turn {turn}"
+        );
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &twelve, (64, 2560));
-        assert_eq!(renderer.layers.planner.capacities(), warm, "twelve rows, turn {turn}");
-        assert_eq!(renderer.layer_stats().allocations, allocations, "turn {turn} made a target");
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "twelve rows, turn {turn}"
+        );
+        assert_eq!(
+            renderer.layer_stats().allocations,
+            allocations,
+            "turn {turn} made a target"
+        );
     }
 }
 
@@ -127,14 +218,33 @@ fn a_menu_after_a_burst_opens_and_closes_without_allocating() {
     for instances in [&burst[..], &[], menu, &[], menu] {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, instances, (256, 256));
     }
-    let (warm, allocations) = (renderer.layers.planner.capacities(), renderer.layer_stats().allocations);
+    let (warm, allocations) = (
+        renderer.layers.planner.capacities(),
+        renderer.layer_stats().allocations,
+    );
     for toggle in 0..4 {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (256, 256));
-        assert_eq!(renderer.layers.spare.len(), 1024, "the burst's targets are all parked");
-        assert_eq!(renderer.layers.planner.capacities(), warm, "closing {toggle}");
+        assert_eq!(
+            renderer.layers.spare.len(),
+            1024,
+            "the burst's targets are all parked"
+        );
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "closing {toggle}"
+        );
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, menu, (256, 256));
-        assert_eq!(renderer.layers.planner.capacities(), warm, "opening {toggle}");
-        assert_eq!(renderer.layer_stats().allocations, allocations, "opening {toggle} made a target");
+        assert_eq!(
+            renderer.layers.planner.capacities(),
+            warm,
+            "opening {toggle}"
+        );
+        assert_eq!(
+            renderer.layer_stats().allocations,
+            allocations,
+            "opening {toggle} made a target"
+        );
     }
 }
 
@@ -144,12 +254,24 @@ fn an_empty_frame_after_an_empty_frame_does_nothing() {
     let gpu = Gpu::headless();
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let mut atlas = crate::text::TextSystem::default().atlas;
-    renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &group([4.0, 4.0, 40.0, 24.0], 0.0), (64, 64));
+    renderer.prepare(
+        &gpu.device,
+        &gpu.queue,
+        &mut atlas,
+        &group([4.0, 4.0, 40.0, 24.0], 0.0),
+        (64, 64),
+    );
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-    assert_eq!(renderer.layers.planner.settles, 1, "the frame the menu closed on");
+    assert_eq!(
+        renderer.layers.planner.settles, 1,
+        "the frame the menu closed on"
+    );
     for frame in 0..3 {
         renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-        assert_eq!(renderer.layers.planner.settles, 1, "empty frame {frame} tidied the plan");
+        assert_eq!(
+            renderer.layers.planner.settles, 1,
+            "empty frame {frame} tidied the plan"
+        );
     }
 }
 
@@ -162,13 +284,33 @@ fn a_frame_never_holds_more_layer_textures_than_dev() {
     let mut renderer = Renderer::new(&gpu.device, OFFSCREEN_FORMAT);
     let mut atlas = crate::text::TextSystem::default().atlas;
     let (one, two) = ([4.0, 4.0, 2000.0, 2000.0], [8.0, 8.0, 2000.0, 2000.0]);
-    renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &group(one, 1.0), (2048, 2048));
-    assert_eq!(renderer.layers.peak_bytes(), 64 << 20, "the layer's texture and its blur scratch");
+    renderer.prepare(
+        &gpu.device,
+        &gpu.queue,
+        &mut atlas,
+        &group(one, 1.0),
+        (2048, 2048),
+    );
+    assert_eq!(
+        renderer.layers.peak_bytes(),
+        64 << 20,
+        "the layer's texture and its blur scratch"
+    );
 
     // It stops blurring while a sibling appears: its scratch is released before the sibling's
     // texture is made, as dev released it in the same layer's own step.
     let mut instances = group(one, 0.0);
     instances.extend(group(two, 0.0));
-    renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &instances, (2048, 2048));
-    assert_eq!(renderer.layers.peak_bytes(), 64 << 20, "two textures, with the scratch already gone");
+    renderer.prepare(
+        &gpu.device,
+        &gpu.queue,
+        &mut atlas,
+        &instances,
+        (2048, 2048),
+    );
+    assert_eq!(
+        renderer.layers.peak_bytes(),
+        64 << 20,
+        "two textures, with the scratch already gone"
+    );
 }

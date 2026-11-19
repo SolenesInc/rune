@@ -44,7 +44,9 @@ impl Pick {
 
     /// Whether `info` is an adapter on the compositor's device.
     pub fn on_compositor_device(&self, info: &wgpu::AdapterInfo) -> bool {
-        self.compositor.as_deref().is_some_and(|pci| same_pci(pci, &info.device_pci_bus_id))
+        self.compositor
+            .as_deref()
+            .is_some_and(|pci| same_pci(pci, &info.device_pci_bus_id))
     }
 
     /// Whether the compositor can show `info`'s buffers: any adapter's when it named no device,
@@ -60,7 +62,10 @@ fn shows(compositor: Option<&str>, pci: &str) -> bool {
 }
 
 /// The adapter for `surface` (or for offscreen work without one), by the order in the module docs.
-pub(crate) fn pick(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>>) -> Result<Pick, String> {
+pub(crate) fn pick(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+) -> Result<Pick, String> {
     let usable = |adapter: &wgpu::Adapter| surface.is_none_or(|s| adapter.is_surface_supported(s));
     let compositor = compositor_pci();
     let mut enumerated = None;
@@ -70,28 +75,75 @@ pub(crate) fn pick(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>
         let found = by_name(&name, &infos);
         enumerated = Some(infos.len());
         match found {
-            Some(index) => return Ok(log(Pick { adapter: adapters.into_iter().nth(index).expect("index from this list"), reason: Reason::EnvName, compositor }, enumerated)),
-            None => eprintln!("rune: no GPU adapter matches WGPU_ADAPTER_NAME={name:?}; choosing as usual"),
+            Some(index) => {
+                return Ok(log(
+                    Pick {
+                        adapter: adapters
+                            .into_iter()
+                            .nth(index)
+                            .expect("index from this list"),
+                        reason: Reason::EnvName,
+                        compositor,
+                    },
+                    enumerated,
+                ));
+            }
+            None => eprintln!(
+                "rune: no GPU adapter matches WGPU_ADAPTER_NAME={name:?}; choosing as usual"
+            ),
         }
     }
     if let Some(power) = wgpu::PowerPreference::from_env() {
         let adapter = request(instance, surface, power)?;
-        return Ok(log(Pick { adapter, reason: Reason::EnvPower, compositor }, enumerated));
+        return Ok(log(
+            Pick {
+                adapter,
+                reason: Reason::EnvPower,
+                compositor,
+            },
+            enumerated,
+        ));
     }
     if let Some(pci) = compositor.as_deref() {
         let adapters = pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
         let infos: Vec<_> = adapters.iter().map(|a| (a.get_info(), usable(a))).collect();
-        enumerated = Some(infos.iter().filter(|(info, _)| info.device_type != wgpu::DeviceType::Cpu).count());
+        enumerated = Some(
+            infos
+                .iter()
+                .filter(|(info, _)| info.device_type != wgpu::DeviceType::Cpu)
+                .count(),
+        );
         if let Some(index) = by_pci(pci, &infos) {
-            let adapter = adapters.into_iter().nth(index).expect("index from this list");
-            return Ok(log(Pick { adapter, reason: Reason::Compositor, compositor }, enumerated));
+            let adapter = adapters
+                .into_iter()
+                .nth(index)
+                .expect("index from this list");
+            return Ok(log(
+                Pick {
+                    adapter,
+                    reason: Reason::Compositor,
+                    compositor,
+                },
+                enumerated,
+            ));
         }
     }
     let adapter = request(instance, surface, wgpu::PowerPreference::LowPower)?;
-    Ok(log(Pick { adapter, reason: Reason::LowPower, compositor }, enumerated))
+    Ok(log(
+        Pick {
+            adapter,
+            reason: Reason::LowPower,
+            compositor,
+        },
+        enumerated,
+    ))
 }
 
-fn request(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, power_preference: wgpu::PowerPreference) -> Result<wgpu::Adapter, String> {
+fn request(
+    instance: &wgpu::Instance,
+    surface: Option<&wgpu::Surface<'_>>,
+    power_preference: wgpu::PowerPreference,
+) -> Result<wgpu::Adapter, String> {
     pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference,
         force_fallback_adapter: false,
@@ -104,13 +156,20 @@ fn request(instance: &wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, power
 /// The first usable adapter whose name contains `name`, ignoring case.
 fn by_name(name: &str, adapters: &[(wgpu::AdapterInfo, bool)]) -> Option<usize> {
     let name = name.to_lowercase();
-    adapters.iter().position(|(info, usable)| *usable && info.name.to_lowercase().contains(&name))
+    adapters
+        .iter()
+        .position(|(info, usable)| *usable && info.name.to_lowercase().contains(&name))
 }
 
 /// The usable adapter on PCI device `pci`, Vulkan first.
 fn by_pci(pci: &str, adapters: &[(wgpu::AdapterInfo, bool)]) -> Option<usize> {
-    let on = |(info, usable): &(wgpu::AdapterInfo, bool)| *usable && same_pci(pci, &info.device_pci_bus_id);
-    adapters.iter().position(|a| on(a) && a.0.backend == wgpu::Backend::Vulkan).or_else(|| adapters.iter().position(on))
+    let on = |(info, usable): &(wgpu::AdapterInfo, bool)| {
+        *usable && same_pci(pci, &info.device_pci_bus_id)
+    };
+    adapters
+        .iter()
+        .position(|a| on(a) && a.0.backend == wgpu::Backend::Vulkan)
+        .or_else(|| adapters.iter().position(on))
 }
 
 /// `PowerPreference::LowPower`'s order; a software adapter comes last.
@@ -130,12 +189,28 @@ fn same_pci(a: &str, b: &str) -> bool {
 
 fn log(pick: Pick, adapters: Option<usize>) -> Pick {
     static ONCE: std::sync::Once = std::sync::Once::new();
-    if std::env::var_os("RUNE_GPU_LOG").is_some_and(|v| v != "0") || adapters.is_some_and(|n| n > 1) {
+    if std::env::var_os("RUNE_GPU_LOG").is_some_and(|v| v != "0") || adapters.is_some_and(|n| n > 1)
+    {
         ONCE.call_once(|| {
             let info = pick.adapter.get_info();
-            let pci = if info.device_pci_bus_id.is_empty() { String::new() } else { format!(", {}", info.device_pci_bus_id) };
-            let compositor = pick.compositor.as_deref().map(|c| format!("; compositor on {c}")).unwrap_or_default();
-            eprintln!("rune: GPU {:?} ({}; {:?}, {:?}{pci}): {}{compositor}", info.name, crate::gpu::backend::label(&pick.adapter), info.backend, info.device_type, pick.reason.describe());
+            let pci = if info.device_pci_bus_id.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", info.device_pci_bus_id)
+            };
+            let compositor = pick
+                .compositor
+                .as_deref()
+                .map(|c| format!("; compositor on {c}"))
+                .unwrap_or_default();
+            eprintln!(
+                "rune: GPU {:?} ({}; {:?}, {:?}{pci}): {}{compositor}",
+                info.name,
+                crate::gpu::backend::label(&pick.adapter),
+                info.backend,
+                info.device_type,
+                pick.reason.describe()
+            );
         });
     }
     pick
@@ -188,7 +263,9 @@ mod dmabuf {
     use wayland_client::globals::{GlobalListContents, registry_queue_init};
     use wayland_client::protocol::wl_registry::WlRegistry;
     use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
-    use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_feedback_v1::{self, ZwpLinuxDmabufFeedbackV1};
+    use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_feedback_v1::{
+        self, ZwpLinuxDmabufFeedbackV1,
+    };
     use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1;
 
     #[derive(Default)]
@@ -198,17 +275,42 @@ mod dmabuf {
     }
 
     impl Dispatch<WlRegistry, GlobalListContents> for State {
-        fn event(_: &mut Self, _: &WlRegistry, _: <WlRegistry as Proxy>::Event, _: &GlobalListContents, _: &Connection, _: &QueueHandle<Self>) {}
+        fn event(
+            _: &mut Self,
+            _: &WlRegistry,
+            _: <WlRegistry as Proxy>::Event,
+            _: &GlobalListContents,
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
+        }
     }
 
     impl Dispatch<ZwpLinuxDmabufV1, ()> for State {
-        fn event(_: &mut Self, _: &ZwpLinuxDmabufV1, _: <ZwpLinuxDmabufV1 as Proxy>::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {}
+        fn event(
+            _: &mut Self,
+            _: &ZwpLinuxDmabufV1,
+            _: <ZwpLinuxDmabufV1 as Proxy>::Event,
+            _: &(),
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
+        }
     }
 
     impl Dispatch<ZwpLinuxDmabufFeedbackV1, ()> for State {
-        fn event(state: &mut Self, _: &ZwpLinuxDmabufFeedbackV1, event: zwp_linux_dmabuf_feedback_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {
+        fn event(
+            state: &mut Self,
+            _: &ZwpLinuxDmabufFeedbackV1,
+            event: zwp_linux_dmabuf_feedback_v1::Event,
+            _: &(),
+            _: &Connection,
+            _: &QueueHandle<Self>,
+        ) {
             match event {
-                zwp_linux_dmabuf_feedback_v1::Event::MainDevice { device } => state.main = Some(device),
+                zwp_linux_dmabuf_feedback_v1::Event::MainDevice { device } => {
+                    state.main = Some(device)
+                }
                 zwp_linux_dmabuf_feedback_v1::Event::Done => state.done = true,
                 _ => {}
             }
@@ -222,11 +324,15 @@ mod dmabuf {
         std::env::var_os("WAYLAND_DISPLAY")?;
         let conn = Connection::connect_to_env().ok()?;
         let (globals, mut queue) = registry_queue_init::<State>(&conn).ok()?;
-        let dmabuf = globals.bind::<ZwpLinuxDmabufV1, _, _>(&queue.handle(), 4..=5, ()).ok()?;
+        let dmabuf = globals
+            .bind::<ZwpLinuxDmabufV1, _, _>(&queue.handle(), 4..=5, ())
+            .ok()?;
         let feedback = dmabuf.get_default_feedback(&queue.handle(), ());
         let mut state = State::default();
         for _ in 0..4 {
-            if state.done { break; }
+            if state.done {
+                break;
+            }
             queue.roundtrip(&mut state).ok()?;
         }
         feedback.destroy();

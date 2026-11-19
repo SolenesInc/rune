@@ -64,8 +64,13 @@ impl Residency {
                 Effects::none()
             }
             // The rows hold the CPU copy's zeros over its texels (and their one-texel border).
-            (Residency::Filled(g, f), ResidencyEvent::RowsUploaded { page, rows: (y0, y1) })
-                if g.page == page && g.y < y1 + 1 && g.y + g.h + 1 > y0 => {
+            (
+                Residency::Filled(g, f),
+                ResidencyEvent::RowsUploaded {
+                    page,
+                    rows: (y0, y1),
+                },
+            ) if g.page == page && g.y < y1 + 1 && g.y + g.h + 1 > y0 => {
                 *self = Residency::Pending(g, f);
                 Effects::one(ResidencyEffect::Queue)
             }
@@ -98,16 +103,37 @@ pub struct QueuedFill {
 impl Atlas {
     /// Room for a `w`×`h` mask the GPU fills, with zeros in the CPU copy under it so a later row
     /// upload doesn't bring back an older mask; queued for the renderer.
-    pub(super) fn reserve(&mut self, key: GlyphKey, w: u32, h: u32, left: i32, top: i32, fill: Fill) -> Option<AtlasGlyph> {
+    pub(super) fn reserve(
+        &mut self,
+        key: GlyphKey,
+        w: u32,
+        h: u32,
+        left: i32,
+        top: i32,
+        fill: Fill,
+    ) -> Option<AtlasGlyph> {
         let (page, ax, ay) = self.alloc(w, h)?;
-        let data = if page == 0 { &mut self.data } else { &mut self.pages[page - 1].data };
+        let data = if page == 0 {
+            &mut self.data
+        } else {
+            &mut self.pages[page - 1].data
+        };
         for row in ay - 1..ay + h + 1 {
             let line = row as usize * ATLAS_SIZE as usize;
             data[line + ax as usize - 1..line + (ax + w + 1) as usize].fill(0);
         }
         self.rasterized += 1;
         self.touch(page as u16, w * h);
-        let g = AtlasGlyph { page: page as u16, x: ax, y: ay, w, h, left, top, lcd: fill.coverage == 3 };
+        let g = AtlasGlyph {
+            page: page as u16,
+            x: ax,
+            y: ay,
+            w,
+            h,
+            left,
+            top,
+            lcd: fill.coverage == 3,
+        };
         self.map.insert(key, Residency::Pending(g, fill));
         self.queue(page, key);
         crate::marks::add("text.gpu_fills", 1);
@@ -123,12 +149,23 @@ impl Atlas {
 
     /// Steps every entry on `page` with `event`, queueing those it asks to.
     pub(crate) fn rows_uploaded(&mut self, page: usize, rows: (u32, u32)) {
-        let event = ResidencyEvent::RowsUploaded { page: page as u16, rows };
+        let event = ResidencyEvent::RowsUploaded {
+            page: page as u16,
+            rows,
+        };
         let mut queued = Vec::new();
         for (key, entry) in self.map.iter_mut() {
-            if entry.step(event).into_iter().any(|e| e == ResidencyEffect::Queue) { queued.push(*key); }
+            if entry
+                .step(event)
+                .into_iter()
+                .any(|e| e == ResidencyEffect::Queue)
+            {
+                queued.push(*key);
+            }
         }
-        for key in queued { self.queue(page, key); }
+        for key in queued {
+            self.queue(page, key);
+        }
     }
 
     /// Each page's queued fills, stepped as run: the renderer draws them before the frame.
@@ -148,13 +185,22 @@ impl Atlas {
             let mut fills = Vec::with_capacity(keys.len());
             for key in keys {
                 // A key whose page went since may live on another page now, queued there.
-                let Some(entry) = self.map.get_mut(&key) else { continue };
-                if let Residency::Pending(g, fill) = *entry && g.page as usize == page {
-                    fills.push(QueuedFill { rect: [g.x, g.y, g.w, g.h], fill });
+                let Some(entry) = self.map.get_mut(&key) else {
+                    continue;
+                };
+                if let Residency::Pending(g, fill) = *entry
+                    && g.page as usize == page
+                {
+                    fills.push(QueuedFill {
+                        rect: [g.x, g.y, g.w, g.h],
+                        fill,
+                    });
                     let _ = entry.step(ran);
                 }
             }
-            if !fills.is_empty() { out.push((page, fills)); }
+            if !fills.is_empty() {
+                out.push((page, fills));
+            }
         }
         #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
         super::fill_bench::record(&self.outlines, &out);
@@ -174,14 +220,24 @@ impl Atlas {
     /// Every mask the GPU filled, by page, with the bytes `outline::fill_mask` gives for it:
     /// what a CPU fill of the same mask writes (`Renderer::fill_drift` compares the two).
     pub(crate) fn gpu_fills(&self) -> Vec<(u16, [u32; 4], Vec<u8>)> {
-        self.map.values().filter_map(|r| match *r {
-            Residency::Filled(g, fill) => {
-                let mut bytes = Vec::with_capacity((g.w * g.h) as usize);
-                super::outline::fill_mask(&self.outlines, &fill, [g.x, g.y], g.w, g.h, &mut bytes);
-                Some((g.page, [g.x, g.y, g.w, g.h], bytes))
-            }
-            _ => None,
-        }).collect()
+        self.map
+            .values()
+            .filter_map(|r| match *r {
+                Residency::Filled(g, fill) => {
+                    let mut bytes = Vec::with_capacity((g.w * g.h) as usize);
+                    super::outline::fill_mask(
+                        &self.outlines,
+                        &fill,
+                        [g.x, g.y],
+                        g.w,
+                        g.h,
+                        &mut bytes,
+                    );
+                    Some((g.page, [g.x, g.y, g.w, g.h], bytes))
+                }
+                _ => None,
+            })
+            .collect()
     }
 }
 
@@ -190,10 +246,20 @@ impl Atlas {
     /// (`fill_bench`). A measurement for the CPU renderer's first frame, not a fill.
     #[doc(hidden)]
     pub fn fill_set(&self) -> super::fill_bench::FillSet {
-        let fills = self.map.values().filter_map(|r| match *r {
-            Residency::Filled(g, fill) | Residency::Pending(g, fill) => Some(QueuedFill { rect: [g.x, g.y, g.w, g.h], fill }),
-            _ => None,
-        }).collect();
-        super::fill_bench::FillSet::new(super::outline::OutlineStore::from_texels(self.outlines.used_texels().to_vec()), fills)
+        let fills = self
+            .map
+            .values()
+            .filter_map(|r| match *r {
+                Residency::Filled(g, fill) | Residency::Pending(g, fill) => Some(QueuedFill {
+                    rect: [g.x, g.y, g.w, g.h],
+                    fill,
+                }),
+                _ => None,
+            })
+            .collect();
+        super::fill_bench::FillSet::new(
+            super::outline::OutlineStore::from_texels(self.outlines.used_texels().to_vec()),
+            fills,
+        )
     }
 }

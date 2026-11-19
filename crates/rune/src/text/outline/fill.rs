@@ -25,7 +25,14 @@ use crate::text::atlas_fill::{Fill, QueuedFill};
 /// takes what the integral would give there (a constant right of it, nothing left of it), with a
 /// margin far wider than the integral's rounding. The integral runs only where a lane's texel
 /// meets a piece's stretch.
-pub(crate) fn fill_mask(store: &OutlineStore, fill: &Fill, at: [u32; 2], w: u32, h: u32, out: &mut Vec<u8>) {
+pub(crate) fn fill_mask(
+    store: &OutlineStore,
+    fill: &Fill,
+    at: [u32; 2],
+    w: u32,
+    h: u32,
+    out: &mut Vec<u8>,
+) {
     SCRATCH.with_borrow_mut(|s| {
         rows_in::<F4>(s, store, fill, at[1], h);
         texels_in::<F4>(s, fill.coverage, fill.pen[0], at[0], w, h, out, None);
@@ -37,11 +44,23 @@ pub(crate) fn fill_mask(store: &OutlineStore, fill: &Fill, at: [u32; 2], w: u32,
 /// drawn at several x phases is one group; only its texels' x differ.
 pub(crate) fn share_rows(fills: &[QueuedFill]) -> Vec<Vec<u32>> {
     let mut groups: Vec<Vec<u32>> = Vec::new();
-    let mut index: std::collections::HashMap<[u32; 7], usize> = std::collections::HashMap::with_capacity(fills.len());
+    let mut index: std::collections::HashMap<[u32; 7], usize> =
+        std::collections::HashMap::with_capacity(fills.len());
     for (i, q) in fills.iter().enumerate() {
         let f = &q.fill;
-        let key = [f.record, f.hint, f.scale.to_bits(), f.radius.to_bits(), f.coverage, q.rect[3], f.pen[1].to_bits()];
-        let k = *index.entry(key).or_insert_with(|| { groups.push(Vec::new()); groups.len() - 1 });
+        let key = [
+            f.record,
+            f.hint,
+            f.scale.to_bits(),
+            f.radius.to_bits(),
+            f.coverage,
+            q.rect[3],
+            f.pen[1].to_bits(),
+        ];
+        let k = *index.entry(key).or_insert_with(|| {
+            groups.push(Vec::new());
+            groups.len() - 1
+        });
         groups[k].push(i as u32);
     }
     groups
@@ -50,21 +69,40 @@ pub(crate) fn share_rows(fills: &[QueuedFill]) -> Vec<Vec<u32>> {
 /// Fills one group of [`share_rows`] (`group` indexes `fills`), each mask into its `outs` entry
 /// (cleared first): the rows once, then each mask's texels. A mask whose rows land elsewhere
 /// (its pen y rounds otherwise on its page) takes rows of its own.
-pub(crate) fn fill_shared<L: Lanes>(store: &OutlineStore, fills: &[QueuedFill], group: &[u32], outs: &mut [Vec<u8>], mut census: Option<&mut Census>) {
+pub(crate) fn fill_shared<L: Lanes>(
+    store: &OutlineStore,
+    fills: &[QueuedFill],
+    group: &[u32],
+    outs: &mut [Vec<u8>],
+    mut census: Option<&mut Census>,
+) {
     SCRATCH.with_borrow_mut(|s| {
         let mut rows_for: Option<usize> = None;
         for (&i, out) in group.iter().zip(outs.iter_mut()) {
             let q = &fills[i as usize];
             let [x, y, w, h] = q.rect;
             let pen_y = y as f32 + q.fill.pen[1];
-            let same = rows_for.is_some() && (0..h).all(|row| pen_y - ((y + row) as f32 + 0.5) == s.ly[row as usize]);
+            let same = rows_for.is_some()
+                && (0..h).all(|row| pen_y - ((y + row) as f32 + 0.5) == s.ly[row as usize]);
             if !same {
                 rows_in::<L>(s, store, &q.fill, y, h);
                 rows_for = Some(i as usize);
-                if let Some(c) = census.as_deref_mut() { c.pieces += s.pieces.len() as u64; c.row_sets += 1; }
+                if let Some(c) = census.as_deref_mut() {
+                    c.pieces += s.pieces.len() as u64;
+                    c.row_sets += 1;
+                }
             }
             out.clear();
-            texels_in::<L>(s, q.fill.coverage, q.fill.pen[0], x, w, h, out, census.as_deref_mut());
+            texels_in::<L>(
+                s,
+                q.fill.coverage,
+                q.fill.pen[0],
+                x,
+                w,
+                h,
+                out,
+                census.as_deref_mut(),
+            );
         }
     });
 }
@@ -113,21 +151,48 @@ struct Scratch {
 
 /// An integral to take: its slot and lane, its row piece, and the texel's x.
 #[derive(Clone, Copy)]
-struct Job { slot: u32, lane: u8, row: u32, lx: f32 }
+struct Job {
+    slot: u32,
+    lane: u8,
+    row: u32,
+    lx: f32,
+}
 
 /// A piece of one band, moved and hinted once for the whole mask (the same arithmetic the shader
 /// does per pixel): its points, its band's moved edges, its y and x extent, whether its x is
 /// monotone (dilation moves its end from its control point, which can bend it back), and the
 /// rows whose box its y extent reaches.
-struct Piece { band: u32, p: [[f32; 2]; 3], be: [f32; 2], connector: bool, x: [f32; 2], monotone_x: bool, rows: [u32; 2] }
+struct Piece {
+    band: u32,
+    p: [[f32; 2]; 3],
+    be: [f32; 2],
+    connector: bool,
+    x: [f32; 2],
+    monotone_x: bool,
+    rows: [u32; 2],
+}
 
 /// A piece in a row, before its y lanes: the row, its points' y from the row's centre, the y
 /// bounds it's weighed between, the box's bounds in its band, and the lanes once taken.
-struct Cand { piece: u32, row: u32, q: [f32; 3], lo: f32, hi: f32, w: [f32; 2], ty: [f32; 2] }
+struct Cand {
+    piece: u32,
+    row: u32,
+    q: [f32; 3],
+    lo: f32,
+    hi: f32,
+    w: [f32; 2],
+    ty: [f32; 2],
+}
 
 /// A piece within one row: its y lanes, the constant it adds right of a texel, its x extent and
 /// points, and its stretch between the row's y crossings.
-struct Row { ty: [f32; 2], right: f32, x: [f32; 2], p: [[f32; 2]; 3], stretch: Stretch }
+struct Row {
+    ty: [f32; 2],
+    right: f32,
+    x: [f32; 2],
+    p: [[f32; 2]; 3],
+    stretch: Stretch,
+}
 
 #[derive(Clone, Copy)]
 enum Stretch {
@@ -149,24 +214,35 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
     let pen_y = at_y as f32 + fill.pen[1];
     let head = t(rec);
     let (count, y0, inv_h) = (head[1], f(head[2]), f(head[3]));
-    let hint = (fill.hint != 0).then(|| [t(fill.hint), t(fill.hint + 1), t(fill.hint + 2)].map(|v| v.map(f)));
+    let hint = (fill.hint != 0)
+        .then(|| [t(fill.hint), t(fill.hint + 1), t(fill.hint + 2)].map(|v| v.map(f)));
     let hy = |y: f32| hint.map_or(y, |[a, b, c]| hint_y(y, a, b, c));
-    let reach = if hint.is_some() { super::HINT_REACH } else { 0.0 };
-    // The bands the mask's rows reach, as the shader picks them per pixel.
-    let row_bands = |ly: f32| if count > 1 {
-        let last = (count - 1) as f32;
-        let band = |u: f32| ((u / scale - y0) * inv_h).floor().clamp(0.0, last) as u32;
-        (band(ly - hw - 2.0 * r - reach), band(ly + hw + reach))
+    let reach = if hint.is_some() {
+        super::HINT_REACH
     } else {
-        (0, 0)
+        0.0
+    };
+    // The bands the mask's rows reach, as the shader picks them per pixel.
+    let row_bands = |ly: f32| {
+        if count > 1 {
+            let last = (count - 1) as f32;
+            let band = |u: f32| ((u / scale - y0) * inv_h).floor().clamp(0.0, last) as u32;
+            (band(ly - hw - 2.0 * r - reach), band(ly + hw + reach))
+        } else {
+            (0, 0)
+        }
     };
     let ly_of = |row: u32| pen_y - ((at_y + row) as f32 + 0.5);
     // The first row from which `test(y, ly)` (false, then true down the mask, as a row's y falls)
     // holds: from an estimate `near`, moved to the exact row.
     let first_row = |near: f32, test: fn(f32, f32) -> bool, y: f32| {
         let mut row = near.clamp(0.0, h as f32) as u32;
-        while row > 0 && test(y, ly_of(row - 1)) { row -= 1; }
-        while row < h && !test(y, ly_of(row)) { row += 1; }
+        while row > 0 && test(y, ly_of(row - 1)) {
+            row -= 1;
+        }
+        while row < h && !test(y, ly_of(row)) {
+            row += 1;
+        }
         row
     };
     let (first, _) = row_bands(ly_of(h.saturating_sub(1)));
@@ -175,14 +251,25 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
     // A row's y is `top - row`, near enough to start the search for a piece's rows.
     let top = pen_y - at_y as f32 - 0.5;
     for band in first..=last.max(first) {
-        let (e0, e1) = if count > 1 { ((y0 + band as f32 / inv_h) * scale, (y0 + (band + 1) as f32 / inv_h) * scale) } else { (-3.0e38, 3.0e38) };
+        let (e0, e1) = if count > 1 {
+            (
+                (y0 + band as f32 / inv_h) * scale,
+                (y0 + (band + 1) as f32 / inv_h) * scale,
+            )
+        } else {
+            (-3.0e38, 3.0e38)
+        };
         let entry = t(head[0] + band);
         for k in 0..entry[1] {
             let (t0, t1) = (t(entry[0] + 2 * k), t(entry[0] + 2 * k + 1));
             let code = t1[2];
             let (oa, ob) = (moved(code & 15, r), moved((code >> 4) & 15, r));
             let at = |x: u32, y: u32, o: [f32; 2]| [f(x) * scale + o[0], f(y) * scale + o[1]];
-            let (mut p0, mut p1, mut p2) = (at(t0[0], t0[1], oa), at(t0[2], t0[3], oa), at(t1[0], t1[1], ob));
+            let (mut p0, mut p1, mut p2) = (
+                at(t0[0], t0[1], oa),
+                at(t0[2], t0[3], oa),
+                at(t1[0], t1[1], ob),
+            );
             let be = [hy(e0 + oa[1]), hy(e1 + oa[1])];
             (p0[1], p1[1], p2[1]) = (hy(p0[1]), hy(p1[1]), hy(p2[1]));
             let connector = code & super::build::CONNECTOR != 0;
@@ -190,11 +277,26 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
                 p1 = [(p0[0] + p2[0]) * 0.5, (p0[1] + p2[1]) * 0.5];
             }
             let (ylo, yhi) = (p0[1].min(p2[1]), p0[1].max(p2[1]));
-            let y = if connector { [ylo, yhi] } else { [ylo.max(be[0]), yhi.min(be[1])] };
+            let y = if connector {
+                [ylo, yhi]
+            } else {
+                [ylo.max(be[0]), yhi.min(be[1])]
+            };
             let x = [p0[0].min(p2[0]), p0[0].max(p2[0])];
             // The rows the shader weighs it at: not wholly below a row's box, nor wholly above.
-            let rows = [first_row(top - y[1] - hw, |y, ly| y - ly > -0.5, y[1]), first_row(top - y[0] + hw, |y, ly| y - ly >= 0.5, y[0])];
-            s.pieces.push(Piece { band, p: [p0, p1, p2], be, connector, x, monotone_x: p1[0] >= x[0] && p1[0] <= x[1], rows });
+            let rows = [
+                first_row(top - y[1] - hw, |y, ly| y - ly > -0.5, y[1]),
+                first_row(top - y[0] + hw, |y, ly| y - ly >= 0.5, y[0]),
+            ];
+            s.pieces.push(Piece {
+                band,
+                p: [p0, p1, p2],
+                be,
+                connector,
+                x,
+                monotone_x: p1[0] >= x[0] && p1[0] <= x[1],
+                rows,
+            });
         }
     }
     let pieces = &s.pieces;
@@ -207,7 +309,9 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
     for (i, pc) in pieces.iter().enumerate() {
         for row in pc.rows[0]..pc.rows[1] {
             let (b0, b1) = s.bands[row as usize];
-            if pc.band < b0 || pc.band > b1 { continue; }
+            if pc.band < b0 || pc.band > b1 {
+                continue;
+            }
             let ly = ly_of(row);
             let (mut wlo, mut whi) = (-hw, hw);
             if !pc.connector {
@@ -217,8 +321,18 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
             let q = [pc.p[0][1] - ly, pc.p[1][1] - ly, pc.p[2][1] - ly];
             let lo = wlo.max(q[0].min(q[2]));
             let hi = whi.min(q[0].max(q[2]));
-            if hi <= lo { continue; }
-            s.cands.push(Cand { piece: i as u32, row, q, lo, hi, w: [wlo, whi], ty: [0.0; 2] });
+            if hi <= lo {
+                continue;
+            }
+            s.cands.push(Cand {
+                piece: i as u32,
+                row,
+                q,
+                lo,
+                hi,
+                w: [wlo, whi],
+                ty: [0.0; 2],
+            });
         }
     }
     for chunk in s.cands.chunks_mut(L::N) {
@@ -229,15 +343,27 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
         }
         let l = |n: usize| L::load(&v[n]);
         let [t0, t1] = y_lanes_on(l(0), l(1), l(2), l(3), l(4)).map(L::store);
-        for (k, c) in chunk.iter_mut().enumerate() { c.ty = [t0[k], t1[k]]; }
+        for (k, c) in chunk.iter_mut().enumerate() {
+            c.ty = [t0[k], t1[k]];
+        }
     }
     // The row pieces, row by row (a stable count by row keeps record order within each).
     s.starts.clear();
     s.starts.resize(h as usize + 2, 0);
-    for c in &s.cands { s.starts[c.row as usize + 2] += 1; }
-    for k in 1..s.starts.len() - 1 { s.starts[k + 1] += s.starts[k]; }
+    for c in &s.cands {
+        s.starts[c.row as usize + 2] += 1;
+    }
+    for k in 1..s.starts.len() - 1 {
+        s.starts[k + 1] += s.starts[k];
+    }
     s.rows.clear();
-    s.rows.extend(s.cands.iter().map(|_| Row { ty: [0.0; 2], right: 0.0, x: [0.0; 2], p: [[0.0; 2]; 3], stretch: Stretch::Empty }));
+    s.rows.extend(s.cands.iter().map(|_| Row {
+        ty: [0.0; 2],
+        right: 0.0,
+        x: [0.0; 2],
+        p: [[0.0; 2]; 3],
+        stretch: Stretch::Empty,
+    }));
     for c in &s.cands {
         let pc = &pieces[c.piece as usize];
         let ([q1y, q2y, q3y], ty) = (c.q, c.ty);
@@ -257,10 +383,20 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
             let (a2x, a1x) = (p0[0] - 2.0 * p1[0] + p2[0], 2.0 * (p1[0] - p0[0]));
             let x = |t: f32| (a2x * t + a1x) * t + p0[0];
             let (xa, xb) = (x(ty[0]), x(ty[1]));
-            Stretch::Within { lo: xa.min(xb) - MARGIN, hi: xa.max(xb) + MARGIN, right }
+            Stretch::Within {
+                lo: xa.min(xb) - MARGIN,
+                hi: xa.max(xb) + MARGIN,
+                right,
+            }
         };
         let slot = &mut s.starts[c.row as usize + 1];
-        s.rows[*slot as usize] = Row { ty, right, x: pc.x, p: pc.p, stretch };
+        s.rows[*slot as usize] = Row {
+            ty,
+            right,
+            x: pc.x,
+            p: pc.p,
+            stretch,
+        };
         *slot += 1;
     }
     // Each row's pieces by their left edge (stable: equal edges keep record order), and the
@@ -274,12 +410,18 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
         let (a, b) = (s.starts[row] as usize, s.starts[row + 1] as usize);
         let rows = &s.rows[a..b];
         for i in 0..rows.len() as u32 {
-            let at = s.by_min[a..].partition_point(|&j| rows[j as usize].x[0].total_cmp(&rows[i as usize].x[0]).is_le());
+            let at = s.by_min[a..].partition_point(|&j| {
+                rows[j as usize].x[0]
+                    .total_cmp(&rows[i as usize].x[0])
+                    .is_le()
+            });
             s.by_min.insert(a + at, i);
         }
         let base = s.tail.len();
         s.tail.resize(base + rows.len() + 1, 0.0);
-        for k in (0..rows.len()).rev() { s.tail[base + k] = s.tail[base + k + 1] + rows[s.by_min[a + k] as usize].right; }
+        for k in (0..rows.len()).rev() {
+            s.tail[base + k] = s.tail[base + k + 1] + rows[s.by_min[a + k] as usize].right;
+        }
     }
     s.ly.clear();
     s.ly.extend((0..h).map(ly_of));
@@ -288,15 +430,33 @@ fn rows_in<L: Lanes>(s: &mut Scratch, store: &OutlineStore, fill: &Fill, at_y: u
 /// A mask's texels from its rows ([`rows_in`]): `w` wide, its top-left texel at x `at_x` on its
 /// page, its pen `pen_x` texels right of that.
 #[allow(clippy::too_many_arguments)]
-fn texels_in<L: Lanes>(s: &mut Scratch, coverage: u32, pen_x: f32, at_x: u32, w: u32, h: u32, out: &mut Vec<u8>, mut census: Option<&mut Census>) {
+fn texels_in<L: Lanes>(
+    s: &mut Scratch,
+    coverage: u32,
+    pen_x: f32,
+    at_x: u32,
+    w: u32,
+    h: u32,
+    out: &mut Vec<u8>,
+    mut census: Option<&mut Census>,
+) {
     let hw = 0.5f32;
     let across = if coverage == 3 { 3.0 } else { 1.0 };
     let pen = at_x as f32 + pen_x;
     // A texel's x from the pen (x / 1 is x exactly: only a subpixel mask divides).
-    let lx_of = |col: u32| if across == 1.0 { (at_x + col) as f32 + 0.5 - pen } else { ((at_x + col) as f32 + 0.5 - pen) / across };
+    let lx_of = |col: u32| {
+        if across == 1.0 {
+            (at_x + col) as f32 + 0.5 - pen
+        } else {
+            ((at_x + col) as f32 + 0.5 - pen) / across
+        }
+    };
     let (zero, one, half) = (L::splat(0.0), L::splat(1.0), L::splat(hw));
     for row in 0..h {
-        let (a, b) = (s.starts[row as usize] as usize, s.starts[row as usize + 1] as usize);
+        let (a, b) = (
+            s.starts[row as usize] as usize,
+            s.starts[row as usize + 1] as usize,
+        );
         let rows = &s.rows[a..b];
         let by_min = &s.by_min[a..b];
         let tail = &s.tail[a + row as usize..b + row as usize + 1];
@@ -304,7 +464,10 @@ fn texels_in<L: Lanes>(s: &mut Scratch, coverage: u32, pen_x: f32, at_x: u32, w:
         out.resize(base + w as usize, 0);
         // No piece in the row: every texel is clear (its sum is the empty tail, zero).
         if rows.is_empty() {
-            if let Some(c) = census.as_deref_mut() { c.texels += u64::from(w); c.clear += u64::from(w); }
+            if let Some(c) = census.as_deref_mut() {
+                c.texels += u64::from(w);
+                c.clear += u64::from(w);
+            }
             continue;
         }
         let ly = s.ly[row as usize];
@@ -334,7 +497,10 @@ fn texels_in<L: Lanes>(s: &mut Scratch, coverage: u32, pen_x: f32, at_x: u32, w:
                     Stretch::Within { lo, hi, right } => {
                         let right_of = (L::splat(lo) - lx).ge(half);
                         let left_of = (L::splat(hi) - lx).le(-half);
-                        (L::select(L::and(spans, right_of), L::splat(right), zero), L::and_not(L::and_not(spans, right_of), left_of))
+                        (
+                            L::select(L::and(spans, right_of), L::splat(right), zero),
+                            L::and_not(L::and_not(spans, right_of), left_of),
+                        )
                     }
                     Stretch::Bent => (zero, spans),
                 };
@@ -344,7 +510,12 @@ fn texels_in<L: Lanes>(s: &mut Scratch, coverage: u32, pen_x: f32, at_x: u32, w:
                 while wanted != 0 {
                     let lane = wanted.trailing_zeros();
                     wanted &= wanted - 1;
-                    s.jobs.push(Job { slot: slot as u32, lane: lane as u8, row: i, lx: lxs[lane as usize] });
+                    s.jobs.push(Job {
+                        slot: slot as u32,
+                        lane: lane as u8,
+                        row: i,
+                        lx: lxs[lane as usize],
+                    });
                 }
             }
             s.started.push(started.store());
@@ -362,18 +533,28 @@ fn texels_in<L: Lanes>(s: &mut Scratch, coverage: u32, pen_x: f32, at_x: u32, w:
                 v[7][k] = r.ty[1];
             }
             let l = |m: usize| L::load(&v[m]);
-            let cov = integrate_x([l(0), l(1)], [l(2), l(3)], [l(4), l(5)], [l(6), l(7)], half).store();
-            for (k, j) in chunk.iter().enumerate() { s.slots[j.slot as usize][j.lane as usize] = cov[k]; }
+            let cov =
+                integrate_x([l(0), l(1)], [l(2), l(3)], [l(4), l(5)], [l(6), l(7)], half).store();
+            for (k, j) in chunk.iter().enumerate() {
+                s.slots[j.slot as usize][j.lane as usize] = cov[k];
+            }
         }
-        if let Some(c) = census.as_deref_mut() { c.integrals += s.jobs.len() as u64; }
+        if let Some(c) = census.as_deref_mut() {
+            c.integrals += s.jobs.len() as u64;
+        }
         // Each lane's sum: the tail of the pieces whose left edge is still right of its texel,
         // then every piece's term in left-edge order.
         for g in 0..groups {
             let c0 = g * L::N;
             let lanes = (w as usize - c0).min(L::N);
             let tails: [f32; 4] = s.started[g].map(|k| tail[k as usize]);
-            let acc = s.slots[g * n..(g + 1) * n].iter().fold(L::load(&tails), |acc, v| acc + L::load(v)).store();
-            for (k, &v) in acc[..lanes].iter().enumerate() { out[base + c0 + k] = byte(v, hw); }
+            let acc = s.slots[g * n..(g + 1) * n]
+                .iter()
+                .fold(L::load(&tails), |acc, v| acc + L::load(v))
+                .store();
+            for (k, &v) in acc[..lanes].iter().enumerate() {
+                out[base + c0 + k] = byte(v, hw);
+            }
         }
         if let Some(c) = census.as_deref_mut() {
             c.texels += u64::from(w);

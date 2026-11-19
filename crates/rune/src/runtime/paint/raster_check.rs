@@ -20,14 +20,29 @@ impl RuntimeCore {
         let fresh = glyphs(&self.instances);
         let differ: Vec<_> = settled.iter().zip(&fresh).filter(|(a, b)| a != b).collect();
         if !differ.is_empty() || settled.len() != fresh.len() {
-            eprintln!("rune: raster check at {:.3} s: {} of {} resting glyphs and icons draw unlike a fresh paint, first:", self.clock, differ.len(), settled.len());
+            eprintln!(
+                "rune: raster check at {:.3} s: {} of {} resting glyphs and icons draw unlike a fresh paint, first:",
+                self.clock,
+                differ.len(),
+                settled.len()
+            );
             for (a, b) in differ.iter().take(3) {
                 eprintln!("  resting {a:?}\n  fresh   {b:?}");
             }
         }
-        let magnified: Vec<_> = self.instances.iter().filter(|i| magnifies(i)).map(|i| (i.rect, i.uv)).collect();
+        let magnified: Vec<_> = self
+            .instances
+            .iter()
+            .filter(|i| magnifies(i))
+            .map(|i| (i.rect, i.uv))
+            .collect();
         if !magnified.is_empty() {
-            eprintln!("rune: raster check at {:.3} s: {} resting glyphs or icons draw a mask stretched, first (rect, atlas uv) {:?}", self.clock, magnified.len(), &magnified[..magnified.len().min(3)]);
+            eprintln!(
+                "rune: raster check at {:.3} s: {} resting glyphs or icons draw a mask stretched, first (rect, atlas uv) {:?}",
+                self.clock,
+                magnified.len(),
+                &magnified[..magnified.len().min(3)]
+            );
         }
     }
 }
@@ -36,7 +51,11 @@ impl RuntimeCore {
 type Glyph = ([f32; 4], [f32; 4], [f32; 4], [f32; 4], [f32; 2]);
 
 fn glyphs(instances: &[Instance]) -> Vec<Glyph> {
-    instances.iter().filter(|i| i.params[1] == KIND_GLYPH).map(|i| (i.rect, i.radii, i.border, i.params, [i.uv[2], i.uv[3]])).collect()
+    instances
+        .iter()
+        .filter(|i| i.params[1] == KIND_GLYPH)
+        .map(|i| (i.rect, i.radii, i.border, i.params, [i.uv[2], i.uv[3]]))
+        .collect()
 }
 
 /// An unturned glyph or icon drawn larger or smaller than its mask, by more than a 256th: at rest
@@ -44,5 +63,8 @@ fn glyphs(instances: &[Instance]) -> Vec<Glyph> {
 /// zoom shows here.
 fn magnifies(i: &Instance) -> bool {
     let texels = if i.radii[0] > 0.5 { 3.0 } else { 1.0 };
-    i.params[1] == KIND_GLYPH && i.params[0] == 0.0 && i.uv[2] > 0.0 && (i.rect[2] * texels / i.uv[2] - 1.0).abs() > 1.0 / 256.0
+    i.params[1] == KIND_GLYPH
+        && i.params[0] == 0.0
+        && i.uv[2] > 0.0
+        && (i.rect[2] * texels / i.uv[2] - 1.0).abs() > 1.0 / 256.0
 }

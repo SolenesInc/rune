@@ -21,7 +21,9 @@ pub(super) enum Surface<L = Live, B = Backing> {
 }
 
 impl<L, B> Default for Surface<L, B> {
-    fn default() -> Self { Surface::None { announced: false } }
+    fn default() -> Self {
+        Surface::None { announced: false }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,28 +56,46 @@ impl<L, B> Surface<L, B> {
         let announced = self.announced();
         match event {
             SurfaceEvent::Made(live) => {
-                debug_assert!(matches!(self, Surface::None { .. }), "an overlay makes a window only while it holds none");
+                debug_assert!(
+                    matches!(self, Surface::None { .. }),
+                    "an overlay makes a window only while it holds none"
+                );
                 *self = Surface::Live { live, announced };
             }
             SurfaceEvent::Park(backing) => {
-                debug_assert!(matches!(self, Surface::None { .. }), "an overlay parks a window only while it holds none");
+                debug_assert!(
+                    matches!(self, Surface::None { .. }),
+                    "an overlay parks a window only while it holds none"
+                );
                 *self = Surface::Parked { backing, announced };
             }
             SurfaceEvent::TakeLive if matches!(self, Surface::Live { .. }) => {
-                let Surface::Live { live, .. } = std::mem::replace(self, Surface::None { announced }) else { unreachable!() };
+                let Surface::Live { live, .. } =
+                    std::mem::replace(self, Surface::None { announced })
+                else {
+                    unreachable!()
+                };
                 return Effects::one(SurfaceEffect::Live(live));
             }
             SurfaceEvent::TakeParked if matches!(self, Surface::Parked { .. }) => {
-                let Surface::Parked { backing, .. } = std::mem::replace(self, Surface::None { announced }) else { unreachable!() };
+                let Surface::Parked { backing, .. } =
+                    std::mem::replace(self, Surface::None { announced })
+                else {
+                    unreachable!()
+                };
                 return Effects::one(SurfaceEffect::Parked(backing));
             }
             SurfaceEvent::TakeLive | SurfaceEvent::TakeParked => {}
             SurfaceEvent::Announce => match self {
-                Surface::None { announced } | Surface::Parked { announced, .. } | Surface::Live { announced, .. } => *announced = true,
+                Surface::None { announced }
+                | Surface::Parked { announced, .. }
+                | Surface::Live { announced, .. } => *announced = true,
             },
             SurfaceEvent::Release => match std::mem::take(self) {
                 Surface::Live { live, .. } => return Effects::one(SurfaceEffect::Live(live)),
-                Surface::Parked { backing, .. } => return Effects::one(SurfaceEffect::Parked(backing)),
+                Surface::Parked { backing, .. } => {
+                    return Effects::one(SurfaceEffect::Parked(backing));
+                }
                 Surface::None { .. } => {}
             },
         }
@@ -105,15 +125,23 @@ impl<L, B> Surface<L, B> {
 
     pub(super) fn announced(&self) -> bool {
         match *self {
-            Surface::None { announced } | Surface::Parked { announced, .. } | Surface::Live { announced, .. } => announced,
+            Surface::None { announced }
+            | Surface::Parked { announced, .. }
+            | Surface::Live { announced, .. } => announced,
         }
     }
 
-    pub(super) fn announce(&mut self) { self.step(SurfaceEvent::Announce); }
+    pub(super) fn announce(&mut self) {
+        self.step(SurfaceEvent::Announce);
+    }
 
-    pub(super) fn made(&mut self, live: L) { self.step(SurfaceEvent::Made(live)); }
+    pub(super) fn made(&mut self, live: L) {
+        self.step(SurfaceEvent::Made(live));
+    }
 
-    pub(super) fn park(&mut self, backing: B) { self.step(SurfaceEvent::Park(backing)); }
+    pub(super) fn park(&mut self, backing: B) {
+        self.step(SurfaceEvent::Park(backing));
+    }
 
     pub(super) fn take_live(&mut self) -> Option<L> {
         match self.step(SurfaceEvent::TakeLive).into_iter().next() {
@@ -150,11 +178,22 @@ impl<T: 'static> Overlay<T> {
     /// Creates the wgpu surface (and the GPU device, if this is the first surface).
     pub(super) fn attach(&mut self, backing: Backing, scale: f32) -> Option<Live> {
         // First, before the surface binds the view (macOS may observe it).
-        let a11y = self.shared.wake.lock().unwrap().clone().and_then(|wake| match &backing {
-            Backing::Window(window) => crate::a11y::Adapter::new(window, wake),
-            #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
-            Backing::Layer(_) | Backing::Xwayland(_) => crate::a11y::Adapter::windowless(wake),
-        });
+        let a11y = self
+            .shared
+            .wake
+            .lock()
+            .unwrap()
+            .clone()
+            .and_then(|wake| match &backing {
+                Backing::Window(window) => crate::a11y::Adapter::new(window, wake),
+                #[cfg(all(
+                    unix,
+                    not(target_os = "macos"),
+                    not(target_os = "ios"),
+                    not(target_os = "android")
+                ))]
+                Backing::Layer(_) | Backing::Xwayland(_) => crate::a11y::Adapter::windowless(wake),
+            });
         #[cfg(target_os = "macos")]
         let moved = self.panel.as_ref().map(|p| p.raw_handles());
         let make = |instance: &wgpu::Instance| -> Option<wgpu::Surface<'static>> {
@@ -174,7 +213,12 @@ impl<T: 'static> Overlay<T> {
                     }
                     instance.create_surface(w.clone()).ok()
                 }
-                #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+                #[cfg(all(
+                    unix,
+                    not(target_os = "macos"),
+                    not(target_os = "ios"),
+                    not(target_os = "android")
+                ))]
                 Backing::Layer(layer) => {
                     let (display, window) = layer.raw_handles();
                     // SAFETY: the layer surface outlives this wgpu surface (`Live` drops the
@@ -187,7 +231,12 @@ impl<T: 'static> Overlay<T> {
                     }
                     .ok()
                 }
-                #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+                #[cfg(all(
+                    unix,
+                    not(target_os = "macos"),
+                    not(target_os = "ios"),
+                    not(target_os = "android")
+                ))]
                 Backing::Xwayland(surface) => {
                     let (display, window) = surface.raw_handles()?;
                     // SAFETY: the X window and its connection outlive this wgpu surface (`Live`
@@ -202,7 +251,10 @@ impl<T: 'static> Overlay<T> {
                 }
             }
         };
-        let features = self.compositor.as_ref().map_or(wgpu::Features::empty(), |c| c.features());
+        let features = self
+            .compositor
+            .as_ref()
+            .map_or(wgpu::Features::empty(), |c| c.features());
         // A device that died while the overlay was hidden (a driver reset, a resume from
         // Modern Standby) can configure nothing: the next surface gets a new one.
         if self.gpu.as_ref().is_some_and(|gpu| gpu.is_lost()) {
@@ -211,15 +263,34 @@ impl<T: 'static> Overlay<T> {
         }
         // The overlay's own device was already the best for its surface, translucent or not; a
         // device shared from another overlay must composite this one's translucent pixels.
-        let pooled = self.gpu.clone().map(|gpu| (gpu, false)).or_else(|| self.gpu_pool.borrow().upgrade().filter(|gpu| {
-            !gpu.is_lost() && gpu.device.features().contains(features & gpu.adapter.features())
-        }).map(|gpu| (gpu, true)));
-        let reused = pooled.and_then(|(gpu, translucent)| make(&gpu.instance).filter(|s| crate::render::translucency::serves(&gpu, s, features, translucent)).map(|s| (gpu, s)));
+        let pooled = self.gpu.clone().map(|gpu| (gpu, false)).or_else(|| {
+            self.gpu_pool
+                .borrow()
+                .upgrade()
+                .filter(|gpu| {
+                    !gpu.is_lost()
+                        && gpu
+                            .device
+                            .features()
+                            .contains(features & gpu.adapter.features())
+                })
+                .map(|gpu| (gpu, true))
+        });
+        let reused = pooled.and_then(|(gpu, translucent)| {
+            make(&gpu.instance)
+                .filter(|s| crate::render::translucency::serves(&gpu, s, features, translucent))
+                .map(|s| (gpu, s))
+        });
         let mut prewarmed = None;
         let surface = match reused {
-            Some((gpu, surface)) => { self.gpu = Some(gpu); surface }
+            Some((gpu, surface)) => {
+                self.gpu = Some(gpu);
+                surface
+            }
             None => {
-                let made = Gpu::for_surface(features, true, |instance| make(instance).ok_or_else(|| "could not create its GPU surface".to_owned()));
+                let made = Gpu::for_surface(features, true, |instance| {
+                    make(instance).ok_or_else(|| "could not create its GPU surface".to_owned())
+                });
                 let (gpu, surface, renderer) = match made {
                     Ok(made) => made,
                     Err(error) => {
@@ -238,36 +309,66 @@ impl<T: 'static> Overlay<T> {
             }
         };
         let gpu = self.gpu.clone()?;
-        let (w, h) = ((self.at.size.0 * scale).round() as u32, (self.at.size.1 * scale).round() as u32);
-        let (mut config, translucent) = crate::window::surface_config(&surface, &gpu.adapter, (w, h), self.rt.srgb_blend())?;
+        let (w, h) = (
+            (self.at.size.0 * scale).round() as u32,
+            (self.at.size.1 * scale).round() as u32,
+        );
+        let (mut config, translucent) =
+            crate::window::surface_config(&surface, &gpu.adapter, (w, h), self.rt.srgb_blend())?;
         match translucent {
             Some(mode) => config.alpha_mode = mode,
-            None => eprintln!("transparency unavailable for overlay {}; drawing it opaque", self.name),
+            None => eprintln!(
+                "transparency unavailable for overlay {}; drawing it opaque",
+                self.name
+            ),
         }
         let info = gpu.adapter.get_info();
-        *self.shared.surface.lock().unwrap() = Some(format!("{:?} on {} ({:?}), {:?}, {:?}", info.backend, info.name, info.device_type, config.alpha_mode, config.format));
+        *self.shared.surface.lock().unwrap() = Some(format!(
+            "{:?} on {} ({:?}), {:?}, {:?}",
+            info.backend, info.name, info.device_type, config.alpha_mode, config.format
+        ));
         // A surface the driver refuses costs this overlay alone, never the app's other windows
         // (hex#979). The surface drops before its backing.
         if let Err(error) = crate::window::configure(&surface, &gpu, &config) {
-            self.fail(format!("could not configure its GPU surface on {:?} {}: {error}", info.backend, info.name));
+            self.fail(format!(
+                "could not configure its GPU surface on {:?} {}: {error}",
+                info.backend, info.name
+            ));
             return None;
         }
         #[cfg(target_os = "macos")]
         crate::platform::macos::pin_contents_top_left(&surface);
-        let target_format = if self.rt.srgb_blend() { config.format.remove_srgb_suffix() } else { config.format };
+        let target_format = if self.rt.srgb_blend() {
+            config.format.remove_srgb_suffix()
+        } else {
+            config.format
+        };
         if let Some(renderer) = &mut self.renderer {
             crate::window::rebuild_renderer(&gpu.device, renderer, target_format, &mut self.rt);
         } else {
-            let mut renderer = prewarmed.unwrap_or_else(|| Renderer::new(&gpu.device, target_format));
-            crate::window::rebuild_renderer(&gpu.device, &mut renderer, target_format, &mut self.rt);
+            let mut renderer =
+                prewarmed.unwrap_or_else(|| Renderer::new(&gpu.device, target_format));
+            crate::window::rebuild_renderer(
+                &gpu.device,
+                &mut renderer,
+                target_format,
+                &mut self.rt,
+            );
             self.renderer = Some(renderer);
             self.rt.text.atlas.invalidate();
             self.rt.images.invalidate();
         }
         // Core Animation composites premultiplied pixels even in wgpu's PostMultiplied mode;
         // other straight-alpha surfaces get the conversion pass.
-        let alpha = (config.alpha_mode == wgpu::CompositeAlphaMode::PostMultiplied && gpu.adapter.get_info().backend != wgpu::Backend::Metal)
-            .then(|| crate::render::surface_alpha::AlphaSurface::new(&gpu.device, target_format, (config.width, config.height)));
+        let alpha = (config.alpha_mode == wgpu::CompositeAlphaMode::PostMultiplied
+            && gpu.adapter.get_info().backend != wgpu::Backend::Metal)
+            .then(|| {
+                crate::render::surface_alpha::AlphaSurface::new(
+                    &gpu.device,
+                    target_format,
+                    (config.width, config.height),
+                )
+            });
         self.rt.transparent = true;
         self.rt.set_viewport(self.at.size, scale);
         #[cfg(target_os = "macos")]
@@ -277,7 +378,9 @@ impl<T: 'static> Overlay<T> {
         });
         #[cfg(target_os = "macos")]
         let fn_key = match &backing {
-            Backing::Window(window) if self.rt.modifier_keys() => crate::input::fn_key::FnKey::new(window),
+            Backing::Window(window) if self.rt.modifier_keys() => {
+                crate::input::fn_key::FnKey::new(window)
+            }
             _ => None,
         };
         Some(Live {
@@ -289,12 +392,19 @@ impl<T: 'static> Overlay<T> {
             fn_key,
             #[cfg(target_os = "macos")]
             present: None,
-            a11y, alpha, surface, config, backing, scale,
+            a11y,
+            alpha,
+            surface,
+            config,
+            backing,
+            scale,
         })
     }
 
     pub(super) fn rescale(&mut self, gpu: &Gpu, scale: f32) {
-        let Some(live) = self.surface.live_mut() else { return };
+        let Some(live) = self.surface.live_mut() else {
+            return;
+        };
         if (live.scale - scale).abs() < f32::EPSILON {
             return;
         }
@@ -340,8 +450,16 @@ impl<T: 'static> Overlay<T> {
             Some(SurfaceEffect::Live(mut live)) => {
                 // The present worker joins, and the display link stops, before the surface goes.
                 #[cfg(target_os = "macos")]
-                { live.present.take(); live.pacing.take(); }
-                let Live { alpha, surface, backing, .. } = live;
+                {
+                    live.present.take();
+                    live.pacing.take();
+                }
+                let Live {
+                    alpha,
+                    surface,
+                    backing,
+                    ..
+                } = live;
                 drop(alpha);
                 #[cfg(target_os = "macos")]
                 crate::platform::macos::detach_layer(&surface);
@@ -353,7 +471,12 @@ impl<T: 'static> Overlay<T> {
         };
         #[cfg(target_os = "macos")]
         self.panel.take();
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
         self.x11.take();
         drop(backing);
         self.shared.native.lock().unwrap().0 = None;

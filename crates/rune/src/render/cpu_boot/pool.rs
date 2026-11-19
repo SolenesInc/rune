@@ -20,8 +20,14 @@ struct Shared {
 /// What the workers see, as one state: parked, a job to run (and which one, so a worker runs each
 /// once), or told to leave.
 enum State {
-    Idle { round: u64 },
-    Working { round: u64, job: JobRef, wanted: usize },
+    Idle {
+        round: u64,
+    },
+    Working {
+        round: u64,
+        job: JobRef,
+        wanted: usize,
+    },
     Leaving,
 }
 
@@ -41,30 +47,52 @@ pub struct Pool {
 impl Pool {
     /// A pool that runs jobs on `threads` threads in all: the caller and `threads - 1` workers.
     pub fn new(threads: usize) -> Pool {
-        let shared = Arc::new(Shared { state: Mutex::new(State::Idle { round: 0 }), wake: Condvar::new(), done: Condvar::new(), running: AtomicUsize::new(0) });
-        let workers = (1..threads.max(1)).map(|k| {
-            let shared = shared.clone();
-            std::thread::Builder::new().name(format!("rune-cpu-paint-{k}")).spawn(move || work(&shared, k)).expect("a painting thread")
-        }).collect();
+        let shared = Arc::new(Shared {
+            state: Mutex::new(State::Idle { round: 0 }),
+            wake: Condvar::new(),
+            done: Condvar::new(),
+            running: AtomicUsize::new(0),
+        });
+        let workers = (1..threads.max(1))
+            .map(|k| {
+                let shared = shared.clone();
+                std::thread::Builder::new()
+                    .name(format!("rune-cpu-paint-{k}"))
+                    .spawn(move || work(&shared, k))
+                    .expect("a painting thread")
+            })
+            .collect();
         Pool { shared, workers }
     }
 
     /// Threads a job runs on, the caller included.
-    pub fn threads(&self) -> usize { self.workers.len() + 1 }
+    pub fn threads(&self) -> usize {
+        self.workers.len() + 1
+    }
 
     /// Runs `job` on the caller and on `extra` workers (at most all of them), returning once all
     /// have finished it.
     pub fn run(&self, extra: usize, job: &(dyn Fn() + Sync + '_)) {
         let extra = extra.min(self.workers.len());
-        if extra == 0 { return job(); }
+        if extra == 0 {
+            return job();
+        }
         // SAFETY: only the lifetime is erased; `run` doesn't return before `running` is back to
         // zero, so no worker holds the pointer past this call.
-        let erased: *const Job = unsafe { std::mem::transmute::<&(dyn Fn() + Sync + '_), &'static Job>(job) };
+        let erased: *const Job =
+            unsafe { std::mem::transmute::<&(dyn Fn() + Sync + '_), &'static Job>(job) };
         {
             let mut s = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
-            let round = match *s { State::Idle { round } => round + 1, _ => return job() };
+            let round = match *s {
+                State::Idle { round } => round + 1,
+                _ => return job(),
+            };
             self.shared.running.store(extra, Ordering::Release);
-            *s = State::Working { round, job: JobRef(erased), wanted: extra };
+            *s = State::Working {
+                round,
+                job: JobRef(erased),
+                wanted: extra,
+            };
         }
         self.shared.wake.notify_all();
         job();
@@ -72,7 +100,9 @@ impl Pool {
         while self.shared.running.load(Ordering::Acquire) > 0 {
             s = self.shared.done.wait(s).unwrap_or_else(|e| e.into_inner());
         }
-        if let State::Working { round, .. } = *s { *s = State::Idle { round }; }
+        if let State::Working { round, .. } = *s {
+            *s = State::Idle { round };
+        }
     }
 }
 
@@ -87,7 +117,9 @@ fn work(shared: &Shared, k: usize) {
                     State::Leaving => return,
                     State::Working { round, job, wanted } if round != last => {
                         last = round;
-                        if k <= wanted { break job; }
+                        if k <= wanted {
+                            break job;
+                        }
                     }
                     _ => {}
                 }
@@ -109,6 +141,8 @@ impl Drop for Pool {
     fn drop(&mut self) {
         *self.shared.state.lock().unwrap_or_else(|e| e.into_inner()) = State::Leaving;
         self.shared.wake.notify_all();
-        for w in self.workers.drain(..) { let _ = w.join(); }
+        for w in self.workers.drain(..) {
+            let _ = w.join();
+        }
     }
 }

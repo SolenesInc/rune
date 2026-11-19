@@ -13,13 +13,18 @@ pub(crate) fn wait_ms() -> Option<f64> {
     {
         use std::io::Read;
         let mut buf = [0u8; 128];
-        let len = std::fs::File::open("/proc/thread-self/schedstat").ok()?.read(&mut buf).ok()?;
+        let len = std::fs::File::open("/proc/thread-self/schedstat")
+            .ok()?
+            .read(&mut buf)
+            .ok()?;
         let stats = std::str::from_utf8(&buf[..len]).ok()?;
         let ns: f64 = stats.split_whitespace().nth(1)?.parse().ok()?;
         Some(ns / 1e6)
     }
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    { None }
+    {
+        None
+    }
 }
 
 /// Whether the machine has no core to spare: the 1-minute load average is at or above the core
@@ -27,10 +32,17 @@ pub(crate) fn wait_ms() -> Option<f64> {
 pub(crate) fn overloaded() -> bool {
     #[cfg(unix)]
     {
-        use std::{sync::Mutex, time::{Duration, Instant}};
+        use std::{
+            sync::Mutex,
+            time::{Duration, Instant},
+        };
         static CACHE: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
         let mut cache = CACHE.lock().unwrap();
-        if let Some((at, busy)) = *cache && at.elapsed() < Duration::from_secs(5) { return busy }
+        if let Some((at, busy)) = *cache
+            && at.elapsed() < Duration::from_secs(5)
+        {
+            return busy;
+        }
         let mut load = [0f64; 1];
         // SAFETY: `load` is a live, writable array of the one sample asked for.
         let got = unsafe { libc::getloadavg(load.as_mut_ptr(), 1) };
@@ -40,14 +52,18 @@ pub(crate) fn overloaded() -> bool {
         busy
     }
     #[cfg(not(unix))]
-    { false }
+    {
+        false
+    }
 }
 
 /// The wall ms a callback was blocked, or `None` when it wasn't. `wait` is the run-queue time
 /// it spent when known; without it, a `loaded` machine gets the benefit of the doubt.
 #[cfg(debug_assertions)]
 pub(crate) fn blocked_ms(wall: f64, cpu: f64, wait: Option<f64>, loaded: bool) -> Option<f64> {
-    if wait.is_none() && loaded { return None }
+    if wait.is_none() && loaded {
+        return None;
+    }
     let blocked = wall - wait.unwrap_or(0.0).clamp(0.0, wall);
     (blocked > STALL_MS && blocked > STALL_CPU_RATIO * cpu).then_some(blocked)
 }

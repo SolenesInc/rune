@@ -1,19 +1,26 @@
 use winit::dpi::{LogicalPosition, LogicalSize};
 
-use crate::runtime::Runtime;
 use super::Win;
+use crate::runtime::Runtime;
 
 /// What a built frame hands the window besides its pixels: secure input, the IME, the cursor,
 /// help tags and the clipboard.
-pub(super) fn sync_platform<S: 'static>(l: &mut Win, rt: &mut Runtime<S>, secure_input: &mut crate::input::secure_input::SecureInput,
-    ime: &mut bool, clipboard: &crate::clipboard::Client) {
+pub(super) fn sync_platform<S: 'static>(
+    l: &mut Win,
+    rt: &mut Runtime<S>,
+    secure_input: &mut crate::input::secure_input::SecureInput,
+    ime: &mut bool,
+    clipboard: &crate::clipboard::Client,
+) {
     let focused = l.window.has_focus();
     secure_input.set(rt.has_secure_focus() && focused);
     let ime_allowed = rt.ime_area.is_some() && !rt.has_secure_focus() && focused;
     let reset = std::mem::take(&mut rt.ime_reset);
     // Rune ended a composition itself (a blur, a click, a finished field): the input method
     // drops its copy, so it doesn't come back in the next field.
-    if reset { crate::platform::ime::cancel(&l.window); }
+    if reset {
+        crate::platform::ime::cancel(&l.window);
+    }
     if reset || ime_allowed != *ime {
         l.window.set_ime_allowed(false);
         l.window.set_ime_allowed(ime_allowed);
@@ -24,7 +31,11 @@ pub(super) fn sync_platform<S: 'static>(l: &mut Win, rt: &mut Runtime<S>, secure
     #[cfg(target_os = "macos")]
     {
         use winit::platform::macos::{OptionAsAlt, WindowExtMacOS};
-        let want = if ime_allowed && rt.ime_option_as_alt { OptionAsAlt::Both } else { OptionAsAlt::None };
+        let want = if ime_allowed && rt.ime_option_as_alt {
+            OptionAsAlt::Both
+        } else {
+            OptionAsAlt::None
+        };
         if l.window.option_as_alt() != want {
             l.window.set_option_as_alt(want);
         }
@@ -35,7 +46,11 @@ pub(super) fn sync_platform<S: 'static>(l: &mut Win, rt: &mut Runtime<S>, secure
         l.native.help.sync(&l.window, rt.help_regions());
     } else {
         // Window points: the view's times its zoom.
-        let regions: Vec<([f32; 4], String)> = rt.help_regions().iter().map(|(r, t)| (rt.to_window(*r), t.clone())).collect();
+        let regions: Vec<([f32; 4], String)> = rt
+            .help_regions()
+            .iter()
+            .map(|(r, t)| (rt.to_window(*r), t.clone()))
+            .collect();
         l.native.help.sync(&l.window, &regions);
     }
     // The process has one menu theme: the active window's, so its window menu matches it.
@@ -52,7 +67,11 @@ impl Win {
     /// The runtime's cursor while the pointer is in the window, the arrow once it leaves.
     /// `Hidden` needs focus, so it can't outlive the window being active.
     pub(super) fn apply_cursor<S>(&mut self, rt: &Runtime<S>, focused: bool) {
-        let want = match rt.cursor() { crate::el::Cursor::Hidden if !focused => crate::el::Cursor::Default, c => c };
-        self.cursor.apply(&self.window, want, rt.pointer().is_some());
+        let want = match rt.cursor() {
+            crate::el::Cursor::Hidden if !focused => crate::el::Cursor::Default,
+            c => c,
+        };
+        self.cursor
+            .apply(&self.window, want, rt.pointer().is_some());
     }
 }

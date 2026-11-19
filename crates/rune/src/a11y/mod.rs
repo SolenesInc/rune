@@ -3,7 +3,13 @@
 //! handlers run wherever the OS calls them; they only queue what they heard and wake the host,
 //! whose thread then activates the runtime's tree (`runtime/a11y/tree.rs`), runs the actions
 //! and sends tree updates. Until a client asks, the runtime builds nothing.
-#![cfg_attr(not(all(feature = "accessibility", any(target_os = "macos", target_os = "linux"))), allow(dead_code))]
+#![cfg_attr(
+    not(all(
+        feature = "accessibility",
+        any(target_os = "macos", target_os = "linux")
+    )),
+    allow(dead_code)
+)]
 
 use std::sync::{Arc, Mutex};
 
@@ -35,12 +41,16 @@ impl Announcement {
         self.said = self.said.wrapping_add(1);
     }
 
-    pub(crate) fn said(&self) -> u32 { self.said }
+    pub(crate) fn said(&self) -> u32 {
+        self.said
+    }
 
     /// The live region's name and politeness, if anything was said. Every other call ends in
     /// a zero-width space, which readers don't speak, so a repeat still changes the name.
     pub(crate) fn words(&self) -> Option<(String, crate::LiveRegion)> {
-        if self.text.trim().is_empty() { return None; }
+        if self.text.trim().is_empty() {
+            return None;
+        }
         let mark = if self.said % 2 == 0 { "\u{200B}" } else { "" };
         Some((format!("{}{mark}", self.text), self.how))
     }
@@ -55,7 +65,10 @@ pub(crate) struct Inbox {
 
 /// What a client asked of the runtime's tree. The later call wins, so the two cannot disagree.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
-#[cfg_attr(not(all(feature = "accessibility", target_os = "linux")), allow(dead_code))]
+#[cfg_attr(
+    not(all(feature = "accessibility", target_os = "linux")),
+    allow(dead_code)
+)]
 enum Asked {
     #[default]
     Nothing,
@@ -71,7 +84,9 @@ pub(crate) struct Shared {
 
 impl Shared {
     fn push(&self, f: impl FnOnce(&mut Inbox)) {
-        if let Ok(mut inbox) = self.inbox.lock() { f(&mut inbox); }
+        if let Ok(mut inbox) = self.inbox.lock() {
+            f(&mut inbox);
+        }
         (self.wake)();
     }
 }
@@ -93,7 +108,10 @@ impl ActionHandler for Actions {
     }
 }
 
-#[cfg_attr(not(all(feature = "accessibility", target_os = "linux")), allow(dead_code))]
+#[cfg_attr(
+    not(all(feature = "accessibility", target_os = "linux")),
+    allow(dead_code)
+)]
 struct Deactivation(Arc<Shared>);
 impl DeactivationHandler for Deactivation {
     fn deactivate_accessibility(&mut self) {
@@ -113,19 +131,31 @@ pub struct AccessibilityLink {
 }
 
 impl Default for AccessibilityLink {
-    fn default() -> Self { Self::with_wake(Arc::new(|| {})) }
+    fn default() -> Self {
+        Self::with_wake(Arc::new(|| {}))
+    }
 }
 
 impl AccessibilityLink {
     /// A link no OS adapter wakes: tests call [`AccessibilityLink::activate`] themselves.
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub(crate) fn with_wake(wake: crate::Waker) -> Self {
-        AccessibilityLink { shared: Arc::new(Shared { inbox: Mutex::default(), wake }), adopted: false }
+        AccessibilityLink {
+            shared: Arc::new(Shared {
+                inbox: Mutex::default(),
+                wake,
+            }),
+            adopted: false,
+        }
     }
 
     /// What an assistive client's first request does: the next update holds the whole tree.
-    pub fn activate(&self) { self.shared.push(|i| i.asked = Asked::Activate); }
+    pub fn activate(&self) {
+        self.shared.push(|i| i.asked = Asked::Activate);
+    }
 
     /// Runs what the link heard on `rt`, then returns the tree's changes for the adapter, as a
     /// host's turn does. `name` names the root when the runtime has no window title.
@@ -137,11 +167,17 @@ impl AccessibilityLink {
     /// The runtime's tree belonged to an earlier adapter: drop it before this link reads or
     /// writes it.
     fn adopt<S: 'static>(&mut self, rt: &mut Runtime<S>) {
-        if !std::mem::replace(&mut self.adopted, true) { rt.a11y_deactivate(); }
+        if !std::mem::replace(&mut self.adopted, true) {
+            rt.a11y_deactivate();
+        }
     }
 
     fn take(&self) -> Inbox {
-        self.shared.inbox.lock().map(|mut i| std::mem::take(&mut *i)).unwrap_or_default()
+        self.shared
+            .inbox
+            .lock()
+            .map(|mut i| std::mem::take(&mut *i))
+            .unwrap_or_default()
     }
 
     fn receive<S: 'static>(&mut self, rt: &mut Runtime<S>, name: &str) -> bool {
@@ -153,13 +189,24 @@ impl AccessibilityLink {
             Asked::Nothing => {}
         }
         if log() && inbox.asked != Asked::Nothing {
-            let said = if inbox.asked == Asked::Activate { "activated" } else { "deactivated" };
+            let said = if inbox.asked == Asked::Activate {
+                "activated"
+            } else {
+                "deactivated"
+            };
             eprintln!("rune: a11y {name:?}: {said}");
         }
         let mut queued = false;
         for request in &inbox.actions {
             let ran = rt.a11y_action(request);
-            if log() { eprintln!("rune: a11y {name:?}: {:?} on {:?} {}", request.action, request.target_node, if ran { "queued" } else { "refused" }); }
+            if log() {
+                eprintln!(
+                    "rune: a11y {name:?}: {:?} on {:?} {}",
+                    request.action,
+                    request.target_node,
+                    if ran { "queued" } else { "refused" }
+                );
+            }
             queued |= ran;
         }
         queued
@@ -169,7 +216,13 @@ impl AccessibilityLink {
         self.adopt(rt);
         let started = log().then(crate::time::Instant::now);
         let update = rt.a11y_update()?;
-        if let Some(t) = started { eprintln!("rune: a11y update: {} nodes in {:.0} us", update.nodes.len(), t.elapsed().as_secs_f64() * 1e6); }
+        if let Some(t) = started {
+            eprintln!(
+                "rune: a11y update: {} nodes in {:.0} us",
+                update.nodes.len(),
+                t.elapsed().as_secs_f64() * 1e6
+            );
+        }
         Some(update)
     }
 }
@@ -190,7 +243,12 @@ impl Adapter {
     pub(crate) fn new(window: &winit::window::Window, wake: crate::Waker) -> Option<Self> {
         let link = AccessibilityLink::with_wake(wake);
         #[cfg(all(feature = "accessibility", target_os = "macos"))]
-        return macos::Adapter::new(window, Activation(link.shared.clone()), Actions(link.shared.clone())).map(|inner| Adapter { link, inner });
+        return macos::Adapter::new(
+            window,
+            Activation(link.shared.clone()),
+            Actions(link.shared.clone()),
+        )
+        .map(|inner| Adapter { link, inner });
         #[cfg(all(feature = "accessibility", target_os = "linux"))]
         return Self::surface(link);
         #[allow(unreachable_code)]
@@ -210,7 +268,11 @@ impl Adapter {
     #[cfg(all(feature = "accessibility", target_os = "linux"))]
     fn surface(link: AccessibilityLink) -> Option<Self> {
         let shared = &link.shared;
-        let inner = unix::Adapter::new(Activation(shared.clone()), Actions(shared.clone()), Deactivation(shared.clone()));
+        let inner = unix::Adapter::new(
+            Activation(shared.clone()),
+            Actions(shared.clone()),
+            Deactivation(shared.clone()),
+        );
         Some(Adapter { link, inner })
     }
 
@@ -224,7 +286,10 @@ impl Adapter {
     /// The window gained or lost key focus.
     #[allow(unused_variables)]
     pub(crate) fn focus(&mut self, focused: bool) {
-        #[cfg(all(feature = "accessibility", any(target_os = "macos", target_os = "linux")))]
+        #[cfg(all(
+            feature = "accessibility",
+            any(target_os = "macos", target_os = "linux")
+        ))]
         self.inner.focus(focused);
     }
 
@@ -265,4 +330,3 @@ fn log() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var_os("RUNE_A11Y_LOG").is_some_and(|v| v != "0"))
 }
-

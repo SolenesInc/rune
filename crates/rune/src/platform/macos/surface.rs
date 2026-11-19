@@ -1,8 +1,8 @@
 //! Metal layer presentation and drawable visibility.
 
+use super::ns_window;
 use objc2::msg_send;
 use objc2_app_kit::NSWindow;
-use super::ns_window;
 
 /// Presents the surface's drawables inside the current Core Animation transaction, so a
 /// window frame change and the frame drawn for it reach the screen together. Costs a
@@ -10,7 +10,9 @@ use super::ns_window;
 pub(crate) fn present_with_transaction(surface: &wgpu::Surface, on: bool) {
     use objc2_video::runtime::Bool;
     // SAFETY: a live CAMetalLayer, on the main thread, between frames.
-    crate::gpu::with_layer(surface, |layer| unsafe { let _: () = objc2_video::msg_send![layer, setPresentsWithTransaction: Bool::new(on)]; });
+    crate::gpu::with_layer(surface, |layer| unsafe {
+        let _: () = objc2_video::msg_send![layer, setPresentsWithTransaction: Bool::new(on)];
+    });
 }
 
 #[link(name = "QuartzCore", kind = "framework")]
@@ -23,7 +25,13 @@ unsafe extern "C" {
 /// gravities for unflipped contents; under a flipped view (winit's is) "bottom" is the top.
 fn top_left_gravity(contents_flipped: bool) -> &'static objc2::runtime::AnyObject {
     // SAFETY: QuartzCore's constant strings.
-    unsafe { if contents_flipped { kCAGravityBottomLeft } else { kCAGravityTopLeft } }
+    unsafe {
+        if contents_flipped {
+            kCAGravityBottomLeft
+        } else {
+            kCAGravityTopLeft
+        }
+    }
 }
 
 /// Pins the Metal layer's contents to the window's top left at their own size. A drawable that
@@ -40,7 +48,9 @@ pub(crate) fn pin_contents_top_left(surface: &wgpu::Surface) {
         let layer = &*std::ptr::from_ref(video_layer).cast::<AnyObject>();
         let flipped: Bool = msg_send![layer, contentsAreFlipped];
         let _: () = msg_send![layer, setContentsGravity: top_left_gravity(flipped.as_bool())];
-        let Some(srgb) = CGColorSpace::with_name(Some(kCGColorSpaceSRGB)) else { return };
+        let Some(srgb) = CGColorSpace::with_name(Some(kCGColorSpaceSRGB)) else {
+            return;
+        };
         let _: () = objc2_video::msg_send![video_layer, setColorspace: &*srgb];
     });
 }
@@ -49,7 +59,9 @@ pub(crate) fn pin_contents_top_left(surface: &wgpu::Surface) {
 /// it the last drawable's pixels, after the surface is gone.
 pub(crate) fn detach_layer(surface: &wgpu::Surface) {
     // SAFETY: a live CAMetalLayer, on the main thread, under wgpu's lock.
-    crate::gpu::with_layer(surface, |layer| unsafe { let _: () = objc2_video::msg_send![layer, removeFromSuperlayer]; });
+    crate::gpu::with_layer(surface, |layer| unsafe {
+        let _: () = objc2_video::msg_send![layer, removeFromSuperlayer];
+    });
 }
 
 /// Whether none of `window` is on screen: covered, or its displays asleep. AppKit keeps the
@@ -81,7 +93,9 @@ pub(crate) unsafe fn layer_occluded(layer: &objc2_video::runtime::AnyObject) -> 
             let delegate: *const AnyObject = msg_send![layer, delegate];
             if let Some(delegate) = delegate.as_ref() {
                 let window: *const AnyObject = msg_send![delegate, window];
-                let Some(window) = window.as_ref() else { return false };
+                let Some(window) = window.as_ref() else {
+                    return false;
+                };
                 let state: usize = msg_send![window, occlusionState];
                 return state & OCCLUSION_VISIBLE == 0;
             }
@@ -141,7 +155,11 @@ impl PresumeShown {
             let previous: Option<Retained<AnyObject>> = msg_send![&*layer, delegate];
             let stand_in: Retained<ShownWindow> = msg_send![ShownWindow::class(), new];
             let _: () = msg_send![&*layer, setDelegate: &*stand_in];
-            Some(PresumeShown { layer, previous, _stand_in: stand_in })
+            Some(PresumeShown {
+                layer,
+                previous,
+                _stand_in: stand_in,
+            })
         }
     }
 }
@@ -149,7 +167,9 @@ impl PresumeShown {
 impl Drop for PresumeShown {
     fn drop(&mut self) {
         // SAFETY: as in `new`; restores the delegate the layer had.
-        unsafe { let _: () = objc2_video::msg_send![&*self.layer, setDelegate: self.previous.as_deref()]; }
+        unsafe {
+            let _: () = objc2_video::msg_send![&*self.layer, setDelegate: self.previous.as_deref()];
+        }
     }
 }
 

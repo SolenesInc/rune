@@ -11,7 +11,10 @@ pub(super) enum Typing {
     /// A mark was toggled with nothing selected: text typed with the selection still at `at`
     /// (`(anchor, focus)`) carries exactly `marks`. Anywhere else they're stale, since an app
     /// can move the caret through the public fields without disarming them.
-    Armed { at: (usize, usize), marks: Vec<Mark> },
+    Armed {
+        at: (usize, usize),
+        marks: Vec<Mark>,
+    },
 }
 
 impl Typing {

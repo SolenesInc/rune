@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use super::{RichLayoutOptions, Span, TextSystem};
 
 mod ink;
-pub use ink::{TextInk, ink};
 use crate::tok::TextStyle;
+pub use ink::{TextInk, ink};
 
 struct Fonts {
     /// Bumped by any change, of fonts or families.
@@ -64,14 +64,27 @@ fn with_state<R>(f: impl FnOnce(&mut Option<Fonts>) -> R) -> R {
 
 fn apply_fonts(slot: &mut Option<Fonts>, fonts: &[&'static [u8]], families: (&str, &str)) {
     let same_fonts = slot.as_ref().is_some_and(|f| f.fonts == fonts);
-    if same_fonts && slot.as_ref().is_some_and(|f| f.families.0 == families.0 && f.families.1 == families.1) {
+    if same_fonts
+        && slot
+            .as_ref()
+            .is_some_and(|f| f.families.0 == families.0 && f.families.1 == families.1)
+    {
         return;
     }
     let generation = slot.as_ref().map_or(1, |f| f.generation + 1);
-    let fonts_generation = match slot.as_ref() { Some(f) if same_fonts => f.fonts_generation, _ => generation };
+    let fonts_generation = match slot.as_ref() {
+        Some(f) if same_fonts => f.fonts_generation,
+        _ => generation,
+    };
     let scope = slot.as_ref().map_or(0, |f| f.scope);
     let families = (families.0.to_owned(), families.1.to_owned());
-    *slot = Some(Fonts { generation, fonts_generation, fonts: fonts.to_vec(), families, scope });
+    *slot = Some(Fonts {
+        generation,
+        fonts_generation,
+        fonts: fonts.to_vec(),
+        families,
+        scope,
+    });
 }
 
 /// Called by every [`TextSystem::new`]; the next measurement uses these fonts.
@@ -112,7 +125,11 @@ pub fn font_epoch() -> u64 {
 }
 
 fn epoch_of(f: &Fonts) -> u64 {
-    if f.scope == 0 { f.generation } else { 1 << 63 | f.scope << 32 | (f.generation & 0xFFFF_FFFF) }
+    if f.scope == 0 {
+        f.generation
+    } else {
+        1 << 63 | f.scope << 32 | (f.generation & 0xFFFF_FFFF)
+    }
 }
 
 /// Holds a thread-scoped family override; see [`with_families`].
@@ -169,7 +186,10 @@ pub fn with_families(sans: &str, mono: &str) -> FamiliesGuard {
         })
     });
     let previous = OVERRIDE.with_borrow_mut(|o| std::mem::replace(o, seeded));
-    FamiliesGuard { previous, _not_send: PhantomData }
+    FamiliesGuard {
+        previous,
+        _not_send: PhantomData,
+    }
 }
 
 /// The size in points of `text` (with `spans`, as [`crate::rich`] takes them) set in `style`,
@@ -196,8 +216,15 @@ pub fn measure_with(
     with_text(|t| {
         let l = t.layout_rich_with(text, spans, style, 1.0, max_width, options);
         // Spaces hanging past a wrapped line's end take no room, as the runtime measures them.
-        let w = if max_width.is_some() { l.width() } else { l.full_width() };
-        (w.ceil(), super::line_metrics::spec_height(&l, style, 1.0, true))
+        let w = if max_width.is_some() {
+            l.width()
+        } else {
+            l.full_width()
+        };
+        (
+            w.ceil(),
+            super::line_metrics::spec_height(&l, style, 1.0, true),
+        )
     })
 }
 
@@ -205,7 +232,12 @@ pub fn measure_with(
 /// given, in points, as [`measure`] lays it out. An editor that keeps its own document and draws
 /// each line with [`crate::rich`] moves its caret, hit-tests a press and boxes its selection with
 /// [`parley::editing::Selection`] on it. Laying out the same line again is a cache lookup.
-pub fn layout(text: &str, spans: &[Span], style: TextStyle, max_width: Option<f32>) -> std::rc::Rc<parley::Layout<super::Ink>> {
+pub fn layout(
+    text: &str,
+    spans: &[Span],
+    style: TextStyle,
+    max_width: Option<f32>,
+) -> std::rc::Rc<parley::Layout<super::Ink>> {
     with_text(|t| t.layout_rich(text, spans, style, 1.0, max_width))
 }
 
@@ -214,8 +246,19 @@ pub fn layout(text: &str, spans: &[Span], style: TextStyle, max_width: Option<f3
 /// and its width on one line, neither counting the spaces that end a line.
 pub fn content_widths(text: &str, spans: &[Span], style: TextStyle) -> (f32, f32) {
     with_text(|t| {
-        let min = t.layout_rich_with(text, spans, style, 1.0, Some(0.0), RichLayoutOptions::default()).width();
-        let max = t.layout_rich_with(text, spans, style, 1.0, None, RichLayoutOptions::default()).width();
+        let min = t
+            .layout_rich_with(
+                text,
+                spans,
+                style,
+                1.0,
+                Some(0.0),
+                RichLayoutOptions::default(),
+            )
+            .width();
+        let max = t
+            .layout_rich_with(text, spans, style, 1.0, None, RichLayoutOptions::default())
+            .width();
         (min, max)
     })
 }
@@ -231,10 +274,15 @@ pub(super) fn with_text<R>(f: impl FnOnce(&mut TextSystem) -> R) -> R {
     MEASURER.with_borrow_mut(|m| {
         let current = font_epoch();
         if m.as_ref().is_none_or(|m| m.generation != current) {
-            let wanted = with_state(|f| f.as_ref().map(|f| (f.fonts_generation, f.fonts.clone(), f.families.clone())));
+            let wanted = with_state(|f| {
+                f.as_ref()
+                    .map(|f| (f.fonts_generation, f.fonts.clone(), f.families.clone()))
+            });
             match (m.as_mut(), &wanted) {
                 // Only the families changed: the loaded fonts stay.
-                (Some(m), Some((fonts_generation, _, (sans, mono)))) if m.fonts_generation == *fonts_generation => {
+                (Some(m), Some((fonts_generation, _, (sans, mono))))
+                    if m.fonts_generation == *fonts_generation =>
+                {
                     m.text.set_families(sans, mono);
                     m.generation = font_epoch();
                 }
@@ -244,8 +292,14 @@ pub(super) fn with_text<R>(f: impl FnOnce(&mut TextSystem) -> R) -> R {
                         None => TextSystem::default(),
                     };
                     // Building a text system notes its fonts, so read the generation it settled on.
-                    let fonts_generation = with_state(|f| f.as_ref().map(|f| f.fonts_generation)).unwrap_or(0);
-                    *m = Some(Measurer { generation: font_epoch(), fonts_generation, text, calls: 0 });
+                    let fonts_generation =
+                        with_state(|f| f.as_ref().map(|f| f.fonts_generation)).unwrap_or(0);
+                    *m = Some(Measurer {
+                        generation: font_epoch(),
+                        fonts_generation,
+                        text,
+                        calls: 0,
+                    });
                 }
             }
         }
@@ -268,7 +322,10 @@ mod tests {
         let (w, h) = measure("Hello world", &[], style, None);
         assert!(w > 50.0 && h >= 17.0, "{w} {h}");
         let (min, tall) = measure("Hello world", &[], style, Some(0.0));
-        assert!(min < w && tall > h, "min-content breaks at every opportunity: {min} {tall}");
+        assert!(
+            min < w && tall > h,
+            "min-content breaks at every opportunity: {min} {tall}"
+        );
         let mut bold = Span::new(0, 5);
         bold.weight = Some(700.0);
         assert!(measure("Hello world", &[bold], style, None).0 > w);
@@ -279,9 +336,24 @@ mod tests {
         let style = TextStyle::new(14.0, 400.0);
         let link = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let (plain_w, plain_h) = measure(link, &[], style, Some(120.0));
-        let (w, h) = measure_with(link, &[], style, Some(120.0), RichLayoutOptions::new().wrap_anywhere());
-        assert!(plain_w > 120.0, "without wrap_anywhere the token runs past the width: {plain_w}");
-        assert!(w <= 120.0 && h > plain_h * 2.0, "{w} {h} vs {plain_w} {plain_h}");
-        assert_eq!(measure(link, &[], style, Some(120.0)), measure_with(link, &[], style, Some(120.0), RichLayoutOptions::new()));
+        let (w, h) = measure_with(
+            link,
+            &[],
+            style,
+            Some(120.0),
+            RichLayoutOptions::new().wrap_anywhere(),
+        );
+        assert!(
+            plain_w > 120.0,
+            "without wrap_anywhere the token runs past the width: {plain_w}"
+        );
+        assert!(
+            w <= 120.0 && h > plain_h * 2.0,
+            "{w} {h} vs {plain_w} {plain_h}"
+        );
+        assert_eq!(
+            measure(link, &[], style, Some(120.0)),
+            measure_with(link, &[], style, Some(120.0), RichLayoutOptions::new())
+        );
     }
 }

@@ -57,7 +57,11 @@ pub(crate) fn cursor_geometry(
 /// The x just outside the pill chip whose label starts or ends at byte `at`, on the line at
 /// height `y`: after the chip of a pill ending there, else before one starting there.
 fn pill_edge(layout: &Layout<Ink>, at: usize, y: f32) -> Option<f32> {
-    let ids: Vec<u64> = layout.inline_boxes().filter(|b| b.index == at && b.id & PILL_BOX != 0).map(|b| b.id).collect();
+    let ids: Vec<u64> = layout
+        .inline_boxes()
+        .filter(|b| b.index == at && b.id & PILL_BOX != 0)
+        .map(|b| b.id)
+        .collect();
     if ids.is_empty() {
         return None;
     }
@@ -79,7 +83,9 @@ fn pill_edge(layout: &Layout<Ink>, at: usize, y: f32) -> Option<f32> {
     // If bidi reordering moved `lead` away from the pill's glyph run, step left from the run.
     let start_byte = layout.inline_boxes().find(|b| b.id == lead.id)?.index;
     let gr_x0 = line.items().find_map(|it| match it {
-        PositionedLayoutItem::GlyphRun(gr) if gr.run().text_range().contains(&start_byte) => Some(gr.offset()),
+        PositionedLayoutItem::GlyphRun(gr) if gr.run().text_range().contains(&start_byte) => {
+            Some(gr.offset())
+        }
         _ => None,
     });
     if let Some(gx) = gr_x0.filter(|&gx| (lead.x + lead.width - gx).abs() >= 1.0) {
@@ -88,7 +94,10 @@ fn pill_edge(layout: &Layout<Ink>, at: usize, y: f32) -> Option<f32> {
     Some(lead.x)
 }
 
-pub(super) fn line_for_offset(layout: &Layout<Ink>, offset: f32) -> Option<(usize, parley::Line<'_, Ink>)> {
+pub(super) fn line_for_offset(
+    layout: &Layout<Ink>,
+    offset: f32,
+) -> Option<(usize, parley::Line<'_, Ink>)> {
     if offset < 0.0 {
         return Some((0, layout.get(0)?));
     }
@@ -107,7 +116,9 @@ pub(super) fn line_for_offset(layout: &Layout<Ink>, offset: f32) -> Option<(usiz
 /// width into the following cluster).
 pub(crate) fn cursor_from_point(layout: &Layout<Ink>, x: f32, y: f32) -> parley::editing::Cursor {
     use parley::{BreakReason, editing::Cursor, layout::Affinity};
-    if layout.inline_boxes().next().is_none() && layout.lines().all(|l| l.metrics().inline_min_coord == 0.0) {
+    if layout.inline_boxes().next().is_none()
+        && layout.lines().all(|l| l.metrics().inline_min_coord == 0.0)
+    {
         return Cursor::from_point(layout, x, y);
     }
     if layout.len() == 0 {
@@ -136,7 +147,11 @@ pub(crate) fn cursor_from_point(layout: &Layout<Ink>, x: f32, y: f32) -> parley:
     // Left of a right-to-left line is its end, and right of it its start.
     let rtl = layout.is_rtl();
     if x <= m.inline_min_coord + m.offset {
-        return if rtl { Cursor::from_byte_index(layout, r.end, Affinity::Upstream) } else { Cursor::from_byte_index(layout, r.start, Affinity::Downstream) };
+        return if rtl {
+            Cursor::from_byte_index(layout, r.end, Affinity::Upstream)
+        } else {
+            Cursor::from_byte_index(layout, r.start, Affinity::Downstream)
+        };
     }
     for item in line.items() {
         if let PositionedLayoutItem::InlineBox(b) = item
@@ -145,12 +160,21 @@ pub(crate) fn cursor_from_point(layout: &Layout<Ink>, x: f32, y: f32) -> parley:
             && x <= b.x + b.width
             && let Some(ib) = layout.inline_boxes().find(|ib| ib.id == b.id)
         {
-            let aff = if b.id & 1 == 0 { Affinity::Downstream } else { Affinity::Upstream };
+            let aff = if b.id & 1 == 0 {
+                Affinity::Downstream
+            } else {
+                Affinity::Upstream
+            };
             return Cursor::from_byte_index(layout, ib.index, aff);
         }
     }
     for run in line.runs() {
-        let mut cx = m.inline_min_coord + run.visual_clusters().next().and_then(|c| c.visual_offset()).unwrap_or(m.offset);
+        let mut cx = m.inline_min_coord
+            + run
+                .visual_clusters()
+                .next()
+                .and_then(|c| c.visual_offset())
+                .unwrap_or(m.offset);
         for cl in run.visual_clusters() {
             let adv = cl.advance();
             if x <= cx + adv {
@@ -176,7 +200,11 @@ pub(crate) fn cursor_from_point(layout: &Layout<Ink>, x: f32, y: f32) -> parley:
             return Cursor::from_byte_index(layout, cl.text_range().start, Affinity::Downstream);
         }
     }
-    if rtl { Cursor::from_byte_index(layout, r.start, Affinity::Downstream) } else { Cursor::from_byte_index(layout, r.end, Affinity::Upstream) }
+    if rtl {
+        Cursor::from_byte_index(layout, r.start, Affinity::Downstream)
+    } else {
+        Cursor::from_byte_index(layout, r.end, Affinity::Upstream)
+    }
 }
 
 /// Start (`!end`) or end (`end`) byte of the visual line containing `byte`.
@@ -196,7 +224,8 @@ pub(crate) fn line_edge(layout: &Layout<Ink>, byte: usize, end: bool) -> usize {
         return r.start;
     }
     if line.break_reason() == BreakReason::Explicit && r.end > r.start {
-        parley::Cluster::from_byte_index(layout, r.end - 1).map_or(r.end - 1, |c| c.text_range().start)
+        parley::Cluster::from_byte_index(layout, r.end - 1)
+            .map_or(r.end - 1, |c| c.text_range().start)
     } else {
         r.end
     }
@@ -205,7 +234,12 @@ pub(crate) fn line_edge(layout: &Layout<Ink>, byte: usize, end: bool) -> usize {
 /// Byte index on the previous (`!down`) or next (`down`) visual line at `goal`'s x (the column
 /// a run of Up and Down keeps), else `byte`'s, and that x; the start on the first line moving
 /// up, `None` on the last moving down.
-pub(crate) fn move_line(layout: &Layout<Ink>, byte: usize, down: bool, goal: Option<f32>) -> Option<(usize, f32)> {
+pub(crate) fn move_line(
+    layout: &Layout<Ink>,
+    byte: usize,
+    down: bool,
+    goal: Option<f32>,
+) -> Option<(usize, f32)> {
     use parley::{editing::Cursor, layout::Affinity};
     if layout.len() == 0 {
         return None;
@@ -224,7 +258,10 @@ pub(crate) fn move_line(layout: &Layout<Ink>, byte: usize, down: bool, goal: Opt
     }
     let line = layout.get(if down { idx + 1 } else { idx - 1 })?;
     let m = line.metrics();
-    Some((cursor_from_point(layout, x, (m.block_min_coord + m.block_max_coord) * 0.5).index(), x))
+    Some((
+        cursor_from_point(layout, x, (m.block_min_coord + m.block_max_coord) * 0.5).index(),
+        x,
+    ))
 }
 
 /// Line boxes (`(BoundingBox, line_idx)`) covering bytes `a..b` of `layout`. When `pill_boxes`
@@ -272,7 +309,12 @@ pub(crate) fn range_boxes(
         };
         let mut intervals: Vec<(f64, f64)> = Vec::new();
         for run in line.runs() {
-            let mut cx = (m.inline_min_coord + run.visual_clusters().next().and_then(|c| c.visual_offset()).unwrap_or(m.offset)) as f64;
+            let mut cx = (m.inline_min_coord
+                + run
+                    .visual_clusters()
+                    .next()
+                    .and_then(|c| c.visual_offset())
+                    .unwrap_or(m.offset)) as f64;
             for cl in run.visual_clusters() {
                 let adv = cl.advance() as f64;
                 if range.contains(&cl.text_range().start) && adv > 0.0 {
@@ -286,13 +328,16 @@ pub(crate) fn range_boxes(
                 if let PositionedLayoutItem::InlineBox(ib) = item
                     && ib.id & PILL_BOX != 0
                     && ib.width > 0.0
-                    && layout.inline_boxes().find(|b| b.id == ib.id).is_some_and(|b| {
-                        if ib.id & 1 == 0 {
-                            range.contains(&b.index)
-                        } else {
-                            b.index > 0 && range.contains(&(b.index - 1))
-                        }
-                    })
+                    && layout
+                        .inline_boxes()
+                        .find(|b| b.id == ib.id)
+                        .is_some_and(|b| {
+                            if ib.id & 1 == 0 {
+                                range.contains(&b.index)
+                            } else {
+                                b.index > 0 && range.contains(&(b.index - 1))
+                            }
+                        })
                 {
                     intervals.push((ib.x as f64, (ib.x + ib.width) as f64));
                 }
@@ -314,7 +359,10 @@ pub(crate) fn range_boxes(
         }
         for (x0, x1) in merged {
             if x1 > x0 {
-                rects.push((parley::BoundingBox::new(x0, line_min, x1, line_max), line_ix));
+                rects.push((
+                    parley::BoundingBox::new(x0, line_min, x1, line_max),
+                    line_ix,
+                ));
             }
         }
     }

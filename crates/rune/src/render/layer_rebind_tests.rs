@@ -6,13 +6,25 @@ use crate::text::outline::{OutlineStore, WIDTH};
 
 /// A group that needs a target of its own: half-opaque, so it isolates.
 fn group(bounds: [f32; 4]) -> Vec<Instance> {
-    vec![Instance::begin_layer(bounds, NO_CLIP, LayerSpec { opacity: 0.5, ..Default::default() }),
-        rect(bounds, [1.0; 4]), Instance::end_layer()]
+    vec![
+        Instance::begin_layer(
+            bounds,
+            NO_CLIP,
+            LayerSpec {
+                opacity: 0.5,
+                ..Default::default()
+            },
+        ),
+        rect(bounds, [1.0; 4]),
+        Instance::end_layer(),
+    ]
 }
 
 /// `count` groups in a row, each with a target of its own.
 fn groups(count: usize) -> Vec<Instance> {
-    (0..count).flat_map(|index| group([index as f32 * 8.0, 4.0, 8.0, 8.0])).collect()
+    (0..count)
+        .flat_map(|index| group([index as f32 * 8.0, 4.0, 8.0, 8.0]))
+        .collect()
 }
 
 /// An outline store of `rows` rows holding a record, so text asks the renderer for Windfoil.
@@ -34,9 +46,20 @@ fn a_parked_target_binds_the_outline_texture_when_it_is_taken_back() {
     // Text has drawn from outlines: Windfoil and its minimum-height outline texture exist.
     atlas.outlines = store(1);
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &text, (64, 64));
-    let short = renderer.uber.outlines().expect("text asked for Windfoil").height();
-    assert_eq!(short, crate::render::outlines::MIN_ROWS, "the store starts at its minimum");
-    assert_eq!(renderer.layers.targets[0].as_ref().unwrap().outline_rows, short);
+    let short = renderer
+        .uber
+        .outlines()
+        .expect("text asked for Windfoil")
+        .height();
+    assert_eq!(
+        short,
+        crate::render::outlines::MIN_ROWS,
+        "the store starts at its minimum"
+    );
+    assert_eq!(
+        renderer.layers.targets[0].as_ref().unwrap().outline_rows,
+        short
+    );
 
     // The text leaves: its target waits in the spares.
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
@@ -45,16 +68,34 @@ fn a_parked_target_binds_the_outline_texture_when_it_is_taken_back() {
     // The store grows past the texture while the target waits: nothing binds it yet.
     atlas.outlines = store(crate::render::outlines::MIN_ROWS as usize * 2);
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-    let tall = renderer.uber.outlines().expect("Windfoil stays built").height();
+    let tall = renderer
+        .uber
+        .outlines()
+        .expect("Windfoil stays built")
+        .height();
     assert!(tall > short, "the outline texture grew");
-    assert_eq!(renderer.layers.spare[0].outline_rows, short, "a parked target waits unbound");
+    assert_eq!(
+        renderer.layers.spare[0].outline_rows, short,
+        "a parked target waits unbound"
+    );
 
     // Text needing the new rows takes that same target back, and it binds before it draws.
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &text, (64, 64));
-    let slot = renderer.layers.targets[0].as_ref().expect("the layer has its target");
-    assert_eq!(slot.identity, parked, "the layer took the parked target back");
-    assert_eq!(slot.outline_rows, tall, "and draws through the taller outline store");
-    assert_eq!(slot.binding, renderer.layers.bindings, "bound in this frame's generation");
+    let slot = renderer.layers.targets[0]
+        .as_ref()
+        .expect("the layer has its target");
+    assert_eq!(
+        slot.identity, parked,
+        "the layer took the parked target back"
+    );
+    assert_eq!(
+        slot.outline_rows, tall,
+        "and draws through the taller outline store"
+    );
+    assert_eq!(
+        slot.binding, renderer.layers.bindings,
+        "bound in this frame's generation"
+    );
 }
 
 /// Switching the outline on a layerless frame (text's first records build Windfoil) rebinds the
@@ -71,27 +112,56 @@ fn a_texture_switch_binds_no_parked_target_until_one_returns() {
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &quad, (64, 64));
     assert!(renderer.uber.outlines().is_none(), "no outline store yet");
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-    assert_eq!(renderer.layers.spare.len(), 4, "the four targets are parked");
+    assert_eq!(
+        renderer.layers.spare.len(),
+        4,
+        "the four targets are parked"
+    );
     let binds = renderer.layers.binds;
 
     // A layerless frame whose atlas grew outline records: the renderer switches to Windfoil and
     // makes its atlas pages again, rebinding every live target twice.
     atlas.outlines = store(1);
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &[], (64, 64));
-    assert!(renderer.uber.outlines().is_some(), "the frame switched to Windfoil");
-    assert_eq!(renderer.layers.binds, binds, "a parked target makes no bind group");
+    assert!(
+        renderer.uber.outlines().is_some(),
+        "the frame switched to Windfoil"
+    );
+    assert_eq!(
+        renderer.layers.binds, binds,
+        "a parked target makes no bind group"
+    );
     let generation = renderer.layers.bindings;
-    assert!(renderer.layers.spare.iter().all(|t| t.binding < generation), "every spare waits stale");
+    assert!(
+        renderer.layers.spare.iter().all(|t| t.binding < generation),
+        "every spare waits stale"
+    );
 
     // One layer comes back and takes one of them: that target binds, once, and only it.
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &quad[..3], (64, 64));
-    assert_eq!(renderer.layers.binds, binds + 1, "one target returned, so one bind group");
-    let slot = renderer.layers.targets[0].as_ref().expect("the layer has its target");
-    assert_eq!(slot.binding, generation, "and it binds the frame's atlas and outline texture");
-    assert!(renderer.layers.spare.iter().all(|t| t.binding < generation), "the others still wait");
+    assert_eq!(
+        renderer.layers.binds,
+        binds + 1,
+        "one target returned, so one bind group"
+    );
+    let slot = renderer.layers.targets[0]
+        .as_ref()
+        .expect("the layer has its target");
+    assert_eq!(
+        slot.binding, generation,
+        "and it binds the frame's atlas and outline texture"
+    );
+    assert!(
+        renderer.layers.spare.iter().all(|t| t.binding < generation),
+        "the others still wait"
+    );
     assert_eq!(renderer.layers.spare.len(), 3);
 
     // A frame that keeps that layer takes no new target and binds nothing.
     renderer.prepare(&gpu.device, &gpu.queue, &mut atlas, &quad[..3], (64, 64));
-    assert_eq!(renderer.layers.binds, binds + 1, "a steady frame binds nothing");
+    assert_eq!(
+        renderer.layers.binds,
+        binds + 1,
+        "a steady frame binds nothing"
+    );
 }

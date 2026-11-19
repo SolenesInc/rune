@@ -41,7 +41,10 @@ impl El {
         self
     }
     /// [`El::on_press_tx`] in place.
-    pub fn set_on_press_tx<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> &mut Self {
+    pub fn set_on_press_tx<S: 'static>(
+        &mut self,
+        f: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> &mut Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         if self.role == RoleTag::GROUP {
             self.role = RoleTag::BUTTON;
@@ -57,7 +60,10 @@ impl El {
         self.on_background_press_tx(move |s: &mut S, _tx: &mut Tx| f(s))
     }
     /// [`El::on_background_press`] with the transaction.
-    pub fn on_background_press_tx<S: 'static>(mut self, f: impl Fn(&mut S, &mut Tx) + 'static) -> Self {
+    pub fn on_background_press_tx<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, &mut Tx) + 'static,
+    ) -> Self {
         self.handlers.on_press = Some(Rc::new(move |s, tx| f(downcast::<S>(s), tx)));
         self.focusable(false)
     }
@@ -104,8 +110,14 @@ impl El {
     /// and the element behaves as if it had no `drag_out`. Headless tools record `drag-out
     /// <path>` in the trace and `dragOut` in the tree instead. Overlay panels start the same
     /// session; see [`crate::drag_out`] for how far that path is tested.
-    pub fn drag_out<S: 'static>(mut self, f: impl Fn(&S) -> Option<crate::DragItem> + 'static) -> Self {
-        self.handlers.drag_out = Some(Rc::new(move |s| f(s.cast::<S>().expect("handler registered for a different state type than the app's"))));
+    pub fn drag_out<S: 'static>(
+        mut self,
+        f: impl Fn(&S) -> Option<crate::DragItem> + 'static,
+    ) -> Self {
+        self.handlers.drag_out = Some(Rc::new(move |s| {
+            f(s.cast::<S>()
+                .expect("handler registered for a different state type than the app's"))
+        }));
         self
     }
     /// How far (points, straight-line) the pointer travels from the press before this
@@ -139,8 +151,13 @@ impl El {
         self
     }
     /// Called once when a [`El::drag_out`] drag ends, with what the drop did.
-    pub fn on_drag_end<S: 'static>(mut self, f: impl Fn(&mut S, crate::DragOutcome, &mut Tx) + 'static) -> Self {
-        self.handlers.on_drag_end = Some(Rc::new(move |s, outcome, tx| f(downcast::<S>(s), outcome, tx)));
+    pub fn on_drag_end<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, crate::DragOutcome, &mut Tx) + 'static,
+    ) -> Self {
+        self.handlers.on_drag_end = Some(Rc::new(move |s, outcome, tx| {
+            f(downcast::<S>(s), outcome, tx)
+        }));
         self
     }
 }
@@ -216,7 +233,8 @@ pub(crate) enum WindowDrag {
 }
 
 pub(crate) type PressFn = Rc<dyn Fn(crate::states::States<'_>, &mut Tx)>;
-pub(crate) type InputKeyFn = Rc<dyn Fn(crate::states::States<'_>, &crate::KeyEvent, &mut Tx) -> bool>;
+pub(crate) type InputKeyFn =
+    Rc<dyn Fn(crate::states::States<'_>, &crate::KeyEvent, &mut Tx) -> bool>;
 pub(crate) type StepFn = Rc<dyn Fn(crate::states::States<'_>, i32, &mut Tx)>;
 pub(crate) type StepLimitFn = Rc<dyn Fn(crate::states::States<'_>, bool, &mut Tx)>;
 
@@ -245,7 +263,10 @@ impl PointerEvent {
     /// The point in window points, as `on_pointer_move` and `on_secondary_press` give it: a
     /// popup or context menu's anchor.
     pub fn window(&self) -> PointerPress {
-        PointerPress { x: self.window_x, y: self.window_y }
+        PointerPress {
+            x: self.window_x,
+            y: self.window_y,
+        }
     }
 }
 
@@ -258,8 +279,13 @@ pub(crate) type DragEndFn = Rc<dyn Fn(crate::states::States<'_>, crate::DragOutc
 impl El {
     /// On the root, receive native window activation/deactivation (not text-field focus).
     /// Also works on interactive overlays. Headless hosts may call Runtime::window_focus.
-    pub fn on_window_focus<S: 'static>(mut self, f: impl Fn(&mut S, bool, &mut Tx) + 'static) -> Self {
-        self.handlers.on_window_focus = Some(Rc::new(move |s, focused, tx| f(downcast::<S>(s), focused, tx)));
+    pub fn on_window_focus<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, bool, &mut Tx) + 'static,
+    ) -> Self {
+        self.handlers.on_window_focus = Some(Rc::new(move |s, focused, tx| {
+            f(downcast::<S>(s), focused, tx)
+        }));
         self
     }
     /// On the root (or modal root), handle paste when no text field is focused.
@@ -269,17 +295,26 @@ impl El {
         self.handlers.on_paste = Some(PasteFn {
             rich: false,
             call: Rc::new(move |s, content, tx| {
-                content.has_plain() && { f(downcast::<S>(s), content.text(), tx); true }
+                content.has_plain() && {
+                    f(downcast::<S>(s), content.text(), tx);
+                    true
+                }
             }),
         });
         self
     }
     /// [`El::on_paste`] with everything the clipboard held: plain text and, when the source
     /// offered them, sanitised HTML and RTF. Replaces an `on_paste` on the same element.
-    pub fn on_paste_content<S: 'static>(mut self, f: impl Fn(&mut S, &crate::ClipboardContent, &mut Tx) + 'static) -> Self {
+    pub fn on_paste_content<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, &crate::ClipboardContent, &mut Tx) + 'static,
+    ) -> Self {
         self.handlers.on_paste = Some(PasteFn {
             rich: true,
-            call: Rc::new(move |s, content, tx| { f(downcast::<S>(s), content, tx); true }),
+            call: Rc::new(move |s, content, tx| {
+                f(downcast::<S>(s), content, tx);
+                true
+            }),
         });
         self
     }
@@ -288,7 +323,10 @@ impl El {
     /// the element's own points as well. The Menu key and Shift+F10 call it too, while this
     /// element or one inside it is focused and no key handler took the key, at the focused
     /// element's bottom-left.
-    pub fn on_secondary_press<S: 'static>(mut self, f: impl Fn(&mut S, PointerPress, &mut Tx) + 'static) -> Self {
+    pub fn on_secondary_press<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, PointerPress, &mut Tx) + 'static,
+    ) -> Self {
         self.handlers.on_secondary_press = Some(Rc::new(move |s, p, tx| {
             f(downcast::<S>(s), p.window(), tx);
         }));
@@ -303,8 +341,12 @@ impl El {
     ///     s.menu = Some((s.shape_at(p.x, p.y), p.window()));
     /// })
     /// ```
-    pub fn on_secondary_press_local<S: 'static>(mut self, f: impl Fn(&mut S, PointerEvent, &mut Tx) + 'static) -> Self {
-        self.handlers.on_secondary_press = Some(Rc::new(move |s, p, tx| f(downcast::<S>(s), p, tx)));
+    pub fn on_secondary_press_local<S: 'static>(
+        mut self,
+        f: impl Fn(&mut S, PointerEvent, &mut Tx) + 'static,
+    ) -> Self {
+        self.handlers.on_secondary_press =
+            Some(Rc::new(move |s, p, tx| f(downcast::<S>(s), p, tx)));
         self
     }
 }

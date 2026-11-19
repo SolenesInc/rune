@@ -23,7 +23,11 @@ static EMBEDDED_INTER: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 /// The full faces' files, which a web build serves beside its `app.js`.
 #[cfg(all(target_arch = "wasm32", feature = "embedded-fonts"))]
-pub(crate) const FILES: &[&str] = &["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf"];
+pub(crate) const FILES: &[&str] = &[
+    "Inter-Regular.ttf",
+    "Inter-Medium.ttf",
+    "Inter-SemiBold.ttf",
+];
 
 /// Notes that a text system set text in the embedded Inter: no font of the app's is Inter.
 #[cfg(all(target_arch = "wasm32", feature = "embedded-fonts"))]
@@ -42,7 +46,9 @@ pub(crate) fn embedded_inter() -> bool {
 /// frame.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn arrive(faces: Vec<Vec<u8>>) {
-    let Ok(mut arrived) = ARRIVED.lock() else { return };
+    let Ok(mut arrived) = ARRIVED.lock() else {
+        return;
+    };
     arrived.extend(faces.into_iter().map(|f| Blob::new(std::sync::Arc::new(f))));
     COUNT.store(arrived.len(), Ordering::Release);
     drop(arrived);
@@ -55,7 +61,9 @@ impl TextSystem {
         if COUNT.load(Ordering::Acquire) <= self.faces_taken {
             return false;
         }
-        let Some(faces) = ARRIVED.lock().ok().map(|a| a[self.faces_taken..].to_vec()) else { return false };
+        let Some(faces) = ARRIVED.lock().ok().map(|a| a[self.faces_taken..].to_vec()) else {
+            return false;
+        };
         self.faces_taken += faces.len();
         self.swap_faces(&faces);
         self.drop_shaped();

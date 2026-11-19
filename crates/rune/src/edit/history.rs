@@ -79,7 +79,8 @@ impl Change {
             + self.after.text.len()
             + (self.before.marks.len() + self.after.marks.len()) * std::mem::size_of::<MarkRange>()
             + (self.before.blocks.len() + self.after.blocks.len()) * std::mem::size_of::<Block>()
-            + (self.before.soft_breaks.len() + self.after.soft_breaks.len()) * std::mem::size_of::<u32>()
+            + (self.before.soft_breaks.len() + self.after.soft_breaks.len())
+                * std::mem::size_of::<u32>()
     }
 }
 
@@ -138,12 +139,20 @@ pub(super) enum Record {
 pub(super) fn step(run: &mut Run, kind: EditKind, into_empty: bool) -> Record {
     let (record, next) = match (*run, kind) {
         (_, EditKind::Other) => (Record::Push, Run::Closed),
-        (_, EditKind::DeleteRun) | (Run::Closed | Run::Inserting, EditKind::Delete) => (Record::Push, Run::Deleting),
+        (_, EditKind::DeleteRun) | (Run::Closed | Run::Inserting, EditKind::Delete) => {
+            (Record::Push, Run::Deleting)
+        }
         (Run::Deleting, EditKind::Delete) => (Record::Join, Run::Deleting),
         (Run::Closed, EditKind::Text | EditKind::LineBreak) => (Record::Push, Run::Inserting),
-        (Run::Inserting | Run::Deleting, EditKind::Text | EditKind::LineBreak) => (Record::Join, Run::Inserting),
+        (Run::Inserting | Run::Deleting, EditKind::Text | EditKind::LineBreak) => {
+            (Record::Join, Run::Inserting)
+        }
     };
-    *run = if kind == EditKind::Text && into_empty { Run::Closed } else { next };
+    *run = if kind == EditKind::Text && into_empty {
+        Run::Closed
+    } else {
+        next
+    };
     record
 }
 
@@ -160,7 +169,11 @@ impl TextEdit {
 
     /// An undo group opened on the document as it is now.
     pub(super) fn group_from_here(&self) -> Group {
-        if self.secure { Group::Unrecorded } else { Group::Open(self.snapshot_now()) }
+        if self.secure {
+            Group::Unrecorded
+        } else {
+            Group::Open(self.snapshot_now())
+        }
     }
 
     /// Edits record undo steps: not on a secure field, and not inside an undo group, whose
@@ -171,7 +184,9 @@ impl TextEdit {
 
     /// End a typing group on a pointer selection or focus change.
     pub fn break_history_group(&mut self) {
-        if self.history.run != Run::Closed { Arc::make_mut(&mut self.history).run = Run::Closed; }
+        if self.history.run != Run::Closed {
+            Arc::make_mut(&mut self.history).run = Run::Closed;
+        }
     }
 
     pub(super) fn snapshot_now(&self) -> Snapshot {
@@ -211,7 +226,11 @@ impl TextEdit {
             return;
         }
         let h = Arc::make_mut(&mut self.history);
-        let expected = h.redo.last().map(|c| &c.before).or_else(|| h.undo.back().map(|c| &c.after));
+        let expected = h
+            .redo
+            .last()
+            .map(|c| &c.before)
+            .or_else(|| h.undo.back().map(|c| &c.after));
         if expected.is_some_and(|last| last.text != before.text) {
             *h = History::default();
         }
@@ -284,24 +303,42 @@ impl TextEdit {
 
     /// Undo one typing group or discrete edit. Active IME composition is cancelled first.
     pub fn undo(&mut self) {
-        if !self.recording() { return; }
+        if !self.recording() {
+            return;
+        }
         self.break_history_group();
-        if self.preedit().is_some() { self.cancel_composition(); return; }
+        if self.preedit().is_some() {
+            self.cancel_composition();
+            return;
+        }
         let h = Arc::make_mut(&mut self.history);
-        let Some(change) = h.undo.pop_back() else { return };
+        let Some(change) = h.undo.pop_back() else {
+            return;
+        };
         // Public model text may have been replaced by the app. Never restore stale history.
-        if self.text != change.after.text.as_str() { *h = History::default(); return; }
+        if self.text != change.after.text.as_str() {
+            *h = History::default();
+            return;
+        }
         self.restore(&change.before);
         Arc::make_mut(&mut self.history).redo.push(change);
     }
 
     pub fn redo(&mut self) {
-        if !self.recording() { return; }
+        if !self.recording() {
+            return;
+        }
         self.break_history_group();
-        if self.preedit().is_some() { self.cancel_composition(); return; }
+        if self.preedit().is_some() {
+            self.cancel_composition();
+            return;
+        }
         let h = Arc::make_mut(&mut self.history);
         let Some(change) = h.redo.pop() else { return };
-        if self.text != change.before.text.as_str() { *h = History::default(); return; }
+        if self.text != change.before.text.as_str() {
+            *h = History::default();
+            return;
+        }
         self.restore(&change.after);
         Arc::make_mut(&mut self.history).undo.push_back(change);
     }

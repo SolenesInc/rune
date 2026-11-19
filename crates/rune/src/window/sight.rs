@@ -26,7 +26,9 @@ pub(crate) enum Sight {
 }
 
 impl Sight {
-    pub(crate) fn covered(self) -> bool { matches!(self, Sight::Covered(_)) }
+    pub(crate) fn covered(self) -> bool {
+        matches!(self, Sight::Covered(_))
+    }
 
     /// `cover` starts (`on`) or stops covering the window. A notification, either way,
     /// supersedes a refused drawable's guess, which only stood in for one.
@@ -35,8 +37,14 @@ impl Sight {
             Sight::Seen => 0,
             Sight::Covered(set) => set.get(),
         };
-        if cover != Cover::Surface { bits &= !(Cover::Surface as u8); }
-        bits = if on { bits | cover as u8 } else { bits & !(cover as u8) };
+        if cover != Cover::Surface {
+            bits &= !(Cover::Surface as u8);
+        }
+        bits = if on {
+            bits | cover as u8
+        } else {
+            bits & !(cover as u8)
+        };
         NonZeroU8::new(bits).map_or(Sight::Seen, Sight::Covered)
     }
 }
@@ -48,11 +56,14 @@ impl<S: 'static> Host<S> {
     pub(super) fn set_cover(&mut self, cover: Cover, on: bool) {
         let Some(l) = self.win.as_mut() else { return };
         #[cfg(target_os = "macos")]
-        { l.native.prime.stop(); }
+        {
+            l.native.prime.stop();
+        }
         let was = self.life.cover(cover, on);
         l.backoff_step(BackoffEvent::Uncovered);
         l.presented = None;
-        self.rt.set_live_visible(self.life.uncovered() && !l.minimized());
+        self.rt
+            .set_live_visible(self.life.uncovered() && !l.minimized());
         if self.life.covered() {
             self.secure_input.set(false);
             l.stop_pacing();
@@ -64,7 +75,10 @@ impl<S: 'static> Host<S> {
         sync_chrome(&mut self.rt, l, self.chrome, self.titlebar);
         // A window opened while the displays slept has no display link yet.
         #[cfg(target_os = "macos")]
-        if l.native.pacing.is_none() { l.native.pacing = crate::platform::display_link::DisplayLink::new(&l.window, self.frame_wake.clone()); }
+        if l.native.pacing.is_none() {
+            l.native.pacing =
+                crate::platform::display_link::DisplayLink::new(&l.window, self.frame_wake.clone());
+        }
         if was {
             self.rt.settle_all();
             l.request_redraw();

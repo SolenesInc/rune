@@ -40,11 +40,19 @@ pub(super) fn step(state: &mut Held, event: Event) -> Effects<Effect> {
                 Held::Down { keys } => keys,
                 // A release with this press's own timestamp is the repeat itself: the key stayed
                 // down, and the release is spent rather than replayed.
-                Held::AwaitingRepeat { keys, code: released, time: released_at } if (released, released_at) == (code, time) => {
+                Held::AwaitingRepeat {
+                    keys,
+                    code: released,
+                    time: released_at,
+                } if (released, released_at) == (code, time) => {
                     *state = held(keys);
                     return Effects::none();
                 }
-                Held::AwaitingRepeat { keys, code: released, .. } => forget(keys, released),
+                Held::AwaitingRepeat {
+                    keys,
+                    code: released,
+                    ..
+                } => forget(keys, released),
             };
             if keys.contains(&code) {
                 *state = held(keys);
@@ -58,7 +66,11 @@ pub(super) fn step(state: &mut Held, event: Event) -> Effects<Effect> {
             let keys = match std::mem::take(state) {
                 Held::Up => Vec::new(),
                 Held::Down { keys } => keys,
-                Held::AwaitingRepeat { keys, code: released, .. } => forget(keys, released),
+                Held::AwaitingRepeat {
+                    keys,
+                    code: released,
+                    ..
+                } => forget(keys, released),
             };
             *state = Held::AwaitingRepeat { keys, code, time };
             Effects::none()
@@ -68,13 +80,21 @@ pub(super) fn step(state: &mut Held, event: Event) -> Effects<Effect> {
 
 /// A hold with these keys down, or `Up` when there are none.
 fn held(keys: Vec<u8>) -> Held {
-    if keys.is_empty() { Held::Up } else { Held::Down { keys } }
+    if keys.is_empty() {
+        Held::Up
+    } else {
+        Held::Down { keys }
+    }
 }
 
 /// The first key down started the active grab, which ends with its release; keys pressed
 /// during the grab send their releases elsewhere, so they are forgotten with it.
 fn forget(mut keys: Vec<u8>, released: u8) -> Vec<u8> {
-    if keys.first() == Some(&released) { keys.clear(); } else { keys.retain(|&c| c != released); }
+    if keys.first() == Some(&released) {
+        keys.clear();
+    } else {
+        keys.retain(|&c| c != released);
+    }
     keys
 }
 
@@ -88,7 +108,10 @@ mod tests {
     }
 
     fn release(r: &mut Held, code: u8, time: u32) {
-        assert!(step(r, Event::Release { code, time }).is_empty(), "a release never fires");
+        assert!(
+            step(r, Event::Release { code, time }).is_empty(),
+            "a release never fires"
+        );
     }
 
     #[test]
@@ -96,15 +119,23 @@ mod tests {
         let mut r = Held::default();
         // Release/press pairs with matching timestamps.
         assert!(press(&mut r, 38, 10));
-        release(&mut r, 38, 40); assert!(!press(&mut r, 38, 40));
-        release(&mut r, 38, 70); assert!(!press(&mut r, 38, 70));
+        release(&mut r, 38, 40);
+        assert!(!press(&mut r, 38, 40));
+        release(&mut r, 38, 70);
+        assert!(!press(&mut r, 38, 70));
         release(&mut r, 38, 90);
-        assert!(press(&mut r, 38, 300), "a new press after a real release fires");
+        assert!(
+            press(&mut r, 38, 300),
+            "a new press after a real release fires"
+        );
         // Detectable autorepeat: presses without releases.
         assert!(!press(&mut r, 38, 330));
         assert!(!press(&mut r, 38, 360));
         release(&mut r, 38, 400);
-        assert!(press(&mut r, 39, 410), "another key fires and settles the earlier release");
+        assert!(
+            press(&mut r, 39, 410),
+            "another key fires and settles the earlier release"
+        );
         assert!(press(&mut r, 38, 420));
     }
 
@@ -114,7 +145,10 @@ mod tests {
         assert!(press(&mut r, 65, 10)); // the grabbed chord's key starts the active grab
         assert!(press(&mut r, 38, 20)); // another key arrives through the grab
         release(&mut r, 65, 30); // the grab ends; 38's release goes to the focused window instead
-        assert!(press(&mut r, 38, 400), "a later fresh press of the other key still fires");
+        assert!(
+            press(&mut r, 38, 400),
+            "a later fresh press of the other key still fires"
+        );
         assert!(press(&mut r, 65, 410));
     }
 }

@@ -26,13 +26,20 @@ fn view(s: &Shortcuts, _: &mut Cx<Shortcuts>) -> El {
 
 /// ⌘Z (Ctrl+Z off macOS) is the app's shortcut; anything else it leaves.
 fn shortcut(s: &mut Shortcuts, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    s.log.push(format!("app {:?} in {:?} field {}", ev.key, tx.focused(), tx.in_text_field()));
+    s.log.push(format!(
+        "app {:?} in {:?} field {}",
+        ev.key,
+        tx.focused(),
+        tx.in_text_field()
+    ));
     ev.is_command('z')
 }
 
 fn runtime() -> Runtime<Shortcuts> {
     let spec = crate::AppSpec::new("shortcuts", (300.0, 100.0), Shortcuts::default, view);
-    let mut rt = crate::App::new(spec).on_field_key(shortcut).headless_runtime((300.0, 100.0), Env::new(true, 1.0));
+    let mut rt = crate::App::new(spec)
+        .on_field_key(shortcut)
+        .headless_runtime((300.0, 100.0), Env::new(true, 1.0));
     rt.frame(0.0);
     rt
 }
@@ -43,7 +50,17 @@ fn press(rt: &mut Runtime<Shortcuts>, key: Key, mods: Mods) {
 }
 
 fn command() -> Mods {
-    if cfg!(target_os = "macos") { Mods { cmd: true, ..Mods::default() } } else { Mods { ctrl: true, ..Mods::default() } }
+    if cfg!(target_os = "macos") {
+        Mods {
+            cmd: true,
+            ..Mods::default()
+        }
+    } else {
+        Mods {
+            ctrl: true,
+            ..Mods::default()
+        }
+    }
 }
 
 #[test]
@@ -55,10 +72,18 @@ fn a_focused_field_s_keys_reach_the_app_first_and_what_it_leaves_reaches_the_fie
     press(&mut rt, Key::Command('z'), command());
     assert_eq!(
         rt.state().log,
-        [r#"app Text("a") in Some("field") field true"#, r#"field Text("a")"#, r#"app Command('z') in Some("field") field true"#],
+        [
+            r#"app Text("a") in Some("field") field true"#,
+            r#"field Text("a")"#,
+            r#"app Command('z') in Some("field") field true"#
+        ],
         "the app hears each key first; the field never hears the one the app took"
     );
-    assert_eq!(rt.state().field.text, "a", "the field typed what the app left");
+    assert_eq!(
+        rt.state().field.text,
+        "a",
+        "the field typed what the app left"
+    );
 }
 
 #[test]

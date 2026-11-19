@@ -5,16 +5,20 @@
 use std::time::Duration;
 
 use super::frame::{Gate, Quiet, QuietEffect, QuietEvent, Turn, turn};
-use crate::window::{Backoff, BackoffEvent, Missed, OCCLUDED_MAX, OCCLUDED_RETRY, TIMEOUT_RETRY, TIMER_FRAME};
 use super::surface::{Surface, SurfaceEffect};
 use crate::time::Instant;
+use crate::window::{
+    Backoff, BackoffEvent, Missed, OCCLUDED_MAX, OCCLUDED_RETRY, TIMEOUT_RETRY, TIMER_FRAME,
+};
 
 /// Every sequence of `alphabet` up to `len` long, prefixes first.
 fn walk<E: Copy>(alphabet: &[E], len: usize, mut run: impl FnMut(&[E])) {
     let mut seq = Vec::new();
     fn go<E: Copy>(alphabet: &[E], len: usize, seq: &mut Vec<E>, run: &mut impl FnMut(&[E])) {
         run(seq);
-        if seq.len() == len { return; }
+        if seq.len() == len {
+            return;
+        }
         for &e in alphabet {
             seq.push(e);
             go(alphabet, len, seq, run);
@@ -106,8 +110,12 @@ fn quiet_matches_dev_for_every_sequence() {
         QuietOp::TimerDue { resting: false },
         QuietOp::TimerDue { resting: true },
         QuietOp::Draw { presents: None },
-        QuietOp::Draw { presents: Some(false) },
-        QuietOp::Draw { presents: Some(true) },
+        QuietOp::Draw {
+            presents: Some(false),
+        },
+        QuietOp::Draw {
+            presents: Some(true),
+        },
         QuietOp::Forget,
     ];
     let mut cases = 0;
@@ -116,11 +124,19 @@ fn quiet_matches_dev_for_every_sequence() {
         let (mut dev, mut quiet) = (DevQuiet::default(), Quiet::<u32>::default());
         for (i, &op) in seq.iter().enumerate() {
             let n = i as u32 + 1;
-            assert_eq!(apply_quiet(&mut quiet, op, n), dev.apply(op, n), "{seq:?} at {i}");
+            assert_eq!(
+                apply_quiet(&mut quiet, op, n),
+                dev.apply(op, n),
+                "{seq:?} at {i}"
+            );
             assert_eq!(quiet.presented().copied(), dev.presented, "{seq:?} at {i}");
             // Dev's timer with nothing presented was never read: the next frame took it first.
             let timer = matches!(quiet, Quiet::Rests { timer: true, .. });
-            assert_eq!(timer, dev.timer && dev.presented.is_some(), "{seq:?} at {i}");
+            assert_eq!(
+                timer,
+                dev.timer && dev.presented.is_some(),
+                "{seq:?} at {i}"
+            );
         }
     });
     assert_eq!(cases, (0..=6).map(|k| 6usize.pow(k)).sum::<usize>());
@@ -138,7 +154,15 @@ fn dev_occluded_retry(now: Instant, wait: &mut Duration) -> Option<Instant> {
 /// `sync_occlusion`, which only sets `occluded` on macOS): whether it returned, whether it
 /// counted an occluded miss, and the retry it left. An occluded miss runs `missed`, which
 /// schedules the next re-check and backs off.
-fn dev_gate(prewarm: bool, occluded: bool, dirty: bool, idle: bool, retry: &mut Option<Instant>, wait: &mut Duration, now: Instant) -> (bool, bool, Option<Instant>) {
+fn dev_gate(
+    prewarm: bool,
+    occluded: bool,
+    dirty: bool,
+    idle: bool,
+    retry: &mut Option<Instant>,
+    wait: &mut Duration,
+    now: Instant,
+) -> (bool, bool, Option<Instant>) {
     if !prewarm && occluded {
         if retry.is_none_or(|retry| retry <= now) {
             *retry = dev_occluded_retry(now, wait);
@@ -146,23 +170,42 @@ fn dev_gate(prewarm: bool, occluded: bool, dirty: bool, idle: bool, retry: &mut 
         }
         return (true, false, *retry);
     }
-    if !dirty && idle { return (true, false, *retry); }
-    if !prewarm && retry.is_some_and(|retry| retry > now) { return (true, false, *retry); }
-    if !prewarm { *retry = None; }
+    if !dirty && idle {
+        return (true, false, *retry);
+    }
+    if !prewarm && retry.is_some_and(|retry| retry > now) {
+        return (true, false, *retry);
+    }
+    if !prewarm {
+        *retry = None;
+    }
     (false, false, *retry)
 }
 
 /// `draw_frame`'s arms for each answer, as the branch writes them: an occluded miss steps the
 /// backoff, and a drawn frame clears the wait before it takes its drawable.
-fn ours_gate(decided: Turn, prewarm: bool, backoff: &mut Backoff, now: Instant) -> (bool, bool, Option<Instant>) {
+fn ours_gate(
+    decided: Turn,
+    prewarm: bool,
+    backoff: &mut Backoff,
+    now: Instant,
+) -> (bool, bool, Option<Instant>) {
     match decided {
         Turn::Occluded { recheck } => {
-            if recheck { backoff.step(BackoffEvent::Missed { missed: Missed::Occluded, paced: false, now }); }
+            if recheck {
+                backoff.step(BackoffEvent::Missed {
+                    missed: Missed::Occluded,
+                    paced: false,
+                    now,
+                });
+            }
             (true, recheck, backoff.deadline())
         }
         Turn::Rest | Turn::BackedOff => (true, false, backoff.deadline()),
         Turn::Draw => {
-            if !prewarm { backoff.step(BackoffEvent::Lapsed); }
+            if !prewarm {
+                backoff.step(BackoffEvent::Lapsed);
+            }
             (false, false, backoff.deadline())
         }
     }
@@ -172,14 +215,20 @@ fn ours_gate(decided: Turn, prewarm: bool, backoff: &mut Backoff, now: Instant) 
 /// at `wait` (as a long covered spell leaves it, or as dev's fields did).
 fn backoff_start(at: Option<Instant>, wait: Duration) -> Backoff {
     let mut backoff = Backoff::seeded(wait, TIMEOUT_RETRY);
-    if let Some(at) = at { backoff.step(BackoffEvent::At(at)); }
+    if let Some(at) = at {
+        backoff.step(BackoffEvent::At(at));
+    }
     backoff
 }
 
 /// The occluded wait behind `backoff`'s deadline, which no query shows: a miss now, on a copy.
 fn occluded_wait(backoff: Backoff, now: Instant) -> Duration {
     let mut probe = backoff;
-    probe.step(BackoffEvent::Missed { missed: Missed::Occluded, paced: false, now });
+    probe.step(BackoffEvent::Missed {
+        missed: Missed::Occluded,
+        paced: false,
+        now,
+    });
     probe.deadline().expect("an occluded miss always re-checks") - now
 }
 
@@ -196,13 +245,44 @@ fn turn_matches_dev_for_every_gate() {
             for start_wait in waits {
                 cases += 1;
                 let reads = std::cell::Cell::new(0);
-                let decided = turn(Gate { prewarm, occluded, dirty, idle, retry: start }, || { reads.set(reads.get() + 1); now });
+                let decided = turn(
+                    Gate {
+                        prewarm,
+                        occluded,
+                        dirty,
+                        idle,
+                        retry: start,
+                    },
+                    || {
+                        reads.set(reads.get() + 1);
+                        now
+                    },
+                );
                 let (mut dev_retry, mut dev_wait) = (start, start_wait);
                 let mut ours = backoff_start(start, start_wait);
                 let arms = ours_gate(decided, prewarm, &mut ours, now);
-                assert_eq!(arms, dev_gate(prewarm, occluded, dirty, idle, &mut dev_retry, &mut dev_wait, now), "{decided:?} {prewarm} {occluded} {dirty} {idle} {start:?} {start_wait:?}");
-                assert_eq!(occluded_wait(ours, now), dev_wait, "the wait it leaves: {decided:?} {start_wait:?}");
-                assert!(reads.get() <= 1 && (start.is_some() || reads.get() == 0), "the clock is read only to compare a retry");
+                assert_eq!(
+                    arms,
+                    dev_gate(
+                        prewarm,
+                        occluded,
+                        dirty,
+                        idle,
+                        &mut dev_retry,
+                        &mut dev_wait,
+                        now
+                    ),
+                    "{decided:?} {prewarm} {occluded} {dirty} {idle} {start:?} {start_wait:?}"
+                );
+                assert_eq!(
+                    occluded_wait(ours, now),
+                    dev_wait,
+                    "the wait it leaves: {decided:?} {start_wait:?}"
+                );
+                assert!(
+                    reads.get() <= 1 && (start.is_some() || reads.get() == 0),
+                    "the clock is read only to compare a retry"
+                );
             }
         }
     }
@@ -212,17 +292,35 @@ fn turn_matches_dev_for_every_gate() {
 /// Each event happens `delta` after the last, so a re-check comes due and misses again, backing
 /// the wait off towards its cap.
 #[derive(Clone, Copy, Debug)]
-struct TurnOp { delta: Duration, occluded: bool }
+struct TurnOp {
+    delta: Duration,
+    occluded: bool,
+}
 
 #[test]
 fn occluded_misses_back_off_like_dev() {
     let base = Instant::now();
     let alphabet = [
-        TurnOp { delta: Duration::ZERO, occluded: true },
-        TurnOp { delta: Duration::from_millis(100), occluded: true },
-        TurnOp { delta: Duration::from_millis(260), occluded: true },
-        TurnOp { delta: Duration::from_secs(3), occluded: true },
-        TurnOp { delta: Duration::from_secs(3), occluded: false },
+        TurnOp {
+            delta: Duration::ZERO,
+            occluded: true,
+        },
+        TurnOp {
+            delta: Duration::from_millis(100),
+            occluded: true,
+        },
+        TurnOp {
+            delta: Duration::from_millis(260),
+            occluded: true,
+        },
+        TurnOp {
+            delta: Duration::from_secs(3),
+            occluded: true,
+        },
+        TurnOp {
+            delta: Duration::from_secs(3),
+            occluded: false,
+        },
     ];
     walk(&alphabet, 5, |seq| {
         let mut dev = (None, OCCLUDED_RETRY);
@@ -230,7 +328,16 @@ fn occluded_misses_back_off_like_dev() {
         let mut now = base;
         for (i, &op) in seq.iter().enumerate() {
             now = now + op.delta;
-            let decided = turn(Gate { prewarm: false, occluded: op.occluded, dirty: false, idle: true, retry: ours.deadline() }, || now);
+            let decided = turn(
+                Gate {
+                    prewarm: false,
+                    occluded: op.occluded,
+                    dirty: false,
+                    idle: true,
+                    retry: ours.deadline(),
+                },
+                || now,
+            );
             let ours_arms = ours_gate(decided, false, &mut ours, now);
             let dev_arms = dev_gate(false, op.occluded, false, true, &mut dev.0, &mut dev.1, now);
             assert_eq!(ours_arms, dev_arms, "{seq:?} at {i}");
@@ -249,7 +356,9 @@ struct DevBackoff {
 }
 
 impl DevBackoff {
-    fn new(wait: Duration) -> Self { DevBackoff { retry: None, wait } }
+    fn new(wait: Duration) -> Self {
+        DevBackoff { retry: None, wait }
+    }
 
     /// `missed`, through origin/dev's `Missed::retry` rule copied literally (above).
     fn missed(&mut self, missed: Missed, paced: bool, now: Instant) {
@@ -293,11 +402,19 @@ fn holds_up(seq: &[BackoffOp], prewarm: bool, scale: u32) {
             BackoffOp::Missed { missed, paced } => {
                 let effect = ours.step(BackoffEvent::Missed { missed, paced, now });
                 dev.missed(missed, paced, now);
-                assert_eq!(!effect.is_empty(), dev.retry.is_some(), "a wait stops the display link: {op:?} at {k}");
+                assert_eq!(
+                    !effect.is_empty(),
+                    dev.retry.is_some(),
+                    "a wait stops the display link: {op:?} at {k}"
+                );
             }
             BackoffOp::Due => {
-                if ours.deadline().is_some_and(|at| at <= now) { ours.step(BackoffEvent::Lapsed); }
-                if dev.retry.is_some_and(|at| at <= now) { dev.retry = None; }
+                if ours.deadline().is_some_and(|at| at <= now) {
+                    ours.step(BackoffEvent::Lapsed);
+                }
+                if dev.retry.is_some_and(|at| at <= now) {
+                    dev.retry = None;
+                }
             }
             BackoffOp::Frame { presents } => {
                 if !prewarm {
@@ -309,10 +426,12 @@ fn holds_up(seq: &[BackoffOp], prewarm: bool, scale: u32) {
                     dev.wait = OCCLUDED_RETRY;
                 }
             }
-            BackoffOp::At => if !prewarm {
-                ours.step(BackoffEvent::At(now + TIMER_FRAME));
-                dev.retry = Some(now + TIMER_FRAME);
-            },
+            BackoffOp::At => {
+                if !prewarm {
+                    ours.step(BackoffEvent::At(now + TIMER_FRAME));
+                    dev.retry = Some(now + TIMER_FRAME);
+                }
+            }
             BackoffOp::Reveal => {
                 ours.step(BackoffEvent::Revealed);
                 dev.wait = OCCLUDED_RETRY;
@@ -322,20 +441,47 @@ fn holds_up(seq: &[BackoffOp], prewarm: bool, scale: u32) {
                 dev.retry = None;
             }
         }
-        assert_eq!(ours.deadline(), dev.retry, "{op:?} at {k}, prewarm {prewarm}, scale {scale}");
-        assert_eq!(ours.waiting(now), dev.retry.is_some_and(|at| at > now), "waiting after {op:?} at {k}");
-        assert_eq!(occluded_wait(ours, now), dev.wait, "the wait after {op:?} at {k}, prewarm {prewarm}");
+        assert_eq!(
+            ours.deadline(),
+            dev.retry,
+            "{op:?} at {k}, prewarm {prewarm}, scale {scale}"
+        );
+        assert_eq!(
+            ours.waiting(now),
+            dev.retry.is_some_and(|at| at > now),
+            "waiting after {op:?} at {k}"
+        );
+        assert_eq!(
+            occluded_wait(ours, now),
+            dev.wait,
+            "the wait after {op:?} at {k}, prewarm {prewarm}"
+        );
     }
 }
 
 #[test]
 fn overlay_backoff_matches_dev_for_every_sequence() {
     let alphabet = [
-        BackoffOp::Missed { missed: Missed::Occluded, paced: false },
-        BackoffOp::Missed { missed: Missed::Timeout, paced: false },
-        BackoffOp::Missed { missed: Missed::Timeout, paced: true },
-        BackoffOp::Missed { missed: Missed::Outdated, paced: false },
-        BackoffOp::Missed { missed: Missed::Unconfigured, paced: false },
+        BackoffOp::Missed {
+            missed: Missed::Occluded,
+            paced: false,
+        },
+        BackoffOp::Missed {
+            missed: Missed::Timeout,
+            paced: false,
+        },
+        BackoffOp::Missed {
+            missed: Missed::Timeout,
+            paced: true,
+        },
+        BackoffOp::Missed {
+            missed: Missed::Outdated,
+            paced: false,
+        },
+        BackoffOp::Missed {
+            missed: Missed::Unconfigured,
+            paced: false,
+        },
         BackoffOp::Due,
         BackoffOp::Frame { presents: false },
         BackoffOp::Frame { presents: true },
@@ -350,17 +496,27 @@ fn overlay_backoff_matches_dev_for_every_sequence() {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Platform { Mac, X11, Wayland }
+enum Platform {
+    Mac,
+    X11,
+    Wayland,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind { Window, Layer }
+enum Kind {
+    Window,
+    Layer,
+}
 
 /// A window or surface, numbered by the step that made it.
 type Made = (u32, Kind);
 
 /// Which owner gave the window back on `release`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Owner { Live, Parked }
+enum Owner {
+    Live,
+    Parked,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Outcome {
@@ -387,7 +543,11 @@ enum SurfaceOp {
 }
 
 #[derive(Clone, Copy)]
-struct Config { platform: Platform, defers: bool, callback: bool }
+struct Config {
+    platform: Platform,
+    defers: bool,
+    callback: bool,
+}
 
 /// origin/dev's `live`, `parked` and `announced`, written as `prepare`, `window`, `unpark`,
 /// `ready`, `hide_window`, `park` and `release` wrote them.
@@ -402,10 +562,16 @@ struct DevSurface {
 
 impl DevSurface {
     fn apply(&mut self, c: Config, op: SurfaceOp, n: u32) {
-        let kind = if c.platform == Platform::Wayland { Kind::Layer } else { Kind::Window };
+        let kind = if c.platform == Platform::Wayland {
+            Kind::Layer
+        } else {
+            Kind::Window
+        };
         match op {
             SurfaceOp::Prepare { showing, outcome } => {
-                if self.live.is_some() { return; }
+                if self.live.is_some() {
+                    return;
+                }
                 let (creation, attach, rescale) = match outcome {
                     Outcome::Ok => (true, true, true),
                     Outcome::Window => (false, true, true),
@@ -414,7 +580,9 @@ impl DevSurface {
                 };
                 let surface = showing || !c.defers;
                 let parks = c.platform == Platform::X11;
-                if !surface && !parks { return; }
+                if !surface && !parks {
+                    return;
+                }
                 let made = if c.platform == Platform::Wayland {
                     creation.then_some((n, kind))
                 } else if self.parked.is_some() || self.window(c, creation, attach, n) {
@@ -430,16 +598,22 @@ impl DevSurface {
                     self.live = Some(live);
                     // The surface's display scale is known now; one that can't take it leaves
                     // the overlay live but not ready, so nothing is announced.
-                    if live.1 == Kind::Window && !rescale { return; }
+                    if live.1 == Kind::Window && !rescale {
+                        return;
+                    }
                     self.ready(c);
                 }
             }
             SurfaceOp::HideWindow => {
                 let Some(live) = &self.live else { return };
-                if live.1 == Kind::Layer { self.live.take(); }
+                if live.1 == Kind::Layer {
+                    self.live.take();
+                }
             }
             SurfaceOp::Park => {
-                if !matches!(self.live, Some((_, Kind::Window))) { return; }
+                if !matches!(self.live, Some((_, Kind::Window))) {
+                    return;
+                }
                 if c.platform == Platform::Mac {
                     self.release();
                 } else {
@@ -453,9 +627,13 @@ impl DevSurface {
 
     /// Failing to make the window leaves nothing; failing to attach its surface parks nothing.
     fn window(&mut self, c: Config, creation: bool, attach: bool, n: u32) -> bool {
-        if !creation { return false; }
+        if !creation {
+            return false;
+        }
         if c.platform == Platform::Mac {
-            if !attach { return false; }
+            if !attach {
+                return false;
+            }
             self.live = Some((n, Kind::Window));
         } else {
             self.parked = Some((n, Kind::Window));
@@ -465,7 +643,9 @@ impl DevSurface {
 
     fn unpark(&mut self, attach: bool) -> Option<Made> {
         let window = self.parked.take()?;
-        if attach { return Some(window); }
+        if attach {
+            return Some(window);
+        }
         self.parked = Some(window);
         None
     }
@@ -478,7 +658,11 @@ impl DevSurface {
     }
 
     fn release(&mut self) {
-        let released = self.live.take().map(|live| (Owner::Live, live)).or_else(|| self.parked.take().map(|backing| (Owner::Parked, backing)));
+        let released = self
+            .live
+            .take()
+            .map(|live| (Owner::Live, live))
+            .or_else(|| self.parked.take().map(|backing| (Owner::Parked, backing)));
         self.released.extend(released);
         self.announced = false;
     }
@@ -493,10 +677,16 @@ struct Ours {
 
 impl Ours {
     fn apply(&mut self, c: Config, op: SurfaceOp, n: u32) {
-        let kind = if c.platform == Platform::Wayland { Kind::Layer } else { Kind::Window };
+        let kind = if c.platform == Platform::Wayland {
+            Kind::Layer
+        } else {
+            Kind::Window
+        };
         match op {
             SurfaceOp::Prepare { showing, outcome } => {
-                if self.surface.live().is_some() { return; }
+                if self.surface.live().is_some() {
+                    return;
+                }
                 let (creation, attach, rescale) = match outcome {
                     Outcome::Ok => (true, true, true),
                     Outcome::Window => (false, true, true),
@@ -505,7 +695,9 @@ impl Ours {
                 };
                 let surface = showing || !c.defers;
                 let parks = c.platform == Platform::X11;
-                if !surface && !parks { return; }
+                if !surface && !parks {
+                    return;
+                }
                 let made = if c.platform == Platform::Wayland {
                     creation.then_some((n, kind))
                 } else if self.surface.parked().is_some() || self.window(c, creation, attach, n) {
@@ -519,20 +711,30 @@ impl Ours {
                 };
                 if let Some(live) = made {
                     self.surface.made(live);
-                    if live.1 == Kind::Window && !rescale { return; }
+                    if live.1 == Kind::Window && !rescale {
+                        return;
+                    }
                     self.ready(c);
                 }
             }
             SurfaceOp::HideWindow => {
-                let Some(live) = self.surface.live() else { return };
-                if live.1 == Kind::Layer { self.surface.take_live(); }
+                let Some(live) = self.surface.live() else {
+                    return;
+                };
+                if live.1 == Kind::Layer {
+                    self.surface.take_live();
+                }
             }
             SurfaceOp::Park => {
-                if !matches!(self.surface.live(), Some((_, Kind::Window))) { return; }
+                if !matches!(self.surface.live(), Some((_, Kind::Window))) {
+                    return;
+                }
                 if c.platform == Platform::Mac {
                     self.release();
                 } else {
-                    let Some(live) = self.surface.take_live() else { return };
+                    let Some(live) = self.surface.take_live() else {
+                        return;
+                    };
                     self.surface.park(live);
                 }
             }
@@ -541,9 +743,13 @@ impl Ours {
     }
 
     fn window(&mut self, c: Config, creation: bool, attach: bool, n: u32) -> bool {
-        if !creation { return false; }
+        if !creation {
+            return false;
+        }
         if c.platform == Platform::Mac {
-            if !attach { return false; }
+            if !attach {
+                return false;
+            }
             self.surface.made((n, Kind::Window));
         } else {
             self.surface.park((n, Kind::Window));
@@ -553,7 +759,9 @@ impl Ours {
 
     fn unpark(&mut self, attach: bool) -> Option<Made> {
         let window = self.surface.take_parked()?;
-        if attach { return Some(window); }
+        if attach {
+            return Some(window);
+        }
         self.surface.park(window);
         None
     }
@@ -561,7 +769,8 @@ impl Ours {
     fn ready(&mut self, c: Config) {
         if !self.surface.announced() && c.callback {
             self.surface.announce();
-            self.heard.push(self.surface.live().or(self.surface.parked()).copied());
+            self.heard
+                .push(self.surface.live().or(self.surface.parked()).copied());
         }
     }
 
@@ -577,14 +786,38 @@ impl Ours {
 #[test]
 fn surface_matches_dev_for_every_sequence() {
     let alphabet = [
-        SurfaceOp::Prepare { showing: false, outcome: Outcome::Ok },
-        SurfaceOp::Prepare { showing: true, outcome: Outcome::Ok },
-        SurfaceOp::Prepare { showing: false, outcome: Outcome::Window },
-        SurfaceOp::Prepare { showing: true, outcome: Outcome::Window },
-        SurfaceOp::Prepare { showing: false, outcome: Outcome::Attach },
-        SurfaceOp::Prepare { showing: true, outcome: Outcome::Attach },
-        SurfaceOp::Prepare { showing: false, outcome: Outcome::Rescale },
-        SurfaceOp::Prepare { showing: true, outcome: Outcome::Rescale },
+        SurfaceOp::Prepare {
+            showing: false,
+            outcome: Outcome::Ok,
+        },
+        SurfaceOp::Prepare {
+            showing: true,
+            outcome: Outcome::Ok,
+        },
+        SurfaceOp::Prepare {
+            showing: false,
+            outcome: Outcome::Window,
+        },
+        SurfaceOp::Prepare {
+            showing: true,
+            outcome: Outcome::Window,
+        },
+        SurfaceOp::Prepare {
+            showing: false,
+            outcome: Outcome::Attach,
+        },
+        SurfaceOp::Prepare {
+            showing: true,
+            outcome: Outcome::Attach,
+        },
+        SurfaceOp::Prepare {
+            showing: false,
+            outcome: Outcome::Rescale,
+        },
+        SurfaceOp::Prepare {
+            showing: true,
+            outcome: Outcome::Rescale,
+        },
         SurfaceOp::HideWindow,
         SurfaceOp::Park,
         SurfaceOp::Release,
@@ -594,25 +827,54 @@ fn surface_matches_dev_for_every_sequence() {
     let (mut released_live, mut released_parked) = (0, 0);
     for platform in [Platform::Mac, Platform::X11, Platform::Wayland] {
         for (defers, callback) in [(false, false), (false, true), (true, false), (true, true)] {
-            let c = Config { platform, defers, callback };
+            let c = Config {
+                platform,
+                defers,
+                callback,
+            };
             walk(&alphabet, 5, |seq| {
                 let mut dev = DevSurface::default();
-                let mut ours = Ours { surface: Surface::default(), heard: Vec::new(), released: Vec::new() };
+                let mut ours = Ours {
+                    surface: Surface::default(),
+                    heard: Vec::new(),
+                    released: Vec::new(),
+                };
                 for (i, &op) in seq.iter().enumerate() {
                     let n = i as u32 + 1;
                     let (before_live, before_released) = (dev.live, dev.released.len());
                     dev.apply(c, op, n);
                     ours.apply(c, op, n);
                     if let SurfaceOp::Prepare { outcome, .. } = op {
-                        if outcome == Outcome::Attach && before_live.is_none() && dev.parked.is_some() { parked_after_attach += 1; }
-                        if outcome == Outcome::Rescale && before_live.is_none() && dev.live.is_some() { live_after_rescale += 1; }
+                        if outcome == Outcome::Attach
+                            && before_live.is_none()
+                            && dev.parked.is_some()
+                        {
+                            parked_after_attach += 1;
+                        }
+                        if outcome == Outcome::Rescale
+                            && before_live.is_none()
+                            && dev.live.is_some()
+                        {
+                            live_after_rescale += 1;
+                        }
                     }
                     for &(owner, _) in &dev.released[before_released..] {
-                        if owner == Owner::Live { released_live += 1; } else { released_parked += 1; }
+                        if owner == Owner::Live {
+                            released_live += 1;
+                        } else {
+                            released_parked += 1;
+                        }
                     }
-                    let at = || format!("{platform:?} defers {defers} callback {callback}: {seq:?} at {i}");
+                    let at = || {
+                        format!("{platform:?} defers {defers} callback {callback}: {seq:?} at {i}")
+                    };
                     assert_eq!(ours.surface.live().map(|live| *live), dev.live, "{}", at());
-                    assert_eq!(ours.surface.parked().map(|backing| *backing), dev.parked, "{}", at());
+                    assert_eq!(
+                        ours.surface.parked().map(|backing| *backing),
+                        dev.parked,
+                        "{}",
+                        at()
+                    );
                     assert_eq!(ours.surface.announced(), dev.announced, "{}", at());
                     assert_eq!(ours.heard, dev.heard, "{}", at());
                     assert_eq!(ours.released, dev.released, "{}", at());
@@ -620,7 +882,16 @@ fn surface_matches_dev_for_every_sequence() {
             });
         }
     }
-    assert!(parked_after_attach > 0, "an attach that fails leaves its window parked");
-    assert!(live_after_rescale > 0, "a rescale that fails leaves the overlay live");
-    assert!(released_live > 0 && released_parked > 0, "release gives a live or a parked window back");
+    assert!(
+        parked_after_attach > 0,
+        "an attach that fails leaves its window parked"
+    );
+    assert!(
+        live_after_rescale > 0,
+        "a rescale that fails leaves the overlay live"
+    );
+    assert!(
+        released_live > 0 && released_parked > 0,
+        "release gives a live or a parked window back"
+    );
 }

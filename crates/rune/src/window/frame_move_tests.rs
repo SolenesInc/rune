@@ -7,7 +7,13 @@ use crate::window::frame::FrameAnim;
 
 /// The anim a walk's `Animate` requests start, and the origin it is taken from.
 fn animation() -> FrameAnim {
-    FrameAnim::new(None, 0.0, [10.0, 20.0, 300.0, 200.0], [0.0; 4], [30.0, 40.0, 300.0, 200.0])
+    FrameAnim::new(
+        None,
+        0.0,
+        [10.0, 20.0, 300.0, 200.0],
+        [0.0; 4],
+        [30.0, 40.0, 300.0, 200.0],
+    )
 }
 const ORIGIN: [f32; 2] = [10.0, 20.0];
 const JUMP: (f32, f32) = (300.0, 200.0);
@@ -61,7 +67,10 @@ fn feed(slot: &mut Option<FrameMove>, step: Step) -> Observed {
             false
         }
     };
-    Observed { moving: FrameMove::moving(slot), asked }
+    Observed {
+        moving: FrameMove::moving(slot),
+        asked,
+    }
 }
 
 /// The fields this replaced, kept apart exactly as they were: `Host::frame_move` (its anim and
@@ -85,19 +94,26 @@ impl Apart {
             Step::Jump(size) => self.frame_jump = Some(size),
             // WindowEvent::Resized: `frame_jump.take().is_some_and(|(w, h)| …)`.
             Step::Resized(viewport) => {
-                asked = self.frame_jump.take().is_some_and(|(w, h)| (w - viewport.0).abs() < 1.0 && (h - viewport.1).abs() < 1.0);
+                asked = self.frame_jump.take().is_some_and(|(w, h)| {
+                    (w - viewport.0).abs() < 1.0 && (h - viewport.1).abs() < 1.0
+                });
             }
             // land_frame: `frame_move.take()`, which leaves the loose jump alone.
             Step::Land => self.frame_move = None,
         }
-        Observed { moving: self.frame_move.is_some(), asked }
+        Observed {
+            moving: self.frame_move.is_some(),
+            asked,
+        }
     }
 }
 
 fn every_sequence(alphabet: &[Step], max: usize, mut f: impl FnMut(&[Step])) {
     fn walk(alphabet: &[Step], seq: &mut Vec<Step>, max: usize, f: &mut impl FnMut(&[Step])) {
         f(seq);
-        if seq.len() == max { return; }
+        if seq.len() == max {
+            return;
+        }
         for step in alphabet {
             seq.push(*step);
             walk(alphabet, seq, max, f);
@@ -116,7 +132,10 @@ fn holds_up(seq: &[Step]) {
         let expected = apart.step(*step);
         assert_eq!(seen, expected, "{seq:?} at {k}");
         // A platform's events never leave both of dev's fields set; the one value can't hold both.
-        assert!(!(apart.frame_move.is_some() && apart.frame_jump.is_some()), "{seq:?} at {k}");
+        assert!(
+            !(apart.frame_move.is_some() && apart.frame_jump.is_some()),
+            "{seq:?} at {k}"
+        );
         let left = match (apart.frame_move, apart.frame_jump) {
             (Some(()), _) => Some(FrameMove::animating(animation(), ORIGIN)),
             (None, Some(size)) => Some(FrameMove::jumped(size)),
@@ -130,7 +149,14 @@ fn holds_up(seq: &[Step]) {
 /// the event it announced, once, and is never motion.
 #[test]
 fn every_order_of_jumps_spends_one_coupon() {
-    let all = [Step::Jump(JUMP), Step::Jump(OTHER_JUMP), Step::Resized(HIS), Step::Resized(NEAR), Step::Resized(USER), Step::Land];
+    let all = [
+        Step::Jump(JUMP),
+        Step::Jump(OTHER_JUMP),
+        Step::Resized(HIS),
+        Step::Resized(NEAR),
+        Step::Resized(USER),
+        Step::Land,
+    ];
     every_sequence(&all, 6, holds_up);
 }
 
@@ -146,13 +172,25 @@ fn every_order_of_animations_leaves_the_same_frame_moving() {
 #[test]
 fn a_jump_is_spent_by_the_resize_it_announced_once() {
     let mut slot = None;
-    assert!(!feed(&mut slot, Step::Resized(HIS)).asked, "no request, no coupon");
+    assert!(
+        !feed(&mut slot, Step::Resized(HIS)).asked,
+        "no request, no coupon"
+    );
     let requested = feed(&mut slot, Step::Jump(JUMP));
     assert!(!requested.moving, "a jump names one event, it isn't motion");
-    assert!(!feed(&mut slot, Step::Resized(USER)).asked, "another size is the user's");
-    assert!(!feed(&mut slot, Step::Resized(HIS)).asked, "and the coupon is spent, so it's the user's too");
+    assert!(
+        !feed(&mut slot, Step::Resized(USER)).asked,
+        "another size is the user's"
+    );
+    assert!(
+        !feed(&mut slot, Step::Resized(HIS)).asked,
+        "and the coupon is spent, so it's the user's too"
+    );
     feed(&mut slot, Step::Jump(JUMP));
-    assert!(feed(&mut slot, Step::Resized(HIS)).asked, "its own size lays out as a step");
+    assert!(
+        feed(&mut slot, Step::Resized(HIS)).asked,
+        "its own size lays out as a step"
+    );
     assert!(!feed(&mut slot, Step::Resized(HIS)).asked, "once");
 }
 
@@ -163,12 +201,24 @@ fn a_later_request_or_landing_keeps_the_rules() {
     let mut slot = None;
     feed(&mut slot, Step::Jump(JUMP));
     feed(&mut slot, Step::Jump(OTHER_JUMP));
-    assert!(!feed(&mut slot, Step::Resized(HIS)).asked, "the earlier size is gone");
+    assert!(
+        !feed(&mut slot, Step::Resized(HIS)).asked,
+        "the earlier size is gone"
+    );
     feed(&mut slot, Step::Jump(JUMP));
     feed(&mut slot, Step::Land);
-    assert!(feed(&mut slot, Step::Resized(HIS)).asked, "a landing mid-move leaves the coupon for its Resized");
-    assert!(feed(&mut slot, Step::Animate).moving, "an animation is motion");
+    assert!(
+        feed(&mut slot, Step::Resized(HIS)).asked,
+        "a landing mid-move leaves the coupon for its Resized"
+    );
+    assert!(
+        feed(&mut slot, Step::Animate).moving,
+        "an animation is motion"
+    );
     feed(&mut slot, Step::Animate);
-    assert!(feed(&mut slot, Step::Resized(HIS)).moving, "and no Resized spends it");
+    assert!(
+        feed(&mut slot, Step::Resized(HIS)).moving,
+        "and no Resized spends it"
+    );
     assert!(!feed(&mut slot, Step::Land).moving, "landing stops it");
 }

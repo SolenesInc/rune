@@ -49,21 +49,26 @@ pub(crate) mod virtual_rows;
 mod visual;
 mod visuals;
 
-pub use a11y::LiveRegion;
-pub(crate) use a11y::{A11y, Checked};
-pub use a11y::DrawnText;
-pub use anchor::{Anchor, Side, anchor_rect};
 pub(crate) use crate::clipboard::tx::{ClipboardRead, ReadFn};
 pub use crate::cursor::{Cursor, CursorImage};
+pub use a11y::DrawnText;
+pub use a11y::LiveRegion;
+pub(crate) use a11y::{A11y, Checked};
+pub use anchor::{Anchor, Side, anchor_rect};
 pub use direction::Direction;
-pub(crate) use direction::{DirEffect, DirEvent, Flow, Pin, mirror_anchor, mirror_visual, step as step_direction};
+pub(crate) use direction::{
+    DirEffect, DirEvent, Flow, Pin, mirror_anchor, mirror_visual, step as step_direction,
+};
 pub(crate) use drop::{DropHoverFn, DropSpec};
 pub(crate) use focus::FocusSpec;
 pub(crate) use focus::ModalSpec;
 pub(crate) use focus::Reveal;
 pub(crate) use handler_set::Handlers;
 pub use handlers::{Drag, Phase, PointerEvent, PointerPress};
-pub(crate) use handlers::{DragEndFn, DragFn, DragOutFn, InputKeyFn, OwnTextFn, PointerFn, PressFn, StepFn, StepLimitFn, WindowDrag};
+pub(crate) use handlers::{
+    DragEndFn, DragFn, DragOutFn, InputKeyFn, OwnTextFn, PointerFn, PressFn, StepFn, StepLimitFn,
+    WindowDrag,
+};
 pub(crate) use help::{HELP_KEY, HELP_ROW, help_words};
 pub use input::{InputSpec, auto_grow, edit_access, text_input};
 pub use pills::InlineIcon;
@@ -75,8 +80,8 @@ pub use scroll::ScrollSpec;
 pub(crate) use scroll::{AtBottomFn, ScrollAxes, ScrollEdges, VisibleRowsFn};
 pub use selection_style::SelectionStyle;
 pub(crate) use sticky::{Sticky, StickyEdge};
-pub(crate) use text_spec::{Elide, TextDir, TextDirEvent, step_text_dir};
 pub use text_spec::TextSpec;
+pub(crate) use text_spec::{Elide, TextDir, TextDirEvent, step_text_dir};
 pub(crate) use tx::{Commit, FocusAsk, MotionSource, SelectRequest, TraceCalls};
 pub use tx::{Shell, Tx};
 pub(crate) use visual::VisualFlags;
@@ -109,12 +114,20 @@ pub struct GrowthSpec {
 
 impl Default for GrowthSpec {
     fn default() -> Self {
-        GrowthSpec { spring: GROWTH, edge: edge::FEATHER }
+        GrowthSpec {
+            spring: GROWTH,
+            edge: edge::FEATHER,
+        }
     }
 }
 
 /// The selection highlight until [`El::selection_color`] or [`El::caret`] sets one.
-pub(crate) const DEFAULT_SELECTION: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.2 };
+pub(crate) const DEFAULT_SELECTION: Color = Color {
+    r: 1.0,
+    g: 1.0,
+    b: 1.0,
+    a: 0.2,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum Align {
@@ -136,9 +149,13 @@ impl std::fmt::Debug for LinkFn {
 }
 /// [`El::on_link_secondary`]'s handler.
 #[derive(Clone)]
-pub(crate) struct LinkSecondaryFn(pub Rc<dyn Fn(crate::states::States<'_>, &str, PointerPress, &mut Tx)>);
+pub(crate) struct LinkSecondaryFn(
+    pub Rc<dyn Fn(crate::states::States<'_>, &str, PointerPress, &mut Tx)>,
+);
 impl std::fmt::Debug for LinkSecondaryFn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("LinkSecondaryFn") }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LinkSecondaryFn")
+    }
 }
 
 /// Default `truncate_fade` edge, in ems.
@@ -168,7 +185,11 @@ pub struct PillStyle {
 
 impl PillStyle {
     pub const fn new() -> Self {
-        Self { bg: None, fg: None, icon: None }
+        Self {
+            bg: None,
+            fg: None,
+            icon: None,
+        }
     }
     /// The chip's colour.
     pub const fn bg(mut self, bg: Color) -> Self {
@@ -186,12 +207,18 @@ impl PillStyle {
         self
     }
 }
-pub(crate) type InputPasteFn = Rc<dyn Fn(crate::states::States<'_>, &crate::ClipboardContent, &mut Tx) -> bool>;
+pub(crate) type InputPasteFn =
+    Rc<dyn Fn(crate::states::States<'_>, &crate::ClipboardContent, &mut Tx) -> bool>;
 /// What a [`FrameRead`] asks of the last presented frame.
 #[derive(Clone)]
 pub(crate) enum ReadQuery {
     /// The element at a point ([`Tx::element_at`]).
-    At { within: Option<String>, x: f32, y: f32, pick: crate::Pick },
+    At {
+        within: Option<String>,
+        x: f32,
+        y: f32,
+        pick: crate::Pick,
+    },
     /// The element each key names ([`Tx::find_elements`]).
     Keys(Vec<String>),
 }
@@ -211,16 +238,21 @@ pub(crate) struct FrameRead {
     pub(crate) f: Rc<std::cell::Cell<Option<FrameReadFn>>>,
 }
 impl FrameRead {
-    pub fn take(&self) -> Option<FrameReadFn> { self.f.take() }
+    pub fn take(&self) -> Option<FrameReadFn> {
+        self.f.take()
+    }
 }
 impl std::fmt::Debug for FrameRead {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("FrameRead") }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FrameRead")
+    }
 }
 
 /// What an `El::selection_copy` element copies for a selection inside it.
 pub(crate) type SelectionCopy = Rc<dyn Fn(&crate::TextSelection) -> Option<String>>;
 /// `El::on_selection_change`.
-pub(crate) type SelectionChangeFn = Rc<dyn Fn(crate::states::States<'_>, &crate::SelectionChange, &mut Tx)>;
+pub(crate) type SelectionChangeFn =
+    Rc<dyn Fn(crate::states::States<'_>, &crate::SelectionChange, &mut Tx)>;
 
 pub(crate) type LayoutFn = Rc<dyn Fn(crate::states::States<'_>, [f32; 4])>;
 pub(crate) type LayoutTxFn = Rc<dyn Fn(crate::states::States<'_>, [f32; 4], &mut Tx)>;
@@ -309,14 +341,20 @@ pub fn spacer() -> El {
 /// rows split by Desktop's `border-bottom: 0.5px` ends where Chromium's does. It stretches
 /// across its column; give it `w_full` or margins as a `<div>` takes them.
 pub fn rule(width: f32, c: Color) -> El {
-    base(FlexDirection::Row).border_sides([width, 0.0, 0.0, 0.0], c).border_layout()
+    base(FlexDirection::Row)
+        .border_sides([width, 0.0, 0.0, 0.0], c)
+        .border_layout()
 }
 
 /// Text with styled byte ranges; wraps at its width.
 pub fn rich(content: impl Into<String>, spans: Vec<Span>) -> El {
     let mut e = text(content);
     if let Some(t) = &mut e.text {
-        t.spans = if spans.len() <= 1 || spans.windows(2).all(|w| w[0].start < w[0].end && w[0].end <= w[1].start) {
+        t.spans = if spans.len() <= 1
+            || spans
+                .windows(2)
+                .all(|w| w[0].start < w[0].end && w[0].end <= w[1].start)
+        {
             spans
         } else {
             crate::text::flatten_spans(&spans)
@@ -344,10 +382,13 @@ pub fn canvas(shape: Shape) -> El {
 }
 
 impl El {
-
     /// Bind opacity directly to a latest-wins value, without rebuilding or laying out the view.
     pub fn live_opacity(mut self, value: impl Into<crate::live::Binding<f32>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Opacity)); self
+        self.bind_live(crate::live::Bound::new(
+            value,
+            crate::live::Property::Opacity,
+        ));
+        self
     }
 
     /// Bind a subtree's Gaussian blur (sigma in points), optionally smoothed with `Live::smooth`.
@@ -357,36 +398,54 @@ impl El {
     }
     /// Bind an additive parent-space offset in points. Descendants and hit tests follow it.
     pub fn live_offset(mut self, value: impl Into<crate::live::Binding<[f32; 2]>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Offset)); self
+        self.bind_live(crate::live::Bound::new(
+            value,
+            crate::live::Property::Offset,
+        ));
+        self
     }
     /// Bind uniform scale around the node's centre; layout remains at its target size. Text,
     /// icons and images in the subtree scale with it, as under [`El::scale`]. Text rasterizes
     /// at the scale rounded to 1/32, so a dragged value doesn't fill the glyph atlas.
     pub fn live_scale(mut self, value: impl Into<crate::live::Binding<f32>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Scale)); self
+        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Scale));
+        self
     }
     /// Bind the [start, end] span of a shape's strokes that draws, as fractions (0 to 1) of
     /// their combined length, as [`Shape::trimmed`](crate::Shape::trimmed) cuts them. A
     /// [`Tween`](crate::Tween) runs a countdown ring or a travelling dash without rebuilding.
     pub fn live_trim(mut self, value: impl Into<crate::live::Binding<[f32; 2]>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Trim)); self
+        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Trim));
+        self
     }
     pub fn live_fill(mut self, value: impl Into<crate::live::Binding<Color>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Fill)); self
+        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Fill));
+        self
     }
     /// Bind presentation [x, y, width, height] in parent points. Does not reflow siblings or
     /// rewrap text; use ordinary layout for those changes. Width/height clamp at zero.
     pub fn live_rect(mut self, value: impl Into<crate::live::Binding<[f32; 4]>>) -> Self {
-        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Rect)); self
+        self.bind_live(crate::live::Bound::new(value, crate::live::Property::Rect));
+        self
     }
     fn bind_live(&mut self, bound: crate::live::Bound) {
-        if let Some(old) = self.cold_mut().live.iter_mut().find(|b| b.property == bound.property) { *old = bound; }
-        else { self.cold_mut().live.push(bound); }
+        if let Some(old) = self
+            .cold_mut()
+            .live
+            .iter_mut()
+            .find(|b| b.property == bound.property)
+        {
+            *old = bound;
+        } else {
+            self.cold_mut().live.push(bound);
+        }
     }
 
     pub(crate) fn key_location(&self) -> String {
         #[cfg(debug_assertions)]
-        if let Some(source) = self.key_source { return source.to_string(); }
+        if let Some(source) = self.key_source {
+            return source.to_string();
+        }
         "unknown (build with debug assertions for source locations)".into()
     }
 
@@ -405,7 +464,9 @@ impl El {
     pub fn set_key(&mut self, key: impl Into<String>) -> &mut Self {
         self.key = Some(key.into());
         #[cfg(debug_assertions)]
-        { self.key_source = Some(std::panic::Location::caller()); }
+        {
+            self.key_source = Some(std::panic::Location::caller());
+        }
         self
     }
     #[inline]
@@ -434,7 +495,10 @@ impl El {
         self.flags.set(ElFlags::MEMO_EXTENDED, self.memo.is_some());
         let start = self.children.len();
         self.children.extend(children);
-        if self.children[start..].iter().any(|c| c.flags.has(ElFlags::HAS_VIRTUAL)) {
+        if self.children[start..]
+            .iter()
+            .any(|c| c.flags.has(ElFlags::HAS_VIRTUAL))
+        {
             self.flags.set(ElFlags::HAS_VIRTUAL, true);
         }
         self

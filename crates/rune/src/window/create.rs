@@ -4,8 +4,21 @@
 use super::*;
 
 impl<S: 'static> Host<S> {
-    #[cfg_attr(not(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))), allow(unused_variables))]
-    pub(super) fn try_create(&mut self, event_loop: &ActiveEventLoop, token: Option<String>, focus: bool) -> Result<(), String> {
+    #[cfg_attr(
+        not(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        )),
+        allow(unused_variables)
+    )]
+    pub(super) fn try_create(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        token: Option<String>,
+        focus: bool,
+    ) -> Result<(), String> {
         // A released window reopens at the height its content reached while it was gone.
         crate::marks::mark("window.create");
         let built = self.shown && self.build_for_show();
@@ -13,29 +26,56 @@ impl<S: 'static> Host<S> {
         let launcher = self.launcher();
         let visible = !launcher && (self.started || self.options.visible);
         #[allow(unused_mut)]
-        let mut attrs = self.options.attributes(self.rt.window_title.current().unwrap_or(self.spec.title), size, self.spec.min_size, visible).with_active(focus);
+        let mut attrs = self
+            .options
+            .attributes(
+                self.rt.window_title.current().unwrap_or(self.spec.title),
+                size,
+                self.spec.min_size,
+                visible,
+            )
+            .with_active(focus);
         #[cfg(target_os = "macos")]
-        if self.macos_window.nonactivating_panel { attrs = attrs.with_visible(false).with_active(false); }
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        if self.macos_window.nonactivating_panel {
+            attrs = attrs.with_visible(false).with_active(false);
+        }
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
         {
             if let Some(id) = crate::tooling::app_id() {
-                attrs = winit::platform::wayland::WindowAttributesExtWayland::with_name(attrs, id, id);
+                attrs =
+                    winit::platform::wayland::WindowAttributesExtWayland::with_name(attrs, id, id);
                 attrs = winit::platform::x11::WindowAttributesExtX11::with_name(attrs, id, id);
             }
-            if self.float_on_open { attrs = float_on_open::fixed(attrs, &self.options, size); }
+            if self.float_on_open {
+                attrs = float_on_open::fixed(attrs, &self.options, size);
+            }
             if let Some(token) = token {
                 let token = winit::window::ActivationToken::from_raw(token);
                 attrs = winit::platform::startup_notify::WindowAttributesExtStartupNotify::with_activation_token(attrs, token);
             }
         }
-        let open_as = if !self.shown && self.options.resizable { self.open_as } else { crate::windows::OpenAs::Normal };
+        let open_as = if !self.shown && self.options.resizable {
+            self.open_as
+        } else {
+            crate::windows::OpenAs::Normal
+        };
         attrs = attrs.with_maximized(open_as.maximizes());
-        if open_as.full_screens() { attrs = attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None))); }
+        if open_as.full_screens() {
+            attrs = attrs.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        }
         let chrome = frame_chrome(self.chrome, self.titlebar, self.rt.titlebar_set());
         #[cfg(target_os = "macos")]
         if !self.options.borderless && chrome.full_size_content {
             use winit::platform::macos::WindowAttributesExtMacOS;
-            attrs = attrs.with_titlebar_transparent(true).with_title_hidden(true).with_fullsize_content_view(true);
+            attrs = attrs
+                .with_titlebar_transparent(true)
+                .with_title_hidden(true)
+                .with_fullsize_content_view(true);
         }
         let window = Arc::new(event_loop.create_window(attrs).map_err(|e| e.to_string())?);
         crate::marks::mark("window.native");
@@ -52,14 +92,24 @@ impl<S: 'static> Host<S> {
         crate::native_menu::adopt_standard_view();
         #[cfg(target_os = "macos")]
         let panel = if self.macos_window.nonactivating_panel {
-            Some(crate::platform::macos::Panel::adopt_window(&window, size, &self.macos_window).ok_or("could not create nonactivating panel")?)
-        } else { None };
+            Some(
+                crate::platform::macos::Panel::adopt_window(&window, size, &self.macos_window)
+                    .ok_or("could not create nonactivating panel")?,
+            )
+        } else {
+            None
+        };
         #[cfg(target_os = "macos")]
         crate::platform::macos::configure_window(&window, &self.macos_window);
         #[cfg(target_os = "macos")]
         crate::platform::macos::drop::install(&window);
-        if self.options.click_through && let Err(error) = window.set_cursor_hittest(false) {
-            eprintln!("click-through unavailable for {}: {error}", self.native_handle.key());
+        if self.options.click_through
+            && let Err(error) = window.set_cursor_hittest(false)
+        {
+            eprintln!(
+                "click-through unavailable for {}: {error}",
+                self.native_handle.key()
+            );
         }
         window.set_ime_allowed(false);
         self.rt.ime_reset = true;
@@ -83,17 +133,31 @@ impl<S: 'static> Host<S> {
                 (None, surface.map_err(|e| e.to_string())?)
             }
             None => {
-                let features = self.comp.as_ref().map_or(wgpu::Features::empty(), |c| c.features());
+                let features = self
+                    .comp
+                    .as_ref()
+                    .map_or(wgpu::Features::empty(), |c| c.features());
                 let transparent = self.options.transparent;
                 // A shared device that can't composite this window's translucent pixels gets its own.
-                let cached = self.gpu_pool.borrow().upgrade().filter(|gpu| !gpu.is_lost()).and_then(|gpu| {
-                    let surface = gpu.instance.create_surface(window.clone()).ok()?;
-                    crate::render::translucency::serves(&gpu, &surface, features, transparent).then_some((gpu, surface))
-                });
+                let cached = self
+                    .gpu_pool
+                    .borrow()
+                    .upgrade()
+                    .filter(|gpu| !gpu.is_lost())
+                    .and_then(|gpu| {
+                        let surface = gpu.instance.create_surface(window.clone()).ok()?;
+                        crate::render::translucency::serves(&gpu, &surface, features, transparent)
+                            .then_some((gpu, surface))
+                    });
                 let (gpu, surface) = if let Some(cached) = cached {
                     cached
                 } else {
-                    let (gpu, surface, renderer) = Gpu::for_surface(features, transparent, |instance| instance.create_surface(window.clone()).map_err(|e| e.to_string()))?;
+                    let (gpu, surface, renderer) =
+                        Gpu::for_surface(features, transparent, |instance| {
+                            instance
+                                .create_surface(window.clone())
+                                .map_err(|e| e.to_string())
+                        })?;
                     prewarmed = renderer;
                     let gpu = Arc::new(gpu);
                     *self.gpu_pool.borrow_mut() = Arc::downgrade(&gpu);
@@ -103,23 +167,40 @@ impl<S: 'static> Host<S> {
                 (Some(gpu), surface)
             }
         };
-        let adapter = &gpu.as_ref().or(self.gpu.as_ref().map(|g| &g.0)).unwrap().adapter;
+        let adapter = &gpu
+            .as_ref()
+            .or(self.gpu.as_ref().map(|g| &g.0))
+            .unwrap()
+            .adapter;
         let phys = window.inner_size();
-        let (mut config, translucent) = surface_config(&surface, adapter, (phys.width, phys.height), self.rt.srgb_blend())
-            .ok_or("the GPU adapter can't present to this window")?;
+        let (mut config, translucent) = surface_config(
+            &surface,
+            adapter,
+            (phys.width, phys.height),
+            self.rt.srgb_blend(),
+        )
+        .ok_or("the GPU adapter can't present to this window")?;
         #[cfg(target_os = "macos")]
         let launch_drawables = LaunchDrawables::cap(&mut config);
         if self.options.transparent {
             config.alpha_mode = translucent.unwrap_or_else(|| {
-                eprintln!("transparency unavailable for {}; using an opaque window", self.native_handle.key());
+                eprintln!(
+                    "transparency unavailable for {}; using an opaque window",
+                    self.native_handle.key()
+                );
                 wgpu::CompositeAlphaMode::Opaque
             });
             self.rt.transparent = config.alpha_mode != wgpu::CompositeAlphaMode::Opaque;
         }
-        let target_format = if self.rt.srgb_blend() { config.format.remove_srgb_suffix() } else { config.format };
+        let target_format = if self.rt.srgb_blend() {
+            config.format.remove_srgb_suffix()
+        } else {
+            config.format
+        };
         if let Some(gpu) = gpu {
             crate::marks::mark("renderer.begin");
-            let mut renderer = prewarmed.unwrap_or_else(|| Renderer::new(&gpu.device, target_format));
+            let mut renderer =
+                prewarmed.unwrap_or_else(|| Renderer::new(&gpu.device, target_format));
             crate::marks::note("uber", renderer.uber_shader());
             crate::marks::mark("renderer.ready");
             renderer.set_srgb_blend(self.rt.srgb_blend());
@@ -129,56 +210,98 @@ impl<S: 'static> Host<S> {
         rebuild_renderer(&gpu.device, renderer, target_format, &mut self.rt);
         // A refused configuration (the driver's, or a device that is gone) leaves a surface
         // wgpu panics on its next drawable: the window closes, and the next open makes both.
-        let refused = configure(&surface, gpu, &config).err().map(|error| (gpu.is_lost(), error));
+        let refused = configure(&surface, gpu, &config)
+            .err()
+            .map(|error| (gpu.is_lost(), error));
         if let Some((lost, error)) = refused {
             if lost {
                 self.gpu = None;
                 *self.gpu_pool.borrow_mut() = Weak::default();
             }
-            return Err(format!("the window's GPU surface refused its configuration: {error}"));
+            return Err(format!(
+                "the window's GPU surface refused its configuration: {error}"
+            ));
         }
         crate::marks::mark("gpu.surface");
         #[cfg(target_os = "macos")]
         crate::platform::macos::pin_contents_top_left(&surface);
         #[cfg(target_os = "macos")]
-        crate::platform::macos::window_shape::apply_corners(&window, &self.macos_window, self.options.transparent, self.options.borderless);
+        crate::platform::macos::window_shape::apply_corners(
+            &window,
+            &self.macos_window,
+            self.options.transparent,
+            self.options.borderless,
+        );
         // Metal's PostMultiplied mode only makes CAMetalLayer non-opaque; Core Animation
         // still composites premultiplied pixels. Other backends follow wgpu's straight-alpha contract.
         let alpha = alpha_pass(gpu, self.options.transparent, &config, target_format);
         let scale = window.scale_factor() as f32;
-        self.rt.set_system_dark(crate::platform::preferences::window_dark(&window, self.args.theme.as_deref()));
-        self.rt.set_viewport((phys.width as f32 / scale, phys.height as f32 / scale), scale);
+        self.rt
+            .set_system_dark(crate::platform::preferences::window_dark(
+                &window,
+                self.args.theme.as_deref(),
+            ));
+        self.rt.set_viewport(
+            (phys.width as f32 / scale, phys.height as f32 / scale),
+            scale,
+        );
         if (self.shown || launcher) && !built {
             // Reopening paints the settled state in the first frame (guarantee 8).
             self.rt.settle_all();
         }
         self.shown = true;
-        if visible { self.life.show(); }
+        if visible {
+            self.life.show();
+        }
         self.idle = true;
         self.rt.set_live_visible(visible);
         *self.native_handle.native.window.lock().unwrap() = Arc::downgrade(&window);
-        self.native_handle.native.number.store(native_window_number(&window).unwrap_or(0), Ordering::Release);
+        self.native_handle.native.number.store(
+            native_window_number(&window).unwrap_or(0),
+            Ordering::Release,
+        );
         #[cfg(target_os = "macos")]
-        let resamples = crate::platform::macos::window_shape::resamples(&window, self.options.transparent);
+        let resamples =
+            crate::platform::macos::window_shape::resamples(&window, self.options.transparent);
         #[cfg(target_os = "macos")]
-        let hook_log = self.present_log.clone()
-            .or_else(|| resamples.then(|| Arc::new(crate::frame::present_time::metal::Log::untraced())));
+        let hook_log = self.present_log.clone().or_else(|| {
+            resamples.then(|| Arc::new(crate::frame::present_time::metal::Log::untraced()))
+        });
         #[cfg(target_os = "macos")]
-        let present = hook_log.clone().and_then(|log| crate::frame::present_time::metal::LayerHook::attach(&surface, log));
+        let present = hook_log
+            .clone()
+            .and_then(|log| crate::frame::present_time::metal::LayerHook::attach(&surface, log));
         #[cfg(target_os = "macos")]
-        let shadow = hook_log.clone().filter(|_| resamples && present.is_some())
-            .and_then(|log| crate::platform::macos::window_shape::Shadow::new(&window, log, visible || launcher));
+        let shadow = hook_log
+            .clone()
+            .filter(|_| resamples && present.is_some())
+            .and_then(|log| {
+                crate::platform::macos::window_shape::Shadow::new(&window, log, visible || launcher)
+            });
         #[cfg(target_os = "macos")]
-        if self.present_log.is_some() && present.is_none() { eprintln!("rune: trace: this surface reports no present times"); }
+        if self.present_log.is_some() && present.is_none() {
+            eprintln!("rune: trace: this surface reports no present times");
+        }
         #[cfg(target_os = "macos")]
-        let fn_key = if self.rt.modifier_keys() { crate::input::fn_key::FnKey::new(&window) } else { None };
+        let fn_key = if self.rt.modifier_keys() {
+            crate::input::fn_key::FnKey::new(&window)
+        } else {
+            None
+        };
         #[cfg(target_os = "macos")]
         let full_screen = mac::FullScreenWatch::new(&window);
         #[cfg(target_os = "macos")]
-        let prime = if visible && panel.is_none() { native::Prime::launching() } else { native::Prime::Steady };
+        let prime = if visible && panel.is_none() {
+            native::Prime::launching()
+        } else {
+            native::Prime::Steady
+        };
         #[cfg(target_os = "macos")]
         let native = Native {
-            pacing: crate::platform::display_link::DisplayLink::new(&window, self.frame_wake.clone()),
+            pacing: crate::platform::display_link::DisplayLink::new(
+                &window,
+                self.frame_wake.clone(),
+            ),
             present,
             present_log: hook_log,
             shadow,
@@ -211,21 +334,41 @@ impl<S: 'static> Host<S> {
             presented: None,
             redraw: std::cell::Cell::new(Redraw::Idle),
         });
-        if launcher { self.win.as_mut().unwrap().first_frame.prepare(Instant::now()); }
+        if launcher {
+            self.win
+                .as_mut()
+                .unwrap()
+                .first_frame
+                .prepare(Instant::now());
+        }
         self.apply_placement(event_loop);
         #[cfg(target_os = "macos")]
-        if visible && let Some(w) = &self.win && w.native.panel.is_some() { w.show(focus); }
+        if visible
+            && let Some(w) = &self.win
+            && w.native.panel.is_some()
+        {
+            w.show(focus);
+        }
         crate::marks::mark("window.created");
-        if let Some(created) = self.on_created.take() { created(self.native_handle.clone()); }
-        if let Some(on_window) = self.on_window.as_mut() { on_window(&self.native_handle); }
+        if let Some(created) = self.on_created.take() {
+            created(self.native_handle.clone());
+        }
+        if let Some(on_window) = self.on_window.as_mut() {
+            on_window(&self.native_handle);
+        }
         if let (Some(w), Some((gpu, ..))) = (self.win.as_mut(), self.gpu.as_ref()) {
             #[cfg(target_os = "macos")]
-            if let Some(pacing) = &mut w.native.pacing { pacing.update_display(&w.window); }
+            if let Some(pacing) = &mut w.native.pacing {
+                pacing.update_display(&w.window);
+            }
             let size = w.window.inner_size();
             let scale = w.window.scale_factor() as f32;
             if size.width > 0 && size.height > 0 {
                 w.resize_surface(Some(&**gpu), size);
-                self.rt.set_viewport((size.width as f32 / scale, size.height as f32 / scale), scale);
+                self.rt.set_viewport(
+                    (size.width as f32 / scale, size.height as f32 / scale),
+                    scale,
+                );
             }
             sync_chrome(&mut self.rt, w, self.chrome, self.titlebar);
             sync_screen_origin(&mut self.rt, &w.window);
@@ -239,15 +382,24 @@ impl<S: 'static> Host<S> {
         #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
         let mut drew = false;
         #[cfg(target_os = "macos")]
-        if visible && !self.rt.minimize.field() && !self.life.finished() && !event_loop.exiting()
-            && self.win.as_ref().is_some_and(|w| w.native.panel.is_none() && w.window.is_minimized() != Some(true))
+        if visible
+            && !self.rt.minimize.field()
+            && !self.life.finished()
+            && !event_loop.exiting()
+            && self
+                .win
+                .as_ref()
+                .is_some_and(|w| w.native.panel.is_none() && w.window.is_minimized() != Some(true))
         {
             let presents = self.meter.totals().presents;
             self.redraw();
             drew = self.meter.totals().presents > presents;
             self.shell(event_loop);
         }
-        if !drew && (visible || launcher) && let Some(w) = &self.win {
+        if !drew
+            && (visible || launcher)
+            && let Some(w) = &self.win
+        {
             w.request_redraw();
         }
         Ok(())
@@ -267,7 +419,9 @@ impl<S: 'static> Host<S> {
     /// The next frame draws with what this makes; `replace_lost_surface` gives the window up if
     /// this keeps failing.
     pub(super) fn reattach(&mut self) -> Result<(), String> {
-        let Some(w) = self.win.as_mut() else { return Err("there is no window to draw into".into()) };
+        let Some(w) = self.win.as_mut() else {
+            return Err("there is no window to draw into".into());
+        };
         let window = w.window.clone();
         // The old surface goes before the device that made it and before the new surface is
         // made.
@@ -277,22 +431,38 @@ impl<S: 'static> Host<S> {
         self.gpu = None;
         self.rt.text.atlas.invalidate();
         self.rt.images.invalidate();
-        let features = self.comp.as_ref().map_or(wgpu::Features::empty(), |c| c.features());
+        let features = self
+            .comp
+            .as_ref()
+            .map_or(wgpu::Features::empty(), |c| c.features());
         let transparent = self.options.transparent;
         let (gpu, surface, prewarmed) = Gpu::for_surface(features, transparent, |instance| {
-            instance.create_surface(window.clone()).map_err(|e| e.to_string())
+            instance
+                .create_surface(window.clone())
+                .map_err(|e| e.to_string())
         })?;
         let gpu = Arc::new(gpu);
         let size = window.inner_size();
-        let (mut config, translucent) = surface_config(&surface, &gpu.adapter, (size.width, size.height), self.rt.srgb_blend())
-            .ok_or("the GPU adapter can't present to this window")?;
+        let (mut config, translucent) = surface_config(
+            &surface,
+            &gpu.adapter,
+            (size.width, size.height),
+            self.rt.srgb_blend(),
+        )
+        .ok_or("the GPU adapter can't present to this window")?;
         if transparent {
             config.alpha_mode = translucent.unwrap_or(wgpu::CompositeAlphaMode::Opaque);
         }
         if let Err(error) = configure(&surface, &gpu, &config) {
-            return Err(format!("the new GPU surface refused its configuration: {error}"));
+            return Err(format!(
+                "the new GPU surface refused its configuration: {error}"
+            ));
         }
-        let target_format = if self.rt.srgb_blend() { config.format.remove_srgb_suffix() } else { config.format };
+        let target_format = if self.rt.srgb_blend() {
+            config.format.remove_srgb_suffix()
+        } else {
+            config.format
+        };
         let mut renderer = prewarmed.unwrap_or_else(|| Renderer::new(&gpu.device, target_format));
         renderer.set_srgb_blend(self.rt.srgb_blend());
         rebuild_renderer(&gpu.device, &mut renderer, target_format, &mut self.rt);
@@ -302,10 +472,14 @@ impl<S: 'static> Host<S> {
         // The new surface reports presents where the old one did, to the log the window kept
         // (`try_create`): the shadow built on that log keeps re-sampling.
         #[cfg(target_os = "macos")]
-        let present = self.win.as_ref()
+        let present = self
+            .win
+            .as_ref()
             .and_then(|w| w.native.present_log.clone())
             .and_then(|log| crate::frame::present_time::metal::LayerHook::attach(&surface, log));
-        let Some(w) = self.win.as_mut() else { return Err("the window closed while it made a new surface".into()) };
+        let Some(w) = self.win.as_mut() else {
+            return Err("the window closed while it made a new surface".into());
+        };
         w.surface = Some(surface);
         w.config = config;
         w.surface_ok = true;
@@ -333,28 +507,41 @@ impl<S: 'static> Host<S> {
     /// window, a device and a surface. False when there is nothing to draw with this frame.
     pub(super) fn replace_lost_surface(&mut self) -> bool {
         let lost = self.gpu.as_ref().is_none_or(|(gpu, _)| gpu.is_lost());
-        let surface_missing = self.win.as_ref().is_some_and(|w| !w.surface_ok || w.surface.is_none());
-        if !lost && !surface_missing { return true; }
+        let surface_missing = self
+            .win
+            .as_ref()
+            .is_some_and(|w| !w.surface_ok || w.surface.is_none());
+        if !lost && !surface_missing {
+            return true;
+        }
         let now = Instant::now();
-        let Some(step) = self.win.as_mut().map(|w| w.surface_retries.attempt()) else { return false };
+        let Some(step) = self.win.as_mut().map(|w| w.surface_retries.attempt()) else {
+            return false;
+        };
         if step == SurfaceStep::GiveUp {
             return self.give_up_surface(format!("the window's GPU surface was replaced {SURFACE_TRIES} times without a frame reaching the screen"));
         }
         match self.reattach() {
             Ok(()) => {
-                if let Some(w) = self.win.as_mut() { w.backoff_step(BackoffEvent::Lapsed); }
+                if let Some(w) = self.win.as_mut() {
+                    w.backoff_step(BackoffEvent::Lapsed);
+                }
                 true
             }
             Err(error) => match self.win.as_ref().and_then(|w| w.surface_retries.retry(now)) {
                 Some(at) => {
-                    eprintln!("rune: could not replace the window's GPU surface, trying again: {error}");
+                    eprintln!(
+                        "rune: could not replace the window's GPU surface, trying again: {error}"
+                    );
                     if let Some(w) = self.win.as_mut() {
                         w.surface_ok = false;
                         w.backoff_step(BackoffEvent::At(at));
                     }
                     false
                 }
-                None => self.give_up_surface(format!("the window's GPU surface could not be replaced: {error}")),
+                None => self.give_up_surface(format!(
+                    "the window's GPU surface could not be replaced: {error}"
+                )),
             },
         }
     }
@@ -376,9 +563,20 @@ impl<S: 'static> Host<S> {
 
 /// The pass that turns premultiplied pixels into straight alpha for a `PostMultiplied` surface on
 /// a backend that composites premultiplied pixels (all but Metal).
-fn alpha_pass(gpu: &Gpu, transparent: bool, config: &wgpu::SurfaceConfiguration, format: wgpu::TextureFormat)
-    -> Option<crate::render::surface_alpha::AlphaSurface> {
-    (transparent && config.alpha_mode == wgpu::CompositeAlphaMode::PostMultiplied
+fn alpha_pass(
+    gpu: &Gpu,
+    transparent: bool,
+    config: &wgpu::SurfaceConfiguration,
+    format: wgpu::TextureFormat,
+) -> Option<crate::render::surface_alpha::AlphaSurface> {
+    (transparent
+        && config.alpha_mode == wgpu::CompositeAlphaMode::PostMultiplied
         && gpu.adapter.get_info().backend != wgpu::Backend::Metal)
-        .then(|| crate::render::surface_alpha::AlphaSurface::new(&gpu.device, format, (config.width, config.height)))
+        .then(|| {
+            crate::render::surface_alpha::AlphaSurface::new(
+                &gpu.device,
+                format,
+                (config.width, config.height),
+            )
+        })
 }

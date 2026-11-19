@@ -23,17 +23,25 @@ pub struct Recording {
 pub fn encode(scene: &Scene<'_>) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
-    for v in [scene.size.0, scene.size.1] { out.extend_from_slice(&v.to_le_bytes()); }
-    for c in scene.clear { out.extend_from_slice(&c.to_le_bytes()); }
+    for v in [scene.size.0, scene.size.1] {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    for c in scene.clear {
+        out.extend_from_slice(&c.to_le_bytes());
+    }
     out.extend_from_slice(&u32::from(scene.lcd).to_le_bytes());
     out.extend_from_slice(&(scene.instances.len() as u32).to_le_bytes());
     out.extend_from_slice(bytemuck::cast_slice(scene.instances));
     out.extend_from_slice(&(scene.glyph_pages.len() as u32).to_le_bytes());
-    for page in &scene.glyph_pages { out.extend_from_slice(page); }
+    for page in &scene.glyph_pages {
+        out.extend_from_slice(page);
+    }
     out.extend_from_slice(&(scene.images.len() as u32).to_le_bytes());
     for image in &scene.images {
         let height = image.data.len() as u32 / (image.width * 4).max(1);
-        for v in [image.width, height] { out.extend_from_slice(&v.to_le_bytes()); }
+        for v in [image.width, height] {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
         out.extend_from_slice(image.data);
     }
     out
@@ -42,22 +50,39 @@ pub fn encode(scene: &Scene<'_>) -> Vec<u8> {
 impl Recording {
     pub fn decode(bytes: &[u8]) -> Option<Recording> {
         let mut r = Reader { bytes, at: 0 };
-        if r.take(4)? != MAGIC { return None; }
+        if r.take(4)? != MAGIC {
+            return None;
+        }
         let size = (r.u32()?, r.u32()?);
-        let clear = [f32::from_bits(r.u32()?), f32::from_bits(r.u32()?), f32::from_bits(r.u32()?), f32::from_bits(r.u32()?)];
+        let clear = [
+            f32::from_bits(r.u32()?),
+            f32::from_bits(r.u32()?),
+            f32::from_bits(r.u32()?),
+            f32::from_bits(r.u32()?),
+        ];
         let lcd = r.u32()? & 1 != 0;
         let count = r.u32()? as usize;
-        let instances = bytemuck::pod_collect_to_vec(r.take(count * std::mem::size_of::<Instance>())?);
+        let instances =
+            bytemuck::pod_collect_to_vec(r.take(count * std::mem::size_of::<Instance>())?);
         let pages = r.u32()? as usize;
         let side = (ATLAS_SIZE * ATLAS_SIZE) as usize;
-        let glyph_pages = (0..pages).map(|_| r.take(side).map(<[u8]>::to_vec)).collect::<Option<Vec<_>>>()?;
+        let glyph_pages = (0..pages)
+            .map(|_| r.take(side).map(<[u8]>::to_vec))
+            .collect::<Option<Vec<_>>>()?;
         let count = r.u32()? as usize;
         let mut images = Vec::with_capacity(count);
         for _ in 0..count {
             let (w, h) = (r.u32()?, r.u32()?);
             images.push((w, r.take((w * h * 4) as usize)?.to_vec()));
         }
-        Some(Recording { instances, glyph_pages, images, size, clear, lcd })
+        Some(Recording {
+            instances,
+            glyph_pages,
+            images,
+            size,
+            clear,
+            lcd,
+        })
     }
 
     /// The frame, ready for `paint`.
@@ -66,7 +91,15 @@ impl Recording {
             instances: &self.instances,
             glyph_pages: self.glyph_pages.iter().map(Vec::as_slice).collect(),
             outlines: None,
-            images: self.images.iter().map(|(width, data)| Image { width: *width, data, dirty: None }).collect(),
+            images: self
+                .images
+                .iter()
+                .map(|(width, data)| Image {
+                    width: *width,
+                    data,
+                    dirty: None,
+                })
+                .collect(),
             size: self.size,
             clear: self.clear,
             lcd: self.lcd,
@@ -79,9 +112,13 @@ impl Recording {
         }
     }
 
-    pub fn instances(&self) -> &[Instance] { &self.instances }
+    pub fn instances(&self) -> &[Instance] {
+        &self.instances
+    }
 
-    pub fn size(&self) -> (u32, u32) { self.size }
+    pub fn size(&self) -> (u32, u32) {
+        self.size
+    }
 }
 
 struct Reader<'b> {

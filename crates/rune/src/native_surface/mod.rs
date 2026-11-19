@@ -4,16 +4,16 @@
 #[cfg(test)]
 #[path = "tests.rs"]
 mod gpu_tests;
-#[cfg(test)]
-mod place_tests;
 #[cfg(target_os = "macos")]
 pub mod macos;
 mod pipeline;
 pub(crate) mod place;
-pub use pipeline::SurfaceRenderer;
-pub(crate) use pipeline::Building;
-use std::sync::{Arc, Mutex};
+#[cfg(test)]
+mod place_tests;
 use crate::time::Instant;
+pub(crate) use pipeline::Building;
+pub use pipeline::SurfaceRenderer;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SurfaceFit {
@@ -44,7 +44,10 @@ pub struct ColorInfo {
 }
 impl Default for ColorInfo {
     fn default() -> Self {
-        Self { matrix: Matrix::Bt709, transfer: Transfer::Srgb }
+        Self {
+            matrix: Matrix::Bt709,
+            transfer: Transfer::Srgb,
+        }
     }
 }
 
@@ -93,10 +96,18 @@ impl Orient {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn from_transform(a: f64, b: f64, c: f64, d: f64) -> Self {
         let m = [a, b, c, d].map(|v| v.round());
-        let unit = m.iter().all(|v| v.abs() <= 1.0) && m.iter().zip([a, b, c, d]).all(|(r, v)| (r - v).abs() < 1e-3);
-        let quarter = (m[0] != 0.0 && m[3] != 0.0 && m[1] == 0.0 && m[2] == 0.0) || (m[0] == 0.0 && m[3] == 0.0 && m[1] != 0.0 && m[2] != 0.0);
+        let unit = m.iter().all(|v| v.abs() <= 1.0)
+            && m.iter()
+                .zip([a, b, c, d])
+                .all(|(r, v)| (r - v).abs() < 1e-3);
+        let quarter = (m[0] != 0.0 && m[3] != 0.0 && m[1] == 0.0 && m[2] == 0.0)
+            || (m[0] == 0.0 && m[3] == 0.0 && m[1] != 0.0 && m[2] != 0.0);
         // Orthogonal, so the inverse is the transpose: [a b; c d].
-        if unit && quarter { Self(m.map(|v| v as i8)) } else { Self::UP }
+        if unit && quarter {
+            Self(m.map(|v| v as i8))
+        } else {
+            Self::UP
+        }
     }
 
     /// Whether width and height trade places.
@@ -165,7 +176,11 @@ impl NativeSurface {
         self.0.lock().unwrap().video.clone()
     }
     /// Pull this frame's picture from the surface's video, if it has one.
-    pub(crate) fn pull_video(&self, clock: crate::video::Clock, wake: &Arc<crate::live::Wake>) -> Option<crate::video::Pulled> {
+    pub(crate) fn pull_video(
+        &self,
+        clock: crate::video::Clock,
+        wake: &Arc<crate::live::Wake>,
+    ) -> Option<crate::video::Pulled> {
         let video = self.video()?;
         Some(video.pull(self, clock, wake))
     }
@@ -233,7 +248,12 @@ impl NativeSurface {
     pub fn push_bytes(&self, frame: ByteFrame, frame_id: u64) -> Result<(), String> {
         self.push_bytes_oriented(frame, frame_id, Orient::UP)
     }
-    pub(crate) fn push_bytes_oriented(&self, frame: ByteFrame, frame_id: u64, orient: Orient) -> Result<(), String> {
+    pub(crate) fn push_bytes_oriented(
+        &self,
+        frame: ByteFrame,
+        frame_id: u64,
+        orient: Orient,
+    ) -> Result<(), String> {
         let [w, h] = [frame.width, frame.height];
         if w == 0 || h == 0 || w > 16384 || h > 16384 {
             return Err("video size must be 1..16384".into());
@@ -266,9 +286,21 @@ impl NativeSurface {
         self.push_oriented(buffer, frame_id, Orient::UP)
     }
     #[cfg(target_os = "macos")]
-    pub(crate) fn push_oriented(&self, buffer: macos::PixelBuffer, frame_id: u64, orient: Orient) -> Result<(), String> {
+    pub(crate) fn push_oriented(
+        &self,
+        buffer: macos::PixelBuffer,
+        frame_id: u64,
+        orient: Orient,
+    ) -> Result<(), String> {
         let (size, format, color) = buffer.info()?;
-        self.replace(Frame { id: frame_id, source: Source::PixelBuffer(buffer), size, format, color, orient });
+        self.replace(Frame {
+            id: frame_id,
+            source: Source::PixelBuffer(buffer),
+            size,
+            format,
+            color,
+            orient,
+        });
         Ok(())
     }
     fn replace(&self, frame: Frame) {
@@ -300,7 +332,10 @@ impl NativeSurface {
             } else {
                 s.submitted += 1;
             }
-            if s.timing.as_ref().is_none_or(|old| old.submitted_at <= timing.submitted_at) {
+            if s.timing
+                .as_ref()
+                .is_none_or(|old| old.submitted_at <= timing.submitted_at)
+            {
                 s.timing = Some(timing.clone());
             }
             s.observer.clone()
@@ -328,9 +363,17 @@ pub struct SurfaceDraw {
 /// Independent scalar colour oracle: encoded YCbCr -> linear RGB.
 pub fn nv12_reference(y: u8, cb: u8, cr: u8, format: Format, color: ColorInfo) -> [f32; 3] {
     let (y, u, v) = if format == Format::Nv12Video {
-        ((y as f32 - 16.0) / 219.0, (cb as f32 - 128.0) / 224.0, (cr as f32 - 128.0) / 224.0)
+        (
+            (y as f32 - 16.0) / 219.0,
+            (cb as f32 - 128.0) / 224.0,
+            (cr as f32 - 128.0) / 224.0,
+        )
     } else {
-        (y as f32 / 255.0, (cb as f32 - 128.0) / 255.0, (cr as f32 - 128.0) / 255.0)
+        (
+            y as f32 / 255.0,
+            (cb as f32 - 128.0) / 255.0,
+            (cr as f32 - 128.0) / 255.0,
+        )
     };
     let (kr, kb) = match color.matrix {
         Matrix::Bt601 => (0.299, 0.114),
@@ -400,7 +443,10 @@ pub fn synthetic(width: u32, height: u32, phase: u64) -> ByteFrame {
         width,
         height,
         format: Format::Nv12Video,
-        color: ColorInfo { matrix: Matrix::Bt709, transfer: Transfer::Bt709 },
+        color: ColorInfo {
+            matrix: Matrix::Bt709,
+            transfer: Transfer::Bt709,
+        },
         planes: [y, uv],
     }
 }

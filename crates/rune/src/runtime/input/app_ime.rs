@@ -20,19 +20,27 @@ enum AppComposition {
 
 impl AppIme {
     /// The app's editor has a composition open: Return and Escape belong to the input method.
-    pub(super) fn composing(&self) -> bool { matches!(self.composition, AppComposition::Composing(_)) }
+    pub(super) fn composing(&self) -> bool {
+        matches!(self.composition, AppComposition::Composing(_))
+    }
 
     /// Steps the composition with what the app is about to hear.
     fn step(&mut self, ev: &Ime) {
         match ev {
-            Ime::Preedit(s, _) => self.replace(if s.is_empty() { AppComposition::Idle } else { AppComposition::Composing(s.clone()) }),
+            Ime::Preedit(s, _) => self.replace(if s.is_empty() {
+                AppComposition::Idle
+            } else {
+                AppComposition::Composing(s.clone())
+            }),
             Ime::Commit(_) => self.replace(AppComposition::Idle),
             Ime::Enabled | Ime::Disabled => {}
         }
     }
 
     fn replace(&mut self, next: AppComposition) {
-        if let AppComposition::Composing(old) = &mut self.composition { old.zeroize(); }
+        if let AppComposition::Composing(old) = &mut self.composition {
+            old.zeroize();
+        }
         self.composition = next;
     }
 }
@@ -46,7 +54,12 @@ pub(super) fn area(r: [f32; 4], s: f32) -> [f32; 4] {
 /// element's drawn rect `r` in device pixels.
 pub(super) fn within(r: [f32; 4], at: [f32; 4], s: f32) -> [f32; 4] {
     let [x, y, w, h] = at;
-    [r[0] + x * s, r[1] + y * s, r[0] + (x + w.max(0.0)) * s, r[1] + (y + h.max(0.0)) * s]
+    [
+        r[0] + x * s,
+        r[1] + y * s,
+        r[0] + (x + w.max(0.0)) * s,
+        r[1] + (y + h.max(0.0)) * s,
+    ]
 }
 
 impl RuntimeCore {
@@ -62,11 +75,20 @@ impl RuntimeCore {
     /// composition the app has open ends there even after a field took focus, and the input
     /// method turning on or off is only the app's to hear.
     pub(super) fn run_ime(&mut self, ev: Ime, one: &mut Tx) -> bool {
-        let app = self.app_ime.composing() || matches!(ev, Ime::Enabled | Ime::Disabled) || self.focused_input().is_none();
-        let active = self.composing() || matches!(&ev, Ime::Preedit(s, _) | Ime::Commit(s) if !s.is_empty());
-        let ran = if app { self.app_ime_event(&ev, one) } else { self.with_focused(|e| e.ime(&ev), one) };
+        let app = self.app_ime.composing()
+            || matches!(ev, Ime::Enabled | Ime::Disabled)
+            || self.focused_input().is_none();
+        let active =
+            self.composing() || matches!(&ev, Ime::Preedit(s, _) | Ime::Commit(s) if !s.is_empty());
+        let ran = if app {
+            self.app_ime_event(&ev, one)
+        } else {
+            self.with_focused(|e| e.ime(&ev), one)
+        };
         // The key that confirmed or cancelled a composition comes back up unheard.
-        if ran && active { self.key_releases.ime_took_key(); }
+        if ran && active {
+            self.key_releases.ime_took_key();
+        }
         ran
     }
 
@@ -74,7 +96,10 @@ impl RuntimeCore {
     /// app's editor hears its last preedit committed.
     pub(super) fn finish_ime(&mut self, one: &mut Tx) -> bool {
         if self.app_ime.composing() {
-            let AppComposition::Composing(text) = std::mem::take(&mut self.app_ime.composition) else { return false };
+            let AppComposition::Composing(text) = std::mem::take(&mut self.app_ime.composition)
+            else {
+                return false;
+            };
             return self.app_ime_event(&Ime::Commit(text), one);
         }
         self.finish_field_composition(one)
@@ -83,15 +108,27 @@ impl RuntimeCore {
     /// The focused field's composition becomes its text, its change handler hearing it, before
     /// focus or the caret moves away from it.
     pub(super) fn finish_field_composition(&mut self, one: &mut Tx) -> bool {
-        if !self.focused_input().is_some_and(|i| i.access.is_some()) || !self.composing() { return false; }
+        if !self.focused_input().is_some_and(|i| i.access.is_some()) || !self.composing() {
+            return false;
+        }
         let mut finished = false;
-        self.with_focused(|e| { finished = e.finish_composition(); EditOutcome::default() }, one);
-        if finished { self.ime_reset = true; }
+        self.with_focused(
+            |e| {
+                finished = e.finish_composition();
+                EditOutcome::default()
+            },
+            one,
+        );
+        if finished {
+            self.ime_reset = true;
+        }
         finished
     }
 
     fn app_ime_event(&mut self, ev: &Ime, one: &mut Tx) -> bool {
-        if !self.app.has(app_side::Hook::Ime) { return false; }
+        if !self.app.has(app_side::Hook::Ime) {
+            return false;
+        }
         self.app_ime.step(ev);
         self.app.ime(ev, one)
     }

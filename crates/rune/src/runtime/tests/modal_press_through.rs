@@ -3,15 +3,26 @@ use crate::ScrollSpec;
 
 const DT: f64 = 1.0 / 120.0;
 
-struct Popover { open: bool, through: bool, pressed: u32 }
+struct Popover {
+    open: bool,
+    through: bool,
+    pressed: u32,
+}
 
 /// A focusable control at the top left and, while open, a popover modal at the bottom right
 /// that closes on a press outside it.
 fn view(s: &Popover, _: &mut Cx<Popover>) -> El {
-    let control = el().key("control").absolute(0.0, 0.0).size(40.0, 40.0).focusable(true)
+    let control = el()
+        .key("control")
+        .absolute(0.0, 0.0)
+        .size(40.0, 40.0)
+        .focusable(true)
         .on_press(|s: &mut Popover| s.pressed += 1);
     let popover = s.open.then(|| {
-        el().key("popover").absolute(100.0, 100.0).size(40.0, 40.0).focusable(true)
+        el().key("popover")
+            .absolute(100.0, 100.0)
+            .size(40.0, 40.0)
+            .focusable(true)
             .modal(true, |s: &mut Popover| s.open = false)
             .modal_press_through(s.through)
     });
@@ -19,7 +30,16 @@ fn view(s: &Popover, _: &mut Cx<Popover>) -> El {
 }
 
 fn press_outside(through: bool) -> Runtime<Popover> {
-    let mut rt = Runtime::new(Popover { open: true, through, pressed: 0 }, view, (200.0, 200.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        Popover {
+            open: true,
+            through,
+            pressed: 0,
+        },
+        view,
+        (200.0, 200.0),
+        Env::new(true, 1.0),
+    );
     rt.frame(0.0);
     rt.pointer_move(20.0, 20.0);
     rt.pointer_down(20.0, 20.0);
@@ -32,8 +52,16 @@ fn press_outside(through: bool) -> Runtime<Popover> {
 fn a_press_outside_a_press_through_modal_closes_it_and_presses_what_is_under_it() {
     let rt = press_outside(true);
     assert!(!rt.state().open, "the press asked the modal to close");
-    assert_eq!(rt.state().pressed, 1, "the press went on to the control under it");
-    assert_eq!(rt.focused_key().as_deref(), Some("control"), "focus stays where the press put it");
+    assert_eq!(
+        rt.state().pressed,
+        1,
+        "the press went on to the control under it"
+    );
+    assert_eq!(
+        rt.focused_key().as_deref(),
+        Some("control"),
+        "focus stays where the press put it"
+    );
 }
 
 #[test]
@@ -43,14 +71,24 @@ fn a_press_outside_a_modal_only_closes_it_by_default() {
     assert_eq!(rt.state().pressed, 0, "the press only closed the modal");
 }
 
-struct Invoked { open: bool, toggled: u32 }
+struct Invoked {
+    open: bool,
+    toggled: u32,
+}
 
 /// A toggle at the top left whose press-through popover, while open, is anchored under it.
 fn invoked(s: &Invoked, _: &mut Cx<Invoked>) -> El {
-    let toggle = el().key("toggle").absolute(0.0, 0.0).size(40.0, 40.0)
-        .on_press(|s: &mut Invoked| { s.open = !s.open; s.toggled += 1; });
+    let toggle = el()
+        .key("toggle")
+        .absolute(0.0, 0.0)
+        .size(40.0, 40.0)
+        .on_press(|s: &mut Invoked| {
+            s.open = !s.open;
+            s.toggled += 1;
+        });
     let popover = s.open.then(|| {
-        el().key("popover").size(40.0, 40.0)
+        el().key("popover")
+            .size(40.0, 40.0)
             .modal(true, |s: &mut Invoked| s.open = false)
             .modal_press_through(true)
             .anchored("toggle", crate::Side::Bottom, crate::Align::Start, 4.0)
@@ -60,7 +98,15 @@ fn invoked(s: &Invoked, _: &mut Cx<Invoked>) -> El {
 
 #[test]
 fn a_press_on_a_press_through_modals_invoker_leaves_the_modal_to_the_invoker() {
-    let mut rt = Runtime::new(Invoked { open: false, toggled: 0 }, invoked, (200.0, 200.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        Invoked {
+            open: false,
+            toggled: 0,
+        },
+        invoked,
+        (200.0, 200.0),
+        Env::new(true, 1.0),
+    );
     rt.frame(0.0);
     let press = |rt: &mut Runtime<Invoked>, t: f64| {
         rt.pointer_move(20.0, 20.0);
@@ -71,24 +117,43 @@ fn a_press_on_a_press_through_modals_invoker_leaves_the_modal_to_the_invoker() {
     press(&mut rt, DT);
     assert!(rt.state().open, "the first press opens the popover");
     press(&mut rt, 2.0 * DT);
-    assert!(!rt.state().open, "the second press closes it, and nothing opens it again");
+    assert!(
+        !rt.state().open,
+        "the second press closes it, and nothing opens it again"
+    );
     assert_eq!(rt.state().toggled, 2, "each press reached the invoker once");
 }
 
-struct Reading { through: bool }
+struct Reading {
+    through: bool,
+}
 
 /// A tall page in a scroll viewport, with a modal open over its top left.
 fn reading(s: &Reading, _: &mut Cx<Reading>) -> El {
-    let page = col().key("page").size(200.0, 200.0).scroll(ScrollSpec { stick_bottom: false })
+    let page = col()
+        .key("page")
+        .size(200.0, 200.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .child(el().size(200.0, 1000.0));
-    let modal = el().key("modal").absolute(0.0, 0.0).size(40.0, 40.0).focusable(true)
+    let modal = el()
+        .key("modal")
+        .absolute(0.0, 0.0)
+        .size(40.0, 40.0)
+        .focusable(true)
         .modal(true, |_: &mut Reading| {})
         .modal_press_through(s.through);
     el().size(200.0, 200.0).child(page).child(modal)
 }
 
 fn wheel_beside_the_modal(through: bool) -> Runtime<Reading> {
-    let mut rt = Runtime::new(Reading { through }, reading, (200.0, 200.0), Env::new(true, 1.0));
+    let mut rt = Runtime::new(
+        Reading { through },
+        reading,
+        (200.0, 200.0),
+        Env::new(true, 1.0),
+    );
     rt.frame(0.0);
     rt.pointer_move(150.0, 150.0);
     rt.wheel(150.0, 150.0, -60.0);
@@ -108,14 +173,25 @@ fn the_wheel_beside_a_modal_scrolls_nothing_by_default() {
     assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(0.0));
 }
 
-struct Wheeled { open: bool, closes: bool }
+struct Wheeled {
+    open: bool,
+    closes: bool,
+}
 
 /// A tall page in a scroll viewport, with a press-through modal open over its top left.
 fn wheeled(s: &Wheeled, _: &mut Cx<Wheeled>) -> El {
-    let page = col().key("page").size(200.0, 200.0).scroll(ScrollSpec { stick_bottom: false })
+    let page = col()
+        .key("page")
+        .size(200.0, 200.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .child(el().size(200.0, 1000.0));
     let modal = s.open.then(|| {
-        el().key("modal").absolute(0.0, 0.0).size(40.0, 40.0).focusable(true)
+        el().key("modal")
+            .absolute(0.0, 0.0)
+            .size(40.0, 40.0)
+            .focusable(true)
             .modal(true, |s: &mut Wheeled| s.open = false)
             .modal_press_through(true)
             .modal_wheel_closes(s.closes)
@@ -123,8 +199,17 @@ fn wheeled(s: &Wheeled, _: &mut Cx<Wheeled>) -> El {
     el().size(200.0, 200.0).child(page).children(modal)
 }
 
-fn wheel_at(closes: bool, at: (f32, f32), wheel: impl Fn(&mut Runtime<Wheeled>, f32, f32)) -> Runtime<Wheeled> {
-    let mut rt = Runtime::new(Wheeled { open: true, closes }, wheeled, (200.0, 200.0), Env::new(true, 1.0));
+fn wheel_at(
+    closes: bool,
+    at: (f32, f32),
+    wheel: impl Fn(&mut Runtime<Wheeled>, f32, f32),
+) -> Runtime<Wheeled> {
+    let mut rt = Runtime::new(
+        Wheeled { open: true, closes },
+        wheeled,
+        (200.0, 200.0),
+        Env::new(true, 1.0),
+    );
     rt.frame(0.0);
     rt.pointer_move(at.0, at.1);
     wheel(&mut rt, at.0, at.1);
@@ -135,11 +220,26 @@ fn wheel_at(closes: bool, at: (f32, f32), wheel: impl Fn(&mut Runtime<Wheeled>, 
 #[test]
 fn the_wheel_beside_a_modal_that_closes_on_it_closes_it_and_scrolls_what_is_under_it() {
     for (path, rt) in [
-        ("wheel", wheel_at(true, (150.0, 150.0), |rt, x, y| rt.wheel(x, y, -60.0))),
-        ("wheel_xy", wheel_at(true, (150.0, 150.0), |rt, x, y| rt.wheel_xy(x, y, 0.0, -60.0))),
+        (
+            "wheel",
+            wheel_at(true, (150.0, 150.0), |rt, x, y| rt.wheel(x, y, -60.0)),
+        ),
+        (
+            "wheel_xy",
+            wheel_at(true, (150.0, 150.0), |rt, x, y| {
+                rt.wheel_xy(x, y, 0.0, -60.0)
+            }),
+        ),
     ] {
-        assert!(!rt.state().open, "{path}: the wheel asked the modal to close");
-        assert_eq!(rt.scrolls.values().next().map(|s| s.offset), Some(60.0), "{path}: the page scrolled");
+        assert!(
+            !rt.state().open,
+            "{path}: the wheel asked the modal to close"
+        );
+        assert_eq!(
+            rt.scrolls.values().next().map(|s| s.offset),
+            Some(60.0),
+            "{path}: the page scrolled"
+        );
     }
 }
 

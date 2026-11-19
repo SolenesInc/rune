@@ -24,9 +24,11 @@ pub(super) const MATH_FONT_FILES: &[&str] = &["stixtwomath"];
 #[cfg(target_os = "macos")]
 pub(super) const MATH_FAMILIES: &[&str] = &["STIX Two Math"];
 #[cfg(not(target_os = "macos"))]
-pub(super) const MATH_FONT_FILES: &[&str] = &["notosansmath", "stixtwomath", "notomusic", "symbola"];
+pub(super) const MATH_FONT_FILES: &[&str] =
+    &["notosansmath", "stixtwomath", "notomusic", "symbola"];
 #[cfg(not(target_os = "macos"))]
-pub(super) const MATH_FAMILIES: &[&str] = &["Noto Sans Math", "STIX Two Math", "Noto Music", "Symbola"];
+pub(super) const MATH_FAMILIES: &[&str] =
+    &["Noto Sans Math", "STIX Two Math", "Noto Music", "Symbola"];
 
 #[cfg(target_os = "macos")]
 pub(super) const MONO_SCRIPT_FILES: &[&str] = &["couriernew"];
@@ -50,31 +52,79 @@ pub(super) struct ScriptFonts {
 
 impl ScriptFonts {
     pub(super) fn covers(&self, ch: char) -> bool {
-        self.blocks.iter().any(|&(lo, hi)| (lo..=hi).contains(&(ch as u32)))
+        self.blocks
+            .iter()
+            .any(|&(lo, hi)| (lo..=hi).contains(&(ch as u32)))
     }
 }
 
 const HEBREW: &[(u32, u32)] = &[(0x0590, 0x05FF), (0xFB1D, 0xFB4F)];
-const ARABIC: &[(u32, u32)] = &[(0x0600, 0x06FF), (0x0750, 0x077F), (0x0870, 0x08FF), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF)];
+const ARABIC: &[(u32, u32)] = &[
+    (0x0600, 0x06FF),
+    (0x0750, 0x077F),
+    (0x0870, 0x08FF),
+    (0xFB50, 0xFDFF),
+    (0xFE70, 0xFEFF),
+];
 const DEVANAGARI: &[(u32, u32)] = &[(0x0900, 0x097F), (0xA8E0, 0xA8FF)];
 const BENGALI: &[(u32, u32)] = &[(0x0980, 0x09FF)];
 const THAI: &[(u32, u32)] = &[(0x0E00, 0x0E7F)];
 
 #[cfg(target_os = "macos")]
 pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[
-    ScriptFonts { script: b"Hebr", blocks: HEBREW, files: &["sfhebrewttf", "arialhb"] },
-    ScriptFonts { script: b"Arab", blocks: ARABIC, files: &["sfarabicttf", "geezapro"] },
-    ScriptFonts { script: b"Deva", blocks: DEVANAGARI, files: &["kohinoorttc", "itfdevanagari"] },
-    ScriptFonts { script: b"Beng", blocks: BENGALI, files: &["kohinoorbangla", "banglamn"] },
-    ScriptFonts { script: b"Thai", blocks: THAI, files: &["thonburi"] },
+    ScriptFonts {
+        script: b"Hebr",
+        blocks: HEBREW,
+        files: &["sfhebrewttf", "arialhb"],
+    },
+    ScriptFonts {
+        script: b"Arab",
+        blocks: ARABIC,
+        files: &["sfarabicttf", "geezapro"],
+    },
+    ScriptFonts {
+        script: b"Deva",
+        blocks: DEVANAGARI,
+        files: &["kohinoorttc", "itfdevanagari"],
+    },
+    ScriptFonts {
+        script: b"Beng",
+        blocks: BENGALI,
+        files: &["kohinoorbangla", "banglamn"],
+    },
+    ScriptFonts {
+        script: b"Thai",
+        blocks: THAI,
+        files: &["thonburi"],
+    },
 ];
 #[cfg(not(target_os = "macos"))]
 pub(super) const SCRIPT_FONTS: &[ScriptFonts] = &[
-    ScriptFonts { script: b"Hebr", blocks: HEBREW, files: &["notosanshebrew", "freesans"] },
-    ScriptFonts { script: b"Arab", blocks: ARABIC, files: &["notosansarabic", "notonaskharabic", "freesans"] },
-    ScriptFonts { script: b"Deva", blocks: DEVANAGARI, files: &["notosansdevanagari", "lohitdevanagari", "freesans"] },
-    ScriptFonts { script: b"Beng", blocks: BENGALI, files: &["notosansbengali", "lohitbengali", "freesans"] },
-    ScriptFonts { script: b"Thai", blocks: THAI, files: &["notosansthai", "tlwg", "freesans"] },
+    ScriptFonts {
+        script: b"Hebr",
+        blocks: HEBREW,
+        files: &["notosanshebrew", "freesans"],
+    },
+    ScriptFonts {
+        script: b"Arab",
+        blocks: ARABIC,
+        files: &["notosansarabic", "notonaskharabic", "freesans"],
+    },
+    ScriptFonts {
+        script: b"Deva",
+        blocks: DEVANAGARI,
+        files: &["notosansdevanagari", "lohitdevanagari", "freesans"],
+    },
+    ScriptFonts {
+        script: b"Beng",
+        blocks: BENGALI,
+        files: &["notosansbengali", "lohitbengali", "freesans"],
+    },
+    ScriptFonts {
+        script: b"Thai",
+        blocks: THAI,
+        files: &["notosansthai", "tlwg", "freesans"],
+    },
 ];
 
 /// Whether `ch` is in a symbol block the eager symbol fallbacks often miss. General punctuation
@@ -105,7 +155,9 @@ pub(crate) fn is_pictographic(ch: char) -> bool {
 /// sequence, unless `U+FE0E` asks for text.
 pub(super) fn is_emoji(g: &str) -> bool {
     use icu_properties::{CodePointSetData, props::EmojiPresentation};
-    if g.contains('\u{FE0E}') { return false; }
+    if g.contains('\u{FE0E}') {
+        return false;
+    }
     g.chars().any(|c| matches!(c as u32, 0xFE0F | 0x20E3 | 0x1F3FB..=0x1F3FF | 0x1F1E6..=0x1F1FF | 0xE0020..=0xE007F))
         || g.chars().next().is_some_and(|c| CodePointSetData::new::<EmojiPresentation>().contains(c))
 }
@@ -134,4 +186,3 @@ pub(super) fn routes(text: &str) -> Vec<(Range<usize>, Route)> {
     }
     out
 }
-

@@ -29,7 +29,10 @@ pub(super) fn fetch(late: Vec<String>, share: bool, wake: impl Fn() + Clone + 's
     #[cfg(feature = "embedded-fonts")]
     if crate::text::full_faces::embedded_inter() {
         let base = MODULE_URL.with(String::clone);
-        let urls = crate::text::full_faces::FILES.iter().map(|file| super::platform::resolve_url(file, &base)).collect();
+        let urls = crate::text::full_faces::FILES
+            .iter()
+            .map(|file| super::platform::resolve_url(file, &base))
+            .collect();
         load(urls, true, false, wake.clone());
     }
     let wake: Rc<dyn Fn()> = Rc::new(wake);
@@ -77,27 +80,36 @@ pub(super) fn now(url: &str) {
     }
 }
 fn load(urls: Vec<String>, all_or_none: bool, share: bool, wake: impl FnOnce() + 'static) {
-    let files: Vec<_> = urls.into_iter().map(|url| {
-        let bytes = super::platform::fetch_bytes(&url);
-        (url, bytes)
-    }).collect();
+    let files: Vec<_> = urls
+        .into_iter()
+        .map(|url| {
+            let bytes = super::platform::fetch_bytes(&url);
+            (url, bytes)
+        })
+        .collect();
     wasm_bindgen_futures::spawn_local(async move {
         let mut faces = Vec::new();
         for (url, bytes) in files {
             match wasm_bindgen_futures::JsFuture::from(bytes).await {
                 Ok(bytes) => faces.push(js_sys::Uint8Array::new(&bytes).to_vec()),
                 Err(e) if all_or_none => {
-                    let note = format!("rune: {url} did not load, so text outside Latin, Greek and Cyrillic draws in fallback fonts:");
+                    let note = format!(
+                        "rune: {url} did not load, so text outside Latin, Greek and Cyrillic draws in fallback fonts:"
+                    );
                     web_sys::console::warn_2(&note.into(), &e);
                     return;
                 }
-                Err(e) => web_sys::console::warn_2(&format!("rune: font {url} did not load:").into(), &e),
+                Err(e) => {
+                    web_sys::console::warn_2(&format!("rune: font {url} did not load:").into(), &e)
+                }
             }
         }
         if faces.is_empty() {
             return;
         }
-        if share { super::page_fonts::share(faces.iter().map(Vec::as_slice)); }
+        if share {
+            super::page_fonts::share(faces.iter().map(Vec::as_slice));
+        }
         crate::text::full_faces::arrive(faces);
         wake();
     });

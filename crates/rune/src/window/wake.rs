@@ -41,14 +41,32 @@ impl WakeWork {
     /// drawable, and a launcher's cached frame is paced. `minimized` is asked only when the
     /// answer could be a frame, so a quiet turn reads nothing of the window.
     pub(crate) fn of(f: WakeFacts, minimized: impl FnOnce() -> bool) -> WakeWork {
-        if !f.window { return WakeWork::Nothing; }
-        if f.launcher && !f.visible {
-            return if f.changed { WakeWork::HiddenFrame } else { WakeWork::Nothing };
+        if !f.window {
+            return WakeWork::Nothing;
         }
-        if f.quiet { return WakeWork::Nothing; }
+        if f.launcher && !f.visible {
+            return if f.changed {
+                WakeWork::HiddenFrame
+            } else {
+                WakeWork::Nothing
+            };
+        }
+        if f.quiet {
+            return WakeWork::Nothing;
+        }
         // A shown launcher also draws as it shows; any other window draws because it shows.
-        let asked = if f.launcher { f.changed || (f.was_shown && f.visible) } else { f.visible };
-        if !asked { return WakeWork::Nothing; }
-        if (!f.launcher && f.covered) || minimized() { WakeWork::CoveredFrame } else { WakeWork::Paint }
+        let asked = if f.launcher {
+            f.changed || (f.was_shown && f.visible)
+        } else {
+            f.visible
+        };
+        if !asked {
+            return WakeWork::Nothing;
+        }
+        if (!f.launcher && f.covered) || minimized() {
+            WakeWork::CoveredFrame
+        } else {
+            WakeWork::Paint
+        }
     }
 }

@@ -3,12 +3,26 @@
 use rune::text::TextSystem;
 use rune::{Color, Cx, El, Env, Runtime, el};
 
-const GREY: Color = Color { r: 0.3, g: 0.3, b: 0.3, a: 1.0 };
-const BLUE: Color = Color { r: 0.0, g: 0.4, b: 1.0, a: 1.0 };
+const GREY: Color = Color {
+    r: 0.3,
+    g: 0.3,
+    b: 0.3,
+    a: 1.0,
+};
+const BLUE: Color = Color {
+    r: 0.0,
+    g: 0.4,
+    b: 1.0,
+    a: 1.0,
+};
 
 fn view(_: &(), _: &mut Cx<()>) -> El {
     el().size(60.0, 40.0).fill(Color::BLACK).child(
-        el().size(40.0, 20.0).fill(Color::BLACK).border(1.0, GREY).hover_border(BLUE).on_press(|_: &mut ()| {}),
+        el().size(40.0, 20.0)
+            .fill(Color::BLACK)
+            .border(1.0, GREY)
+            .hover_border(BLUE)
+            .on_press(|_: &mut ()| {}),
     )
 }
 
@@ -31,11 +45,23 @@ fn border(rt: &Runtime<()>) -> [f32; 4] {
 #[test]
 fn a_box_takes_its_hover_border_under_the_pointer_and_gives_it_back_when_it_leaves() {
     let mut rt = runtime();
-    assert_eq!(border(&rt), GREY.premul(1.0), "at rest the border keeps its own colour");
+    assert_eq!(
+        border(&rt),
+        GREY.premul(1.0),
+        "at rest the border keeps its own colour"
+    );
     rt.pointer_move(10.0, 10.0);
     rt.frame(1.0 / 60.0);
-    assert_eq!(border(&rt), BLUE.premul(1.0), "hovered, the border takes the hover colour");
+    assert_eq!(
+        border(&rt),
+        BLUE.premul(1.0),
+        "hovered, the border takes the hover colour"
+    );
     rt.pointer_move(55.0, 35.0);
     rt.frame(1.0);
-    assert_eq!(border(&rt), GREY.premul(1.0), "once the pointer leaves, the border fades back");
+    assert_eq!(
+        border(&rt),
+        GREY.premul(1.0),
+        "once the pointer leaves, the border fades back"
+    );
 }

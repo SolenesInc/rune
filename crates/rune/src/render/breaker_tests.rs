@@ -13,15 +13,28 @@ fn a_build_the_device_takes_works_and_one_it_refuses_is_dropped_for_good() {
     assert_eq!(step(&mut health, &mut seq, Event::Wanted), [Effect::Build]);
     assert!(step(&mut health, &mut seq, Event::Built(Verdict::Now(None))).is_empty());
     assert!(health.working());
-    assert!(step(&mut health, &mut seq, Event::Wanted).is_empty(), "built once");
+    assert!(
+        step(&mut health, &mut seq, Event::Wanted).is_empty(),
+        "built once"
+    );
 
     let mut health = Health::Untried;
-    let effects = step(&mut health, &mut seq, Event::Built(Verdict::Now(Some("invalid".into()))));
+    let effects = step(
+        &mut health,
+        &mut seq,
+        Event::Built(Verdict::Now(Some("invalid".into()))),
+    );
     assert_eq!(effects, [Effect::Drop, Effect::Report("invalid".into())]);
     assert!(matches!(health, Health::Broken));
-    assert!(step(&mut health, &mut seq, Event::Wanted).is_empty(), "never built again");
+    assert!(
+        step(&mut health, &mut seq, Event::Wanted).is_empty(),
+        "never built again"
+    );
     // A new shader gets one more try.
-    assert_eq!(step(&mut health, &mut seq, Event::ShaderChanged), [Effect::Drop]);
+    assert_eq!(
+        step(&mut health, &mut seq, Event::ShaderChanged),
+        [Effect::Drop]
+    );
     assert_eq!(step(&mut health, &mut seq, Event::Wanted), [Effect::Build]);
 }
 
@@ -32,31 +45,74 @@ fn a_late_answer_settles_only_its_own_check() {
     let mut seq = Seq::default();
     let mut health = Health::Untried;
     let answer = Answer::default();
-    assert!(step(&mut health, &mut seq, Event::Built(Verdict::Later(answer.clone()))).is_empty());
+    assert!(
+        step(
+            &mut health,
+            &mut seq,
+            Event::Built(Verdict::Later(answer.clone()))
+        )
+        .is_empty()
+    );
     assert!(!health.working());
     assert!(health.answered().is_none(), "no answer yet");
     *answer.lock().unwrap() = Some(Some("GPUInternalError: compile failed".into()));
-    let Some(Event::Answered { attempt, error }) = health.answered() else { panic!("the answer") };
+    let Some(Event::Answered { attempt, error }) = health.answered() else {
+        panic!("the answer")
+    };
 
-    assert_eq!(step(&mut health, &mut seq, Event::ShaderChanged), [Effect::Drop]);
-    assert!(step(&mut health, &mut seq, Event::Answered { attempt, error: error.clone() }).is_empty(), "stale");
+    assert_eq!(
+        step(&mut health, &mut seq, Event::ShaderChanged),
+        [Effect::Drop]
+    );
+    assert!(
+        step(
+            &mut health,
+            &mut seq,
+            Event::Answered {
+                attempt,
+                error: error.clone()
+            }
+        )
+        .is_empty(),
+        "stale"
+    );
     assert!(matches!(health, Health::Untried));
 
     let answer = Answer::default();
-    step(&mut health, &mut seq, Event::Built(Verdict::Later(answer.clone())));
+    step(
+        &mut health,
+        &mut seq,
+        Event::Built(Verdict::Later(answer.clone())),
+    );
     *answer.lock().unwrap() = Some(error);
     let answered = health.answered().expect("the answer");
-    assert_eq!(step(&mut health, &mut seq, answered), [Effect::Drop, Effect::Report("GPUInternalError: compile failed".into())]);
+    assert_eq!(
+        step(&mut health, &mut seq, answered),
+        [
+            Effect::Drop,
+            Effect::Report("GPUInternalError: compile failed".into())
+        ]
+    );
     assert!(matches!(health, Health::Broken));
 }
 
 fn rect(bounds: [f32; 4]) -> Instance {
-    Instance { rect: bounds, fill: [1.0; 4], clip: NO_CLIP, params: [0.0, KIND_RECT, 0.0, 1.0], ..Instance::zeroed() }
+    Instance {
+        rect: bounds,
+        fill: [1.0; 4],
+        clip: NO_CLIP,
+        params: [0.0, KIND_RECT, 0.0, 1.0],
+        ..Instance::zeroed()
+    }
 }
 
 fn group(spec: LayerSpec) -> Vec<Instance> {
     let bounds = [4.0, 4.0, 24.0, 8.0];
-    vec![Instance::begin_layer(bounds, NO_CLIP, spec), rect(bounds), Instance::end_layer()]
+    vec![
+        Instance::begin_layer(bounds, NO_CLIP, spec),
+        rect(bounds),
+        Instance::end_layer(),
+    ]
 }
 
 /// Draws three frames of `instances` with `feature`'s pipelines built broken, and checks that no
@@ -77,9 +133,15 @@ fn draw_refusing(feature: Feature, instances: &[Instance]) -> (Renderer, [u8; 4]
         renderer.submit(&gpu.queue, encoder);
         out = target.read(&gpu.device);
         let error = pollster::block_on(scope.pop());
-        assert!(error.is_none(), "a frame set a pipeline the device refused: {error:?}");
+        assert!(
+            error.is_none(),
+            "a frame set a pipeline the device refused: {error:?}"
+        );
     }
-    assert!(!matches!(renderer.breakers.health(feature), Health::Working | Health::Untried));
+    assert!(!matches!(
+        renderer.breakers.health(feature),
+        Health::Working | Health::Untried
+    ));
     let at = (8 * 32 + 16) * 4;
     (renderer, [out[at], out[at + 1], out[at + 2], out[at + 3]])
 }
@@ -88,22 +150,47 @@ fn draw_refusing(feature: Feature, instances: &[Instance]) -> (Renderer, [u8; 4]
 /// the frame, at full opacity, rather than leaving the frame blank.
 #[test]
 fn a_refused_layer_pipeline_draws_the_group_in_its_parent() {
-    let (renderer, pixel) = draw_refusing(Feature::Isolation, &group(LayerSpec { opacity: 0.5, ..Default::default() }));
+    let (renderer, pixel) = draw_refusing(
+        Feature::Isolation,
+        &group(LayerSpec {
+            opacity: 0.5,
+            ..Default::default()
+        }),
+    );
     assert_eq!(pixel, [255; 4]);
     assert_eq!(renderer.layer_stats().targets, 0);
-    assert!(!renderer.extra.iter().any(|(f, _)| *f == FORMAT), "the refused pipeline isn't kept");
+    assert!(
+        !renderer.extra.iter().any(|(f, _)| *f == FORMAT),
+        "the refused pipeline isn't kept"
+    );
 }
 
 #[test]
 fn a_refused_plus_lighter_pipeline_draws_source_over() {
-    let (renderer, pixel) = draw_refusing(Feature::PlusLighter, &group(LayerSpec { opacity: 0.5, blend: Blend::PlusLighter, ..Default::default() }));
+    let (renderer, pixel) = draw_refusing(
+        Feature::PlusLighter,
+        &group(LayerSpec {
+            opacity: 0.5,
+            blend: Blend::PlusLighter,
+            ..Default::default()
+        }),
+    );
     let want = [188, 188, 188, 128];
-    assert!(pixel.iter().zip(want).all(|(&a, b)| a.abs_diff(b) <= 1), "half white, isolated, source-over: {pixel:?}");
+    assert!(
+        pixel.iter().zip(want).all(|(&a, b)| a.abs_diff(b) <= 1),
+        "half white, isolated, source-over: {pixel:?}"
+    );
     assert!(renderer.layers.additive.is_none());
 }
 
 #[test]
 fn a_refused_blur_pipeline_draws_unblurred() {
-    let (_, pixel) = draw_refusing(Feature::LayerBlur, &group(LayerSpec { blur: 4.0, ..Default::default() }));
+    let (_, pixel) = draw_refusing(
+        Feature::LayerBlur,
+        &group(LayerSpec {
+            blur: 4.0,
+            ..Default::default()
+        }),
+    );
     assert_eq!(pixel, [255; 4]);
 }

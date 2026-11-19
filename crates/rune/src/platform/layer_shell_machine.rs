@@ -19,9 +19,19 @@ pub(crate) mod touch {
     /// What the compositor said about a touch.
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub(crate) enum Event {
-        Down { id: i32, x: f32, y: f32 },
-        Motion { id: i32, x: f32, y: f32 },
-        Up { id: i32 },
+        Down {
+            id: i32,
+            x: f32,
+            y: f32,
+        },
+        Motion {
+            id: i32,
+            x: f32,
+            y: f32,
+        },
+        Up {
+            id: i32,
+        },
         /// The compositor took the touch for a system gesture of its own.
         Cancel,
         /// The seat went away: nothing more arrives for this finger.
@@ -44,7 +54,9 @@ pub(crate) mod touch {
                 *state = State::Down { id };
                 Effects::two(Effect::Move(x, y), Effect::Press)
             }
-            (State::Down { id }, Event::Motion { id: moving, x, y }) if id == moving => Effects::one(Effect::Move(x, y)),
+            (State::Down { id }, Event::Motion { id: moving, x, y }) if id == moving => {
+                Effects::one(Effect::Move(x, y))
+            }
             (State::Down { id }, Event::Up { id: lifted }) if id == lifted => {
                 *state = State::Up;
                 Effects::two(Effect::Release, Effect::Leave)
@@ -85,13 +97,18 @@ pub(crate) mod readiness {
         Configuring { scale: Option<i32> },
         /// Configured. `size` and `scale` are what the compositor said that `dispatch` hasn't
         /// read yet.
-        Ready { size: Option<(u32, u32)>, scale: Option<i32> },
+        Ready {
+            size: Option<(u32, u32)>,
+            scale: Option<i32>,
+        },
         /// Destroyed by the compositor: it says nothing more that counts.
         Closed,
     }
 
     impl Default for State {
-        fn default() -> Self { State::Configuring { scale: None } }
+        fn default() -> Self {
+            State::Configuring { scale: None }
+        }
     }
 
     /// The surface after `event`. No effect: what it said is read with the accessors below.
@@ -99,19 +116,40 @@ pub(crate) mod readiness {
         match (&*state, event) {
             (State::Closed, _) => {}
             (_, Event::Closed) => *state = State::Closed,
-            (State::Configuring { scale }, Event::Configure { width, height }) => *state = State::Ready { size: Some((width, height)), scale: *scale },
-            (State::Ready { scale, .. }, Event::Configure { width, height }) => *state = State::Ready { size: Some((width, height)), scale: *scale },
-            (State::Configuring { .. }, Event::Scale(scale)) => *state = State::Configuring { scale: Some(scale) },
-            (State::Ready { size, .. }, Event::Scale(scale)) => *state = State::Ready { size: *size, scale: Some(scale) },
+            (State::Configuring { scale }, Event::Configure { width, height }) => {
+                *state = State::Ready {
+                    size: Some((width, height)),
+                    scale: *scale,
+                }
+            }
+            (State::Ready { scale, .. }, Event::Configure { width, height }) => {
+                *state = State::Ready {
+                    size: Some((width, height)),
+                    scale: *scale,
+                }
+            }
+            (State::Configuring { .. }, Event::Scale(scale)) => {
+                *state = State::Configuring { scale: Some(scale) }
+            }
+            (State::Ready { size, .. }, Event::Scale(scale)) => {
+                *state = State::Ready {
+                    size: *size,
+                    scale: Some(scale),
+                }
+            }
         }
     }
 
     impl State {
         /// The compositor configured a size, so the surface can be drawn on.
-        pub(crate) fn configured(&self) -> bool { !matches!(self, State::Configuring { .. }) }
+        pub(crate) fn configured(&self) -> bool {
+            !matches!(self, State::Configuring { .. })
+        }
 
         /// The compositor destroyed the surface.
-        pub(crate) fn closed(&self) -> bool { matches!(self, State::Closed) }
+        pub(crate) fn closed(&self) -> bool {
+            matches!(self, State::Closed)
+        }
 
         /// The size the compositor asked for that `dispatch` hasn't read yet.
         pub(crate) fn size(&self) -> Option<(u32, u32)> {

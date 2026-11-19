@@ -5,7 +5,11 @@ fn presses_on_one_element_close_in_time_and_place_count_up() {
     let mut run = PressRun::default();
     assert_eq!(run.press("a", 0.0, (10.0, 10.0), 0.5), 1);
     assert_eq!(run.press("a", 0.3, (12.0, 9.0), 0.5), 2);
-    assert_eq!(run.press("a", 0.6, (13.0, 9.0), 0.5), 3, "the interval runs from the last press, not the first");
+    assert_eq!(
+        run.press("a", 0.6, (13.0, 9.0), 0.5),
+        3,
+        "the interval runs from the last press, not the first"
+    );
 }
 
 #[test]

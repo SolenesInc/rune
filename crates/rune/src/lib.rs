@@ -3,8 +3,13 @@
 //! input, scroll viewports, growth stacks, streaming reveals, themes as data, and headless agent
 //! tooling.
 
-#[cfg(all(target_arch = "wasm32", any(feature = "hot", feature = "native-file-dialog")))]
-compile_error!("web does not support Rune's hot or native-file-dialog features; disable them for wasm32");
+#[cfg(all(
+    target_arch = "wasm32",
+    any(feature = "hot", feature = "native-file-dialog")
+))]
+compile_error!(
+    "web does not support Rune's hot or native-file-dialog features; disable them for wasm32"
+);
 
 mod a11y;
 mod app;
@@ -60,8 +65,8 @@ pub mod text;
 pub mod theme;
 pub mod time;
 pub mod tok;
-pub mod tracked;
 pub mod tooling;
+pub mod tracked;
 pub mod tray;
 
 pub(crate) use image::pixels;
@@ -73,7 +78,6 @@ pub(crate) use window::titlebar;
 /// AccessKit's types, for [`Runtime::accessibility_tree`] and [`Runtime::accessibility_action`].
 pub use a11y::AccessibilityLink;
 pub use accesskit;
-pub use parley;
 pub use app::App;
 pub use app::AppHandle;
 pub use clipboard::ClipboardContent;
@@ -202,7 +206,6 @@ pub use live::Live;
 pub use live::LiveText;
 pub use live::Tween;
 pub use memo::{memo, region, region_with};
-pub use tracked::Tracked;
 pub use native_menu::MenuError;
 pub use native_menu::MenuItem;
 pub use native_surface::NativeSurface;
@@ -225,6 +228,7 @@ pub use overlay::options::OverlayLevel;
 pub use overlay::options::OverlayOptions;
 pub use overlay::options::OverlayPlacement;
 pub use overlay::options::OverlaySupport;
+pub use parley;
 pub use pixels::Pixels;
 pub use platform::accent::SystemAccent;
 pub use platform::accent::system_accent;
@@ -255,9 +259,9 @@ pub use popup_menu::PopupItem;
 pub use popup_menu::PopupMenu;
 pub use popup_menu::PopupMenuError;
 pub use popup_menu::popup_menu_supported;
-pub use quit::fast_exit;
 #[cfg(not(target_arch = "wasm32"))]
 pub use quit::exit_deadline;
+pub use quit::fast_exit;
 pub use quit::quitting;
 pub use recorder::FakeMicrophone;
 pub use recorder::Level;
@@ -362,6 +366,7 @@ pub use tooling::run_with;
 pub use tooling::set_app_id;
 pub use tooling::try_run_windows_with;
 pub use tooling::try_run_windows_with_args;
+pub use tracked::Tracked;
 pub use tray::Tray;
 pub use tray::TrayError;
 pub use tray::TrayEvent;
@@ -408,7 +413,9 @@ pub fn scene_clock() -> SceneClock {
 pub(crate) fn with_scene_clock<T>(clock: SceneClock, f: impl FnOnce() -> T) -> T {
     struct Restore(SceneClock);
     impl Drop for Restore {
-        fn drop(&mut self) { SCENE_CLOCK.set(self.0); }
+        fn drop(&mut self) {
+            SCENE_CLOCK.set(self.0);
+        }
     }
 
     let _restore = Restore(SCENE_CLOCK.replace(clock));

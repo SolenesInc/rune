@@ -54,7 +54,9 @@ impl Phase {
     }
 
     /// The held press is extending the selection.
-    pub(in crate::runtime) fn dragging(&self) -> bool { matches!(self, Phase::Dragging { .. }) }
+    pub(in crate::runtime) fn dragging(&self) -> bool {
+        matches!(self, Phase::Dragging { .. })
+    }
 }
 
 /// A selection: its anchor in one text and its focus in the same text or, in `far`, another text
@@ -80,8 +82,22 @@ pub(in crate::runtime) struct Selection {
 
 impl Selection {
     /// `anchor..focus` in text `path` reading `content`, made from the unit range `origin`.
-    pub(in crate::runtime) fn new(path: String, content: String, (anchor, focus): (usize, usize), origin: (usize, usize)) -> Self {
-        Self { path, content, anchor, focus, origin, anchor_end: None, far: None, between: 0 }
+    pub(in crate::runtime) fn new(
+        path: String,
+        content: String,
+        (anchor, focus): (usize, usize),
+        origin: (usize, usize),
+    ) -> Self {
+        Self {
+            path,
+            content,
+            anchor,
+            focus,
+            origin,
+            anchor_end: None,
+            far: None,
+            between: 0,
+        }
     }
 }
 
@@ -95,7 +111,13 @@ pub(in crate::runtime) struct Far {
 }
 
 impl Far {
-    pub(in crate::runtime) fn new(path: String, content: String) -> Self { Self { path, content, end: None } }
+    pub(in crate::runtime) fn new(path: String, content: String) -> Self {
+        Self {
+            path,
+            content,
+            end: None,
+        }
+    }
 }
 
 /// Where a drag's focus landed: the anchor's text, or another text of its group.
@@ -106,12 +128,21 @@ pub(in crate::runtime) enum Reach<'a> {
 
 pub(in crate::runtime) enum Event<'a> {
     /// A primary press placed a new selection, `origin` in text `path`, to be extended by `unit`.
-    Press { path: String, content: String, unit: Unit, origin: (usize, usize) },
+    Press {
+        path: String,
+        content: String,
+        unit: Unit,
+        origin: (usize, usize),
+    },
     /// A Shift-press keeps the anchor and moves the focus to `focus`, in `far` or the anchor's
     /// text; the drag that follows extends by character.
     Extend { focus: usize, far: Option<Far> },
     /// The held press moved the selection's ends to `anchor` and `focus`, the focus in `reach`.
-    Drag { anchor: usize, focus: usize, reach: Reach<'a> },
+    Drag {
+        anchor: usize,
+        focus: usize,
+        reach: Reach<'a>,
+    },
     /// The press ended: released, cancelled, lost, or taken by a draggable row.
     Release,
     /// A selection made at once: Select All, `Tx::select_text`, a secondary press's word.
@@ -131,35 +162,62 @@ pub(in crate::runtime) enum Effect {
 
 pub(in crate::runtime) fn step(phase: &mut Phase, event: Event<'_>) -> Effects<Effect> {
     match event {
-        Event::Press { path, content, unit, origin } => {
-            *phase = Phase::Dragging { selection: Selection::new(path, content, origin, origin), unit };
+        Event::Press {
+            path,
+            content,
+            unit,
+            origin,
+        } => {
+            *phase = Phase::Dragging {
+                selection: Selection::new(path, content, origin, origin),
+                unit,
+            };
             Effects::one(Effect::Seal)
         }
         Event::Extend { focus, far } => {
-            let (Phase::Placed(selection) | Phase::Dragging { selection, .. }) = std::mem::take(phase) else {
+            let (Phase::Placed(selection) | Phase::Dragging { selection, .. }) =
+                std::mem::take(phase)
+            else {
                 return Effects::none();
             };
             let mut selection = selection;
             selection.origin = (selection.anchor, selection.anchor);
             selection.focus = focus;
             selection.far = far;
-            *phase = Phase::Dragging { selection, unit: Unit::Char };
+            *phase = Phase::Dragging {
+                selection,
+                unit: Unit::Char,
+            };
             Effects::one(Effect::Seal)
         }
-        Event::Drag { anchor, focus, reach } => {
-            let Phase::Dragging { selection: sel, .. } = phase else { return Effects::none() };
+        Event::Drag {
+            anchor,
+            focus,
+            reach,
+        } => {
+            let Phase::Dragging { selection: sel, .. } = phase else {
+                return Effects::none();
+            };
             let same_far = match reach {
                 Reach::Anchor => sel.far.is_none(),
                 Reach::Far { path, .. } => sel.far.as_ref().is_some_and(|f| f.path == path),
             };
-            if (sel.anchor, sel.focus) == (anchor, focus) && same_far { return Effects::none(); }
+            if (sel.anchor, sel.focus) == (anchor, focus) && same_far {
+                return Effects::none();
+            }
             (sel.anchor, sel.focus) = (anchor, focus);
             match reach {
                 Reach::Anchor => sel.far = None,
-                Reach::Far { path, content } if !same_far => sel.far = Some(Far::new(path.to_owned(), content.to_owned())),
+                Reach::Far { path, content } if !same_far => {
+                    sel.far = Some(Far::new(path.to_owned(), content.to_owned()))
+                }
                 Reach::Far { .. } => {}
             }
-            Effects::one(if same_far { Effect::SyncPins } else { Effect::Seal })
+            Effects::one(if same_far {
+                Effect::SyncPins
+            } else {
+                Effect::Seal
+            })
         }
         Event::Release => {
             if let Phase::Dragging { .. } = phase

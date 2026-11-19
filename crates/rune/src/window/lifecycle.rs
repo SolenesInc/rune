@@ -1,8 +1,8 @@
 //! A window's lifecycle: requests from other threads, showing, focusing, draining updates,
 //! polling while hidden, closing, hiding, opening and creating.
 
-use super::*;
 use super::minimize::{HiddenPoll, shell_take};
+use super::*;
 
 impl<S: 'static> Host<S> {
     pub(super) fn window_request(&mut self, event_loop: &ActiveEventLoop, request: WindowRequest) {
@@ -18,8 +18,11 @@ impl<S: 'static> Host<S> {
     pub(super) fn set_position(&mut self, event_loop: &ActiveEventLoop, position: (i32, i32)) {
         self.placement = None;
         self.options.position = Some(position);
-        if !is_wayland(event_loop) && let Some(w) = &self.win {
-            w.window.set_outer_position(PhysicalPosition::new(position.0, position.1));
+        if !is_wayland(event_loop)
+            && let Some(w) = &self.win
+        {
+            w.window
+                .set_outer_position(PhysicalPosition::new(position.0, position.1));
         }
         self.sync_origin();
     }
@@ -27,50 +30,82 @@ impl<S: 'static> Host<S> {
     pub(super) fn set_always_on_top(&mut self, event_loop: &ActiveEventLoop, on: bool) {
         self.options.always_on_top = on;
         self.macos_window.level = None;
-        if !is_wayland(event_loop) && let Some(w) = &self.win {
-            w.window.set_window_level(if on { WindowLevel::AlwaysOnTop } else { WindowLevel::Normal });
+        if !is_wayland(event_loop)
+            && let Some(w) = &self.win
+        {
+            w.window.set_window_level(if on {
+                WindowLevel::AlwaysOnTop
+            } else {
+                WindowLevel::Normal
+            });
         }
     }
 
     pub(super) fn show(&mut self, event_loop: &ActiveEventLoop) {
-        if self.launcher() { self.reveal_launcher(event_loop); return; }
+        if self.launcher() {
+            self.reveal_launcher(event_loop);
+            return;
+        }
         self.reveal(event_loop, Reveal::Show, None);
     }
 
     pub(super) fn show_key(&mut self, event_loop: &ActiveEventLoop) {
-        if self.launcher() { self.reveal_launcher(event_loop); return; }
+        if self.launcher() {
+            self.reveal_launcher(event_loop);
+            return;
+        }
         self.reveal(event_loop, Reveal::Key, None);
     }
 
     pub(super) fn open(&mut self, event_loop: &ActiveEventLoop, token: Option<String>) {
-        if self.launcher() { self.reveal_launcher(event_loop); return; }
+        if self.launcher() {
+            self.reveal_launcher(event_loop);
+            return;
+        }
         // The launcher's startup token belongs to the first window only.
         let token = token.or_else(|| self.startup_token(event_loop));
         self.reveal(event_loop, Reveal::Open, token);
     }
 
     /// The window shown, or not, so far: the shown one, and nothing while it's hidden.
-    pub(super) fn shown_win(&self) -> Option<&Win> { self.win.as_ref().filter(|_| self.life.shown()) }
+    pub(super) fn shown_win(&self) -> Option<&Win> {
+        self.win.as_ref().filter(|_| self.life.shown())
+    }
 
     /// The window as a reveal finds it.
     fn found(&self) -> Found {
-        let Some(w) = &self.win else { return Found::Missing };
+        let Some(w) = &self.win else {
+            return Found::Missing;
+        };
         let minimized = w.window.is_minimized() == Some(true);
         match self.life {
-            Life::Shown { sight } => Found::Shown { covered: sight.covered(), minimized },
+            Life::Shown { sight } => Found::Shown {
+                covered: sight.covered(),
+                minimized,
+            },
             _ => Found::Hidden { minimized },
         }
     }
 
     /// Brings the window on screen (`Reveal`); a window closed for good stays closed.
-    pub(super) fn reveal(&mut self, event_loop: &ActiveEventLoop, reveal: Reveal, mut token: Option<String>) {
-        if self.life.finished() { return; }
+    pub(super) fn reveal(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        reveal: Reveal,
+        mut token: Option<String>,
+    ) {
+        if self.life.finished() {
+            return;
+        }
         let mut built = false;
         for effect in reveal.effects(self.found()) {
             match effect {
                 RevealEffect::ReadSystem => {
                     self.rt.set_system_accent(crate::system_accent());
-                    self.rt.set_system_scroll_bars_state(crate::platform::scroll_bars::current().with_override(self.args.scroll_bars));
+                    self.rt.set_system_scroll_bars_state(
+                        crate::platform::scroll_bars::current()
+                            .with_override(self.args.scroll_bars),
+                    );
                 }
                 RevealEffect::Build => built = self.build_for_show(),
                 RevealEffect::Place => self.apply_placement(event_loop),
@@ -81,12 +116,27 @@ impl<S: 'static> Host<S> {
                     // On macOS a new window becomes key without activating the app, so activate
                     // it like a reopen does. The launch open leaves activation to the platform.
                     #[cfg(target_os = "macos")]
-                    if focus && self.started && let Some(w) = self.shown_win() { w.focus(); }
+                    if focus
+                        && self.started
+                        && let Some(w) = self.shown_win()
+                    {
+                        w.focus();
+                    }
                 }
-                RevealEffect::OrderIn { focus } => if let Some(w) = &self.win { w.show(focus) },
-                RevealEffect::Unminimize => if let Some(w) = &self.win { w.window.set_minimized(false) },
+                RevealEffect::OrderIn { focus } => {
+                    if let Some(w) = &self.win {
+                        w.show(focus)
+                    }
+                }
+                RevealEffect::Unminimize => {
+                    if let Some(w) = &self.win {
+                        w.window.set_minimized(false)
+                    }
+                }
                 RevealEffect::Settle => {
-                    if !built { self.rt.settle_all(); }
+                    if !built {
+                        self.rt.settle_all();
+                    }
                     self.idle = true;
                 }
                 RevealEffect::Shown { live } => {
@@ -94,15 +144,34 @@ impl<S: 'static> Host<S> {
                     self.rt.set_live_visible(live);
                 }
                 RevealEffect::CancelTimerFrame => self.rt.cancel_timer_frame(),
-                RevealEffect::Number => if let Some(w) = &self.win {
-                    self.native_handle.native.number.store(native_window_number(&w.window).unwrap_or(0), Ordering::Release);
-                },
+                RevealEffect::Number => {
+                    if let Some(w) = &self.win {
+                        self.native_handle.native.number.store(
+                            native_window_number(&w.window).unwrap_or(0),
+                            Ordering::Release,
+                        );
+                    }
+                }
                 RevealEffect::Focus => self.activate(event_loop, token.take()),
-                RevealEffect::MakeKey => if let Some(w) = &self.win { w.make_key() },
-                RevealEffect::Redraw => if let Some(w) = &self.win { w.request_redraw() },
+                RevealEffect::MakeKey => {
+                    if let Some(w) = &self.win {
+                        w.make_key()
+                    }
+                }
+                RevealEffect::Redraw => {
+                    if let Some(w) = &self.win {
+                        w.request_redraw()
+                    }
+                }
                 // No settle, frame, surface configure or acquisition on a cached reveal, unless
                 // the refreshed frame left motion running.
-                RevealEffect::RedrawIfMoving => if !self.idle && let Some(w) = &self.win { w.request_redraw() },
+                RevealEffect::RedrawIfMoving => {
+                    if !self.idle
+                        && let Some(w) = &self.win
+                    {
+                        w.request_redraw()
+                    }
+                }
             }
         }
     }
@@ -110,9 +179,16 @@ impl<S: 'static> Host<S> {
     /// The first window's startup token (`XDG_ACTIVATION_TOKEN`, `DESKTOP_STARTUP_ID`), which
     /// later windows don't inherit.
     fn startup_token(&self, event_loop: &ActiveEventLoop) -> Option<String> {
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
         if !self.shown {
-            use winit::platform::startup_notify::{EventLoopExtStartupNotify, reset_activation_token_env};
+            use winit::platform::startup_notify::{
+                EventLoopExtStartupNotify, reset_activation_token_env,
+            };
             let token = event_loop.read_token_from_env().map(|t| t.into_raw());
             reset_activation_token_env();
             return token;
@@ -124,7 +200,12 @@ impl<S: 'static> Host<S> {
     /// Focuses a shown window; Wayland's compositor wants the open's token for that.
     fn activate(&mut self, event_loop: &ActiveEventLoop, token: Option<String>) {
         let Some(w) = self.win.as_mut() else { return };
-        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android")))]
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
         if is_wayland(event_loop) {
             match token {
                 Some(token) => {
@@ -136,7 +217,9 @@ impl<S: 'static> Host<S> {
                     }
                 }
                 // Without a token the compositor may only mark the window urgent.
-                None => w.window.request_user_attention(Some(winit::window::UserAttentionType::Informational)),
+                None => w
+                    .window
+                    .request_user_attention(Some(winit::window::UserAttentionType::Informational)),
             }
             return;
         }
@@ -148,7 +231,9 @@ impl<S: 'static> Host<S> {
     /// away and takes its new height before it is ordered in (`Runtime::build_for_show`).
     /// Returns whether it built, settled.
     pub(super) fn build_for_show(&mut self) -> bool {
-        if !self.rt.build_for_show() { return false; }
+        if !self.rt.build_for_show() {
+            return false;
+        }
         self.clipboard.flush(&mut self.rt);
         self.take_frame_request(0.0, false);
         // macOS sets the frame at once: the first drawable and layout take the new size.
@@ -158,16 +243,22 @@ impl<S: 'static> Host<S> {
             let size = w.window.inner_size();
             w.resize_surface(Some(&**gpu), size);
             let scale = w.window.scale_factor() as f32;
-            self.rt.set_viewport((size.width as f32 / scale, size.height as f32 / scale), scale);
+            self.rt.set_viewport(
+                (size.width as f32 / scale, size.height as f32 / scale),
+                scale,
+            );
         }
         true
     }
 
     pub(super) fn focus(&self, event_loop: &ActiveEventLoop) {
         let Some(w) = self.shown_win() else { return };
-        if w.window.is_minimized() == Some(true) { w.window.set_minimized(false); }
+        if w.window.is_minimized() == Some(true) {
+            w.window.set_minimized(false);
+        }
         if is_wayland(event_loop) {
-            w.window.request_user_attention(Some(winit::window::UserAttentionType::Informational));
+            w.window
+                .request_user_attention(Some(winit::window::UserAttentionType::Informational));
             return;
         }
         w.focus();
@@ -196,11 +287,17 @@ impl<S: 'static> Host<S> {
         let changed = clipboard || answered || updated || self.rt.drag_ends_pending();
         // Only updates that changed nothing (`AppHandle::update_if`), or an empty startup drain
         // after `try_create` already drew the first frame, ran: no poll, no frame.
-        let quiet = (had_updates || (!wake && !stale_before)) && !changed && requests.only_updates()
-            && !self.rt.patch_pending() && (stale_before || !self.rt.needs_commit()) && !composing(self.comp.as_deref());
+        let quiet = (had_updates || (!wake && !stale_before))
+            && !changed
+            && requests.only_updates()
+            && !self.rt.patch_pending()
+            && (stale_before || !self.rt.needs_commit())
+            && !composing(self.comp.as_deref());
         self.clipboard.flush(&mut self.rt);
         // The next frame polls for the wake.
-        if wake && !quiet { self.rt.cancel_timer_frame(); }
+        if wake && !quiet {
+            self.rt.cancel_timer_frame();
+        }
         if let Some(after) = requests.quit {
             // Quitting from now on: a close later in this turn closes for the quit.
             // `Windows::exiting` carries out its effects.
@@ -215,18 +312,34 @@ impl<S: 'static> Host<S> {
         if let Some(visible) = requests.dock {
             crate::platform::macos::set_dock_icon(visible);
         }
-        let shows = matches!(requests.window, Some(WindowRequest::Show | WindowRequest::ShowKey | WindowRequest::Open(_)));
+        let shows = matches!(
+            requests.window,
+            Some(WindowRequest::Show | WindowRequest::ShowKey | WindowRequest::Open(_))
+        );
         let polled = wake && !quiet && self.poll_hidden(event_loop, shows);
-        if let Some(position) = requests.position { self.set_position(event_loop, position); }
-        if let Some(place) = requests.place { self.place(event_loop, place); }
-        if let Some(request) = requests.window { self.window_request(event_loop, request); }
-        if requests.activation == Some(Activation::Focus) { self.focus(event_loop); }
+        if let Some(position) = requests.position {
+            self.set_position(event_loop, position);
+        }
+        if let Some(place) = requests.place {
+            self.place(event_loop, place);
+        }
+        if let Some(request) = requests.window {
+            self.window_request(event_loop, request);
+        }
+        if requests.activation == Some(Activation::Focus) {
+            self.focus(event_loop);
+        }
         // After the show it may follow; `focus` and `minimize` are last-wins (`AppHandle`).
-        if requests.activation == Some(Activation::Minimize) { self.rt.minimize_step(MinimizeEvent::Asked); }
+        if requests.activation == Some(Activation::Minimize) {
+            self.rt.minimize_step(MinimizeEvent::Asked);
+        }
         self.shell(event_loop);
         // A pop-up or file dialog a quiet update asked for may have been answered at once.
-        let answered = quiet && ((!stale_before && self.rt.needs_commit()) || self.rt.has_pending_input());
-        if quiet { self.clipboard.flush(&mut self.rt); }
+        let answered =
+            quiet && ((!stale_before && self.rt.needs_commit()) || self.rt.has_pending_input());
+        if quiet {
+            self.clipboard.flush(&mut self.rt);
+        }
         let (changed, quiet) = (changed || answered, quiet && !answered);
         // A launcher's cached reveal draws nothing; a hidden one renders its changes hidden,
         // paced (`refresh_hidden`). A covered or minimised one runs them without asking for a
@@ -252,12 +365,16 @@ impl<S: 'static> Host<S> {
                 true
             }
             WakeWork::Paint => {
-                if let Some(w) = &self.win { w.request_redraw(); }
+                if let Some(w) = &self.win {
+                    w.request_redraw();
+                }
                 true
             }
         };
         // Neither a poll nor a frame comes to schedule the updates' `wake_after`s.
-        if !polled && !framed { self.rt.schedule_pending_wakes(); }
+        if !polled && !framed {
+            self.rt.schedule_pending_wakes();
+        }
     }
 
     /// A hidden, keep-running or windowless window still reads its inbox when woken: `poll` runs
@@ -266,7 +383,9 @@ impl<S: 'static> Host<S> {
     /// fresh. A minimize waits for a show in the same turn (`Minimize`). Returns whether it
     /// polled.
     pub(super) fn poll_hidden(&mut self, event_loop: &ActiveEventLoop, shows: bool) -> bool {
-        if event_loop.exiting() || self.shown_win().is_some() { return false; }
+        if event_loop.exiting() || self.shown_win().is_some() {
+            return false;
+        }
         let changed = self.rt.poll_hidden();
         self.clipboard.flush(&mut self.rt);
         // A show this turn minimizes after it: this poll holds the ask across its own shell, and
@@ -275,7 +394,9 @@ impl<S: 'static> Host<S> {
         poll.enter(&mut self.rt);
         self.shell(event_loop);
         poll.leave(&mut self.rt);
-        if changed && self.launcher() { self.refresh_hidden(); }
+        if changed && self.launcher() {
+            self.refresh_hidden();
+        }
         true
     }
 
@@ -287,8 +408,11 @@ impl<S: 'static> Host<S> {
     pub(super) fn refresh_hidden(&mut self) -> bool {
         let now_due = self.hidden_launcher_renders();
         let Some(w) = &mut self.win else { return false };
-        let render = now_due || w.first_frame.deadline().is_some() || w.hidden_pace.changed(Instant::now());
-        if render { w.request_redraw(); }
+        let render =
+            now_due || w.first_frame.deadline().is_some() || w.hidden_pace.changed(Instant::now());
+        if render {
+            w.request_redraw();
+        }
         render
     }
 
@@ -302,16 +426,24 @@ impl<S: 'static> Host<S> {
     /// opens the pop-up menu it asked for, if the window is still there to open it over.
     pub(super) fn shell(&mut self, event_loop: &ActiveEventLoop) {
         self.show_title();
-        if self.rt.take_toggle_maximized() && let Some(w) = self.shown_win() {
+        if self.rt.take_toggle_maximized()
+            && let Some(w) = self.shown_win()
+        {
             chrome::toggle_maximized(&w.window);
         }
-        if self.rt.take_toggle_full_screen() && let Some(w) = self.shown_win() {
+        if self.rt.take_toggle_full_screen()
+            && let Some(w) = self.shown_win()
+        {
             chrome::toggle_full_screen(&w.window);
         }
         // A new `Cx::set_titlebar` or `Cx::titlebar_height` moves the traffic lights.
-        if self.rt.take_titlebar_changed() && let Some(w) = &self.win {
+        if self.rt.take_titlebar_changed()
+            && let Some(w) = &self.win
+        {
             sync_chrome(&mut self.rt, w, self.chrome, self.titlebar);
-            if self.rt.stale() { w.request_redraw(); }
+            if self.rt.stale() {
+                w.request_redraw();
+            }
         }
         for _ in 0..8 {
             let minimize = shell_take(&mut self.rt);
@@ -332,18 +464,30 @@ impl<S: 'static> Host<S> {
                 self.file_dialog.cancel(&mut self.rt);
                 return;
             }
-            let paints = self.shown_win().is_some_and(|w| !self.life.covered() && !w.minimized());
+            let paints = self
+                .shown_win()
+                .is_some_and(|w| !self.life.covered() && !w.minimized());
             // A painting macOS window moves its frame over its next frames (`redraw`).
             if self.rt.window_frame.is_some() && !(paints && cfg!(target_os = "macos")) {
                 self.take_frame_request(self.frame_secs(Instant::now()), false);
             }
             let shown = self.win.as_ref().filter(|_| self.life.shown());
             let window = shown.map(|w| &w.window);
-            if self.popup.open(&mut self.rt, window, paints) && let Some(w) = shown { w.request_redraw(); }
-            if self.file_dialog.open(&mut self.rt, window.map(|w| &**w)) && let Some(w) = shown { w.request_redraw(); }
+            if self.popup.open(&mut self.rt, window, paints)
+                && let Some(w) = shown
+            {
+                w.request_redraw();
+            }
+            if self.file_dialog.open(&mut self.rt, window.map(|w| &**w))
+                && let Some(w) = shown
+            {
+                w.request_redraw();
+            }
             // A callback that ran (a menu that couldn't open) may have asked to close, quit or
             // minimize.
-            if self.rt.shell_request.is_none() && !self.rt.minimize.field() { return; }
+            if self.rt.shell_request.is_none() && !self.rt.minimize.field() {
+                return;
+            }
         }
     }
 
@@ -352,19 +496,27 @@ impl<S: 'static> Host<S> {
         if let Some(w) = &mut self.win {
             w.first_frame.hide();
             #[cfg(target_os = "macos")]
-            { w.native.prime.stop(); }
+            {
+                w.native.prime.stop();
+            }
         }
         self.secure_input.set(false);
-        if !self.closes() { return; }
+        if !self.closes() {
+            return;
+        }
         crate::marks::mark("window.close");
         // Off the screen first: the close looks done at once and `on_close` runs unseen.
-        if let Some(w) = self.shown_win() { w.hide(); }
+        if let Some(w) = self.shown_win() {
+            w.hide();
+        }
         crate::marks::mark("window.close.hidden");
         self.close_hook();
         crate::marks::mark("window.close.hooked");
         self.rt.set_live_visible(false);
         // While the window still shows its last frames.
-        if let Some(trace) = &mut self.trace { trace.settle_presents(crate::frame::present_time::SETTLE); }
+        if let Some(trace) = &mut self.trace {
+            trace.settle_presents(crate::frame::present_time::SETTLE);
+        }
         if let Some(after) = self.rt.shell_request.take().and_then(Shell::after) {
             if after == crate::quit::After::Relaunch {
                 let _ = crate::quit::send(crate::quit::Event::Start { after });
@@ -379,7 +531,10 @@ impl<S: 'static> Host<S> {
             self.file_dialog.cancel(&mut self.rt);
             self.rt.cancel_pointer();
             self.files = FileDrop::default();
-            if let Some(w) = &mut self.win { w.apply_cursor(&self.rt, false); w.hide(); }
+            if let Some(w) = &mut self.win {
+                w.apply_cursor(&self.rt, false);
+                w.hide();
+            }
             crate::marks::mark("window.hidden");
             self.life.finish();
             return;
@@ -388,7 +543,9 @@ impl<S: 'static> Host<S> {
     }
 
     /// Whether a close runs `on_close` (`Life::closes`).
-    pub(super) fn closes(&self) -> bool { self.life.closes(self.keep_running, self.win.is_some()) }
+    pub(super) fn closes(&self) -> bool {
+        self.life.closes(self.keep_running, self.win.is_some())
+    }
 
     pub(super) fn close_hook(&mut self) {
         if let Some(f) = self.on_close {
@@ -407,14 +564,19 @@ impl<S: 'static> Host<S> {
         } else if is_wayland(event_loop) {
             // Wayland has no hidden toplevel: unmap by destroying, recreate on open.
             self.win = None;
-            self.native_handle.native.ready.store(false, Ordering::Release);
+            self.native_handle
+                .native
+                .ready
+                .store(false, Ordering::Release);
             self.native_handle.native.number.store(0, Ordering::Release);
         } else if let Some(w) = self.win.as_mut() {
             w.stop_pacing();
             w.backoff_step(BackoffEvent::Lapsed);
             w.presented = None;
             // Its hidden frame delivers the focus loss.
-            if launcher { w.request_redraw(); }
+            if launcher {
+                w.request_redraw();
+            }
         }
     }
 
@@ -442,20 +604,28 @@ impl<S: 'static> Host<S> {
         if let Some(w) = &mut self.win {
             w.first_frame.hide();
             #[cfg(target_os = "macos")]
-            { w.native.prime.stop(); }
+            {
+                w.native.prime.stop();
+            }
         }
         self.secure_input.set(false);
         self.ime_allowed = false;
-        if let Some(w) = &self.win { w.window.set_ime_allowed(false); }
+        if let Some(w) = &self.win {
+            w.window.set_ime_allowed(false);
+        }
         self.rt.set_live_visible(false);
         self.rt.cancel_timer_frame();
         self.popup.cancel(&mut self.rt);
         self.file_dialog.cancel(&mut self.rt);
         self.rt.cancel_pointer();
         self.files = FileDrop::default();
-        if let Some(w) = &mut self.win { w.apply_cursor(&self.rt, false); }
+        if let Some(w) = &mut self.win {
+            w.apply_cursor(&self.rt, false);
+        }
         self.mods = ModifiersState::empty();
-        if let Some(w) = &self.win { w.hide(); }
+        if let Some(w) = &self.win {
+            w.hide();
+        }
     }
 
     /// Gives up the window and the device and surface it drew with, as `hide` does for an app
@@ -463,7 +633,10 @@ impl<S: 'static> Host<S> {
     /// (an app that sees `AppHandle::window_error` and the window gone can ask for one).
     pub(super) fn release(&mut self) {
         self.win = None;
-        self.native_handle.native.ready.store(false, Ordering::Release);
+        self.native_handle
+            .native
+            .ready
+            .store(false, Ordering::Release);
         self.native_handle.native.number.store(0, Ordering::Release);
         self.gpu = None;
         self.rt.text.atlas.invalidate();
@@ -472,10 +645,18 @@ impl<S: 'static> Host<S> {
 
     /// Creates the window, or records why it can't be and leaves the app windowless; a later
     /// open tries again.
-    pub(super) fn create(&mut self, event_loop: &ActiveEventLoop, token: Option<String>, focus: bool) {
+    pub(super) fn create(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        token: Option<String>,
+        focus: bool,
+    ) {
         let result = self.try_create(event_loop, token, focus);
         if let Err(error) = &result {
-            eprintln!("rune: could not create the window {}: {error}", self.native_handle.key());
+            eprintln!(
+                "rune: could not create the window {}: {error}",
+                self.native_handle.key()
+            );
         }
         *self.shared.window_error.lock().unwrap() = result.err();
     }
@@ -489,9 +670,13 @@ impl<S: 'static> Host<S> {
 /// too, and one that only read a built view asks for none.
 pub(super) fn inspect<S>(rt: &mut Runtime<S>, f: crate::app::Inspection<S>) -> bool {
     let behind = rt.stale();
-    if behind { rt.hidden_timer_frame(); }
+    if behind {
+        rt.hidden_timer_frame();
+    }
     f(rt);
     let changed = rt.has_pending_input() || rt.stale() || rt.scrolling();
-    if changed { rt.hidden_timer_frame(); }
+    if changed {
+        rt.hidden_timer_frame();
+    }
     behind || changed
 }

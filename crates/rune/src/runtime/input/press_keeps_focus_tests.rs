@@ -37,7 +37,10 @@ fn view(s: &S, cx: &mut Cx<S>) -> El {
 }
 
 fn focused(rt: &Runtime<S>) -> Option<String> {
-    rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
+    rt.elements()
+        .iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key.clone())
 }
 
 fn runtime(field_focused: bool) -> Runtime<S> {
@@ -45,7 +48,10 @@ fn runtime(field_focused: bool) -> Runtime<S> {
 }
 
 fn runtime_with(field_focused: bool, window_wide: bool) -> Runtime<S> {
-    let mut s = S { window_wide, ..S::default() };
+    let mut s = S {
+        window_wide,
+        ..S::default()
+    };
     s.field.focused = field_focused;
     let mut rt = Runtime::new(s, view, (300.0, 100.0), Env::default());
     rt.frame(0.0);
@@ -84,21 +90,28 @@ fn a_press_on_a_focusable_control_that_keeps_focus_leaves_nothing_focused_when_n
 fn tab_still_reaches_a_focusable_control_that_keeps_focus_on_a_press() {
     let mut rt = runtime(true);
 
-    rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
+    rt.key(KeyEvent {
+        key: Key::Tab,
+        mods: Mods::default(),
+    });
     rt.frame(1.0 / 60.0);
 
     assert_eq!(focused(&rt).as_deref(), Some("button"));
 }
 
 #[test]
-fn under_controls_keep_focus_a_press_on_a_button_leaves_the_field_focused_and_tab_still_reaches_it() {
+fn under_controls_keep_focus_a_press_on_a_button_leaves_the_field_focused_and_tab_still_reaches_it()
+{
     let mut rt = runtime_with(true, true);
 
     click(&mut rt, "button");
     assert_eq!(rt.state().presses, 1);
     assert_eq!(focused(&rt).as_deref(), Some("field"));
 
-    rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
+    rt.key(KeyEvent {
+        key: Key::Tab,
+        mods: Mods::default(),
+    });
     rt.frame(1.0 / 60.0);
     assert_eq!(focused(&rt).as_deref(), Some("button"));
 }
@@ -155,7 +168,10 @@ fn under_controls_keep_focus_a_press_on_a_control_that_takes_physical_keys_focus
 }
 
 fn rt_focused(rt: &Runtime<Recorder>) -> Option<String> {
-    rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
+    rt.elements()
+        .iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key.clone())
 }
 
 #[derive(Default)]
@@ -178,14 +194,20 @@ fn panel_view(s: &Panel, _: &mut Cx<Panel>) -> El {
 }
 
 fn press_panel_surface(surface_keeps_focus: bool) -> Option<String> {
-    let mut s = Panel { surface_keeps_focus, ..Panel::default() };
+    let mut s = Panel {
+        surface_keeps_focus,
+        ..Panel::default()
+    };
     s.field.focused = true;
     let mut rt = Runtime::new(s, panel_view, (300.0, 100.0), Env::default());
     rt.frame(0.0);
     rt.pointer_down(250.0, 80.0);
     rt.pointer_up(250.0, 80.0);
     rt.frame(1.0 / 60.0);
-    rt.elements().iter().find(|e| e.focused).and_then(|e| e.key.clone())
+    rt.elements()
+        .iter()
+        .find(|e| e.focused)
+        .and_then(|e| e.key.clone())
 }
 
 #[test]

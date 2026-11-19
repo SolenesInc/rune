@@ -23,9 +23,13 @@ pub fn set_app_icon(bytes: impl Into<Vec<u8>>) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let bytes = bytes.into();
-        if decode(&bytes).is_none() { return Err("set_app_icon: the bytes aren't an image AppKit reads".into()); }
+        if decode(&bytes).is_none() {
+            return Err("set_app_icon: the bytes aren't an image AppKit reads".into());
+        }
         *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(bytes);
-        if LAUNCHED.load(Ordering::Acquire) { crate::platform::main_queue::on_main(apply); }
+        if LAUNCHED.load(Ordering::Acquire) {
+            crate::platform::main_queue::on_main(apply);
+        }
     }
     #[cfg(not(target_os = "macos"))]
     let _ = bytes;
@@ -55,8 +59,12 @@ fn decode(bytes: &[u8]) -> Option<objc2::rc::Retained<objc2_app_kit::NSImage>> {
 
 #[cfg(target_os = "macos")]
 fn apply() {
-    let Some(mtm) = objc2_foundation::MainThreadMarker::new() else { return };
-    let Some(bytes) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
+    let Some(mtm) = objc2_foundation::MainThreadMarker::new() else {
+        return;
+    };
+    let Some(bytes) = PENDING.lock().unwrap_or_else(|e| e.into_inner()).take() else {
+        return;
+    };
     let Some(image) = decode(&bytes) else { return };
     let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
     // SAFETY: on the main thread, with an image AppKit decoded.
@@ -69,7 +77,9 @@ mod tests {
 
     fn png() -> Vec<u8> {
         let mut out = std::io::Cursor::new(Vec::new());
-        image::RgbaImage::from_pixel(16, 16, image::Rgba([40, 120, 220, 255])).write_to(&mut out, image::ImageFormat::Png).unwrap();
+        image::RgbaImage::from_pixel(16, 16, image::Rgba([40, 120, 220, 255]))
+            .write_to(&mut out, image::ImageFormat::Png)
+            .unwrap();
         out.into_inner()
     }
 

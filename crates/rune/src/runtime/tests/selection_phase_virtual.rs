@@ -26,18 +26,32 @@ const LEN: usize = 6;
 /// `CLICK_SLOP`, as the reference transcribes it.
 const SLOP: f32 = 4.0;
 
-fn content(row: usize) -> String { format!("row {row:02}") }
+fn content(row: usize) -> String {
+    format!("row {row:02}")
+}
 
-fn path(row: usize) -> String { format!("{LIST}/r{row}") }
+fn path(row: usize) -> String {
+    format!("{LIST}/r{row}")
+}
 
-fn row_of(path: &str) -> usize { path.rsplit_once("/r").and_then(|(_, r)| r.parse().ok()).expect("a row path") }
+fn row_of(path: &str) -> usize {
+    path.rsplit_once("/r")
+        .and_then(|(_, r)| r.parse().ok())
+        .expect("a row path")
+}
 
 /// The top line of the viewport at its start, or its bottom line past the end.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Spot { HiStart, LoEnd }
+enum Spot {
+    HiStart,
+    LoEnd,
+}
 
 fn point(spot: Spot) -> (f32, f32) {
-    match spot { Spot::HiStart => (2.0, 20.0), Spot::LoEnd => (296.0, 100.0) }
+    match spot {
+        Spot::HiStart => (2.0, 20.0),
+        Spot::LoEnd => (296.0, 100.0),
+    }
 }
 
 /// The row under `spot`, with the list scrolled to its top or its end, and the byte a press
@@ -52,42 +66,93 @@ fn under(spot: Spot, top: bool) -> (usize, usize) {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Letter { Press(Spot), Drag(Spot), Up, Lost, Down, Top, SelectAll, Clear }
+enum Letter {
+    Press(Spot),
+    Drag(Spot),
+    Up,
+    Lost,
+    Down,
+    Top,
+    SelectAll,
+    Clear,
+}
 
 const ALPHABET: [Letter; 10] = [
-    Letter::Press(Spot::HiStart), Letter::Press(Spot::LoEnd), Letter::Drag(Spot::HiStart), Letter::Drag(Spot::LoEnd),
-    Letter::Up, Letter::Lost, Letter::Down, Letter::Top, Letter::SelectAll, Letter::Clear,
+    Letter::Press(Spot::HiStart),
+    Letter::Press(Spot::LoEnd),
+    Letter::Drag(Spot::HiStart),
+    Letter::Drag(Spot::LoEnd),
+    Letter::Up,
+    Letter::Lost,
+    Letter::Down,
+    Letter::Top,
+    Letter::SelectAll,
+    Letter::Clear,
 ];
 
 fn view(_: &(), _: &mut Cx<()>) -> El {
     col().key("root").w(300.0).h(120.0).child(
-        col().key("scroll").w_full().h(120.0).scroll(ScrollSpec { stick_bottom: false }).child(
-            col().key("list").w_full().growth(GrowthSpec::default()).selection_group(true).virtual_rows(
-                ROWS,
-                ROW_H,
-                |_: &(), i| format!("r{i}").into(),
-                |_: &(), i| text(content(i)).font(TextStyle::new(14.0, 400.0)).w_full().h(ROW_H).selectable(true),
+        col()
+            .key("scroll")
+            .w_full()
+            .h(120.0)
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(
+                col()
+                    .key("list")
+                    .w_full()
+                    .growth(GrowthSpec::default())
+                    .selection_group(true)
+                    .virtual_rows(
+                        ROWS,
+                        ROW_H,
+                        |_: &(), i| format!("r{i}").into(),
+                        |_: &(), i| {
+                            text(content(i))
+                                .font(TextStyle::new(14.0, 400.0))
+                                .w_full()
+                                .h(ROW_H)
+                                .selectable(true)
+                        },
+                    ),
             ),
-        ),
     )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum U { Char, Word, Paragraph }
+enum U {
+    Char,
+    Word,
+    Paragraph,
+}
 
 /// `unit_at` on "row NN".
 fn unit_at(i: usize, unit: U) -> (usize, usize) {
-    let i = if i == LEN && unit != U::Char { i - 1 } else { i };
+    let i = if i == LEN && unit != U::Char {
+        i - 1
+    } else {
+        i
+    };
     match unit {
         U::Char => (i, i),
         U::Paragraph => (0, LEN),
-        U::Word => match i { 0..=2 => (0, 3), 3 => (3, 4), _ => (4, LEN) },
+        U::Word => match i {
+            0..=2 => (0, 3),
+            3 => (3, 4),
+            _ => (4, LEN),
+        },
     }
 }
 
 /// `extend`, transcribed.
 fn extend(origin: (usize, usize), at: (usize, usize)) -> (usize, usize) {
-    if at.0 < origin.0 { (origin.1, at.0) } else { (origin.0, at.1.max(origin.1)) }
+    if at.0 < origin.0 {
+        (origin.1, at.0)
+    } else {
+        (origin.0, at.1.max(origin.1))
+    }
 }
 
 struct Run {
@@ -112,19 +177,37 @@ struct Dev {
 
 impl Dev {
     fn new() -> Self {
-        Self { path: None, content: String::new(), anchor: 0, focus: 0, far: None, unit: U::Char, origin: (0, 0), dragging: false, presses: None }
+        Self {
+            path: None,
+            content: String::new(),
+            anchor: 0,
+            focus: 0,
+            far: None,
+            unit: U::Char,
+            origin: (0, 0),
+            dragging: false,
+            presses: None,
+        }
     }
 
     /// `PressRun::press` with the clock standing still.
     fn press_count(&mut self, path: &str, point: (f32, f32)) -> u32 {
         match &mut self.presses {
-            Some(last) if last.path == path && (point.0 - last.point.0).abs() <= SLOP && (point.1 - last.point.1).abs() <= SLOP => {
+            Some(last)
+                if last.path == path
+                    && (point.0 - last.point.0).abs() <= SLOP
+                    && (point.1 - last.point.1).abs() <= SLOP =>
+            {
                 last.point = point;
                 last.count += 1;
                 last.count
             }
             _ => {
-                self.presses = Some(Run { path: path.to_owned(), point, count: 1 });
+                self.presses = Some(Run {
+                    path: path.to_owned(),
+                    point,
+                    count: 1,
+                });
                 1
             }
         }
@@ -140,7 +223,11 @@ impl Dev {
     fn down(&mut self, spot: Spot, top: bool) {
         let (row, at) = under(spot, top);
         let clicks = self.press_count(&path(row), point(spot)).min(3);
-        let unit = match clicks { 1 => U::Char, 2 => U::Word, _ => U::Paragraph };
+        let unit = match clicks {
+            1 => U::Char,
+            2 => U::Word,
+            _ => U::Paragraph,
+        };
         let origin = unit_at(at, unit);
         (self.unit, self.origin) = (unit, origin);
         (self.anchor, self.focus) = origin;
@@ -152,13 +239,30 @@ impl Dev {
 
     /// `selection_drag`: the group reaches the row the pointer is over.
     fn drag(&mut self, spot: Spot, top: bool) {
-        if !self.dragging { return; }
-        let Some(h) = self.path.as_deref().map(row_of) else { self.clear(); return };
+        if !self.dragging {
+            return;
+        }
+        let Some(h) = self.path.as_deref().map(row_of) else {
+            self.clear();
+            return;
+        };
         let (j, at) = under(spot, top);
         let at = unit_at(at, self.unit);
-        let (anchor, focus) = if j == h { extend(self.origin, at) } else if j > h { (self.origin.0, at.1) } else { (self.origin.1, at.0) };
-        let same_far = if j == h { self.far.is_none() } else { self.far.as_ref().is_some_and(|(p, _)| *p == path(j)) };
-        if (self.anchor, self.focus) == (anchor, focus) && same_far { return; }
+        let (anchor, focus) = if j == h {
+            extend(self.origin, at)
+        } else if j > h {
+            (self.origin.0, at.1)
+        } else {
+            (self.origin.1, at.0)
+        };
+        let same_far = if j == h {
+            self.far.is_none()
+        } else {
+            self.far.as_ref().is_some_and(|(p, _)| *p == path(j))
+        };
+        if (self.anchor, self.focus) == (anchor, focus) && same_far {
+            return;
+        }
         (self.anchor, self.focus) = (anchor, focus);
         if j == h {
             self.far = None;
@@ -170,7 +274,14 @@ impl Dev {
     /// `selection_key`'s Cmd+A: the group is the list, so it selects every row.
     fn select_all(&mut self) {
         let far = (path(ROWS - 1), content(ROWS - 1));
-        (self.path, self.content, self.anchor, self.focus, self.origin, self.unit) = (Some(path(0)), content(0), 0, LEN, (0, 0), U::Char);
+        (
+            self.path,
+            self.content,
+            self.anchor,
+            self.focus,
+            self.origin,
+            self.unit,
+        ) = (Some(path(0)), content(0), 0, LEN, (0, 0), U::Char);
         self.far = Some(far);
         self.dragging = false;
     }
@@ -186,8 +297,16 @@ impl Dev {
                 if f == h {
                     self.anchor.min(self.focus)..self.anchor.max(self.focus)
                 } else {
-                    let (a, b) = if h < f { (self.anchor.min(LEN), LEN) } else { (0, self.anchor.min(LEN)) };
-                    if a < b { a..b } else { self.anchor..self.anchor }
+                    let (a, b) = if h < f {
+                        (self.anchor.min(LEN), LEN)
+                    } else {
+                        (0, self.anchor.min(LEN))
+                    };
+                    if a < b {
+                        a..b
+                    } else {
+                        self.anchor..self.anchor
+                    }
                 }
             }
         };
@@ -207,20 +326,28 @@ impl Walk {
     fn new() -> Self {
         let mut rt = Runtime::new((), view, (300.0, 120.0), Env::new(true, 1.0));
         rt.double_click_interval = 0.3;
-        let mut walk = Self { rt, dev: Dev::new(), top: true, at: Spot::HiStart };
+        let mut walk = Self {
+            rt,
+            dev: Dev::new(),
+            top: true,
+            at: Spot::HiStart,
+        };
         walk.settle();
         walk
     }
 
     fn settle(&mut self) {
         for _ in 0..60 {
-            if !self.rt.frame(1.0 / 60.0) { break; }
+            if !self.rt.frame(1.0 / 60.0) {
+                break;
+            }
         }
         self.rt.clock = 0.0;
     }
 
     fn scroll(&mut self, top: bool) {
-        self.rt.wheel(150.0, 60.0, if top { 10_000.0 } else { -10_000.0 });
+        self.rt
+            .wheel(150.0, 60.0, if top { 10_000.0 } else { -10_000.0 });
         self.settle();
         self.top = top;
     }
@@ -230,7 +357,9 @@ impl Walk {
         self.rt.selectable = Default::default();
         self.rt.sync_selection_pins();
         self.rt.queue.retain(|_| false);
-        if !self.top { self.scroll(true); }
+        if !self.top {
+            self.scroll(true);
+        }
         self.rt.clock = 0.0;
         self.dev = Dev::new();
         self.at = Spot::HiStart;
@@ -263,7 +392,13 @@ impl Walk {
             Letter::Down => self.scroll(false),
             Letter::Top => self.scroll(true),
             Letter::SelectAll => {
-                self.rt.key(KeyEvent { key: Key::Command('a'), mods: Mods { cmd: true, ..Mods::default() } });
+                self.rt.key(KeyEvent {
+                    key: Key::Command('a'),
+                    mods: Mods {
+                        cmd: true,
+                        ..Mods::default()
+                    },
+                });
                 self.settle();
                 self.dev.select_all();
             }
@@ -279,49 +414,119 @@ impl Walk {
     fn compare(&self, letter: Letter) -> Result<(), String> {
         let dev = &self.dev;
         match (&self.rt.selectable.phase, &dev.path) {
-            (Phase::Empty, None) if !dev.dragging && self.rt.selectable.mounted_between.is_empty() => {}
+            (Phase::Empty, None)
+                if !dev.dragging && self.rt.selectable.mounted_between.is_empty() => {}
             (phase @ (Phase::Placed(sel) | Phase::Dragging { selection: sel, .. }), Some(path)) => {
                 let unit = match phase {
-                    Phase::Dragging { unit, .. } => Some(match unit { Unit::Char => U::Char, Unit::Word => U::Word, Unit::Paragraph => U::Paragraph }),
+                    Phase::Dragging { unit, .. } => Some(match unit {
+                        Unit::Char => U::Char,
+                        Unit::Word => U::Word,
+                        Unit::Paragraph => U::Paragraph,
+                    }),
                     _ => None,
                 };
-                let far = sel.far.as_ref().map(|f| (f.path.clone(), f.content.clone()));
-                let ours = (&sel.path, &sel.content, sel.anchor, sel.focus, sel.origin, &far, unit);
-                let theirs = (path, &dev.content, dev.anchor, dev.focus, dev.origin, &dev.far, dev.dragging.then_some(dev.unit));
-                if ours != theirs { return Err(format!("after {letter:?}: {ours:?}, dev {theirs:?}")); }
+                let far = sel
+                    .far
+                    .as_ref()
+                    .map(|f| (f.path.clone(), f.content.clone()));
+                let ours = (
+                    &sel.path,
+                    &sel.content,
+                    sel.anchor,
+                    sel.focus,
+                    sel.origin,
+                    &far,
+                    unit,
+                );
+                let theirs = (
+                    path,
+                    &dev.content,
+                    dev.anchor,
+                    dev.focus,
+                    dev.origin,
+                    &dev.far,
+                    dev.dragging.then_some(dev.unit),
+                );
+                if ours != theirs {
+                    return Err(format!("after {letter:?}: {ours:?}, dev {theirs:?}"));
+                }
                 // `sync_selection_pins` names the rows of both ends, at their offsets.
-                let end = |e: &Option<crate::runtime::selectable::virtual_selection::VirtualEnd>| {
-                    e.as_ref().map(|e| (e.list_path.clone(), e.row_key.clone(), e.row_index, e.rel_path.clone(), e.offset))
+                let end =
+                    |e: &Option<crate::runtime::selectable::virtual_selection::VirtualEnd>| {
+                        e.as_ref().map(|e| {
+                            (
+                                e.list_path.clone(),
+                                e.row_key.clone(),
+                                e.row_index,
+                                e.rel_path.clone(),
+                                e.offset,
+                            )
+                        })
+                    };
+                let row = |p: &str| {
+                    let r = row_of(p);
+                    (LIST.to_owned(), format!("r{r}"), r, String::new())
                 };
-                let row = |p: &str| { let r = row_of(p); (LIST.to_owned(), format!("r{r}"), r, String::new()) };
                 let (r, k, i, rel) = row(path);
                 if end(&sel.anchor_end) != Some((r, k, i, rel, dev.anchor)) {
                     return Err(format!("after {letter:?}: anchor end {:?}", sel.anchor_end));
                 }
                 if let (Some(far), Some((fp, _))) = (&sel.far, &dev.far) {
                     let (r, k, i, rel) = row(fp);
-                    if end(&far.end) != Some((r, k, i, rel, dev.focus)) { return Err(format!("after {letter:?}: focus end {:?}", far.end)); }
+                    if end(&far.end) != Some((r, k, i, rel, dev.focus)) {
+                        return Err(format!("after {letter:?}: focus end {:?}", far.end));
+                    }
                 }
-                let (h, f) = (row_of(path), dev.far.as_ref().map_or(row_of(path), |(p, _)| row_of(p)));
-                let between: HashSet<String> = (h.min(f) + 1..h.max(f)).map(|r| format!("r{r}")).collect();
-                if let Some(k) = self.rt.selectable.mounted_between.keys().find(|k| !between.contains(*k)) {
-                    return Err(format!("after {letter:?}: row {k} hashed as between rows {h} and {f}"));
+                let (h, f) = (
+                    row_of(path),
+                    dev.far.as_ref().map_or(row_of(path), |(p, _)| row_of(p)),
+                );
+                let between: HashSet<String> =
+                    (h.min(f) + 1..h.max(f)).map(|r| format!("r{r}")).collect();
+                if let Some(k) = self
+                    .rt
+                    .selectable
+                    .mounted_between
+                    .keys()
+                    .find(|k| !between.contains(*k))
+                {
+                    return Err(format!(
+                        "after {letter:?}: row {k} hashed as between rows {h} and {f}"
+                    ));
                 }
             }
             (phase, _) => {
-                let phase = match phase { Phase::Empty => "empty", Phase::Placed(_) => "placed", Phase::Dragging { .. } => "dragging" };
-                return Err(format!("after {letter:?}: {phase}, dev path {:?} dragging {}", dev.path, dev.dragging));
+                let phase = match phase {
+                    Phase::Empty => "empty",
+                    Phase::Placed(_) => "placed",
+                    Phase::Dragging { .. } => "dragging",
+                };
+                return Err(format!(
+                    "after {letter:?}: {phase}, dev path {:?} dragging {}",
+                    dev.path, dev.dragging
+                ));
             }
         }
         let ours = self.rt.text_selection().map(|(p, r)| (p.to_owned(), r));
         let theirs = dev.text_selection();
-        if ours != theirs { return Err(format!("after {letter:?}: text_selection {ours:?}, dev {theirs:?}")); }
+        if ours != theirs {
+            return Err(format!(
+                "after {letter:?}: text_selection {ours:?}, dev {theirs:?}"
+            ));
+        }
         Ok(())
     }
 }
 
-fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: &mut Option<String>) {
-    if failure.is_some() { return; }
+fn visit(
+    walk: &mut Walk,
+    sequence: &mut Vec<Letter>,
+    ran: &mut usize,
+    failure: &mut Option<String>,
+) {
+    if failure.is_some() {
+        return;
+    }
     *ran += 1;
     walk.reset();
     for &letter in sequence.iter() {
@@ -330,7 +535,9 @@ fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: 
             return;
         }
     }
-    if sequence.len() == LENGTH { return; }
+    if sequence.len() == LENGTH {
+        return;
+    }
     for letter in ALPHABET {
         sequence.push(letter);
         visit(walk, sequence, ran, failure);
@@ -342,7 +549,9 @@ fn visit(walk: &mut Walk, sequence: &mut Vec<Letter>, ran: &mut usize, failure: 
 fn every_short_sequence_over_virtual_rows_leaves_what_dev_left() {
     let next = AtomicUsize::new(0);
     let results = Mutex::new(Vec::new());
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(8);
     std::thread::scope(|scope| {
         for _ in 0..workers {
             scope.spawn(|| {
@@ -362,7 +571,10 @@ fn every_short_sequence_over_virtual_rows_leaves_what_dev_left() {
         failures.extend(failure);
     }
     println!("{total} sequences up to length {LENGTH}");
-    assert!(failures.is_empty(), "sequences differ from dev: {failures:#?}");
+    assert!(
+        failures.is_empty(),
+        "sequences differ from dev: {failures:#?}"
+    );
     let expected: usize = (1..=LENGTH as u32).map(|n| ALPHABET.len().pow(n)).sum();
     assert_eq!(total, expected, "every sequence ran");
 }
@@ -375,19 +587,33 @@ fn the_virtual_reference_knows_which_row_each_spot_is_on() {
     for top in [true, false] {
         for spot in [Spot::HiStart, Spot::LoEnd] {
             walk.reset();
-            if !top { walk.scroll(false); }
+            if !top {
+                walk.scroll(false);
+            }
             let (x, y) = point(spot);
             walk.rt.pointer_down(x, y);
             let (row, at) = under(spot, top);
-            assert_eq!(walk.rt.text_selection(), Some((path(row).as_str(), at..at)), "{spot:?} top {top}");
+            assert_eq!(
+                walk.rt.text_selection(),
+                Some((path(row).as_str(), at..at)),
+                "{spot:?} top {top}"
+            );
         }
     }
     walk.reset();
     assert!(walk.rt.virtuals[LIST].range.contains(&0));
     walk.scroll(false);
-    assert!(!walk.rt.virtuals[LIST].range.contains(&0) && !walk.rt.virtuals[LIST].range.contains(&2), "{:?}", walk.rt.virtuals[LIST].range);
+    assert!(
+        !walk.rt.virtuals[LIST].range.contains(&0) && !walk.rt.virtuals[LIST].range.contains(&2),
+        "{:?}",
+        walk.rt.virtuals[LIST].range
+    );
     walk.scroll(true);
-    assert!(!walk.rt.virtuals[LIST].range.contains(&(ROWS - 1)), "{:?}", walk.rt.virtuals[LIST].range);
+    assert!(
+        !walk.rt.virtuals[LIST].range.contains(&(ROWS - 1)),
+        "{:?}",
+        walk.rt.virtuals[LIST].range
+    );
 }
 
 /// A selection made again over the same rows reuses the buckets of the map that hashes the
@@ -396,11 +622,27 @@ fn the_virtual_reference_knows_which_row_each_spot_is_on() {
 fn a_repeated_drag_across_virtual_rows_keeps_the_mounted_row_map() {
     let mut walk = Walk::new();
     let capacity = |walk: &Walk| walk.rt.selectable.mounted_between.capacity();
-    for letter in [Letter::Press(Spot::HiStart), Letter::Drag(Spot::LoEnd), Letter::Up] { walk.play(letter).unwrap(); }
-    assert!(walk.rt.selectable.mounted_between.contains_key("r1"), "row 1 lies between rows 0 and 2");
+    for letter in [
+        Letter::Press(Spot::HiStart),
+        Letter::Drag(Spot::LoEnd),
+        Letter::Up,
+    ] {
+        walk.play(letter).unwrap();
+    }
+    assert!(
+        walk.rt.selectable.mounted_between.contains_key("r1"),
+        "row 1 lies between rows 0 and 2"
+    );
     let warm = capacity(&walk);
     assert!(warm > 0);
-    for letter in [Letter::Press(Spot::HiStart), Letter::Drag(Spot::LoEnd), Letter::Up, Letter::Clear, Letter::Press(Spot::HiStart), Letter::Drag(Spot::LoEnd)] {
+    for letter in [
+        Letter::Press(Spot::HiStart),
+        Letter::Drag(Spot::LoEnd),
+        Letter::Up,
+        Letter::Clear,
+        Letter::Press(Spot::HiStart),
+        Letter::Drag(Spot::LoEnd),
+    ] {
         walk.play(letter).unwrap();
         assert_eq!(capacity(&walk), warm, "after {letter:?}");
     }

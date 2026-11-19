@@ -12,32 +12,75 @@ fn clip(audio: bool, script: &[Sym]) -> New {
 }
 
 fn posters_shown(new: &New) -> usize {
-    new.fake.log.iter().filter(|cmd| matches!(cmd, Cmd::Poster(_))).count()
+    new.fake
+        .log
+        .iter()
+        .filter(|cmd| matches!(cmd, Cmd::Poster(_)))
+        .count()
 }
 
 #[test]
 fn a_poster_after_a_failed_one_leaves_the_placeholder() {
-    let mut new = clip(false, &[Pull(Script::LOADING), Seek(0.3), Pull(Script::LOADING), Land(Done::Err), Pull(Script::LOADING)]);
-    assert_eq!(new.fake.log.iter().filter(|cmd| matches!(cmd, Cmd::Ask(_))).count(), 2, "two decodes queued");
-    assert!(!new.c.failed(), "the first decode was for a time the handle left");
+    let mut new = clip(
+        false,
+        &[
+            Pull(Script::LOADING),
+            Seek(0.3),
+            Pull(Script::LOADING),
+            Land(Done::Err),
+            Pull(Script::LOADING),
+        ],
+    );
+    assert_eq!(
+        new.fake
+            .log
+            .iter()
+            .filter(|cmd| matches!(cmd, Cmd::Ask(_)))
+            .count(),
+        2,
+        "two decodes queued"
+    );
+    assert!(
+        !new.c.failed(),
+        "the first decode was for a time the handle left"
+    );
     new.run(Land(Done::Err));
     new.run(Pull(Script::LOADING));
-    assert_eq!(new.c.run, Run::Failed { error: "load failed".into(), drawn: true });
+    assert_eq!(
+        new.c.run,
+        Run::Failed {
+            error: "load failed".into(),
+            drawn: true
+        }
+    );
     assert!(new.fake.log.contains(&Cmd::Placeholder));
     let frame_id = new.c.frame_id;
 
     new.fake.done = Some((new.fake.asked, Done::Frame));
     new.run(Pull(Script::LOADING));
 
-    assert_eq!(posters_shown(&new), 0, "nothing would redraw the placeholder it covered");
+    assert_eq!(
+        posters_shown(&new),
+        0,
+        "nothing would redraw the placeholder it covered"
+    );
     assert_eq!(new.c.frame_id, frame_id);
-    assert_eq!(new.c.run, Run::Failed { error: "load failed".into(), drawn: true });
+    assert_eq!(
+        new.c.run,
+        Run::Failed {
+            error: "load failed".into(),
+            drawn: true
+        }
+    );
 }
 
 #[test]
 fn a_late_poster_error_leaves_a_working_player_playing() {
     let mut new = clip(false, &[Preload, Play, Pull(Script::FRAME)]);
-    assert!(new.fake.log.contains(&Cmd::Frame(1)), "a native frame arrived");
+    assert!(
+        new.fake.log.contains(&Cmd::Frame(1)),
+        "a native frame arrived"
+    );
     let generation = new.c.generation;
 
     new.run(Land(Done::Err));
@@ -51,14 +94,28 @@ fn a_late_poster_error_leaves_a_working_player_playing() {
 
 #[test]
 fn a_request_from_before_a_player_does_not_answer_the_one_after_it() {
-    let mut new = clip(false, &[Preload, Play, Pull(Script::LOADING), Pause, Park, Pull(Script::LOADING)]);
+    let mut new = clip(
+        false,
+        &[
+            Preload,
+            Play,
+            Pull(Script::LOADING),
+            Pause,
+            Park,
+            Pull(Script::LOADING),
+        ],
+    );
     let (stale, current) = (Attempt::default(), new.fake.asked);
     assert_ne!(stale, current);
     assert_eq!(new.c.stage, Stage::Poster);
 
     new.fake.done = Some((stale, Done::Frame));
     new.run(Pull(Script::LOADING));
-    assert_eq!(posters_shown(&new), 0, "the stale frame is for an older position");
+    assert_eq!(
+        posters_shown(&new),
+        0,
+        "the stale frame is for an older position"
+    );
     assert!(new.c.meta.is_some(), "its facts still count");
 
     new.fake.done = Some((current, Done::Frame));
@@ -68,8 +125,19 @@ fn a_request_from_before_a_player_does_not_answer_the_one_after_it() {
 
 #[test]
 fn a_poster_for_an_older_paused_seek_neither_shows_nor_fails() {
-    let mut new = clip(false, &[Pull(Script::LOADING), Seek(0.3), Pull(Script::LOADING)]);
-    assert_eq!(new.fake.log.iter().filter(|cmd| matches!(cmd, Cmd::Ask(_))).count(), 2, "a decode at 0, then at 0.3");
+    let mut new = clip(
+        false,
+        &[Pull(Script::LOADING), Seek(0.3), Pull(Script::LOADING)],
+    );
+    assert_eq!(
+        new.fake
+            .log
+            .iter()
+            .filter(|cmd| matches!(cmd, Cmd::Ask(_)))
+            .count(),
+        2,
+        "a decode at 0, then at 0.3"
+    );
     let (older, newer) = (new.fake.pending[0], new.fake.asked);
     assert_ne!(older, newer);
 
@@ -96,7 +164,10 @@ fn a_poster_error_overtaken_by_a_seek_waits_for_the_new_time() {
     new.run(Pull(Script::LOADING));
 
     assert!(!new.c.failed(), "the seek at 0.3 may still decode");
-    assert!(new.fake.log.contains(&Cmd::Ask(0.3)), "the same pull asked for the time the handle wants");
+    assert!(
+        new.fake.log.contains(&Cmd::Ask(0.3)),
+        "the same pull asked for the time the handle wants"
+    );
     let current = new.fake.asked;
     assert_ne!(current, stale);
 
@@ -135,7 +206,11 @@ fn a_seek_past_the_end_still_shows_the_poster_its_length_clamps_to() {
     new.run(Pull(Script::LOADING));
 
     assert_eq!(new.c.duration, Some(1.0), "the answer opened the clip");
-    assert_eq!(posters_shown(&new), 1, "the poster at the end is the picture the seek asks for");
+    assert_eq!(
+        posters_shown(&new),
+        1,
+        "the poster at the end is the picture the seek asks for"
+    );
 }
 
 /// A slow worker, each answer one request behind, while the app seeks to the same time again
@@ -143,13 +218,26 @@ fn a_seek_past_the_end_still_shows_the_poster_its_length_clamps_to() {
 #[test]
 fn posters_for_repeated_seeks_to_one_time_all_show() {
     let mut c = Control::default();
-    let meta = Meta { duration: 1.0, size: Some((64, 36)), frame: 0.25, sound: false };
+    let meta = Meta {
+        duration: 1.0,
+        size: Some((64, 36)),
+        frame: 0.25,
+        sound: false,
+    };
     let (mut owed, mut shown) = (None, 0);
     for _ in 0..30 {
         step(&mut c, Event::Seek(0.3));
-        let AskPoster(_, attempt) = only(step(&mut c, Event::Pull)) else { panic!("asks for a poster") };
+        let AskPoster(_, attempt) = only(step(&mut c, Event::Pull)) else {
+            panic!("asks for a poster")
+        };
         if let Some(answered) = owed.replace(attempt)
-            && step(&mut c, Event::PosterDone { attempt: answered, result: Ok(meta) }) == Effects::one(Effect::ShowPoster)
+            && step(
+                &mut c,
+                Event::PosterDone {
+                    attempt: answered,
+                    result: Ok(meta),
+                },
+            ) == Effects::one(Effect::ShowPoster)
         {
             shown += 1;
         }
@@ -160,17 +248,49 @@ fn posters_for_repeated_seeks_to_one_time_all_show() {
 #[test]
 fn a_superseded_poster_keeps_the_clips_frame_timing() {
     let mut c = Control::default();
-    let AskPoster(0.0, stale) = only(step(&mut c, Event::Preload)) else { panic!("asks for a poster") };
+    let AskPoster(0.0, stale) = only(step(&mut c, Event::Preload)) else {
+        panic!("asks for a poster")
+    };
     step(&mut c, Event::Play);
-    step(&mut c, Event::PlayerMade { created: Instant::now() });
+    step(
+        &mut c,
+        Event::PlayerMade {
+            created: Instant::now(),
+        },
+    );
     // The poster lands after the player took over, before its item is ready.
-    let sixty = Meta { duration: 1.0, size: Some((64, 36)), frame: 1.0 / 60.0, sound: false };
-    assert!(step(&mut c, Event::PosterDone { attempt: stale, result: Ok(sixty) }).is_empty());
+    let sixty = Meta {
+        duration: 1.0,
+        size: Some((64, 36)),
+        frame: 1.0 / 60.0,
+        sound: false,
+    };
+    assert!(
+        step(
+            &mut c,
+            Event::PosterDone {
+                attempt: stale,
+                result: Ok(sixty)
+            }
+        )
+        .is_empty()
+    );
     let now = Instant::now();
-    for effect in step(&mut c, Event::Item { item: Item::Ready, now }) {
+    for effect in step(
+        &mut c,
+        Event::Item {
+            item: Item::Ready,
+            now,
+        },
+    ) {
         if effect == Effect::ReadFacts {
             // What a ready item reports, which has no frame timing of its own.
-            c.open(Ok(Meta { duration: 1.0, size: Some((64, 36)), frame: 1.0 / 30.0, sound: false }));
+            c.open(Ok(Meta {
+                duration: 1.0,
+                size: Some((64, 36)),
+                frame: 1.0 / 30.0,
+                sound: false,
+            }));
         }
     }
     step(&mut c, Event::Framed { shown: 0.0 });
@@ -179,8 +299,13 @@ fn a_superseded_poster_keeps_the_clips_frame_timing() {
     step(&mut c, Event::Reconcile { now });
 
     assert_eq!(c.meta.map(|m| m.frame), Some(1.0 / 60.0));
-    let Stage::Ready { settle, .. } = c.stage else { panic!("ready") };
-    assert!(settle.waiting(), "20 ms is the next frame at 60 fps, so the pull waits for it");
+    let Stage::Ready { settle, .. } = c.stage else {
+        panic!("ready")
+    };
+    assert!(
+        settle.waiting(),
+        "20 ms is the next frame at 60 fps, so the pull waits for it"
+    );
 }
 
 fn only(effects: Effects<Effect>) -> Effect {
@@ -214,7 +339,10 @@ fn an_audio_load_error_after_another_open_changes_nothing() {
 
 #[test]
 fn an_audio_load_error_before_another_open_fails_the_clip() {
-    let mut new = clip(true, &[LoadAudio, Play, Land(Done::Err), Pull(Script::READY)]);
+    let mut new = clip(
+        true,
+        &[LoadAudio, Play, Land(Done::Err), Pull(Script::READY)],
+    );
     assert_eq!(new.c.state(), PlayerState::Failed("load failed".into()));
     new.run(Open);
     new.run(Pull(Script::READY));
@@ -226,8 +354,25 @@ fn an_audio_load_error_before_another_open_fails_the_clip() {
 #[test]
 fn overlapping_requests_either_side_of_a_player_answer_for_themselves() {
     walk(
-        &[Preload, Play, Pull(Script::LOADING), Pause, Park, Pull(Script::LOADING)],
-        &[Play, Pause, Seek(0.3), Land(Done::Err), Land(Done::Frame), Land(Done::Facts), Park, Pull(Script::LOADING), Pull(Script::FRAME)],
+        &[
+            Preload,
+            Play,
+            Pull(Script::LOADING),
+            Pause,
+            Park,
+            Pull(Script::LOADING),
+        ],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Land(Done::Err),
+            Land(Done::Frame),
+            Land(Done::Facts),
+            Park,
+            Pull(Script::LOADING),
+            Pull(Script::FRAME),
+        ],
         6,
     );
 }
@@ -237,7 +382,16 @@ fn overlapping_requests_either_side_of_a_player_answer_for_themselves() {
 fn paused_seeks_answer_for_their_own_requests() {
     walk(
         &[Pull(Script::LOADING), Seek(0.3), Pull(Script::LOADING)],
-        &[Seek(0.6), Land(Done::Err), Land(Done::Frame), Land(Done::FrameFails), Open, Play, Pull(Script::LOADING), Pull(Script::FRAME)],
+        &[
+            Seek(0.6),
+            Land(Done::Err),
+            Land(Done::Frame),
+            Land(Done::FrameFails),
+            Open,
+            Play,
+            Pull(Script::LOADING),
+            Pull(Script::FRAME),
+        ],
         6,
     );
 }
@@ -247,7 +401,19 @@ fn paused_seeks_answer_for_their_own_requests() {
 fn late_poster_answers_in_any_order_match_the_fenced_flags() {
     walk(
         &[],
-        &[Play, Pause, Seek(0.3), Preload, Land(Done::Err), Land(Done::Frame), Land(Done::FrameFails), Fail, Park, Pull(Script::LOADING), Pull(Script::FRAME)],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Preload,
+            Land(Done::Err),
+            Land(Done::Frame),
+            Land(Done::FrameFails),
+            Fail,
+            Park,
+            Pull(Script::LOADING),
+            Pull(Script::FRAME),
+        ],
         6,
     );
 }

@@ -6,19 +6,31 @@
 
 use std::path::PathBuf;
 
-use parley::fontique::{Collection, CollectionOptions, FallbackKey, FamilyId, GenericFamily, Language, Script, SourceKind};
+use parley::fontique::{
+    Collection, CollectionOptions, FallbackKey, FamilyId, GenericFamily, Language, Script,
+    SourceKind,
+};
 
 thread_local! {
     static SYSTEM: std::cell::RefCell<Option<Collection>> = const { std::cell::RefCell::new(None) };
 }
 
 fn with_system<R>(f: impl FnOnce(&mut Collection) -> R) -> R {
-    SYSTEM.with_borrow_mut(|system| f(system.get_or_insert_with(|| Collection::new(CollectionOptions { shared: false, system_fonts: true }))))
+    SYSTEM.with_borrow_mut(|system| {
+        f(system.get_or_insert_with(|| {
+            Collection::new(CollectionOptions {
+                shared: false,
+                system_fonts: true,
+            })
+        }))
+    })
 }
 
 /// Every file of family `id` in the system collection.
 fn files_of(system: &mut Collection, id: FamilyId, out: &mut Vec<PathBuf>) {
-    let Some(family) = system.family(id) else { return };
+    let Some(family) = system.family(id) else {
+        return;
+    };
     for font in family.fonts() {
         if let SourceKind::Path(path) = &font.source().kind
             && !out.iter().any(|f| f.as_path() == path.as_ref())
@@ -33,7 +45,9 @@ pub(super) fn family_files(names: &[&str]) -> Vec<PathBuf> {
     with_system(|system| {
         let mut out = Vec::new();
         for name in names {
-            if let Some(id) = system.family_id(name) { files_of(system, id, &mut out); }
+            if let Some(id) = system.family_id(name) {
+                files_of(system, id, &mut out);
+            }
         }
         out
     })
@@ -60,16 +74,35 @@ pub(super) fn fallback_family_files(chars: &[char], locale: Option<&str>) -> Vec
     let mut scripts: Vec<[u8; 4]> = Vec::new();
     for &ch in chars {
         let script = CodePointMapData::<UScript>::new().get(ch);
-        if matches!(script, UScript::Common | UScript::Inherited | UScript::Unknown) { continue; }
-        let Some(tag) = names.get_locale_script(script) else { continue };
-        let Ok(bytes) = <[u8; 4]>::try_from(tag.as_str().as_bytes()) else { continue };
-        if !scripts.contains(&bytes) { scripts.push(bytes); }
+        if matches!(
+            script,
+            UScript::Common | UScript::Inherited | UScript::Unknown
+        ) {
+            continue;
+        }
+        let Some(tag) = names.get_locale_script(script) else {
+            continue;
+        };
+        let Ok(bytes) = <[u8; 4]>::try_from(tag.as_str().as_bytes()) else {
+            continue;
+        };
+        if !scripts.contains(&bytes) {
+            scripts.push(bytes);
+        }
     }
     with_system(|system| {
         let mut out = Vec::new();
         for script in scripts {
-            let ids: Vec<FamilyId> = system.fallback_families(FallbackKey::new(Script::from_bytes(script), language.as_ref())).take(2).collect();
-            for id in ids { files_of(system, id, &mut out); }
+            let ids: Vec<FamilyId> = system
+                .fallback_families(FallbackKey::new(
+                    Script::from_bytes(script),
+                    language.as_ref(),
+                ))
+                .take(2)
+                .collect();
+            for id in ids {
+                files_of(system, id, &mut out);
+            }
         }
         out
     })

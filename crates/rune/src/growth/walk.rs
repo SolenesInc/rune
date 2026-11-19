@@ -70,7 +70,28 @@ struct Dev {
 
 impl Dev {
     fn settled(h: f32) -> Dev {
-        Dev { h, v: 0.0, target: h, age: 0.0, mask: 0.0, streaming: false, whole: false, duration: 0.0, span: 0.0, glide: None, feather: None, limit: f32::INFINITY, stage: None, slide: None, restore: 0.0, give: None, paced: false, rate: 0.0, ended: 0.0, shut: false }
+        Dev {
+            h,
+            v: 0.0,
+            target: h,
+            age: 0.0,
+            mask: 0.0,
+            streaming: false,
+            whole: false,
+            duration: 0.0,
+            span: 0.0,
+            glide: None,
+            feather: None,
+            limit: f32::INFINITY,
+            stage: None,
+            slide: None,
+            restore: 0.0,
+            give: None,
+            paced: false,
+            rate: 0.0,
+            ended: 0.0,
+            shut: false,
+        }
     }
 
     fn moving(&self) -> bool {
@@ -109,7 +130,8 @@ impl Dev {
                 self.span = (target - self.h).abs();
             }
             let d = target - self.h;
-            self.slide = (lift > 1.0 / 64.0 && d.abs() > 1.0 / 64.0).then(|| (lift * target / d, -lift / d));
+            self.slide =
+                (lift > 1.0 / 64.0 && d.abs() > 1.0 / 64.0).then(|| (lift * target / d, -lift / d));
         }
     }
 
@@ -130,7 +152,11 @@ impl Dev {
         let (from, h) = (self.lift(), self.h);
         let stage = (h + rise.max(0.0)).min(self.target);
         let (d, end) = (stage - h, self.target - stage);
-        let b = if d > 1.0 / 64.0 { (end - from) / d } else { 0.0 };
+        let b = if d > 1.0 / 64.0 {
+            (end - from) / d
+        } else {
+            0.0
+        };
         self.slide = Some((if d > 1.0 / 64.0 { from - b * h } else { end }, b));
         self.stage = Some(stage);
         self.span = d;
@@ -156,7 +182,8 @@ impl Dev {
 
     fn step(&mut self, spring: Spring, edge: &StreamEdge, carrying_tail: bool) {
         let dt = DEV_SUBSTEP;
-        let spring = spring.with_duration(spring.duration.max(self.duration) * edge.duration.max(0.05));
+        let spring =
+            spring.with_duration(spring.duration.max(self.duration) * edge.duration.max(0.05));
         let aim = self.stage.unwrap_or(self.target);
         let rem = aim - self.h;
         if self.stage.is_some() && rem.abs() < 1.0 {
@@ -177,7 +204,8 @@ impl Dev {
             self.v = if landed { 0.0 } else { v };
             self.age += dt;
         } else if self.whole {
-            let spring = spring.with_duration(spring.duration * (self.span / DEV_WHOLE_REACH).sqrt().max(1.0));
+            let spring = spring
+                .with_duration(spring.duration * (self.span / DEV_WHOLE_REACH).sqrt().max(1.0));
             let (x, v) = spring.sample(self.h, self.v, self.target, dt);
             let landed = (rem >= 0.0 && x >= self.target) || (rem <= 0.0 && x <= self.target);
             self.h = if landed { self.target } else { x };
@@ -185,7 +213,11 @@ impl Dev {
             self.age += dt;
         } else {
             let (x, _v) = spring.sample(self.h, self.v, self.target, dt);
-            let mut cap = if rem.abs() > devcaps::LONG_DISTANCE { devcaps::MAX_LONG } else { devcaps::MAX };
+            let mut cap = if rem.abs() > devcaps::LONG_DISTANCE {
+                devcaps::MAX_LONG
+            } else {
+                devcaps::MAX
+            };
             if carrying_tail {
                 cap = cap.min(devcaps::CARRYING_TAIL);
             }
@@ -218,8 +250,16 @@ impl Dev {
             // differs from dev: this is the sentinel the branch no longer carries, kept here so
             // the reference stays dev's own reading of an easing that lands on exactly -1.0.
             let riding = self.slide.is_some_and(|(_, b)| b == -1.0);
-            let aim = if left > 0.25 && !riding { self.feather.unwrap_or(edge.mask_max).min(1.5 * left) } else { 0.0 };
-            self.mask = if aim > self.mask { (self.mask + DEV_FOLD_FEATHER_GROW * dt).min(aim) } else { aim };
+            let aim = if left > 0.25 && !riding {
+                self.feather.unwrap_or(edge.mask_max).min(1.5 * left)
+            } else {
+                0.0
+            };
+            self.mask = if aim > self.mask {
+                (self.mask + DEV_FOLD_FEATHER_GROW * dt).min(aim)
+            } else {
+                aim
+            };
         } else if aim > self.mask {
             self.mask = (self.mask + devcaps::MASK_GROW * dt).min(aim);
         } else {
@@ -242,13 +282,22 @@ impl Dev {
         let dt = DEV_SUBSTEP;
         self.ended = if self.streaming { 0.0 } else { self.ended + dt };
         let landing = (self.ended / devpace::LAND_RAMP).min(1.0);
-        let w = (self.rate / devpace::TRAIL).clamp(devpace::MIN + (devpace::LAND - devpace::MIN) * landing, devpace::MAX);
+        let w = (self.rate / devpace::TRAIL).clamp(
+            devpace::MIN + (devpace::LAND - devpace::MIN) * landing,
+            devpace::MAX,
+        );
         let a = (w * w * rem - 2.0 * w * self.v).clamp(-devpace::ACCEL, devpace::ACCEL);
-        let mut cap = if rem > devcaps::LONG_DISTANCE { devcaps::MAX_LONG } else { devcaps::MAX };
+        let mut cap = if rem > devcaps::LONG_DISTANCE {
+            devcaps::MAX_LONG
+        } else {
+            devcaps::MAX
+        };
         if carrying_tail {
             cap = cap.min(devcaps::CARRYING_TAIL);
         }
-        let v = (self.v + a * dt).max(devpace::LAND_MIN * landing).min(cap.min((2.0 * devpace::ACCEL * rem).sqrt()));
+        let v = (self.v + a * dt)
+            .max(devpace::LAND_MIN * landing)
+            .min(cap.min((2.0 * devpace::ACCEL * rem).sqrt()));
         if v * dt >= rem {
             self.h = self.target;
             self.v = 0.0;
@@ -263,11 +312,17 @@ impl Dev {
 /// One event of a row's life.
 #[derive(Clone, Copy, Debug)]
 enum Ev {
-    Kind { streaming: bool, whole: bool, fold: Option<(FoldGlide, f32)> },
+    Kind {
+        streaming: bool,
+        whole: bool,
+        fold: Option<(FoldGlide, f32)>,
+    },
     Retarget(f32),
     HideAbove(f32),
     RideUp(f32),
-    Step { carrying_tail: bool },
+    Step {
+        carrying_tail: bool,
+    },
 }
 
 const FOLD: Spring = Spring::new(0.18, 0.0);
@@ -275,17 +330,53 @@ const FOLD: Spring = Spring::new(0.18, 0.0);
 /// Every event a row can be handed, from the app's kinds to the frame's substeps.
 fn alphabet() -> Vec<Ev> {
     let mut events = vec![
-        Ev::Kind { streaming: false, whole: false, fold: None },
-        Ev::Kind { streaming: true, whole: false, fold: None },
-        Ev::Kind { streaming: false, whole: true, fold: None },
-        Ev::Kind { streaming: false, whole: false, fold: Some((FoldGlide { spring: FOLD, feather: None }, 900.0)) },
-        Ev::Kind { streaming: false, whole: false, fold: Some((FoldGlide { spring: FOLD, feather: Some(20.0) }, 400.0)) },
+        Ev::Kind {
+            streaming: false,
+            whole: false,
+            fold: None,
+        },
+        Ev::Kind {
+            streaming: true,
+            whole: false,
+            fold: None,
+        },
+        Ev::Kind {
+            streaming: false,
+            whole: true,
+            fold: None,
+        },
+        Ev::Kind {
+            streaming: false,
+            whole: false,
+            fold: Some((
+                FoldGlide {
+                    spring: FOLD,
+                    feather: None,
+                },
+                900.0,
+            )),
+        },
+        Ev::Kind {
+            streaming: false,
+            whole: false,
+            fold: Some((
+                FoldGlide {
+                    spring: FOLD,
+                    feather: Some(20.0),
+                },
+                400.0,
+            )),
+        },
         Ev::Retarget(120.0),
         Ev::Retarget(640.0),
         Ev::HideAbove(12.0),
         Ev::RideUp(90.0),
-        Ev::Step { carrying_tail: false },
-        Ev::Step { carrying_tail: true },
+        Ev::Step {
+            carrying_tail: false,
+        },
+        Ev::Step {
+            carrying_tail: true,
+        },
     ];
     events.shrink_to_fit();
     events
@@ -294,7 +385,11 @@ fn alphabet() -> Vec<Ev> {
 /// Hand one event to both, then check every field.
 fn drive(t: &mut GrowTrack, d: &mut Dev, e: Ev, path: &[Ev]) {
     match e {
-        Ev::Kind { streaming, whole, fold } => {
+        Ev::Kind {
+            streaming,
+            whole,
+            fold,
+        } => {
             t.set_kind(streaming, whole, fold);
             d.set_kind(streaming, whole, fold);
         }
@@ -303,7 +398,11 @@ fn drive(t: &mut GrowTrack, d: &mut Dev, e: Ev, path: &[Ev]) {
             d.retarget(to);
         }
         Ev::HideAbove(above) => {
-            assert_eq!(t.hide_above(above).to_bits(), d.hide_above(above).to_bits(), "{path:?} then {e:?}: points cut");
+            assert_eq!(
+                t.hide_above(above).to_bits(),
+                d.hide_above(above).to_bits(),
+                "{path:?} then {e:?}: points cut"
+            );
         }
         Ev::RideUp(rise) => {
             t.ride_up(rise);
@@ -319,7 +418,14 @@ fn drive(t: &mut GrowTrack, d: &mut Dev, e: Ev, path: &[Ev]) {
 
 fn compare(t: &GrowTrack, d: &Dev, path: &[Ev], e: Ev) {
     let what = || format!("{path:?} then {e:?}");
-    let same = |name: &str, a: f32, b: f32| assert!(a.to_bits() == b.to_bits(), "{name}: {} vs dev's {b} after {}", a, what());
+    let same = |name: &str, a: f32, b: f32| {
+        assert!(
+            a.to_bits() == b.to_bits(),
+            "{name}: {} vs dev's {b} after {}",
+            a,
+            what()
+        )
+    };
     same("h", t.h, d.h);
     same("v", t.v, d.v);
     same("target", t.target, d.target);
@@ -330,9 +436,19 @@ fn compare(t: &GrowTrack, d: &Dev, path: &[Ev], e: Ev) {
     same("rate", t.rate, d.rate);
     same("lift", t.lift(), d.lift());
     assert_eq!(t.streaming, d.streaming, "streaming after {}", what());
-    assert_eq!(t.give.map(f32::to_bits), d.give.map(f32::to_bits), "give after {}", what());
+    assert_eq!(
+        t.give.map(f32::to_bits),
+        d.give.map(f32::to_bits),
+        "give after {}",
+        what()
+    );
     assert_eq!(t.shut(), d.shut, "shut after {}", what());
-    assert_eq!(t.shutting_fold(), d.shutting_fold(), "shutting_fold after {}", what());
+    assert_eq!(
+        t.shutting_fold(),
+        d.shutting_fold(),
+        "shutting_fold after {}",
+        what()
+    );
 
     // The kind: a fold's own data, the whole glide, or the capped spring.
     assert_eq!(t.glide(), d.glide, "fold spring after {}", what());
@@ -348,12 +464,27 @@ fn compare(t: &GrowTrack, d: &Dev, path: &[Ev], e: Ev) {
         Stage::StopAt(at) => Some(at),
     };
     assert_eq!(t.staged(), d.stage.is_some(), "staged after {}", what());
-    assert_eq!(stage.map(f32::to_bits), d.stage.map(f32::to_bits), "stage after {}", what());
+    assert_eq!(
+        stage.map(f32::to_bits),
+        d.stage.map(f32::to_bits),
+        "stage after {}",
+        what()
+    );
 
     // How the contents draw.
     let riding = matches!(t.lift, Lift::Riding { .. });
-    assert_eq!(riding, d.slide.is_some_and(|(_, b)| b == -1.0), "riding after {}", what());
-    assert_eq!(!matches!(t.lift, Lift::None), d.slide.is_some(), "lifted at all after {}", what());
+    assert_eq!(
+        riding,
+        d.slide.is_some_and(|(_, b)| b == -1.0),
+        "riding after {}",
+        what()
+    );
+    assert_eq!(
+        !matches!(t.lift, Lift::None),
+        d.slide.is_some(),
+        "lifted at all after {}",
+        what()
+    );
 
     // The climb on the stream's pace.
     let (paced, ended) = match t.pace {
@@ -386,6 +517,12 @@ fn explore(t: GrowTrack, d: Dev, events: &[Ev], left: usize, path: &mut Vec<Ev>)
 fn every_sequence_of_events_matches_dev() {
     let events = alphabet();
     for from in [0.0, 640.0] {
-        explore(GrowTrack::settled(from), Dev::settled(from), &events, DEPTH, &mut Vec::new());
+        explore(
+            GrowTrack::settled(from),
+            Dev::settled(from),
+            &events,
+            DEPTH,
+            &mut Vec::new(),
+        );
     }
 }

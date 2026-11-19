@@ -20,7 +20,10 @@ mod web;
 pub fn spawn(name: impl Into<String>, work: impl FnOnce() + Send + 'static) -> std::io::Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        std::thread::Builder::new().name(name.into()).spawn(work).map(drop)
+        std::thread::Builder::new()
+            .name(name.into())
+            .spawn(work)
+            .map(drop)
     }
     #[cfg(target_arch = "wasm32")]
     {
@@ -31,7 +34,11 @@ pub fn spawn(name: impl Into<String>, work: impl FnOnce() + Send + 'static) -> s
 }
 
 /// [`spawn`] after `delay`: a thread that sleeps first, or a timer on the web.
-pub fn spawn_after(name: impl Into<String>, delay: Duration, work: impl FnOnce() + Send + 'static) -> std::io::Result<()> {
+pub fn spawn_after(
+    name: impl Into<String>,
+    delay: Duration,
+    work: impl FnOnce() + Send + 'static,
+) -> std::io::Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         spawn(name, move || {
@@ -108,7 +115,9 @@ pub fn start_runners() {
 /// does it the blocking way. Ask [`can_wait`] before starting what the promise stands for (a
 /// request), so code that can't wait doesn't start it and then do it again the blocking way.
 #[cfg(target_arch = "wasm32")]
-pub fn wait(promise: &js_sys::Promise) -> Option<Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>> {
+pub fn wait(
+    promise: &js_sys::Promise,
+) -> Option<Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>> {
     web::wait(promise)
 }
 

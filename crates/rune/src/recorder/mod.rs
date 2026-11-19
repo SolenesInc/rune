@@ -12,9 +12,9 @@
 
 mod control;
 mod fake;
-mod meter;
 #[cfg(target_os = "macos")]
 mod macos;
+mod meter;
 #[cfg(target_os = "macos")]
 use macos as backend;
 #[cfg(not(target_os = "macos"))]
@@ -27,12 +27,12 @@ pub use meter::Level;
 
 use crate::live::Live;
 use crate::machine::Attempt;
+use crate::time::Instant;
 use crate::video::{WakerSlot, headless_clock};
 use control::{Control, Effect, Event, FakeSession, Phase, Source};
 #[cfg(test)]
 use meter::Meter;
 use std::path::{Path, PathBuf};
-use crate::time::Instant;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::time::Duration;
@@ -125,7 +125,11 @@ pub struct Recorder {
 impl std::fmt::Debug for Recorder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let c = self.shared.ctl.lock().unwrap();
-        f.debug_struct("Recorder").field("path", &self.shared.path).field("state", &c.status()).field("elapsed", &c.elapsed).finish_non_exhaustive()
+        f.debug_struct("Recorder")
+            .field("path", &self.shared.path)
+            .field("state", &c.status())
+            .field("elapsed", &c.elapsed)
+            .finish_non_exhaustive()
     }
 }
 
@@ -183,7 +187,8 @@ pub(crate) fn headless_frame(_clock: f64) {
 /// A new runtime on this thread starts its clock at 0: fake recordings keep their elapsed
 /// time and go on from there.
 pub(crate) fn headless_reset() {
-    let recorders: Vec<Arc<Shared>> = HEADLESS.with_borrow(|h| h.iter().filter_map(Weak::upgrade).collect());
+    let recorders: Vec<Arc<Shared>> =
+        HEADLESS.with_borrow(|h| h.iter().filter_map(Weak::upgrade).collect());
     for r in recorders {
         r.apply(Event::Tick);
         r.ctl.lock().unwrap().restart_clock();
@@ -202,9 +207,20 @@ impl Recorder {
     /// [`start`](Self::start); each start overwrites the file.
     pub fn to_file(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let wav = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav"));
-        let format = if wav { RecordFormat::Wav } else { RecordFormat::Aac };
-        let opts = Options { format, sample_rate: 44_100, channels: 1, fake: None };
+        let wav = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+        let format = if wav {
+            RecordFormat::Wav
+        } else {
+            RecordFormat::Aac
+        };
+        let opts = Options {
+            format,
+            sample_rate: 44_100,
+            channels: 1,
+            fake: None,
+        };
         Self {
             shared: Arc::new(Shared {
                 opts: Mutex::new(opts),
@@ -251,14 +267,22 @@ impl Recorder {
     /// Microphone access now. Headless: the installed [`FakeMicrophone`]'s (default
     /// `Granted`). Never asks.
     pub fn permission() -> MicPermission {
-        if devices() { backend::permission() } else { FakeMicrophone::installed().permission }
+        if devices() {
+            backend::permission()
+        } else {
+            FakeMicrophone::installed().permission
+        }
     }
     /// Asks for microphone access if it's `Undetermined`, then calls `callback` with the
     /// answer, from any thread (at once when already decided, and always at once headless).
     /// macOS shows its prompt with the app's `NSMicrophoneUsageDescription`; a bundled app
     /// without one gets `Denied` rather than the crash macOS would cause.
     pub fn request_permission(callback: impl FnOnce(MicPermission) + Send + 'static) {
-        if devices() { backend::request_permission(Box::new(callback)) } else { callback(FakeMicrophone::request_installed()) }
+        if devices() {
+            backend::request_permission(Box::new(callback))
+        } else {
+            callback(FakeMicrophone::request_installed())
+        }
     }
 
     /// Starts recording, from `Idle`, `Stopped`, `Interrupted` or `Failed` (an interrupted
@@ -267,9 +291,16 @@ impl Recorder {
     pub fn start(&self) {
         let shared = &self.shared;
         let fake = shared.fake_mic().is_some();
-        let format = if fake { RecordFormat::Wav } else { shared.opts.lock().unwrap().format };
+        let format = if fake {
+            RecordFormat::Wav
+        } else {
+            shared.opts.lock().unwrap().format
+        };
         let path = with_format_extension(&shared.path, format);
-        shared.apply(Event::Start { path, virtual_clock: fake && !devices() });
+        shared.apply(Event::Start {
+            path,
+            virtual_clock: fake && !devices(),
+        });
         shared.settle();
     }
 
@@ -289,7 +320,10 @@ impl Recorder {
     /// it. After an interruption, returns what was saved. Stopping while `Starting` abandons
     /// the start; stopping when not recording returns an error and changes nothing.
     pub fn stop(&self) -> Result<Recording, String> {
-        let result = self.shared.apply(Event::Stop).unwrap_or_else(|| Err(control::NOT_RECORDING.into()));
+        let result = self
+            .shared
+            .apply(Event::Stop)
+            .unwrap_or_else(|| Err(control::NOT_RECORDING.into()));
         self.shared.settle();
         result
     }
@@ -338,7 +372,8 @@ impl Recorder {
     }
 }
 
-const DENIED: &str = "microphone access is denied: allow it in System Settings > Privacy & Security > Microphone";
+const DENIED: &str =
+    "microphone access is denied: allow it in System Settings > Privacy & Security > Microphone";
 const RESTRICTED: &str = "microphone access is restricted on this device";
 
 fn granted(answer: MicPermission) -> Result<(), String> {
@@ -352,15 +387,26 @@ fn granted(answer: MicPermission) -> Result<(), String> {
 impl Control {
     /// The clock elapsed time follows.
     fn now(&self) -> Option<f64> {
-        if self.virtual_clock { headless_clock() } else { Some(wall_now()) }
+        if self.virtual_clock {
+            headless_clock()
+        } else {
+            Some(wall_now())
+        }
     }
 }
 
 /// An effect that runs with the control unlocked, as it blocks, re-enters or does I/O.
 enum Unlocked {
     Ask(Attempt),
-    OpenFake { attempt: Attempt, mic: FakeMicrophone, path: PathBuf },
-    StopDevice { attempt: Attempt, session: backend::Session },
+    OpenFake {
+        attempt: Attempt,
+        mic: FakeMicrophone,
+        path: PathBuf,
+    },
+    StopDevice {
+        attempt: Attempt,
+        session: backend::Session,
+    },
     CancelDevice(backend::Session),
     RemoveFile(PathBuf),
 }
@@ -400,17 +446,30 @@ impl Shared {
                             Effect::Publish(level) => self.publish(level),
                             Effect::Ask { attempt } => unlocked.push(Unlocked::Ask(attempt)),
                             Effect::Open { attempt } => match self.fake_mic() {
-                                Some(mic) => unlocked.push(Unlocked::OpenFake { attempt, mic, path: c.path.clone() }),
+                                Some(mic) => unlocked.push(Unlocked::OpenFake {
+                                    attempt,
+                                    mic,
+                                    path: c.path.clone(),
+                                }),
                                 None => {
                                     let opts = self.opts.lock().unwrap().clone();
-                                    events.push(Event::DeviceOpened { attempt, opened: backend::start(self, attempt, &c.path, &opts) });
+                                    events.push(Event::DeviceOpened {
+                                        attempt,
+                                        opened: backend::start(self, attempt, &c.path, &opts),
+                                    });
                                 }
                             },
                             Effect::FollowHeadless => self.follow_headless(),
                             Effect::PauseDevice => c.device().into_iter().for_each(backend::pause),
-                            Effect::ResumeDevice => c.device().into_iter().for_each(backend::resume),
-                            Effect::StopDevice { attempt, session } => unlocked.push(Unlocked::StopDevice { attempt, session }),
-                            Effect::CancelDevice(session) => unlocked.push(Unlocked::CancelDevice(session)),
+                            Effect::ResumeDevice => {
+                                c.device().into_iter().for_each(backend::resume)
+                            }
+                            Effect::StopDevice { attempt, session } => {
+                                unlocked.push(Unlocked::StopDevice { attempt, session })
+                            }
+                            Effect::CancelDevice(session) => {
+                                unlocked.push(Unlocked::CancelDevice(session))
+                            }
                             Effect::RemoveFile(path) => unlocked.push(Unlocked::RemoveFile(path)),
                             Effect::Reply(result) => reply = Some(result),
                         }
@@ -434,7 +493,10 @@ impl Shared {
                 });
                 Some(Event::FakeOpened { attempt, opened })
             }
-            Unlocked::StopDevice { attempt, session } => Some(Event::Stopped { attempt, result: backend::stop(session) }),
+            Unlocked::StopDevice { attempt, session } => Some(Event::Stopped {
+                attempt,
+                result: backend::stop(session),
+            }),
             Unlocked::CancelDevice(session) => {
                 backend::cancel(session);
                 None
@@ -452,29 +514,45 @@ impl Shared {
         if fake.is_none()
             && let Err(e) = backend::preflight()
         {
-            return Some(Event::Permission { attempt, granted: Err(e) });
+            return Some(Event::Permission {
+                attempt,
+                granted: Err(e),
+            });
         }
-        let answer = match (fake.as_ref().map_or_else(backend::permission, |mic| mic.permission), fake) {
+        let answer = match (
+            fake.as_ref()
+                .map_or_else(backend::permission, |mic| mic.permission),
+            fake,
+        ) {
             (MicPermission::Undetermined, Some(_)) => self.resolve_fake_permission(),
             (MicPermission::Undetermined, None) => {
                 let weak = Arc::downgrade(self);
                 backend::request_permission(Box::new(move |answer| {
                     let Some(shared) = weak.upgrade() else { return };
-                    shared.apply(Event::Permission { attempt, granted: granted(answer) });
+                    shared.apply(Event::Permission {
+                        attempt,
+                        granted: granted(answer),
+                    });
                     shared.settle();
                 }));
                 return None;
             }
             (answer, _) => answer,
         };
-        Some(Event::Permission { attempt, granted: granted(answer) })
+        Some(Event::Permission {
+            attempt,
+            granted: granted(answer),
+        })
     }
 
     /// Follow this recorder on every headless frame of this thread, once.
     fn follow_headless(self: &Arc<Self>) {
         HEADLESS.with_borrow_mut(|h| {
             h.retain(|w| w.strong_count() > 0);
-            if !h.iter().any(|w| std::ptr::eq(w.as_ptr(), Arc::as_ptr(self))) {
+            if !h
+                .iter()
+                .any(|w| std::ptr::eq(w.as_ptr(), Arc::as_ptr(self)))
+            {
                 h.push(Arc::downgrade(self));
             }
         });
@@ -519,7 +597,11 @@ impl Shared {
 
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn interrupted(self: &Arc<Self>, attempt: Attempt, reason: String, duration: f64) {
-        self.apply(Event::Interrupted { attempt, reason, duration });
+        self.apply(Event::Interrupted {
+            attempt,
+            reason,
+            duration,
+        });
         self.settle();
     }
 
@@ -537,7 +619,9 @@ impl Drop for Shared {
         let c = self.ctl.get_mut().unwrap_or_else(PoisonError::into_inner);
         let now = c.now();
         let source = match std::mem::replace(&mut c.phase, Phase::Idle) {
-            Phase::Recording { source, mut anchor, .. } => {
+            Phase::Recording {
+                source, mut anchor, ..
+            } => {
                 control::advance(&mut c.elapsed, &mut anchor, now);
                 source
             }
@@ -556,12 +640,19 @@ impl Drop for Shared {
 
 /// `path` with an extension that holds `format`, which AVAudioRecorder picks the container by.
 fn with_format_extension(path: &Path, format: RecordFormat) -> PathBuf {
-    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
     let (keep, want): (&[&str], &str) = match format {
         RecordFormat::Aac => (&["m4a", "mp4"], "m4a"),
         RecordFormat::Wav => (&["wav"], "wav"),
     };
-    if ext.as_deref().is_some_and(|e| keep.contains(&e)) { path.to_path_buf() } else { path.with_extension(want) }
+    if ext.as_deref().is_some_and(|e| keep.contains(&e)) {
+        path.to_path_buf()
+    } else {
+        path.with_extension(want)
+    }
 }
 
 fn pack(level: Level) -> u64 {
@@ -569,7 +660,10 @@ fn pack(level: Level) -> u64 {
 }
 
 fn unpack(bits: u64) -> Level {
-    Level::new(f32::from_bits((bits >> 32) as u32), f32::from_bits(bits as u32))
+    Level::new(
+        f32::from_bits((bits >> 32) as u32),
+        f32::from_bits(bits as u32),
+    )
 }
 
 #[cfg(test)]

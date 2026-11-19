@@ -100,9 +100,15 @@ impl Blend {
         match self {
             Self::SourceOver => wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
             Self::PlusLighter => {
-                let add = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One,
-                    dst_factor: wgpu::BlendFactor::One, operation: wgpu::BlendOperation::Add };
-                wgpu::BlendState { color: add, alpha: add }
+                let add = wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                };
+                wgpu::BlendState {
+                    color: add,
+                    alpha: add,
+                }
             }
         }
     }
@@ -123,7 +129,14 @@ pub struct LayerSpec {
 }
 
 impl Default for LayerSpec {
-    fn default() -> Self { Self { opacity: 1.0, blend: Blend::SourceOver, blur: 0.0, clip_radius: 0.0 } }
+    fn default() -> Self {
+        Self {
+            opacity: 1.0,
+            blend: Blend::SourceOver,
+            blur: 0.0,
+            clip_radius: 0.0,
+        }
+    }
 }
 
 /// WGSL for clipping like Rune does: `sd_rounded`, `ramp` and `clip_alpha(p, clip, fade)`. `p` is
@@ -226,19 +239,36 @@ pub fn pack_fade(width: [f32; 4], origin: [f32; 4], clip: [f32; 4]) -> [u32; 4] 
     let halves = width.map(|w| half::f16::from_f32(w.clamp(-65504.0, 65504.0)).to_bits() as u32);
     let mut offsets = 0;
     for edge in 0..4 {
-        let distance = if edge < 2 { clip[edge] - origin[edge] } else { origin[edge] - clip[edge] };
+        let distance = if edge < 2 {
+            clip[edge] - origin[edge]
+        } else {
+            origin[edge] - clip[edge]
+        };
         let w = width[edge].abs();
-        let offset = if w > 0.0 { (distance / w).clamp(0.0, 1.0) } else { 0.0 };
+        let offset = if w > 0.0 {
+            (distance / w).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         offsets |= ((offset * 255.0 + 0.5) as u32) << (edge * 8);
     }
-    [halves[0] | (halves[1] << 16), halves[2] | (halves[3] << 16), offsets, 0]
+    [
+        halves[0] | (halves[1] << 16),
+        halves[2] | (halves[3] << 16),
+        offsets,
+        0,
+    ]
 }
 
 /// Decode widths and normalized origin offsets for tools inspecting the instance stream. A
 /// negative width is a linear ramp.
 pub fn unpack_fade(fade: [u32; 4]) -> ([f32; 4], [f32; 4]) {
-    (std::array::from_fn(|e| half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32()),
-     std::array::from_fn(|e| ((fade[2] >> (e * 8)) & 255) as f32 / 255.0))
+    (
+        std::array::from_fn(|e| {
+            half::f16::from_bits((fade[e / 2] >> ((e % 2) * 16)) as u16).to_f32()
+        }),
+        std::array::from_fn(|e| ((fade[2] >> (e * 8)) & 255) as f32 / 255.0),
+    )
 }
 
 pub const NO_CLIP: [f32; 4] = [-1e6, -1e6, 1e6, 1e6];
@@ -257,7 +287,11 @@ pub fn pack_clip_radii(clip: [f32; 4], radii: [f32; 4]) -> u32 {
         if radius < 0.0 && r > 0.0 { -r } else { r }
     });
     if clamped[0] == clamped[1] && clamped[1] == clamped[2] && clamped[2] == clamped[3] {
-        return if clamped[0] == 0.0 { 0 } else { clamped[0].to_bits() };
+        return if clamped[0] == 0.0 {
+            0
+        } else {
+            clamped[0].to_bits()
+        };
     }
     let continuous = clamped.iter().any(|&r| r < 0.0);
     let max_r = clamped.iter().fold(0.0f32, |m, r| m.max(r.abs()));
@@ -303,9 +337,22 @@ impl Instance {
     /// Begin an isolated scope. `bounds` is a device-pixel [x,y,w,h] content bound, including
     /// native surfaces. Primitive bounds (including shadow support) expand it during prepare.
     pub fn begin_layer(bounds: [f32; 4], clip: [f32; 4], spec: LayerSpec) -> Self {
-        let mut instance = Self { rect: bounds, clip, fill: [0.0, 0.0, 0.0, spec.opacity.clamp(0.0, 1.0)],
-            params: [if spec.blend == Blend::PlusLighter { 1.0 } else { 0.0 }, KIND_LAYER,
-                layer_blur::sigma(spec.blur), 0.0], ..Self::zeroed() };
+        let mut instance = Self {
+            rect: bounds,
+            clip,
+            fill: [0.0, 0.0, 0.0, spec.opacity.clamp(0.0, 1.0)],
+            params: [
+                if spec.blend == Blend::PlusLighter {
+                    1.0
+                } else {
+                    0.0
+                },
+                KIND_LAYER,
+                layer_blur::sigma(spec.blur),
+                0.0,
+            ],
+            ..Self::zeroed()
+        };
         instance.round_clip(spec.clip_radius);
         instance
     }
@@ -319,7 +366,10 @@ impl Instance {
     }
 
     pub fn end_layer() -> Self {
-        Self { params: [0.0, KIND_LAYER_END, 0.0, 0.0], ..Self::zeroed() }
+        Self {
+            params: [0.0, KIND_LAYER_END, 0.0, 0.0],
+            ..Self::zeroed()
+        }
     }
 }
 
@@ -348,7 +398,13 @@ pub(crate) fn unpack_u64_f32(a: [f32; 4]) -> u64 {
 
 /// Close a runtime scope, folding empty/single-draw groups back into the direct path. Only the
 /// last one or two records move, so video insertions before this scope keep their indices.
-pub(crate) fn end_layer(instances: &mut Vec<Instance>, surfaces: &mut [crate::native_surface::SurfaceDraw], marks: &mut Vec<u32>, start: usize, surface_start: usize) {
+pub(crate) fn end_layer(
+    instances: &mut Vec<Instance>,
+    surfaces: &mut [crate::native_surface::SurfaceDraw],
+    marks: &mut Vec<u32>,
+    start: usize,
+    surface_start: usize,
+) {
     let primitives = instances.len() - start - 1;
     let videos = surfaces.len() - surface_start;
     let scope = instances[start];
@@ -356,34 +412,59 @@ pub(crate) fn end_layer(instances: &mut Vec<Instance>, surfaces: &mut [crate::na
         instances[start + 1].clip == NO_CLIP && instances[start + 1].fade == [0; 4]
     } else if videos == 1 {
         surfaces[surface_start].clip == NO_CLIP && surfaces[surface_start].fade == [0; 4]
-    } else { true };
+    } else {
+        true
+    };
     let transfer_clip = scope.fade[3] == 0 && unmasked;
     // A lone effect slot keeps a faded scope: the compositor's paint can't take the opacity.
-    let faded_effect = primitives == 1 && instances[start + 1].params[1] == KIND_EFFECT && scope.fill[3] != 1.0;
+    let faded_effect =
+        primitives == 1 && instances[start + 1].params[1] == KIND_EFFECT && scope.fill[3] != 1.0;
     // A layer's `radii` hold its hole (`El::cutout_circle`), which only its composite can cut.
-    if !faded_effect && primitives + videos <= 1 && (primitives + videos == 0 || (scope.border[1] == 0.0 && scope.radii == [0.0; 4])) && scope.params[0] == 0.0 && scope.params[2] == 0.0 && scope.params[3] == 0.0
-        && (transfer_clip || (scope.clip == NO_CLIP && scope.fade == [0; 4])) {
+    if !faded_effect
+        && primitives + videos <= 1
+        && (primitives + videos == 0 || (scope.border[1] == 0.0 && scope.radii == [0.0; 4]))
+        && scope.params[0] == 0.0
+        && scope.params[2] == 0.0
+        && scope.params[3] == 0.0
+        && (transfer_clip || (scope.clip == NO_CLIP && scope.fade == [0; 4]))
+    {
         let opacity = scope.fill[3];
         if primitives == 1 {
             let i = &mut instances[start + 1];
-            if transfer_clip { i.clip = scope.clip; i.fade = scope.fade; }
+            if transfer_clip {
+                i.clip = scope.clip;
+                i.fade = scope.fade;
+            }
             i.fill = i.fill.map(|v| v * opacity);
             // A glyph's `border` holds no colour (an outline glyph's names its record).
-            if i.params[1] != KIND_GLYPH { i.border = i.border.map(|v| v * opacity); }
-            if i.params[1] == KIND_GRADIENT { i.uv = i.uv.map(|v| v * opacity); }
+            if i.params[1] != KIND_GLYPH {
+                i.border = i.border.map(|v| v * opacity);
+            }
+            if i.params[1] == KIND_GRADIENT {
+                i.uv = i.uv.map(|v| v * opacity);
+            }
             // A box's `params.w` is the opacity its colours carry (shader.wgsl `border_over`).
-            if i.params[1] == KIND_RECT || i.params[1] == KIND_GRADIENT { i.params[3] *= opacity; }
+            if i.params[1] == KIND_RECT || i.params[1] == KIND_GRADIENT {
+                i.params[3] *= opacity;
+            }
         }
         if videos == 1 {
-            if transfer_clip { surfaces[surface_start].clip = scope.clip; surfaces[surface_start].fade = scope.fade; }
+            if transfer_clip {
+                surfaces[surface_start].clip = scope.clip;
+                surfaces[surface_start].fade = scope.fade;
+            }
             surfaces[surface_start].opacity *= opacity;
             surfaces[surface_start].before_instance -= 1;
         }
         instances.remove(start);
-        if marks.len() > start { marks.remove(start); }
+        if marks.len() > start {
+            marks.remove(start);
+        }
     } else {
         instances.push(Instance::end_layer());
-        if let Some(&mark) = marks.get(start) { marks.push(mark); }
+        if let Some(&mark) = marks.get(start) {
+            marks.push(mark);
+        }
     }
 }
 
@@ -410,19 +491,31 @@ impl Gpu {
         Self::try_new(instance, surface).unwrap_or_else(|error| panic!("{error}"))
     }
 
-    pub fn try_new(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>) -> Result<Gpu, String> {
+    pub fn try_new(
+        instance: wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+    ) -> Result<Gpu, String> {
         Self::try_with_features(instance, surface, wgpu::Features::empty())
     }
 
     /// Like `try_new`, also enabling whichever of `wanted` the adapter supports.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn try_with_features(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, wanted: wgpu::Features) -> Result<Gpu, String> {
+    pub fn try_with_features(
+        instance: wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+        wanted: wgpu::Features,
+    ) -> Result<Gpu, String> {
         Self::try_for(instance, surface, wanted, false)
     }
 
     /// Like `try_with_features`, preferring for a `translucent` surface `translucency::prefer`'s adapter.
     #[cfg(not(target_arch = "wasm32"))]
-    fn try_for(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, wanted: wgpu::Features, translucent: bool) -> Result<Gpu, String> {
+    fn try_for(
+        instance: wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+        wanted: wgpu::Features,
+        translucent: bool,
+    ) -> Result<Gpu, String> {
         Self::try_picked(instance, surface, wanted, translucent, false)
     }
 
@@ -433,19 +526,38 @@ impl Gpu {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn try_picked(instance: wgpu::Instance, surface: Option<&wgpu::Surface<'_>>, wanted: wgpu::Features, translucent: bool, presented: bool) -> Result<Gpu, String> {
+    fn try_picked(
+        instance: wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+        wanted: wgpu::Features,
+        translucent: bool,
+        presented: bool,
+    ) -> Result<Gpu, String> {
         let _serial = GPU_INIT.lock().unwrap_or_else(|e| e.into_inner());
         let pick = crate::gpu::pick::pick(&instance, surface)?;
         crate::marks::mark("gpu.adapter");
-        if !crate::marks::noted("adapter") { crate::marks::note("adapter", Box::leak(pick.adapter.get_info().name.into_boxed_str())); }
+        if !crate::marks::noted("adapter") {
+            crate::marks::note(
+                "adapter",
+                Box::leak(pick.adapter.get_info().name.into_boxed_str()),
+            );
+        }
         let adapter = match surface {
-            Some(s) if translucent && !pick.from_env() => crate::render::translucency::prefer(&instance, s, &pick),
+            Some(s) if translucent && !pick.from_env() => {
+                crate::render::translucency::prefer(&instance, s, &pick)
+            }
             _ => pick.adapter,
         };
         match Self::device_on(&adapter, wanted) {
             Ok((device, queue)) => {
                 crate::marks::mark("gpu.device");
-                Ok(Gpu::made(instance, adapter, device, queue, surface.is_some() || presented))
+                Ok(Gpu::made(
+                    instance,
+                    adapter,
+                    device,
+                    queue,
+                    surface.is_some() || presented,
+                ))
             }
             // A driver that can't make a device (a broken integrated GPU on a hybrid laptop)
             // leaves the window to the next adapter that presents to its surface.
@@ -457,12 +569,26 @@ impl Gpu {
                         let info = other.get_info();
                         (info.name != first.name || info.backend != first.backend)
                             && surface.is_none_or(|s| other.is_surface_supported(s))
-                            && (!translucent || surface.is_none_or(|s| crate::render::translucency::mode(s, other).is_some()))
+                            && (!translucent
+                                || surface.is_none_or(|s| {
+                                    crate::render::translucency::mode(s, other).is_some()
+                                }))
                     });
                 for other in others {
                     if let Ok((device, queue)) = Self::device_on(&other, wanted) {
-                        eprintln!("rune: {} ({:?}) made no device ({error}); using {}", first.name, first.backend, other.get_info().name);
-                        return Ok(Gpu::made(instance, other, device, queue, surface.is_some() || presented));
+                        eprintln!(
+                            "rune: {} ({:?}) made no device ({error}); using {}",
+                            first.name,
+                            first.backend,
+                            other.get_info().name
+                        );
+                        return Ok(Gpu::made(
+                            instance,
+                            other,
+                            device,
+                            queue,
+                            surface.is_some() || presented,
+                        ));
                     }
                 }
                 Err(error)
@@ -471,22 +597,34 @@ impl Gpu {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn device_on(adapter: &wgpu::Adapter, wanted: wgpu::Features) -> Result<(wgpu::Device, wgpu::Queue), String> {
+    fn device_on(
+        adapter: &wgpu::Adapter,
+        wanted: wgpu::Features,
+    ) -> Result<(wgpu::Device, wgpu::Queue), String> {
         // Dual-source blending is for subpixel text (`FontSmoothing::WindfoilRgb`).
-        let optional_features = wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::DUAL_SOURCE_BLENDING | wanted | crate::gpu::backend::free_features(adapter);
+        let optional_features = wgpu::Features::TIMESTAMP_QUERY
+            | wgpu::Features::DUAL_SOURCE_BLENDING
+            | wanted
+            | crate::gpu::backend::free_features(adapter);
         // Precompiled uber shaders: a metallib on macOS.
         #[cfg(target_os = "macos")]
         let optional_features = optional_features | wgpu::Features::PASSTHROUGH_SHADERS;
         let required_features = adapter.features() & optional_features;
         // A compositor that asks for immediates (`Compositor::features`) gets all the adapter has.
-        let max_immediate_size = if required_features.contains(wgpu::Features::IMMEDIATES) { adapter.limits().max_immediate_size } else { 0 };
+        let max_immediate_size = if required_features.contains(wgpu::Features::IMMEDIATES) {
+            adapter.limits().max_immediate_size
+        } else {
+            0
+        };
         let adapter_limits = adapter.limits();
         // Views and buffers bound at once: 65,536 is far more than Rune binds. wgpu's default, a
         // million, sizes a 32-64 MB descriptor heap on backends that make one from this limit.
         let views = MAX_VIEWS.min(adapter_limits.max_non_sampler_bindings);
-        let required_limits = if adapter_limits.max_inter_stage_shader_variables < wgpu::Limits::default().max_inter_stage_shader_variables
+        let required_limits = if adapter_limits.max_inter_stage_shader_variables
+            < wgpu::Limits::default().max_inter_stage_shader_variables
             || adapter_limits.max_color_attachments < wgpu::Limits::default().max_color_attachments
-            || adapter_limits.max_compute_workgroup_storage_size < wgpu::Limits::default().max_compute_workgroup_storage_size
+            || adapter_limits.max_compute_workgroup_storage_size
+                < wgpu::Limits::default().max_compute_workgroup_storage_size
         {
             wgpu::Limits {
                 max_immediate_size,
@@ -521,12 +659,23 @@ impl Gpu {
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn try_with_features(_: wgpu::Instance, _: Option<&wgpu::Surface<'_>>, _: wgpu::Features) -> Result<Gpu, String> {
+    pub fn try_with_features(
+        _: wgpu::Instance,
+        _: Option<&wgpu::Surface<'_>>,
+        _: wgpu::Features,
+    ) -> Result<Gpu, String> {
         Err("synchronous GPU initialization is unsupported on web; use App::run".into())
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn try_for(i: wgpu::Instance, s: Option<&wgpu::Surface<'_>>, w: wgpu::Features, _: bool) -> Result<Gpu, String> { Self::try_with_features(i, s, w) }
+    fn try_for(
+        i: wgpu::Instance,
+        s: Option<&wgpu::Surface<'_>>,
+        w: wgpu::Features,
+        _: bool,
+    ) -> Result<Gpu, String> {
+        Self::try_with_features(i, s, w)
+    }
 
     pub fn headless() -> Gpu {
         Self::new(Self::instance(), None)
@@ -544,14 +693,20 @@ impl Gpu {
     /// records on Rune's device still work; wgpu just doesn't check their argument buffers.
     pub fn instance() -> wgpu::Instance {
         #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-        if crate::gpu::metal::enabled() { return crate::gpu::metal::instance(); }
+        if crate::gpu::metal::enabled() {
+            return crate::gpu::metal::instance();
+        }
         Self::wgpu_instance()
     }
 
     /// `instance`, or wgpu's when the native Metal backend is only the default and lacks one of
     /// the features a compositor wants (`Compositor::features`).
     pub(crate) fn instance_for(wanted: wgpu::Features) -> wgpu::Instance {
-        if crate::gpu::backend::wgpu_for(wanted) { Self::wgpu_instance() } else { Self::instance() }
+        if crate::gpu::backend::wgpu_for(wanted) {
+            Self::wgpu_instance()
+        } else {
+            Self::instance()
+        }
     }
 
     /// wgpu's own backends, whatever `RUNE_GPU_BACKEND` says.
@@ -563,9 +718,12 @@ impl Gpu {
     /// One instance per set of backends for the whole process: a new one per device was a new
     /// adapter list each time a window or overlay made a device (hex#1268).
     fn wgpu_instance_on(backends: wgpu::Backends) -> wgpu::Instance {
-        static MADE: std::sync::Mutex<Vec<(wgpu::Backends, wgpu::Instance)>> = std::sync::Mutex::new(Vec::new());
+        static MADE: std::sync::Mutex<Vec<(wgpu::Backends, wgpu::Instance)>> =
+            std::sync::Mutex::new(Vec::new());
         let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((_, instance)) = made.iter().find(|(made, _)| *made == backends) { return instance.clone(); }
+        if let Some((_, instance)) = made.iter().find(|(made, _)| *made == backends) {
+            return instance.clone();
+        }
         let instance = Self::new_wgpu_instance(backends);
         made.push((backends, instance.clone()));
         instance
@@ -574,7 +732,9 @@ impl Gpu {
     fn new_wgpu_instance(backends: wgpu::Backends) -> wgpu::Instance {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = backends;
-        descriptor.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
+        descriptor
+            .flags
+            .remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
         wgpu::Instance::new(descriptor)
     }
 
@@ -584,31 +744,51 @@ impl Gpu {
     /// window never gets a second surface.
     /// A `translucent` surface gets an adapter that composites translucent pixels when any can.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) fn for_surface<'w>(wanted: wgpu::Features, translucent: bool,
-        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
+    pub(crate) fn for_surface<'w>(
+        wanted: wgpu::Features,
+        translucent: bool,
+        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>,
+    ) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
         Self::for_surface_from(prewarm::take(), wanted, translucent, surface)
     }
 
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    fn for_surface_from<'w>(early: Option<(Gpu, Renderer)>, wanted: wgpu::Features, translucent: bool,
-        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
+    fn for_surface_from<'w>(
+        early: Option<(Gpu, Renderer)>,
+        wanted: wgpu::Features,
+        translucent: bool,
+        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>,
+    ) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
         let made = Self::surface_gpu_from(early, wanted, translucent, surface)?;
         if std::env::var_os("RUNE_GPU_LOG").is_some_and(|v| v != "0") {
-            eprintln!("rune: a surface draws with {}", crate::gpu::backend::describe(&made.0.device));
+            eprintln!(
+                "rune: a surface draws with {}",
+                crate::gpu::backend::describe(&made.0.device)
+            );
         }
         Ok(made)
     }
 
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    fn surface_gpu_from<'w>(early: Option<(Gpu, Renderer)>, wanted: wgpu::Features, translucent: bool,
-        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
+    fn surface_gpu_from<'w>(
+        early: Option<(Gpu, Renderer)>,
+        wanted: wgpu::Features,
+        translucent: bool,
+        surface: impl FnOnce(&wgpu::Instance) -> Result<wgpu::Surface<'w>, String>,
+    ) -> Result<(Gpu, wgpu::Surface<'w>, Option<Renderer>), String> {
         // A prewarmed native Metal GPU lacking a wanted feature, or one that died since it was
         // made, is dropped before it makes a surface.
-        let Some((early, renderer)) = early.filter(|(gpu, _)| !gpu.is_lost() && crate::gpu::backend::serves(&gpu.device, wanted)) else {
+        let Some((early, renderer)) = early
+            .filter(|(gpu, _)| !gpu.is_lost() && crate::gpu::backend::serves(&gpu.device, wanted))
+        else {
             let instance = Self::instance_for(wanted);
             let surface = surface(&instance)?;
             gpu_events::starting();
-            return Ok((Self::try_for(instance, Some(&surface), wanted, translucent)?, surface, None));
+            return Ok((
+                Self::try_for(instance, Some(&surface), wanted, translucent)?,
+                surface,
+                None,
+            ));
         };
         let surface = surface(&early.instance)?;
         if crate::render::translucency::serves(&early, &surface, wanted, translucent) {
@@ -617,7 +797,11 @@ impl Gpu {
         let instance = early.instance.clone();
         drop((renderer, early));
         gpu_events::starting();
-        Ok((Self::try_for(instance, Some(&surface), wanted, translucent)?, surface, None))
+        Ok((
+            Self::try_for(instance, Some(&surface), wanted, translucent)?,
+            surface,
+            None,
+        ))
     }
 }
 
@@ -649,7 +833,11 @@ pub fn prewarm_gpu_on(backend: crate::GpuBackend) {
 }
 
 /// `choose` before `start`: a thread started first would run on the old backend.
-fn choose_then_start(backend: crate::GpuBackend, choose: impl FnOnce(crate::GpuBackend), start: impl FnOnce()) {
+fn choose_then_start(
+    backend: crate::GpuBackend,
+    choose: impl FnOnce(crate::GpuBackend),
+    start: impl FnOnce(),
+) {
     choose(backend);
     start();
 }
@@ -676,13 +864,15 @@ mod prewarm;
 #[cfg(target_arch = "wasm32")]
 mod prewarm {
     pub(super) fn start() {}
-    pub(super) fn take() -> Option<(super::Gpu, super::Renderer)> { None }
+    pub(super) fn take() -> Option<(super::Gpu, super::Renderer)> {
+        None
+    }
     pub(super) fn discard() {}
 }
 
 mod warmup;
-pub use warmup::{warm_gpu, warm_gpu_with};
 pub(crate) use warmup::{park_gpu, surface_gpu};
+pub use warmup::{warm_gpu, warm_gpu_with};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum BatchBind {
@@ -762,7 +952,12 @@ impl Renderer {
 
     /// Opt-in retained geometry. IDs map instances to shared translation/opacity nodes.
     /// Upload geometry once with `prepare`, then use `present_at` without rebuilding instances.
-    pub fn with_springs(device: &wgpu::Device, format: wgpu::TextureFormat, nodes: &[crate::gpu::springs::Node], ids: &[u32]) -> Renderer {
+    pub fn with_springs(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        nodes: &[crate::gpu::springs::Node],
+        ids: &[u32],
+    ) -> Renderer {
         Self::create(device, format, Some((nodes, ids)), true)
     }
 
@@ -776,8 +971,15 @@ impl Renderer {
     /// Draws uploaded instances `range` into a pass whose target has `format` (the renderer's
     /// own, or one added with `add_format`). Call `encode_layers` before opening the pass.
     /// Scopes are atomic: list/range boundaries must not bisect a layer.
-    pub fn draw_range(&self, pass: &mut wgpu::RenderPass<'_>, format: wgpu::TextureFormat, range: std::ops::Range<u32>) {
-        if range.is_empty() && range.end != self.count { return; }
+    pub fn draw_range(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        format: wgpu::TextureFormat,
+        range: std::ops::Range<u32>,
+    ) {
+        if range.is_empty() && range.end != self.count {
+            return;
+        }
         self.submit_uploads();
         self.validate_layer_range(&range);
         let mut active = ActivePass::borrowed(pass);
@@ -789,13 +991,23 @@ impl Renderer {
     /// `encode_layers_with`, which draws that layer's pass; scopes nest as in `draw_range`.
     /// Because `pass` is already open, `EffectSite::backdrop` is `None`; use `draw_with`,
     /// `draw_with_backdrop`, or `draw_target_range_with` when slots request a backdrop copy.
-    pub fn draw_range_with(&self, pass: &mut wgpu::RenderPass<'_>, format: wgpu::TextureFormat, range: std::ops::Range<u32>, hook: &mut EffectHook<'_>) {
-        if range.is_empty() && range.end != self.count { return; }
+    pub fn draw_range_with(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        format: wgpu::TextureFormat,
+        range: std::ops::Range<u32>,
+        hook: &mut EffectHook<'_>,
+    ) {
+        if range.is_empty() && range.end != self.count {
+            return;
+        }
         self.submit_uploads();
         self.validate_layer_range(&range);
         let mut active = ActivePass::borrowed(pass);
         self.draw_layer_range(&mut active, format, range, None, &mut |phase, site| {
-            if let EffectPhase::Draw(pass) = phase { hook(pass, site); }
+            if let EffectPhase::Draw(pass) = phase {
+                hook(pass, site);
+            }
         });
     }
 
@@ -804,9 +1016,17 @@ impl Renderer {
     /// `El::effect_backdrop(true)`, ends the current pass, copies the target up to that slot into
     /// a pooled backdrop texture, re-opens the pass with `LoadOp::Load`, and hands the backdrop
     /// view in `EffectSite::backdrop`.
-    pub fn draw_with(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, clear: [f32; 4], hook: &mut EffectHook<'_>) {
+    pub fn draw_with(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        clear: [f32; 4],
+        hook: &mut EffectHook<'_>,
+    ) {
         self.draw_with_backdrop(encoder, view, clear, &mut |phase, site| {
-            if let EffectPhase::Draw(pass) = phase { hook(pass, site); }
+            if let EffectPhase::Draw(pass) = phase {
+                hook(pass, site);
+            }
         });
     }
 
@@ -822,8 +1042,20 @@ impl Renderer {
         hook: &mut EffectBackdropHook<'_>,
     ) {
         self.encode_layers_with_backdrop(encoder, hook);
-        let clear = wgpu::Color { r: clear[0] as f64, g: clear[1] as f64, b: clear[2] as f64, a: clear[3] as f64 };
-        self.draw_target_range_with(encoder, view, self.format, wgpu::LoadOp::Clear(clear), 0..self.count, hook);
+        let clear = wgpu::Color {
+            r: clear[0] as f64,
+            g: clear[1] as f64,
+            b: clear[2] as f64,
+            a: clear[3] as f64,
+        };
+        self.draw_target_range_with(
+            encoder,
+            view,
+            self.format,
+            wgpu::LoadOp::Clear(clear),
+            0..self.count,
+            hook,
+        );
     }
 
     /// Draws `range` into `view` (opening the pass with `load`), splitting the pass on `encoder`
@@ -843,31 +1075,48 @@ impl Renderer {
         range: std::ops::Range<u32>,
         hook: &mut EffectBackdropHook<'_>,
     ) {
-        if range.is_empty() && range.end != self.count { return; }
+        if range.is_empty() && range.end != self.count {
+            return;
+        }
         self.validate_layer_range(&range);
         self.flush_uploads(encoder);
-        let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("frame"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        }).forget_lifetime();
+        let pass = encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("frame"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            })
+            .forget_lifetime();
         let mut active = ActivePass::owned(pass, encoder, view);
         self.draw_layer_range(&mut active, format, range, None, hook);
     }
 
     /// `draw_instances`, split after each effect slot in `range` so `hook` runs at its place.
-    fn draw_with_effects(&self, pass: &mut ActivePass<'_, '_>, format: wgpu::TextureFormat, range: std::ops::Range<u32>, target: Option<usize>, hook: &mut EffectBackdropHook<'_>) {
+    fn draw_with_effects(
+        &self,
+        pass: &mut ActivePass<'_, '_>,
+        format: wgpu::TextureFormat,
+        range: std::ops::Range<u32>,
+        target: Option<usize>,
+        hook: &mut EffectBackdropHook<'_>,
+    ) {
         let first = self.effects.partition_point(|(at, _)| *at < range.start);
         let mut cursor = range.start;
-        for (at, instance) in self.effects[first..].iter().take_while(|(at, _)| *at < range.end) {
+        for (at, instance) in self.effects[first..]
+            .iter()
+            .take_while(|(at, _)| *at < range.end)
+        {
             self.draw_instances(pass, format, cursor..*at + 1, target);
             cursor = *at + 1;
             if instance.params[1] == KIND_BACKDROP_BLUR {
@@ -879,47 +1128,97 @@ impl Renderer {
             // stays inside its scroll view or clipped ancestor.
             let c = instance.clip;
             let edge = |v: f32, o: f32, max: u32| (v - o).clamp(0.0, max as f32) as u32;
-            let (x0, y0) = (edge(c[0].floor(), origin[0], size[0]), edge(c[1].floor(), origin[1], size[1]));
-            let (x1, y1) = (edge(c[2].ceil(), origin[0], size[0]), edge(c[3].ceil(), origin[1], size[1]));
-            if x1 <= x0 || y1 <= y0 { continue; }
+            let (x0, y0) = (
+                edge(c[0].floor(), origin[0], size[0]),
+                edge(c[1].floor(), origin[1], size[1]),
+            );
+            let (x1, y1) = (
+                edge(c[2].ceil(), origin[0], size[0]),
+                edge(c[3].ceil(), origin[1], size[1]),
+            );
+            if x1 <= x0 || y1 <= y0 {
+                continue;
+            }
             let backdrop = if instance.params[0] != 0.0 {
-                pass.split_for_backdrop(self, *at, instance, format, origin, size, target.is_some(), hook)
+                pass.split_for_backdrop(
+                    self,
+                    *at,
+                    instance,
+                    format,
+                    origin,
+                    size,
+                    target.is_some(),
+                    hook,
+                )
             } else {
                 None
             };
             pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
-            hook(EffectPhase::Draw(pass), &EffectSite { index: *at, instance, mark: effect_mark(instance), data: instance.uv, scale: instance.params[3],
-                format, origin, size, in_layer: target.is_some(), srgb_blend: self.srgb_blend, backdrop });
+            hook(
+                EffectPhase::Draw(pass),
+                &EffectSite {
+                    index: *at,
+                    instance,
+                    mark: effect_mark(instance),
+                    data: instance.uv,
+                    scale: instance.params[3],
+                    format,
+                    origin,
+                    size,
+                    in_layer: target.is_some(),
+                    srgb_blend: self.srgb_blend,
+                    backdrop,
+                },
+            );
             pass.set_viewport(0.0, 0.0, size[0] as f32, size[1] as f32, 0.0, 1.0);
             pass.set_scissor(pass.scissor(), size);
         }
         self.draw_instances(pass, format, cursor..range.end, target);
     }
 
-    fn draw_instances(&self, pass: &mut wgpu::RenderPass<'_>, format: wgpu::TextureFormat, range: std::ops::Range<u32>, target: Option<usize>) {
+    fn draw_instances(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        format: wgpu::TextureFormat,
+        range: std::ops::Range<u32>,
+        target: Option<usize>,
+    ) {
         if range.is_empty() {
             return;
         }
         pass.set_pipeline(self.draw_pipeline(format, target));
-        if let Some(properties) = &self.springs { pass.set_bind_group(1, &properties.group, &[]); }
+        if let Some(properties) = &self.springs {
+            pass.set_bind_group(1, &properties.group, &[]);
+        }
         pass.set_vertex_buffer(0, self.instances.slice(..));
-        let start = self.image_batches.partition_point(|(batch, _)| batch.end <= range.start);
-        for (batch, bind_kind) in self.image_batches[start..].iter().take_while(|(batch, _)| batch.start < range.end) {
+        let start = self
+            .image_batches
+            .partition_point(|(batch, _)| batch.end <= range.start);
+        for (batch, bind_kind) in self.image_batches[start..]
+            .iter()
+            .take_while(|(batch, _)| batch.start < range.end)
+        {
             let bind = match (*bind_kind, target) {
                 (BatchBind::Image(page), Some(index)) => {
                     let t = self.layers.targets[index].as_ref().unwrap();
-                    t.images.get(page).and_then(Option::as_ref).unwrap_or(&t.base)
+                    t.images
+                        .get(page)
+                        .and_then(Option::as_ref)
+                        .unwrap_or(&t.base)
                 }
-                (BatchBind::Image(page), None) => {
-                    self.images.get(page).and_then(Option::as_ref).map_or(&self.bind_group, |(_, bind)| bind)
-                }
+                (BatchBind::Image(page), None) => self
+                    .images
+                    .get(page)
+                    .and_then(Option::as_ref)
+                    .map_or(&self.bind_group, |(_, bind)| bind),
                 (BatchBind::Glyph(page), Some(index)) => {
                     let t = self.layers.targets[index].as_ref().unwrap();
                     t.glyphs.get(page).unwrap_or(&t.base)
                 }
-                (BatchBind::Glyph(page), None) => {
-                    self.atlas_pages.get(page).map_or(&self.bind_group, |(_, bind)| bind)
-                }
+                (BatchBind::Glyph(page), None) => self
+                    .atlas_pages
+                    .get(page)
+                    .map_or(&self.bind_group, |(_, bind)| bind),
             };
             pass.set_bind_group(0, bind, &[]);
             pass.draw(0..4, batch.start.max(range.start)..batch.end.min(range.end));
@@ -927,16 +1226,28 @@ impl Renderer {
     }
 
     /// The format of the target the renderer was built for (`draw_range` with this format).
-    pub fn format(&self) -> wgpu::TextureFormat { self.format }
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
 
     /// True when colours are sRGB-encoded for blending: the target is a non-sRGB view and every
     /// pass, offscreen layers included, holds encoded premultiplied values. False means linear
     /// premultiplied values, encoded by the `*Srgb` target on write.
-    pub fn srgb_blend(&self) -> bool { self.srgb_blend }
+    pub fn srgb_blend(&self) -> bool {
+        self.srgb_blend
+    }
 
-    pub fn submit(&self, queue: &wgpu::Queue, mut encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
+    pub fn submit(
+        &self,
+        queue: &wgpu::Queue,
+        mut encoder: wgpu::CommandEncoder,
+    ) -> wgpu::SubmissionIndex {
         self.before_submit(&mut encoder);
-        if let Some(s) = &self.surfaces { s.submit(queue,encoder) } else { queue.submit([encoder.finish()]) }
+        if let Some(s) = &self.surfaces {
+            s.submit(queue, encoder)
+        } else {
+            queue.submit([encoder.finish()])
+        }
     }
 
     /// Whether `submit` is `queue.submit` after `before_submit` and nothing more: no native video
@@ -946,7 +1257,12 @@ impl Renderer {
         self.surfaces.as_ref().is_none_or(|s| s.draws_nothing())
     }
 
-    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, clear: [f32; 4]) {
+    pub fn draw(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        clear: [f32; 4],
+    ) {
         self.draw_timed(encoder, view, clear, None);
     }
 
@@ -961,16 +1277,36 @@ impl Renderer {
         self.draw_load(encoder, view, wgpu::LoadOp::Load, None);
     }
 
-    pub fn draw_timed(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, clear: [f32; 4], timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>) {
-        let clear = wgpu::Color { r: clear[0] as f64, g: clear[1] as f64, b: clear[2] as f64, a: clear[3] as f64 };
+    pub fn draw_timed(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        clear: [f32; 4],
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let clear = wgpu::Color {
+            r: clear[0] as f64,
+            g: clear[1] as f64,
+            b: clear[2] as f64,
+            a: clear[3] as f64,
+        };
         self.draw_load(encoder, view, wgpu::LoadOp::Clear(clear), timestamps);
     }
 
-    fn draw_load(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>, timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>) {
-        let timestamps = timestamps.or_else(|| self.surfaces.as_ref().and_then(|s| s.timestamp_writes()));
+    fn draw_load(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        load: wgpu::LoadOp<wgpu::Color>,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let timestamps =
+            timestamps.or_else(|| self.surfaces.as_ref().and_then(|s| s.timestamp_writes()));
         self.encode_layers_timed(encoder, timestamps.as_ref(), &mut |_, _| {});
         let timestamps = timestamps.map(|mut t| {
-            if self.layer_stats().extra_passes > 0 { t.beginning_of_pass_write_index = None; }
+            if self.layer_stats().extra_passes > 0 {
+                t.beginning_of_pass_write_index = None;
+            }
             t
         });
         let blurs = self.has_backdrop_blur();
@@ -980,7 +1316,10 @@ impl Renderer {
                 view,
                 depth_slice: None,
                 resolve_target: None,
-                ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
+                ops: wgpu::Operations {
+                    load,
+                    store: wgpu::StoreOp::Store,
+                },
             })],
             depth_stencil_attachment: None,
             timestamp_writes: timestamps.clone(),
@@ -994,7 +1333,13 @@ impl Renderer {
         // Backdrop blurs split the frame pass, which needs it owned along with the encoder.
         let pass = pass.forget_lifetime();
         let mut active = ActivePass::owned_timed(pass, encoder, view, timestamps);
-        self.draw_layer_range(&mut active, self.format, 0..self.count, None, &mut |_, _| {});
+        self.draw_layer_range(
+            &mut active,
+            self.format,
+            0..self.count,
+            None,
+            &mut |_, _| {},
+        );
     }
 }
 
@@ -1002,7 +1347,11 @@ impl Renderer {
 /// radius draws Apple's continuous corner, whose curve starts 1.528 times the radius from the
 /// corner (`CONTINUOUS_K` in shader.wgsl).
 pub(crate) fn corner_extent(radius: f32) -> f32 {
-    if radius < 0.0 { -radius * CONTINUOUS_K } else { radius }
+    if radius < 0.0 {
+        -radius * CONTINUOUS_K
+    } else {
+        radius
+    }
 }
 
 pub(crate) const CONTINUOUS_K: f32 = 1.528_664_8;
@@ -1024,10 +1373,19 @@ impl Offscreen {
         Self::with_format(device, width, height, OFFSCREEN_FORMAT)
     }
 
-    pub fn with_format(device: &wgpu::Device, width: u32, height: u32, format: wgpu::TextureFormat) -> Offscreen {
+    pub fn with_format(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) -> Offscreen {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("offscreen"),
-            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -1043,7 +1401,14 @@ impl Offscreen {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        Offscreen { texture, view, buffer, width, height, padded_row }
+        Offscreen {
+            texture,
+            view,
+            buffer,
+            width,
+            height,
+            padded_row,
+        }
     }
 
     pub fn copy(&self, encoder: &mut wgpu::CommandEncoder) {
@@ -1051,7 +1416,9 @@ impl Offscreen {
     }
 
     /// Bytes between rows in a readback buffer (`width * 4`, rounded up to wgpu's alignment).
-    pub(crate) fn padded_row(&self) -> u32 { self.padded_row }
+    pub(crate) fn padded_row(&self) -> u32 {
+        self.padded_row
+    }
 
     /// Copies the target into `buffer`, which holds `padded_row() * height` bytes.
     pub(crate) fn copy_to(&self, encoder: &mut wgpu::CommandEncoder, buffer: &wgpu::Buffer) {
@@ -1070,7 +1437,11 @@ impl Offscreen {
                     rows_per_image: Some(self.height),
                 },
             },
-            wgpu::Extent3d { width: self.width, height: self.height, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
         );
     }
 
@@ -1079,7 +1450,9 @@ impl Offscreen {
     pub fn read(&self, device: &wgpu::Device) -> Vec<u8> {
         let slice = self.buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |r| r.expect("map readback"));
-        device.poll(wgpu::PollType::wait_indefinitely()).expect("poll");
+        device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("poll");
         let out = {
             let data = slice.get_mapped_range().expect("mapped range");
             crate::tooling::record::unpad(&data, self.width, self.height, self.padded_row)
@@ -1094,7 +1467,12 @@ impl Offscreen {
     }
 }
 
-pub fn write_png(path: &std::path::Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Result<()> {
+pub fn write_png(
+    path: &std::path::Path,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -1120,7 +1498,11 @@ mod prewarm_order_tests {
     #[test]
     fn prewarm_gpu_on_chooses_before_it_starts() {
         let log = std::cell::RefCell::new(Vec::new());
-        super::choose_then_start(crate::GpuBackend::Metal, |b| log.borrow_mut().push(format!("choose {b:?}")), || log.borrow_mut().push("start".into()));
+        super::choose_then_start(
+            crate::GpuBackend::Metal,
+            |b| log.borrow_mut().push(format!("choose {b:?}")),
+            || log.borrow_mut().push("start".into()),
+        );
         assert_eq!(*log.borrow(), ["choose Metal", "start"]);
     }
 }
@@ -1129,14 +1511,23 @@ mod prewarm_order_tests {
 #[cfg(all(test, target_os = "macos"))]
 mod prewarm_tests {
     use super::{Gpu, Renderer};
-    use objc2_video::{rc::Retained, runtime::{AnyClass, AnyObject}, msg_send};
+    use objc2_video::{
+        msg_send,
+        rc::Retained,
+        runtime::{AnyClass, AnyObject},
+    };
 
     fn layer() -> Retained<AnyObject> {
         unsafe { msg_send![AnyClass::get(c"CAMetalLayer").expect("QuartzCore"), new] }
     }
 
-    fn surface<'w>(instance: &wgpu::Instance, layer: &Retained<AnyObject>) -> Result<wgpu::Surface<'w>, String> {
-        let target = wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(Retained::as_ptr(layer) as *mut std::ffi::c_void);
+    fn surface<'w>(
+        instance: &wgpu::Instance,
+        layer: &Retained<AnyObject>,
+    ) -> Result<wgpu::Surface<'w>, String> {
+        let target = wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(
+            Retained::as_ptr(layer) as *mut std::ffi::c_void
+        );
         // SAFETY: the layer outlives the surface in each test.
         unsafe { instance.create_surface_unsafe(target) }.map_err(|e| e.to_string())
     }
@@ -1147,20 +1538,31 @@ mod prewarm_tests {
         crate::prewarm_gpu();
         crate::prewarm_gpu();
         let layer = layer();
-        let (gpu, _surface, renderer) = match Gpu::for_surface(wgpu::Features::empty(), false, |i| surface(i, &layer)) {
-            Ok(taken) => taken,
-            Err(error) => return eprintln!("skipped: {error}"),
+        let (gpu, _surface, renderer) =
+            match Gpu::for_surface(wgpu::Features::empty(), false, |i| surface(i, &layer)) {
+                Ok(taken) => taken,
+                Err(error) => return eprintln!("skipped: {error}"),
+            };
+        let Some(renderer) = renderer else {
+            return eprintln!("skipped: no GPU for the prewarm thread");
         };
-        let Some(renderer) = renderer else { return eprintln!("skipped: no GPU for the prewarm thread") };
         // Rune's Metal backend loads its metallib without advertising passthrough.
         #[cfg(feature = "metal-backend")]
         let native = crate::gpu::metal::raw_device(&gpu.device).is_some();
         #[cfg(not(feature = "metal-backend"))]
         let native = false;
-        assert!(native || gpu.device.features().contains(wgpu::Features::PASSTHROUGH_SHADERS));
+        assert!(
+            native
+                || gpu
+                    .device
+                    .features()
+                    .contains(wgpu::Features::PASSTHROUGH_SHADERS)
+        );
         assert_eq!(renderer.format, wgpu::TextureFormat::Bgra8Unorm);
         drop((renderer, gpu));
-        let (_, _surface, again) = Gpu::for_surface(wgpu::Features::empty(), false, |i| surface(i, &layer)).expect("a second GPU");
+        let (_, _surface, again) =
+            Gpu::for_surface(wgpu::Features::empty(), false, |i| surface(i, &layer))
+                .expect("a second GPU");
         assert!(again.is_none(), "the prewarmed GPU goes to one window");
 
         // A slot that already took or discarded a GPU ignores a later `start`, so a late
@@ -1191,23 +1593,47 @@ mod prewarm_tests {
     /// the same instance, with the surface made once: a second surface would add a second layer.
     #[test]
     fn a_prewarmed_gpu_missing_wanted_features_is_redone_on_its_instance() {
-        let Ok(early) = Gpu::try_new(Gpu::instance(), None) else { return eprintln!("skipped: no GPU") };
-        let plain = wgpu::Features::FLOAT32_FILTERABLE | wgpu::Features::DEPTH32FLOAT_STENCIL8 | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM;
+        let Ok(early) = Gpu::try_new(Gpu::instance(), None) else {
+            return eprintln!("skipped: no GPU");
+        };
+        let plain = wgpu::Features::FLOAT32_FILTERABLE
+            | wgpu::Features::DEPTH32FLOAT_STENCIL8
+            | wgpu::Features::TEXTURE_FORMAT_16BIT_NORM;
         let missing = (early.adapter.features() - early.device.features()) & plain;
-        let Some(wanted) = missing.iter().next() else { return eprintln!("skipped: the adapter has none of the test's features") };
+        let Some(wanted) = missing.iter().next() else {
+            return eprintln!("skipped: the adapter has none of the test's features");
+        };
         let renderer = Renderer::new(&early.device, wgpu::TextureFormat::Bgra8UnormSrgb);
         let layer = layer();
         let mut made = 0;
-        let (gpu, _surface, renderer) = Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| { made += 1; surface(i, &layer) })
+        let (gpu, _surface, renderer) =
+            Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| {
+                made += 1;
+                surface(i, &layer)
+            })
             .expect("a GPU with the wanted feature");
         assert_eq!(made, 1);
-        assert!(renderer.is_none(), "the prewarmed renderer belongs to the dropped device");
+        assert!(
+            renderer.is_none(),
+            "the prewarmed renderer belongs to the dropped device"
+        );
         assert!(gpu.device.features().contains(wanted));
 
-        let Ok(early) = Gpu::try_new(Gpu::instance(), None) else { return };
+        let Ok(early) = Gpu::try_new(Gpu::instance(), None) else {
+            return;
+        };
         let renderer = Renderer::new(&early.device, wgpu::TextureFormat::Bgra8UnormSrgb);
-        let (_, _surface, kept) = Gpu::for_surface_from(Some((early, renderer)), wgpu::Features::empty(), false, |i| surface(i, &layer)).expect("a GPU");
-        assert!(kept.is_some(), "a suitable prewarmed device keeps its renderer");
+        let (_, _surface, kept) = Gpu::for_surface_from(
+            Some((early, renderer)),
+            wgpu::Features::empty(),
+            false,
+            |i| surface(i, &layer),
+        )
+        .expect("a GPU");
+        assert!(
+            kept.is_some(),
+            "a suitable prewarmed device keeps its renderer"
+        );
     }
 
     /// A compositor wanting a feature the native Metal backend lacks gets wgpu's device, when
@@ -1224,17 +1650,34 @@ mod prewarm_tests {
         let layer = layer();
         let mut made = 0;
         let wanted = wgpu::Features::POLYGON_MODE_LINE;
-        let (gpu, _surface, renderer) = Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| { made += 1; surface(i, &layer) })
+        let (gpu, _surface, renderer) =
+            Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| {
+                made += 1;
+                surface(i, &layer)
+            })
             .expect("a wgpu GPU");
         assert_eq!(made, 1);
         assert!(renderer.is_none());
-        assert!(crate::gpu::metal::raw_device(&gpu.device).is_none(), "wgpu's device");
+        assert!(
+            crate::gpu::metal::raw_device(&gpu.device).is_none(),
+            "wgpu's device"
+        );
         assert!(gpu.device.features().contains(wanted));
         let described = crate::gpu::backend::describe(&gpu.device);
-        assert!(described.starts_with("wgpu Metal on ") && described.contains("which Rune's Metal backend lacks"), "{described}");
+        assert!(
+            described.starts_with("wgpu Metal on ")
+                && described.contains("which Rune's Metal backend lacks"),
+            "{described}"
+        );
         assert!(crate::gpu::backend::describe(&Gpu::headless().device).ends_with("(the default)"));
-        assert!(!crate::gpu::backend::serves(&Gpu::headless().device, wanted));
-        assert!(crate::gpu::backend::serves(&Gpu::headless().device, wgpu::Features::TIMESTAMP_QUERY));
+        assert!(!crate::gpu::backend::serves(
+            &Gpu::headless().device,
+            wanted
+        ));
+        assert!(crate::gpu::backend::serves(
+            &Gpu::headless().device,
+            wgpu::Features::TIMESTAMP_QUERY
+        ));
     }
 
     /// A compositor wanting immediates keeps the native backend and the prewarmed device, which
@@ -1249,12 +1692,23 @@ mod prewarm_tests {
         let renderer = Renderer::new(&early.device, wgpu::TextureFormat::Bgra8UnormSrgb);
         let layer = layer();
         let wanted = wgpu::Features::IMMEDIATES;
-        let (gpu, _surface, kept) = Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| surface(i, &layer)).expect("a GPU");
+        let (gpu, _surface, kept) =
+            Gpu::for_surface_from(Some((early, renderer)), wanted, false, |i| {
+                surface(i, &layer)
+            })
+            .expect("a GPU");
         assert!(kept.is_some(), "the prewarmed renderer");
-        assert!(crate::gpu::metal::raw_device(&gpu.device).is_some(), "the native backend's device");
+        assert!(
+            crate::gpu::metal::raw_device(&gpu.device).is_some(),
+            "the native backend's device"
+        );
         assert!(gpu.device.features().contains(wanted));
         assert_eq!(gpu.device.limits().max_immediate_size, 4096);
         let described = crate::gpu::backend::describe(&gpu.device);
-        assert!(described.starts_with("Rune's Metal backend on ") && described.ends_with("(the default)"), "{described}");
+        assert!(
+            described.starts_with("Rune's Metal backend on ")
+                && described.ends_with("(the default)"),
+            "{described}"
+        );
     }
 }

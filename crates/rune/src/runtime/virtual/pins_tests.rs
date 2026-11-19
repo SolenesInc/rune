@@ -4,10 +4,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 
 use super::{Pins, PinsEvent, Source};
+use crate::El;
 use crate::runtime::selectable::virtual_selection::{
     collect_row_into_pins, collect_virtual_row_selection,
 };
-use crate::El;
 
 /// The fixture's offscreen rows, in child order, with their indices. A longer list keys its
 /// later rows `r{i}`.
@@ -21,7 +21,8 @@ fn index_of(key: &str) -> usize {
 }
 
 fn key_of(i: usize) -> String {
-    ROWS.get(i).map_or_else(|| format!("r{i}"), |key| (*key).to_owned())
+    ROWS.get(i)
+        .map_or_else(|| format!("r{i}"), |key| (*key).to_owned())
 }
 
 /// The row a builder returns: one selectable text with a copy provider on the row.
@@ -40,7 +41,10 @@ fn write(pins: &mut Pins, key: &str) {
 /// The texts and provider `row_el` gives for `key`, written out rather than run through the
 /// collector, so the reference never calls production code.
 fn collected(key: &str) -> (Vec<(String, String)>, Vec<String>) {
-    (vec![(key.to_owned(), format!("/list/{key}/t0"))], vec![format!("/list/{key}")])
+    (
+        vec![(key.to_owned(), format!("/list/{key}/t0"))],
+        vec![format!("/list/{key}")],
+    )
 }
 
 fn source(name: &'static str) -> Source {
@@ -56,7 +60,11 @@ fn source(name: &'static str) -> Source {
 }
 
 fn source_name(source: &Source) -> &'static str {
-    if source.rebuild().is_some() { "rebuild" } else { "stored" }
+    if source.rebuild().is_some() {
+        "rebuild"
+    } else {
+        "stored"
+    }
 }
 
 /// Which commit dev runs, since each fills the kept rows in its own order.
@@ -139,7 +147,12 @@ fn steps(pins: &Pins, kind: Kind, focused: Option<&str>) -> Vec<String> {
         // order (anchor then focus), skipping the focused one again.
         Kind::Indexed | Kind::Remount => {
             let mut steps: Vec<String> = focused.map(str::to_owned).into_iter().collect();
-            steps.extend(pins.rows().iter().filter(|r| Some(r.as_str()) != focused).cloned());
+            steps.extend(
+                pins.rows()
+                    .iter()
+                    .filter(|r| Some(r.as_str()) != focused)
+                    .cloned(),
+            );
             steps
         }
     }
@@ -177,11 +190,22 @@ fn apply(pins: &mut Pins, event: Ev) {
             } else {
                 let (mut texts, mut providers) = (Vec::new(), Vec::new());
                 collect_virtual_row_selection(
-                    &row_el(key), "/list", key, index_of(key), None, false, &mut texts, &mut providers,
+                    &row_el(key),
+                    "/list",
+                    key,
+                    index_of(key),
+                    None,
+                    false,
+                    &mut texts,
+                    &mut providers,
                 );
                 (texts, providers)
             };
-            pins.sync(PinsEvent::Pin { key: key.to_owned(), texts, providers });
+            pins.sync(PinsEvent::Pin {
+                key: key.to_owned(),
+                texts,
+                providers,
+            });
         }
         Ev::Commit(kind, focused) => commit(pins, kind, focused, None),
         Ev::Panic(kind, focused, at) => commit(pins, kind, focused, Some(at)),
@@ -237,7 +261,8 @@ impl Dev {
                 {
                     self.pinned_rows.push(key.to_owned());
                 }
-                self.texts.retain(|(row, _)| self.pinned_rows.iter().any(|r| r == row));
+                self.texts
+                    .retain(|(row, _)| self.pinned_rows.iter().any(|r| r == row));
             }
             // `pin_offscreen_row`, which pushes the row and adds its texts unless they are kept.
             Ev::Pin(key) => {
@@ -308,7 +333,12 @@ impl Dev {
             Kind::Indexed | Kind::Remount => {
                 let pinned = self.pinned_indices();
                 let mut steps: Vec<usize> = focused.map(index_of).into_iter().collect();
-                steps.extend(pinned.iter().copied().filter(|i| Some(*i) != focused.map(index_of)));
+                steps.extend(
+                    pinned
+                        .iter()
+                        .copied()
+                        .filter(|i| Some(*i) != focused.map(index_of)),
+                );
                 for (step, i) in steps.iter().enumerate() {
                     if stop == Some(step) {
                         return;
@@ -324,14 +354,37 @@ impl Dev {
         }
     }
 
-    fn view(&self) -> (Vec<String>, Vec<(String, String)>, Vec<String>, Option<&'static str>) {
-        (self.pinned_rows.clone(), self.texts.clone(), self.providers.clone(), self.source)
+    fn view(
+        &self,
+    ) -> (
+        Vec<String>,
+        Vec<(String, String)>,
+        Vec<String>,
+        Option<&'static str>,
+    ) {
+        (
+            self.pinned_rows.clone(),
+            self.texts.clone(),
+            self.providers.clone(),
+            self.source,
+        )
     }
 }
 
-fn view(pins: &Pins) -> (Vec<String>, Vec<(String, String)>, Vec<String>, Option<&'static str>) {
+fn view(
+    pins: &Pins,
+) -> (
+    Vec<String>,
+    Vec<(String, String)>,
+    Vec<String>,
+    Option<&'static str>,
+) {
     let rows = pins.rows().to_vec();
-    let texts = pins.texts().iter().map(|t| (t.row_key.clone(), t.path.clone())).collect();
+    let texts = pins
+        .texts()
+        .iter()
+        .map(|t| (t.row_key.clone(), t.path.clone()))
+        .collect();
     let providers = match pins {
         Pins::None => Vec::new(),
         Pins::Pinned { providers, .. } => providers.iter().map(|(path, _)| path.clone()).collect(),
@@ -354,7 +407,11 @@ fn every_order_of_pins_commits_panics_and_fallbacks_keeps_what_dev_keeps() {
                     EVENTS[i]
                 })
                 .collect();
-            let walk = order.iter().map(|e| name(*e)).collect::<Vec<_>>().join(", ");
+            let walk = order
+                .iter()
+                .map(|e| name(*e))
+                .collect::<Vec<_>>()
+                .join(", ");
             // A virtual list exists only after a commit, so its source is set before any
             // selection can pin a row.
             let (mut pins, mut dev) = (Pins::None, Dev::default());
@@ -386,7 +443,11 @@ fn a_stored_commit_orders_texts_by_child_while_an_indexed_one_builds_the_focused
         assert_eq!(view(&pins), dev.view(), "{}", name(event));
     }
     let stored: Vec<&str> = pins.texts().iter().map(|t| t.row_key.as_str()).collect();
-    assert_eq!(stored, ["a", "b"], "stored children in index order, not pin order");
+    assert_eq!(
+        stored,
+        ["a", "b"],
+        "stored children in index order, not pin order"
+    );
 
     apply(&mut pins, Ev::Commit(Kind::Indexed, Some("b")));
     dev.apply(Ev::Commit(Kind::Indexed, Some("b")));
@@ -415,11 +476,24 @@ fn a_panicking_builder_keeps_the_pins_collected_before_it() {
         dev.apply(event);
         assert_eq!(view(&pins), dev.view(), "{}", name(event));
         assert_eq!(pins.texts().len(), 1, "row a survives the panic building b");
-        assert_eq!(pins.texts()[0].row_key, "a", "the already collected pin stays first");
+        assert_eq!(
+            pins.texts()[0].row_key,
+            "a",
+            "the already collected pin stays first"
+        );
         // A stored commit installs its source before the loop; an indexed one only after it, so
         // an interrupted indexed commit keeps the stored source it began with.
-        let expected = if kind == Kind::Indexed { "rebuild" } else { "stored" };
-        assert_eq!(pins.source().map(source_name), Some(expected), "{}", name(event));
+        let expected = if kind == Kind::Indexed {
+            "rebuild"
+        } else {
+            "stored"
+        };
+        assert_eq!(
+            pins.source().map(source_name),
+            Some(expected),
+            "{}",
+            name(event)
+        );
     }
 }
 
@@ -454,8 +528,15 @@ fn a_commit_fallback_and_source_change_keep_the_texts_allocation() {
 /// entering row holding a nested list: a focused pinned `b`, then `a`.
 #[test]
 fn a_fallback_in_this_list_keeps_all_its_pins_and_one_before_it_keeps_none() {
-    let start = [Ev::Commit(Kind::Stored, None), Ev::Select(Some("a"), Some("b")), Ev::Commit(Kind::Indexed, None)];
-    for (at, expected) in [(Boundary::Here(Some("b")), vec!["b", "a"]), (Boundary::Earlier, vec![])] {
+    let start = [
+        Ev::Commit(Kind::Stored, None),
+        Ev::Select(Some("a"), Some("b")),
+        Ev::Commit(Kind::Indexed, None),
+    ];
+    for (at, expected) in [
+        (Boundary::Here(Some("b")), vec!["b", "a"]),
+        (Boundary::Earlier, vec![]),
+    ] {
         let (mut pins, mut dev) = (Pins::None, Dev::default());
         for event in start.into_iter().chain([Ev::Fallback(at)]) {
             apply(&mut pins, event);
@@ -480,26 +561,50 @@ fn list_row(_: &Lists, i: usize) -> El {
         .w_full()
         .h(ROW_H)
         .selection_copy(|_| None)
-        .child(crate::text(format!("row {i}")).key("t0").w_full().selectable(true));
-    if i < NESTED { row } else { row.child(crate::col().key("inner").virtualize(ROW_H)) }
+        .child(
+            crate::text(format!("row {i}"))
+                .key("t0")
+                .w_full()
+                .selectable(true),
+        );
+    if i < NESTED {
+        row
+    } else {
+        row.child(crate::col().key("inner").virtualize(ROW_H))
+    }
 }
 
 fn lists_view(_: &Lists, _: &mut crate::Cx<Lists>) -> El {
     let list = |name: &'static str| {
-        crate::col().key(format!("s{name}")).w_full().grow(1.0).scroll(crate::ScrollSpec { stick_bottom: false }).child(
-            crate::col()
-                .key(name)
-                .w_full()
-                .growth(crate::GrowthSpec::default())
-                .selection_group(true)
-                .virtual_rows(LIST_ROWS, ROW_H, |_: &Lists, i| key_of(i).into(), list_row),
-        )
+        crate::col()
+            .key(format!("s{name}"))
+            .w_full()
+            .grow(1.0)
+            .scroll(crate::ScrollSpec {
+                stick_bottom: false,
+            })
+            .child(
+                crate::col()
+                    .key(name)
+                    .w_full()
+                    .growth(crate::GrowthSpec::default())
+                    .selection_group(true)
+                    .virtual_rows(LIST_ROWS, ROW_H, |_: &Lists, i| key_of(i).into(), list_row),
+            )
     };
-    crate::col().w_full().h_full().children([list("one"), list("two")])
+    crate::col()
+        .w_full()
+        .h_full()
+        .children([list("one"), list("two")])
 }
 
 fn lists() -> crate::Runtime<Lists> {
-    let mut rt = crate::Runtime::new(Lists, lists_view, (640.0, 420.0), crate::Env::new(true, 2.0));
+    let mut rt = crate::Runtime::new(
+        Lists,
+        lists_view,
+        (640.0, 420.0),
+        crate::Env::new(true, 2.0),
+    );
     rt.frame(0.0);
     while rt.frame(1.0 / 120.0) {}
     rt
@@ -507,7 +612,11 @@ fn lists() -> crate::Runtime<Lists> {
 
 fn list_path(rt: &crate::Runtime<Lists>, name: &str) -> String {
     let suffix = format!("/{name}");
-    rt.virtuals.keys().find(|p| p.ends_with(&suffix)).expect("a mounted list").clone()
+    rt.virtuals
+        .keys()
+        .find(|p| p.ends_with(&suffix))
+        .expect("a mounted list")
+        .clone()
 }
 
 /// Selects all of list `name`, pinning its first and last rows, and wheels it (at height `y`)
@@ -529,14 +638,18 @@ fn select_all_and_scroll(rt: &mut crate::Runtime<Lists>, name: &'static str, y: 
         }
     }
     let range = rt.virtuals[&path].range.clone();
-    assert!(range.start > 1 && range.end < NESTED, "{name} scrolled to the middle: {range:?}");
+    assert!(
+        range.start > 1 && range.end < NESTED,
+        "{name} scrolled to the middle: {range:?}"
+    );
 }
 
 /// Moves list `name` straight into its nested rows and runs the real remount on its own.
 fn remount_into_nested(rt: &mut crate::Runtime<Lists>, name: &str) -> bool {
     let scroll = rt.virtuals[&list_path(rt, name)].scroll_path.clone();
     let id = rt.path_ids[&scroll];
-    rt.scrolls.get_mut(&id).expect("the list's scroll").offset = ((NESTED + 20) as f32 * ROW_H) as f64;
+    rt.scrolls.get_mut(&id).expect("the list's scroll").offset =
+        ((NESTED + 20) as f32 * ROW_H) as f64;
     rt.remount_falls_back()
 }
 
@@ -546,12 +659,20 @@ type Kept = (Vec<String>, Vec<String>, Vec<String>);
 fn kept(pins: &Pins) -> Kept {
     let (_, texts, providers, _) = view(pins);
     let row = |path: String| path.rsplit('/').next().unwrap_or_default().to_owned();
-    (pins.rows().to_vec(), texts.into_iter().map(|(key, _)| key).collect(), providers.into_iter().map(row).collect())
+    (
+        pins.rows().to_vec(),
+        texts.into_iter().map(|(key, _)| key).collect(),
+        providers.into_iter().map(row).collect(),
+    )
 }
 
 fn dev_kept(dev: &Dev) -> Kept {
     let row = |path: &String| path.rsplit('/').next().unwrap_or_default().to_owned();
-    (dev.pinned_rows.clone(), dev.texts.iter().map(|(key, _)| key.clone()).collect(), dev.providers.iter().map(row).collect())
+    (
+        dev.pinned_rows.clone(),
+        dev.texts.iter().map(|(key, _)| key.clone()).collect(),
+        dev.providers.iter().map(row).collect(),
+    )
 }
 
 /// The real remount, falling back in the list whose pins it is collecting, keeps what dev's
@@ -562,14 +683,28 @@ fn the_real_remount_collects_this_lists_pins_before_it_falls_back() {
     select_all_and_scroll(&mut rt, "one", 100.0);
     let path = list_path(&rt, "one");
     let mut dev = Dev::default();
-    for event in [Ev::Select(Some("a"), Some("r399")), Ev::Commit(Kind::Remount, None)] {
+    for event in [
+        Ev::Select(Some("a"), Some("r399")),
+        Ev::Commit(Kind::Remount, None),
+    ] {
         dev.apply(event);
     }
-    assert_eq!(kept(&rt.virtuals[&path].selection.pins), dev_kept(&dev), "before the fallback");
+    assert_eq!(
+        kept(&rt.virtuals[&path].selection.pins),
+        dev_kept(&dev),
+        "before the fallback"
+    );
 
-    assert!(remount_into_nested(&mut rt, "one"), "a nested list entering falls back");
+    assert!(
+        remount_into_nested(&mut rt, "one"),
+        "a nested list entering falls back"
+    );
     dev.apply(Ev::Fallback(Boundary::Here(None)));
-    assert_eq!(kept(&rt.virtuals[&path].selection.pins), dev_kept(&dev), "after the fallback");
+    assert_eq!(
+        kept(&rt.virtuals[&path].selection.pins),
+        dev_kept(&dev),
+        "after the fallback"
+    );
 }
 
 /// A list after the one that falls back keeps its pins, and its texts are cleared in place,
@@ -580,16 +715,29 @@ fn the_real_remount_clears_later_lists_in_place_when_an_earlier_one_falls_back()
     select_all_and_scroll(&mut rt, "two", 310.0);
     let path = list_path(&rt, "two");
     let mut dev = Dev::default();
-    for event in [Ev::Select(Some("a"), Some("r399")), Ev::Commit(Kind::Remount, None)] {
+    for event in [
+        Ev::Select(Some("a"), Some("r399")),
+        Ev::Commit(Kind::Remount, None),
+    ] {
         dev.apply(event);
     }
-    assert_eq!(kept(&rt.virtuals[&path].selection.pins), dev_kept(&dev), "before the fallback");
+    assert_eq!(
+        kept(&rt.virtuals[&path].selection.pins),
+        dev_kept(&dev),
+        "before the fallback"
+    );
     let pins = &mut rt.virtuals.get_mut(&path).expect("list two").selection.pins;
     let capacity = pins.text_buffers().expect("a committed list").0.capacity();
 
-    assert!(remount_into_nested(&mut rt, "one"), "a nested list entering list one falls back");
+    assert!(
+        remount_into_nested(&mut rt, "one"),
+        "a nested list entering list one falls back"
+    );
     dev.apply(Ev::Fallback(Boundary::Earlier));
     let pins = &mut rt.virtuals.get_mut(&path).expect("list two").selection.pins;
     assert_eq!(kept(pins), dev_kept(&dev), "after the fallback");
-    assert!(pins.text_buffers().expect("a committed list").0.capacity() >= capacity, "cleared in place");
+    assert!(
+        pins.text_buffers().expect("a committed list").0.capacity() >= capacity,
+        "cleared in place"
+    );
 }

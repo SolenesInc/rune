@@ -27,7 +27,9 @@ pub(crate) fn on() -> bool {
     OUT.with_borrow_mut(|out| {
         out.get_or_insert_with(|| {
             let path = std::env::var_os("RUNE_FRAME_LOG")?;
-            std::fs::File::create(&path).ok().map(std::io::BufWriter::new)
+            std::fs::File::create(&path)
+                .ok()
+                .map(std::io::BufWriter::new)
         })
         .is_some()
     })
@@ -47,7 +49,11 @@ pub(crate) fn wake(start: u64) {
 
 /// A frame asked for at t.
 pub(crate) fn asked(at: &'static std::panic::Location<'static>) {
-    ASKED.with_borrow_mut(|a| if !a.contains(&at) { a.push(at) });
+    ASKED.with_borrow_mut(|a| {
+        if !a.contains(&at) {
+            a.push(at)
+        }
+    });
 }
 
 /// A timer asked for at t, due after wait.
@@ -59,14 +65,24 @@ pub(crate) fn waker(at: &'static std::panic::Location<'static>, wait: std::time:
 }
 
 /// Now on the monotonic clock, in ns.
-pub(crate) fn now() -> u64 { now_ns() }
+pub(crate) fn now() -> u64 {
+    now_ns()
+}
 
 /// The clocks at a stage boundary: monotonic and this thread's CPU, in ns.
 #[derive(Clone, Copy)]
-pub(crate) struct Stamp { pub(crate) wall: u64, pub(crate) cpu: u64 }
+pub(crate) struct Stamp {
+    pub(crate) wall: u64,
+    pub(crate) cpu: u64,
+}
 
 impl Stamp {
-    pub(crate) fn now() -> Self { Stamp { wall: now_ns(), cpu: thread_cpu() } }
+    pub(crate) fn now() -> Self {
+        Stamp {
+            wall: now_ns(),
+            cpu: thread_cpu(),
+        }
+    }
 }
 
 /// One drawn frame's stage boundaries and counts.
@@ -100,13 +116,37 @@ pub(crate) struct Frame {
 pub(crate) fn frame(f: Frame) {
     let (inputs, input_ns) = INPUT.replace((0, 0));
     let (wakes, wake_ns) = WAKE.replace((0, 0));
-    let wakers: Vec<String> = WAKERS.with_borrow_mut(std::mem::take).iter().map(|(l, d)| format!("{}:{} {}ms", l.file(), l.line(), d.as_millis())).collect();
-    let asked: Vec<String> = ASKED.with_borrow_mut(std::mem::take).iter().map(|l| format!("{}:{}", l.file(), l.line())).collect();
+    let wakers: Vec<String> = WAKERS
+        .with_borrow_mut(std::mem::take)
+        .iter()
+        .map(|(l, d)| format!("{}:{} {}ms", l.file(), l.line(), d.as_millis()))
+        .collect();
+    let asked: Vec<String> = ASKED
+        .with_borrow_mut(std::mem::take)
+        .iter()
+        .map(|l| format!("{}:{}", l.file(), l.line()))
+        .collect();
     let d = |a: Stamp, b: Stamp| b.wall.saturating_sub(a.wall);
     let ns = |ms: f64| (ms * 1e6) as u64;
     let p = &f.phases;
-    let next: Vec<&str> = ["motion", "frame_move", "commit", "relayout_or_queue", "input", "live", "window_frame", "timer", "steady_frame", "changed", "steady_again"]
-        .into_iter().enumerate().filter(|(i, _)| f.next & (1 << i) != 0).map(|(_, n)| n).collect();
+    let next: Vec<&str> = [
+        "motion",
+        "frame_move",
+        "commit",
+        "relayout_or_queue",
+        "input",
+        "live",
+        "window_frame",
+        "timer",
+        "steady_frame",
+        "changed",
+        "steady_again",
+    ]
+    .into_iter()
+    .enumerate()
+    .filter(|(i, _)| f.next & (1 << i) != 0)
+    .map(|(_, n)| n)
+    .collect();
     let line = serde_json::json!({
         "t": f.entry.wall, "inputs": inputs, "input": input_ns, "wakes": wakes, "wake": wake_ns, "asked": asked, "wakers": wakers,
         "prebuild": d(f.entry, f.start), "acquire": d(f.start, f.acquired), "build": d(f.acquired, f.built),

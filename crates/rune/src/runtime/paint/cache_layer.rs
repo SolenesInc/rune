@@ -20,7 +20,14 @@ impl ScaleSettle {
     /// Paint samples the animation clock, not a wall-clock deadline. Continue to
     /// request frames during the interval, including when the clock is slowed.
     #[inline]
-    pub(super) fn step(&mut self, scale: f32, now: f64, reset: bool, epsilon: f32, poll: bool) -> Effects<AnotherFrame> {
+    pub(super) fn step(
+        &mut self,
+        scale: f32,
+        now: f64,
+        reset: bool,
+        epsilon: f32,
+        poll: bool,
+    ) -> Effects<AnotherFrame> {
         let (seen, since) = match *self {
             Self::Still(seen) => (seen, f64::NEG_INFINITY),
             Self::Settling { scale, since } => (scale, since),
@@ -39,7 +46,11 @@ impl ScaleSettle {
         };
         // Frames follow elapsed time since that change, so nothing compared per frame can
         // extend the window past `STATIC_SCALE_SETTLE`.
-        if poll && now - since < STATIC_SCALE_SETTLE { Effects::One(AnotherFrame) } else { Effects::None }
+        if poll && now - since < STATIC_SCALE_SETTLE {
+            Effects::One(AnotherFrame)
+        } else {
+            Effects::None
+        }
     }
 }
 
@@ -87,24 +98,44 @@ impl NodeCache {
     #[inline]
     pub(super) fn committed_scale(&mut self, scale: f32, now: f64) -> Option<AnotherFrame> {
         if (scale - self.raster_scale).abs() > 1e-4
-            && matches!(self.scale.step(scale, now, false, 1e-4, true), Effects::One(_))
+            && matches!(
+                self.scale.step(scale, now, false, 1e-4, true),
+                Effects::One(_)
+            )
         {
             self.phase = RasterPhase::Live;
             Some(AnotherFrame)
-        } else { None }
+        } else {
+            None
+        }
     }
 
     #[inline]
-    pub(super) fn open(&self, eff_scale: f32, s: f32, settled: bool, now: f64, commit_gen: u64,
-        is_resident: bool, scale_motion: ScaleMotion, paint_hash: u64, check: impl FnOnce() -> bool,
-        glyph_start: usize) -> (ScaleSettle, RasterPass, Option<AnotherFrame>) {
+    pub(super) fn open(
+        &self,
+        eff_scale: f32,
+        s: f32,
+        settled: bool,
+        now: f64,
+        commit_gen: u64,
+        is_resident: bool,
+        scale_motion: ScaleMotion,
+        paint_hash: u64,
+        check: impl FnOnce() -> bool,
+        glyph_start: usize,
+    ) -> (ScaleSettle, RasterPass, Option<AnotherFrame>) {
         let env_same = (s - self.env_scale).abs() <= 1e-4 && !settled;
         let mut scale = self.scale;
         let scale_diff = (eff_scale - self.raster_scale).abs() > 1e-4;
         let same_commit = commit_gen == self.commit_gen;
-        let eligible = same_commit && scale_diff && env_same && is_resident && matches!(self.phase, RasterPhase::Raster { .. });
+        let eligible = same_commit
+            && scale_diff
+            && env_same
+            && is_resident
+            && matches!(self.phase, RasterPhase::Raster { .. });
         let pending = scale.step(eff_scale, now, !env_same, 1e-4, eligible);
-        let scale_settling = eligible && (matches!(pending, Effects::One(_)) || scale_motion == ScaleMotion::Moving);
+        let scale_settling =
+            eligible && (matches!(pending, Effects::One(_)) || scale_motion == ScaleMotion::Moving);
         // A commit can change any paint property. Never use a partial
         // model hash to skip checking the actual emitted draw output.
         let content_same = same_commit && (!scale_diff || scale_settling);
@@ -113,7 +144,13 @@ impl NodeCache {
             && content_same
             && matches!(self.phase, RasterPhase::Raster { paint_hash: hash } if hash == paint_hash)
             && !check();
-        let pass = if can_elide { RasterPass::Elide { glyphs: self.glyphs } } else { RasterPass::Paint { glyph_start } };
+        let pass = if can_elide {
+            RasterPass::Elide {
+                glyphs: self.glyphs,
+            }
+        } else {
+            RasterPass::Paint { glyph_start }
+        };
         (scale, pass, scale_settling.then_some(AnotherFrame))
     }
 }
@@ -121,7 +158,11 @@ impl NodeCache {
 impl RuntimeCore {
     /// Everything outside commits that paints the window: hover, focus and its rings, text
     /// settings, scale, the selection, marks and every scroll offset.
-    pub(super) fn paint_state_hash(&self, sel_ranges: &[(usize, usize, usize)], mark_ranges: &[(usize, usize, usize)]) -> u64 {
+    pub(super) fn paint_state_hash(
+        &self,
+        sel_ranges: &[(usize, usize, usize)],
+        mark_ranges: &[(usize, usize, usize)],
+    ) -> u64 {
         use std::hash::{Hash, Hasher};
         let s = self.env.scale;
         let mut h = rune_motion::Fx::default();
@@ -133,9 +174,17 @@ impl RuntimeCore {
         self.defaults.force_focus_rings.hash(&mut h);
         if let Some(ring) = self.defaults.focus_ring {
             let c = ring.color;
-            [ring.width, ring.offset, c.r, c.g, c.b, c.a].map(f32::to_bits).hash(&mut h);
+            [ring.width, ring.offset, c.r, c.g, c.b, c.a]
+                .map(f32::to_bits)
+                .hash(&mut h);
         }
-        (self.srgb_blend, self.text.smoothing, self.text.families(), crate::text::icon::swap_id()).hash(&mut h);
+        (
+            self.srgb_blend,
+            self.text.smoothing,
+            self.text.families(),
+            crate::text::icon::swap_id(),
+        )
+            .hash(&mut h);
         h.write_u32(s.to_bits());
         sel_ranges.hash(&mut h);
         // A selection's colours follow the window's focus (`El::selection_style`).
@@ -178,11 +227,14 @@ impl RuntimeCore {
             self.cache_inside_scratch.resize(n_nodes, false);
             for i in 0..n_nodes {
                 let n = &self.nodes[i];
-                self.cache_inside_scratch[i] = n.vis_flags.cache() || n.parent.is_some_and(|p| self.cache_inside_scratch[p]);
+                self.cache_inside_scratch[i] =
+                    n.vis_flags.cache() || n.parent.is_some_and(|p| self.cache_inside_scratch[p]);
             }
             let store = self.scene.store();
             for i in (0..n_nodes).rev() {
-                if !self.cache_inside_scratch[i] { continue; }
+                if !self.cache_inside_scratch[i] {
+                    continue;
+                }
                 let n = &self.nodes[i];
                 let live = store.is_node_animating(n.id)
                     // Sticky and anchored descendants move within a raster without motion tracks.
@@ -205,26 +257,42 @@ impl RuntimeCore {
                     || n.input.as_ref().is_some_and(|inp| inp.edit.focused || inp.edit.is_secure())
                     || n.text.as_ref().is_some_and(|t| t.cold.advance_in.is_some());
                 let check = n.text.as_ref().is_some_and(|t| t.cold.live.is_some())
-                    || n.live.iter().any(|b| !n.vis_flags.cache() || !matches!(b.property, crate::live::Property::Offset | crate::live::Property::Scale));
+                    || n.live.iter().any(|b| {
+                        !n.vis_flags.cache()
+                            || !matches!(
+                                b.property,
+                                crate::live::Property::Offset | crate::live::Property::Scale
+                            )
+                    });
                 self.cache_live_scratch[i] |= live;
                 self.cache_check_scratch[i] |= check;
                 // Hover, press and link paint land without a commit (an instant track or a
                 // pointer move inside one text), so hash what this frame samples.
                 let links = n.text.as_ref().is_some_and(|t| !t.cold.links.is_empty());
-                if n.vis.hovers() || n.vis_flags.hover_group() || n.vis.press().a > 0.0 || n.handlers.get().is_some_and(|h| h.press_scale.is_some()) || links {
+                if n.vis.hovers()
+                    || n.vis_flags.hover_group()
+                    || n.vis.press().a > 0.0
+                    || n.handlers.get().is_some_and(|h| h.press_scale.is_some())
+                    || links
+                {
                     let mut ph = rune_motion::Fx::default();
                     ph.write_u64(n.id.0);
                     for prop in [P_HOVER, P_PRESS, P_PRESS_SCALE] {
                         ph.write_u32(self.scene.get(n.id, prop).unwrap_or(0.0).to_bits());
                     }
-                    if links { self.link_states(i).hash(&mut ph); }
-                    self.cache_paint_scratch[i] = self.cache_paint_scratch[i].wrapping_add(ph.finish());
+                    if links {
+                        self.link_states(i).hash(&mut ph);
+                    }
+                    self.cache_paint_scratch[i] =
+                        self.cache_paint_scratch[i].wrapping_add(ph.finish());
                 }
                 if let Some(p) = n.parent {
-                    self.cache_paint_scratch[p] = self.cache_paint_scratch[p].wrapping_add(self.cache_paint_scratch[i]);
+                    self.cache_paint_scratch[p] =
+                        self.cache_paint_scratch[p].wrapping_add(self.cache_paint_scratch[i]);
                     // A lifted descendant draws outside this raster; don't elide its inputs.
                     self.cache_live_scratch[p] |= self.cache_live_scratch[i] || n.vis_flags.raise();
-                    self.cache_check_scratch[p] |= self.cache_check_scratch[i] || !n.live.is_empty();
+                    self.cache_check_scratch[p] |=
+                        self.cache_check_scratch[i] || !n.live.is_empty();
                 }
             }
         }
@@ -238,11 +306,15 @@ impl RuntimeCore {
         glyph_count: &mut usize,
     ) {
         use std::hash::Hasher;
-        let layer_grow = (3.0 * crate::render::layer_blur::sigma(self.instances[start].params[2])).ceil();
+        let layer_grow =
+            (3.0 * crate::render::layer_blur::sigma(self.instances[start].params[2])).ceil();
         let glyph_start = match ac.pass {
             RasterPass::Paint { glyph_start } => glyph_start,
             RasterPass::Elide { glyphs } => {
-                let entry = self.node_caches.get_mut(&ac.node_id).expect("elided cache entry");
+                let entry = self
+                    .node_caches
+                    .get_mut(&ac.node_id)
+                    .expect("elided cache entry");
                 entry.scale = ac.scale;
                 let k = if (ac.cur_scale - entry.raster_scale).abs() <= 1e-4 {
                     1.0
@@ -254,7 +326,12 @@ impl RuntimeCore {
                 let b2 = (ac.origin[0] + entry.rel_bounds[2] * k).ceil();
                 let b3 = (ac.origin[1] + entry.rel_bounds[3] * k).ceil();
                 let sig = entry.signature;
-                self.seal_cache_marker(start, [b0, b1, (b2 - b0).max(0.0), (b3 - b1).max(0.0)], ac.node_id, sig);
+                self.seal_cache_marker(
+                    start,
+                    [b0, b1, (b2 - b0).max(0.0), (b3 - b1).max(0.0)],
+                    ac.node_id,
+                    sig,
+                );
                 *glyph_count += glyphs;
                 return;
             }
@@ -269,7 +346,12 @@ impl RuntimeCore {
             return;
         }
 
-        let mut bounds = [ac.origin[0], ac.origin[1], ac.origin[0] + ac.size[0], ac.origin[1] + ac.size[1]];
+        let mut bounds = [
+            ac.origin[0],
+            ac.origin[1],
+            ac.origin[0] + ac.size[0],
+            ac.origin[1] + ac.size[1],
+        ];
         let mut h = rune_motion::Fx::default();
         h.write_u64(ac.node_id.0);
         // Blur is baked into the target, unlike opacity and clipping on the composite.
@@ -291,47 +373,71 @@ impl RuntimeCore {
                 turn_stack.pop();
             } else {
                 let active_turn = turn_stack.last().copied().flatten();
-                let (mut c0, mut c1, mut c2, mut c3) = if inst.params[1] == crate::render::KIND_LAYER {
-                    let next = if inst.border[1] != 0.0 {
-                        let own = Turn::about(inst.border[1], [inst.border[2], inst.border[3]], inst.rect, NO_CLIP);
-                        Some(active_turn.map_or(own, |t| t.after(own)))
+                let (mut c0, mut c1, mut c2, mut c3) =
+                    if inst.params[1] == crate::render::KIND_LAYER {
+                        let next = if inst.border[1] != 0.0 {
+                            let own = Turn::about(
+                                inst.border[1],
+                                [inst.border[2], inst.border[3]],
+                                inst.rect,
+                                NO_CLIP,
+                            );
+                            Some(active_turn.map_or(own, |t| t.after(own)))
+                        } else {
+                            active_turn
+                        };
+                        turn_stack.push(next);
+                        let g = (3.0 * crate::render::layer_blur::sigma(inst.params[2])).ceil();
+                        let mut r = [
+                            inst.rect[0] - g,
+                            inst.rect[1] - g,
+                            inst.rect[0] + inst.rect[2] + g,
+                            inst.rect[1] + inst.rect[3] + g,
+                        ];
+                        if inst.border[1] != 0.0 {
+                            r = Turn::about(
+                                inst.border[1],
+                                [inst.border[2], inst.border[3]],
+                                inst.rect,
+                                NO_CLIP,
+                            )
+                            .bbox(r);
+                        }
+                        (
+                            r[0].max(inst.clip[0]),
+                            r[1].max(inst.clip[1]),
+                            r[2].min(inst.clip[2]),
+                            r[3].min(inst.clip[3]),
+                        )
                     } else {
-                        active_turn
+                        let mut rect = inst.rect;
+                        if inst.params[1] == KIND_GLYPH && inst.params[0] != 0.0 {
+                            let (sin, cos) = inst.params[0].sin_cos();
+                            let width = cos.abs() * rect[2] + sin.abs() * rect[3];
+                            let height = sin.abs() * rect[2] + cos.abs() * rect[3];
+                            rect = [
+                                rect[0] + (rect[2] - width) * 0.5,
+                                rect[1] + (rect[3] - height) * 0.5,
+                                width,
+                                height,
+                            ];
+                        }
+                        let grow = match inst.params[1] {
+                            KIND_GLYPH => 0.0,
+                            KIND_SHADOW => inst.params[2] * 3.0 + 1.0,
+                            KIND_EFFECT => inst.params[2] + 1.0,
+                            KIND_RECT | KIND_GRADIENT | KIND_DASHED | KIND_RADIAL => {
+                                1.0 + inst.params[2] * 2.0
+                            }
+                            _ => 1.0,
+                        };
+                        (
+                            (rect[0] - grow).max(inst.clip[0]),
+                            (rect[1] - grow).max(inst.clip[1]),
+                            (rect[0] + rect[2] + grow).min(inst.clip[2]),
+                            (rect[1] + rect[3] + grow).min(inst.clip[3]),
+                        )
                     };
-                    turn_stack.push(next);
-                    let g = (3.0 * crate::render::layer_blur::sigma(inst.params[2])).ceil();
-                    let mut r = [inst.rect[0] - g, inst.rect[1] - g, inst.rect[0] + inst.rect[2] + g, inst.rect[1] + inst.rect[3] + g];
-                    if inst.border[1] != 0.0 {
-                        r = Turn::about(inst.border[1], [inst.border[2], inst.border[3]], inst.rect, NO_CLIP).bbox(r);
-                    }
-                    (
-                        r[0].max(inst.clip[0]),
-                        r[1].max(inst.clip[1]),
-                        r[2].min(inst.clip[2]),
-                        r[3].min(inst.clip[3]),
-                    )
-                } else {
-                    let mut rect = inst.rect;
-                    if inst.params[1] == KIND_GLYPH && inst.params[0] != 0.0 {
-                        let (sin, cos) = inst.params[0].sin_cos();
-                        let width = cos.abs() * rect[2] + sin.abs() * rect[3];
-                        let height = sin.abs() * rect[2] + cos.abs() * rect[3];
-                        rect = [rect[0] + (rect[2] - width) * 0.5, rect[1] + (rect[3] - height) * 0.5, width, height];
-                    }
-                    let grow = match inst.params[1] {
-                        KIND_GLYPH => 0.0,
-                        KIND_SHADOW => inst.params[2] * 3.0 + 1.0,
-                        KIND_EFFECT => inst.params[2] + 1.0,
-                        KIND_RECT | KIND_GRADIENT | KIND_DASHED | KIND_RADIAL => 1.0 + inst.params[2] * 2.0,
-                        _ => 1.0,
-                    };
-                    (
-                        (rect[0] - grow).max(inst.clip[0]),
-                        (rect[1] - grow).max(inst.clip[1]),
-                        (rect[0] + rect[2] + grow).min(inst.clip[2]),
-                        (rect[1] + rect[3] + grow).min(inst.clip[3]),
-                    )
-                };
                 if c2 > c0 && c3 > c1 {
                     if let Some(t) = active_turn {
                         [c0, c1, c2, c3] = t.bbox([c0, c1, c2, c3]);
@@ -346,11 +452,21 @@ impl RuntimeCore {
             h.write_i64(q(inst.rect[1] - ac.origin[1]));
             h.write_i64(q(inst.rect[2]));
             h.write_i64(q(inst.rect[3]));
-            for r in inst.radii { h.write_u32(r.to_bits()); }
-            for f in inst.fill { h.write_u32(f.to_bits()); }
-            for b in inst.border { h.write_u32(b.to_bits()); }
-            for p in inst.params { h.write_u32(p.to_bits()); }
-            for u in inst.uv { h.write_u32(u.to_bits()); }
+            for r in inst.radii {
+                h.write_u32(r.to_bits());
+            }
+            for f in inst.fill {
+                h.write_u32(f.to_bits());
+            }
+            for b in inst.border {
+                h.write_u32(b.to_bits());
+            }
+            for p in inst.params {
+                h.write_u32(p.to_bits());
+            }
+            for u in inst.uv {
+                h.write_u32(u.to_bits());
+            }
             for k in 0..4 {
                 let cv = inst.clip[k];
                 if cv.abs() < 1e6 {
@@ -359,7 +475,9 @@ impl RuntimeCore {
                     h.write_u32(cv.to_bits());
                 }
             }
-            for fd in inst.fade { h.write_u32(fd); }
+            for fd in inst.fade {
+                h.write_u32(fd);
+            }
         }
         let b0 = (bounds[0] - layer_grow).floor();
         let b1 = (bounds[1] - layer_grow).floor();
@@ -369,24 +487,42 @@ impl RuntimeCore {
         let bh = (b3 - b1).max(0.0);
         if bw > 4096.0 || bh > 4096.0 {
             self.evict_cache(ac.node_id);
-            crate::render::end_layer(&mut self.instances, &mut self.surfaces, &mut self.marks, start, surface_start);
+            crate::render::end_layer(
+                &mut self.instances,
+                &mut self.surfaces,
+                &mut self.marks,
+                start,
+                surface_start,
+            );
             return;
         }
         let mut sig = h.finish();
-        if sig == 0 { sig = 1; }
-        let rel_bounds = [b0 - ac.origin[0], b1 - ac.origin[1], b2 - ac.origin[0], b3 - ac.origin[1]];
+        if sig == 0 {
+            sig = 1;
+        }
+        let rel_bounds = [
+            b0 - ac.origin[0],
+            b1 - ac.origin[1],
+            b2 - ac.origin[0],
+            b3 - ac.origin[1],
+        ];
         let glyphs = *glyph_count - glyph_start;
         let is_resident = self.text.atlas.resident_caches.get(&ac.node_id.0) == Some(&sig);
-        self.node_caches.insert(ac.node_id, NodeCache {
-            signature: sig,
-            raster_scale: ac.cur_scale,
-            scale: ac.scale,
-            env_scale: ac.env_scale,
-            phase: RasterPhase::Raster { paint_hash: ac.paint_hash },
-            rel_bounds,
-            glyphs,
-            commit_gen: self.commit_gen,
-        });
+        self.node_caches.insert(
+            ac.node_id,
+            NodeCache {
+                signature: sig,
+                raster_scale: ac.cur_scale,
+                scale: ac.scale,
+                env_scale: ac.env_scale,
+                phase: RasterPhase::Raster {
+                    paint_hash: ac.paint_hash,
+                },
+                rel_bounds,
+                glyphs,
+                commit_gen: self.commit_gen,
+            },
+        );
         if is_resident && self.surfaces.len() == surface_start {
             self.instances.truncate(start + 1);
         }

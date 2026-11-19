@@ -6,7 +6,12 @@
 use super::{readiness, touch};
 
 /// Every sequence of up to `depth` symbols, shortest first, through `each`.
-fn each_sequence<T: Copy>(alphabet: &[T], depth: usize, seq: &mut Vec<T>, each: &mut impl FnMut(&[T])) {
+fn each_sequence<T: Copy>(
+    alphabet: &[T],
+    depth: usize,
+    seq: &mut Vec<T>,
+    each: &mut impl FnMut(&[T]),
+) {
     each(seq);
     if seq.len() == depth {
         return;
@@ -54,10 +59,26 @@ impl OldTouch {
 fn every_touch_sequence_matches_what_the_old_finger_did() {
     use touch::{Effect, Event};
     let alphabet = [
-        Event::Down { id: 0, x: 1.0, y: 2.0 },
-        Event::Down { id: 1, x: 3.0, y: 4.0 },
-        Event::Motion { id: 0, x: 5.0, y: 6.0 },
-        Event::Motion { id: 1, x: 7.0, y: 8.0 },
+        Event::Down {
+            id: 0,
+            x: 1.0,
+            y: 2.0,
+        },
+        Event::Down {
+            id: 1,
+            x: 3.0,
+            y: 4.0,
+        },
+        Event::Motion {
+            id: 0,
+            x: 5.0,
+            y: 6.0,
+        },
+        Event::Motion {
+            id: 1,
+            x: 7.0,
+            y: 8.0,
+        },
         Event::Up { id: 0 },
         Event::Up { id: 1 },
         Event::Cancel,
@@ -81,12 +102,19 @@ fn every_touch_sequence_matches_what_the_old_finger_did() {
                     Effect::Move(..) | Effect::Leave => {}
                 }
             }
-            assert_eq!(matches!(finger, touch::State::Down { .. }), old.id.is_some(), "finger after {seq:?}");
+            assert_eq!(
+                matches!(finger, touch::State::Down { .. }),
+                old.id.is_some(),
+                "finger after {seq:?}"
+            );
             if let (touch::State::Down { id }, Some(old_id)) = (finger, old.id) {
                 assert_eq!(id, old_id, "finger after {seq:?}");
             }
             // One finger: it never releases twice, and only a vanished seat leaves a press behind.
-            assert!(releases <= presses && presses - releases <= 1 + orphaned, "presses {presses}, releases {releases}, orphaned {orphaned} in {seq:?}");
+            assert!(
+                releases <= presses && presses - releases <= 1 + orphaned,
+                "presses {presses}, releases {releases}, orphaned {orphaned} in {seq:?}"
+            );
         }
     });
 }
@@ -129,8 +157,16 @@ struct Used {
 
 fn used(closed: bool, size: Option<(u32, u32)>, scale: Option<i32>) -> Used {
     match closed {
-        true => Used { closed, size: None, scale: None },
-        false => Used { closed, size, scale },
+        true => Used {
+            closed,
+            size: None,
+            scale: None,
+        },
+        false => Used {
+            closed,
+            size,
+            scale,
+        },
     }
 }
 
@@ -143,8 +179,14 @@ fn every_readiness_sequence_reports_the_same_size_and_scale() {
     }
     use readiness::Event;
     let alphabet = [
-        Symbol::Event(Event::Configure { width: 10, height: 20 }),
-        Symbol::Event(Event::Configure { width: 30, height: 40 }),
+        Symbol::Event(Event::Configure {
+            width: 10,
+            height: 20,
+        }),
+        Symbol::Event(Event::Configure {
+            width: 30,
+            height: 40,
+        }),
         Symbol::Event(Event::Scale(2)),
         Symbol::Event(Event::Scale(3)),
         Symbol::Event(Event::Closed),
@@ -165,7 +207,11 @@ fn every_readiness_sequence_reports_the_same_size_and_scale() {
                 }
             }
             assert_eq!(state.closed(), old.closed, "closed after {seq:?}");
-            assert_eq!(state.configured(), old.ever || old.closed, "configured after {seq:?}");
+            assert_eq!(
+                state.configured(),
+                old.ever || old.closed,
+                "configured after {seq:?}"
+            );
         }
     });
 }
@@ -176,14 +222,33 @@ fn a_second_configure_replaces_the_size_nobody_read() {
     readiness::step(&mut state, readiness::Event::Scale(2));
     assert!(!state.configured());
     assert_eq!(state.size(), None, "no size before the first configure");
-    readiness::step(&mut state, readiness::Event::Configure { width: 10, height: 20 });
+    readiness::step(
+        &mut state,
+        readiness::Event::Configure {
+            width: 10,
+            height: 20,
+        },
+    );
     assert!(state.configured());
-    readiness::step(&mut state, readiness::Event::Configure { width: 30, height: 40 });
+    readiness::step(
+        &mut state,
+        readiness::Event::Configure {
+            width: 30,
+            height: 40,
+        },
+    );
     assert_eq!(state.size(), Some((30, 40)));
     assert_eq!(state.take_size(), Some((30, 40)));
     assert_eq!(state.take_size(), None, "read once");
-    assert!(state.configured(), "reading the size doesn't unconfigure the surface");
-    assert_eq!(state.take_scale(), Some(2), "a scale sent before the first configure is kept");
+    assert!(
+        state.configured(),
+        "reading the size doesn't unconfigure the surface"
+    );
+    assert_eq!(
+        state.take_scale(),
+        Some(2),
+        "a scale sent before the first configure is kept"
+    );
     readiness::step(&mut state, readiness::Event::Closed);
     assert!(state.closed());
     assert_eq!(state.take_size(), None);

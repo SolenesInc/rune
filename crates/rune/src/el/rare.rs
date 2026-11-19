@@ -7,7 +7,10 @@ use std::rc::Rc;
 use rune_motion::{Anim, Spring, Transition};
 
 use crate::cold::{Cold, Empty};
-use crate::el::{A11y, Anchor, FocusSpec, GrowthSpec, InputSpec, ScrollAxes, ScrollEdges, ScrollSpec, Sticky, WindowDrag};
+use crate::el::{
+    A11y, Anchor, FocusSpec, GrowthSpec, InputSpec, ScrollAxes, ScrollEdges, ScrollSpec, Sticky,
+    WindowDrag,
+};
 
 /// Element fields most elements leave at their defaults.
 #[derive(Clone)]
@@ -82,7 +85,13 @@ impl Empty for ElCold {
         scroll: None,
         scroll_axes: ScrollAxes::Y,
         sticky: None,
-        scroll_edges: ScrollEdges { fade: 0.0, fade_style: crate::el::FadeStyle::SMOOTH, margin: 0.0, anchor: false, room: 0.0 },
+        scroll_edges: ScrollEdges {
+            fade: 0.0,
+            fade_style: crate::el::FadeStyle::SMOOTH,
+            margin: 0.0,
+            anchor: false,
+            room: 0.0,
+        },
         growth: None,
         virtual_estimate: None,
         virtual_rows: None,

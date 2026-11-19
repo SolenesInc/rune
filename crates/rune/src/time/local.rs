@@ -77,7 +77,9 @@ fn offset_at(secs: i64) -> Option<i32> {
     // `Date` holds ±8.64e15 ms; past that, its offset is NaN.
     let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(secs as f64 * 1000.0));
     let minutes_west = date.get_timezone_offset();
-    minutes_west.is_finite().then(|| (-minutes_west * 60.0) as i32)
+    minutes_west
+        .is_finite()
+        .then(|| (-minutes_west * 60.0) as i32)
 }
 
 #[cfg(not(any(unix, target_arch = "wasm32")))]

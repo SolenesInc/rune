@@ -92,8 +92,14 @@ impl FontSmoothing {
 /// iPhones and iPads never smooth, and an iPad reports itself as a Mac with a touch screen.
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) fn browser_default(platform: &str, touch_points: u32) -> FontSmoothing {
-    let mac = platform.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("mac"));
-    if mac && touch_points <= 1 { FontSmoothing::On } else { FontSmoothing::Off }
+    let mac = platform
+        .get(..3)
+        .is_some_and(|p| p.eq_ignore_ascii_case("mac"));
+    if mac && touch_points <= 1 {
+        FontSmoothing::On
+    } else {
+        FontSmoothing::Off
+    }
 }
 
 impl FontSmoothing {
@@ -108,10 +114,22 @@ impl FontSmoothing {
 
     /// How a mode drawn from outlines (`text/windfoil.rs`) draws them; None for the others.
     pub(crate) fn look(self) -> Option<Look> {
-        let chromium = |coverage, hint, whole_pens| Look { macos_weight: false, coverage, hint, whole_pens };
+        let chromium = |coverage, hint, whole_pens| Look {
+            macos_weight: false,
+            coverage,
+            hint,
+            whole_pens,
+        };
         Some(match self {
-            FontSmoothing::Windfoil => Look { macos_weight: true, coverage: Coverage::Box, hint: OutlineHint::CoreGraphics, whole_pens: false },
-            FontSmoothing::WindfoilChromium => chromium(Coverage::Box, OutlineHint::DirectWrite, false),
+            FontSmoothing::Windfoil => Look {
+                macos_weight: true,
+                coverage: Coverage::Box,
+                hint: OutlineHint::CoreGraphics,
+                whole_pens: false,
+            },
+            FontSmoothing::WindfoilChromium => {
+                chromium(Coverage::Box, OutlineHint::DirectWrite, false)
+            }
             FontSmoothing::Slug => chromium(Coverage::Slug, OutlineHint::None, false),
             FontSmoothing::HintedGpu => chromium(Coverage::Box, OutlineHint::Auto, false),
             FontSmoothing::Hinted => chromium(Coverage::Box, OutlineHint::Auto, true),
@@ -196,7 +214,11 @@ pub(crate) const PHASES: f32 = 60.0;
 /// pixels above, at every scale (measured on macOS 15.3: 1× and 2×, ppem 3–80, in ¼ steps
 /// around each boundary). A ¼-point floor matches it only at 2× from 17 to 33 ppem.
 pub(crate) fn quantisation_steps(ppem: f32) -> f32 {
-    if ppem > 0.0 { (1.0 + (100.0 / 3.0 / ppem).floor()).min(5.0) } else { 5.0 }
+    if ppem > 0.0 {
+        (1.0 + (100.0 / 3.0 / ppem).floor()).min(5.0)
+    } else {
+        5.0
+    }
 }
 
 /// The device pixel a glyph's quad starts at and its x phase in sixtieths of a pixel (its atlas
@@ -210,7 +232,11 @@ pub(crate) fn glyph_x(x: f32, ppem: f32) -> (f32, u8) {
     let x = ((x * 256.0).round() / 256.0 * steps).floor() / steps;
     let fx = x.floor();
     let phase = ((x - fx) * steps).round();
-    if phase >= steps { (fx + 1.0, 0) } else { (fx, (phase * (PHASES / steps)) as u8) }
+    if phase >= steps {
+        (fx + 1.0, 0)
+    } else {
+        (fx, (phase * (PHASES / steps)) as u8)
+    }
 }
 
 /// Coverage exponents for black and for white text with font smoothing off: the curve Skia's
@@ -228,7 +254,10 @@ const TEXT_GAMMA: [f32; 2] = [1.12, 0.45];
 pub(crate) fn coverage_exponent(mode: FontSmoothing, fill: [f32; 4], apple: bool) -> f32 {
     // Outline modes with Chromium's weight take its gamma on every OS, as the lab drew them.
     let chromium = mode.look().is_some_and(|l| !l.macos_weight);
-    if (apple && !chromium) || matches!(mode, FontSmoothing::On | FontSmoothing::Windfoil) || fill[3] <= 0.0 {
+    if (apple && !chromium)
+        || matches!(mode, FontSmoothing::On | FontSmoothing::Windfoil)
+        || fill[3] <= 0.0
+    {
         return 1.0;
     }
     let luma = (0.2126 * fill[0] + 0.7152 * fill[1] + 0.0722 * fill[2]) / fill[3];

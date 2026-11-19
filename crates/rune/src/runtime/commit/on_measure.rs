@@ -7,7 +7,9 @@ impl RuntimeCore {
     /// ran, at most [`layout_read::PASSES`] times.
     pub(super) fn settle_measures(&mut self, mut measured: Measured, tx: &Tx) -> Measured {
         for _ in 0..layout_read::PASSES {
-            if !self.run_measures(&measured.nodes) { break; }
+            if !self.run_measures(&measured.nodes) {
+                break;
+            }
             self.discard_measured(measured);
             measured = self.measure(tx);
             measured = self.settle_layout_reads(measured, tx);
@@ -21,7 +23,9 @@ impl RuntimeCore {
         let mut last = std::mem::take(&mut self.measure_fired);
         let mut moved = Vec::new();
         for (i, n) in nodes.iter().enumerate() {
-            let Some(f) = n.handlers.get().and_then(|h| h.on_measure.clone()) else { continue };
+            let Some(f) = n.handlers.get().and_then(|h| h.on_measure.clone()) else {
+                continue;
+            };
             let rect = self.placed(nodes, i, false);
             let heard = last.remove(&n.path);
             if layout_read::moved(heard, Some(rect)) {
@@ -31,7 +35,9 @@ impl RuntimeCore {
                 self.measure_fired.insert(n.path.clone(), heard);
             }
         }
-        for (f, rect) in &moved { f(self.app.states(), *rect); }
+        for (f, rect) in &moved {
+            f(self.app.states(), *rect);
+        }
         !moved.is_empty()
     }
 }

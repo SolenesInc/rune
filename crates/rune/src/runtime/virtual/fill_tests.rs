@@ -18,7 +18,9 @@ impl Dev {
 }
 
 fn sequence(bits: u32, len: usize) -> String {
-    (0..len).map(|i| if bits >> i & 1 == 1 { 'F' } else { '.' }).collect()
+    (0..len)
+        .map(|i| if bits >> i & 1 == 1 { 'F' } else { '.' })
+        .collect()
 }
 
 /// Every sequence of frames up to two past the bound (the bound is where the answers diverge, and
@@ -32,7 +34,10 @@ fn every_run_of_frames_draws_what_dev_draws() {
             let walk = sequence(bits, len);
             let (mut fill, mut dev) = (Fill::Idle, Dev { virtual_fill: 0 });
             for (i, wanted) in (0..len).map(|i| (i, bits >> i & 1 == 1)) {
-                let drew = fill.step(FillEvent::Frame { wanted }).into_iter().any(|e| e == FillEffect::Draw);
+                let drew = fill
+                    .step(FillEvent::Frame { wanted })
+                    .into_iter()
+                    .any(|e| e == FillEffect::Draw);
                 assert_eq!(
                     drew,
                     dev.frame(wanted),
@@ -60,8 +65,14 @@ fn a_settled_frame_forgets_the_run_and_the_bound_stops_it() {
             .collect::<Vec<_>>()
     };
     let drawn = frames(&mut fill);
-    assert!(drawn[..FILL_FRAMES as usize].iter().all(|drew| *drew), "the first {FILL_FRAMES} frames draw: {drawn:?}");
-    assert!(drawn[FILL_FRAMES as usize..].iter().all(|drew| !drew), "the bound stops drawing: {drawn:?}");
+    assert!(
+        drawn[..FILL_FRAMES as usize].iter().all(|drew| *drew),
+        "the first {FILL_FRAMES} frames draw: {drawn:?}"
+    );
+    assert!(
+        drawn[FILL_FRAMES as usize..].iter().all(|drew| !drew),
+        "the bound stops drawing: {drawn:?}"
+    );
     fill.step(FillEvent::Frame { wanted: false });
     assert!(!fill.step(FillEvent::Frame { wanted: true }).is_empty());
 }

@@ -94,6 +94,9 @@ impl std::hash::Hash for CursorImage {
 
 impl std::fmt::Debug for CursorImage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CursorImage").field("png_bytes", &self.bytes.len()).field("hot", &self.hot).finish()
+        f.debug_struct("CursorImage")
+            .field("png_bytes", &self.bytes.len())
+            .field("hot", &self.hot)
+            .finish()
     }
 }

@@ -13,9 +13,9 @@
 //! moves it one frame on rather than charging it the overrun ([`FrameClock::presented`]).
 
 use crate::machine::Effects;
+use crate::runtime::Runtime;
 use crate::time::Instant;
 use rune_motion::TrackId;
-use crate::runtime::Runtime;
 
 /// The most a frame steps motion it starts. Its first frame shows one 120 Hz frame of movement,
 /// instead of repeating its start pose or jumping ahead by a late frame's gap or the time
@@ -48,10 +48,18 @@ impl Step {
 /// starts on the frame gets at most [`RESUME_STEP`] of it. With nothing running the frame
 /// steps [`RESUME_STEP`], so motion it starts moves one frame, however long the idle.
 pub(crate) fn split(gap: f64, running: bool) -> Step {
-    if !running { return Step { catch_up: 0.0, dt: RESUME_STEP }; }
+    if !running {
+        return Step {
+            catch_up: 0.0,
+            dt: RESUME_STEP,
+        };
+    }
     let total = gap.clamp(0.0, MAX_GAP);
     let dt = total.min(RESUME_STEP);
-    Step { catch_up: total - dt, dt }
+    Step {
+        catch_up: total - dt,
+        dt,
+    }
 }
 
 /// Steps `rt` by a frame `gap` seconds after the last, for hosts without presentation times
@@ -93,7 +101,11 @@ enum Effect<'a> {
 
 impl FrameClock {
     pub(crate) fn new(now: Instant) -> Self {
-        Self { phase: Phase::Idle { last: now }, spare: Vec::new(), undrawn: Vec::new() }
+        Self {
+            phase: Phase::Idle { last: now },
+            spare: Vec::new(),
+            undrawn: Vec::new(),
+        }
     }
 
     /// The target time of the last frame the clock stepped to.
@@ -120,19 +132,35 @@ impl FrameClock {
                 if let Phase::Stepped { last: target, .. } = &mut self.phase {
                     *target = last;
                 } else {
-                    self.phase = Phase::Stepped { last, starts: std::mem::take(&mut self.spare) };
+                    self.phase = Phase::Stepped {
+                        last,
+                        starts: std::mem::take(&mut self.spare),
+                    };
                 }
-                let Phase::Stepped { starts, .. } = &mut self.phase else { unreachable!() };
+                let Phase::Stepped { starts, .. } = &mut self.phase else {
+                    unreachable!()
+                };
                 starts.clear();
                 Effects::one(Effect::Frame(split(gap, running), starts))
             }
             Event::Present(done) => {
-                let Phase::Stepped { starts, .. } = &mut self.phase else { return Effects::none() };
+                let Phase::Stepped { starts, .. } = &mut self.phase else {
+                    return Effects::none();
+                };
                 self.spare = std::mem::take(starts);
                 self.phase = Phase::Presented { last };
-                if self.spare.is_empty() { return Effects::none(); }
-                let late = done.saturating_duration_since(last).as_secs_f64().min(MAX_GAP);
-                if late > 0.0 { Effects::one(Effect::Delay(late, &mut self.spare)) } else { Effects::none() }
+                if self.spare.is_empty() {
+                    return Effects::none();
+                }
+                let late = done
+                    .saturating_duration_since(last)
+                    .as_secs_f64()
+                    .min(MAX_GAP);
+                if late > 0.0 {
+                    Effects::one(Effect::Delay(late, &mut self.spare))
+                } else {
+                    Effects::none()
+                }
             }
         }
     }
@@ -145,7 +173,10 @@ impl FrameClock {
 
     /// The step for a frame presented at `at`. See [`split`].
     fn begin(&mut self, at: Instant, running: bool) -> (Step, &mut Vec<TrackId>) {
-        let Effects::One(Effect::Frame(step, starts)) = self.step(Event::Advance { at, running }) else { unreachable!() };
+        let Effects::One(Effect::Frame(step, starts)) = self.step(Event::Advance { at, running })
+        else {
+            unreachable!()
+        };
         (step, starts)
     }
 
@@ -156,14 +187,21 @@ impl FrameClock {
     /// Steps `rt` to the frame presented at `at`, in one runtime pass. `compositing`: a
     /// compositor's own animation was still running after the previous frame. Returns whether
     /// anything still animates and the seconds stepped.
-    pub(crate) fn advance<S: 'static>(&mut self, rt: &mut Runtime<S>, at: Instant, compositing: bool) -> (bool, f64) {
+    pub(crate) fn advance<S: 'static>(
+        &mut self,
+        rt: &mut Runtime<S>,
+        at: Instant,
+        compositing: bool,
+    ) -> (bool, f64) {
         let mut undrawn = std::mem::take(&mut self.undrawn);
         let (step, starts) = self.begin(at, rt.animating || compositing);
         rt.frame_target = Some(at);
         if !undrawn.is_empty() {
             let core: &mut crate::runtime::RuntimeCore = &mut **rt;
             let scale = f64::from(core.time_scale);
-            core.scene.store_mut().delay(&mut undrawn, step.catch_up * scale);
+            core.scene
+                .store_mut()
+                .delay(&mut undrawn, step.catch_up * scale);
         }
         let animating = rt.frame_split(step.catch_up, step.dt);
         starts.extend_from_slice(rt.scene.store().started());
@@ -185,7 +223,12 @@ impl FrameClock {
     /// rather than by how late this one was. Motion already running keeps real time.
     pub(crate) fn presented<S: 'static>(&mut self, rt: &mut Runtime<S>, done: Instant) {
         if let Effects::One(Effect::Delay(late, starts)) = self.step(Event::Present(done)) {
-            { let core: &mut crate::runtime::RuntimeCore = &mut **rt; core.scene.store_mut().delay(starts, late * f64::from(core.time_scale)); }
+            {
+                let core: &mut crate::runtime::RuntimeCore = &mut **rt;
+                core.scene
+                    .store_mut()
+                    .delay(starts, late * f64::from(core.time_scale));
+            }
         }
     }
 }
@@ -207,36 +250,79 @@ mod tests {
         let start = Instant::now();
         let ms = |n: u64| Duration::from_millis(n);
         let mut clock = FrameClock::new(start);
-        let fresh = Step { catch_up: 0.0, dt: RESUME_STEP };
+        let fresh = Step {
+            catch_up: 0.0,
+            dt: RESUME_STEP,
+        };
         assert_eq!(clock.frame_step(start + ms(5), false), fresh, "first frame");
-        assert_eq!(clock.frame_step(start + ms(2005), false), fresh, "after idle, however long");
+        assert_eq!(
+            clock.frame_step(start + ms(2005), false),
+            fresh,
+            "after idle, however long"
+        );
         let late = clock.frame_step(start + ms(2054), true);
-        assert!((late.total() - 0.049).abs() < 1e-9 && late.dt == RESUME_STEP, "a late running frame keeps its time: {late:?}");
+        assert!(
+            (late.total() - 0.049).abs() < 1e-9 && late.dt == RESUME_STEP,
+            "a late running frame keeps its time: {late:?}"
+        );
         let short = clock.frame_step(start + ms(2058), true);
-        assert!((short.dt - 0.004).abs() < 1e-9 && short.catch_up == 0.0, "a short frame steps its gap: {short:?}");
+        assert!(
+            (short.dt - 0.004).abs() < 1e-9 && short.catch_up == 0.0,
+            "a short frame steps its gap: {short:?}"
+        );
         let suspended = clock.frame_step(start + ms(5058), true);
-        assert!((suspended.total() - MAX_GAP).abs() < 1e-9 && suspended.dt == RESUME_STEP,
-            "a suspension moves running motion at most MAX_GAP: {suspended:?}");
+        assert!(
+            (suspended.total() - MAX_GAP).abs() < 1e-9 && suspended.dt == RESUME_STEP,
+            "a suspension moves running motion at most MAX_GAP: {suspended:?}"
+        );
         clock.hold(start + ms(6000));
-        assert_eq!(clock.frame_step(start + ms(6000), true), Step { catch_up: 0.0, dt: 0.0 });
+        assert_eq!(
+            clock.frame_step(start + ms(6000), true),
+            Step {
+                catch_up: 0.0,
+                dt: 0.0
+            }
+        );
         // A display-link target ran ahead; a later `now` before it must not rewind the clock.
         clock.hold(start + ms(6010));
         clock.hold(start + ms(6002));
         let next = clock.frame_step(start + ms(6018), true);
-        assert!((next.total() - 0.008).abs() < 1e-9, "the gap counts from the latest target: {next:?}");
+        assert!(
+            (next.total() - 0.008).abs() < 1e-9,
+            "the gap counts from the latest target: {next:?}"
+        );
     }
 
     #[derive(Clone, Copy, Default)]
-    struct Pair { a: f32, b: f32, polls: u32 }
+    struct Pair {
+        a: f32,
+        b: f32,
+        polls: u32,
+    }
 
     /// `a` and `b` stack in a column, so both share x and snap alike.
     fn view(s: &Pair, _: &mut Cx<Pair>) -> El {
-        crate::col().children([crate::el().key("a").size(s.a, 8.0), crate::el().key("b").size(s.b, 8.0)])
+        crate::col().children([
+            crate::el().key("a").size(s.a, 8.0),
+            crate::el().key("b").size(s.b, 8.0),
+        ])
     }
 
     fn runtime() -> Runtime<Pair> {
-        let mut rt = Runtime::new(Pair { a: 12.0, b: 12.0, polls: 0 }, view, (400.0, 50.0), Env::default());
-        rt.app_mut().poll = Some(|s, _, _| { s.polls += 1; false });
+        let mut rt = Runtime::new(
+            Pair {
+                a: 12.0,
+                b: 12.0,
+                polls: 0,
+            },
+            view,
+            (400.0, 50.0),
+            Env::default(),
+        );
+        rt.app_mut().poll = Some(|s, _, _| {
+            s.polls += 1;
+            false
+        });
         rt
     }
 
@@ -246,20 +332,35 @@ mod tests {
 
     /// The window host's path: `a` springs from `FRAME`, frames present at `times` and `on`
     /// runs just before the frame at `at`. Returns `(time, a, b)` after each frame.
-    fn run(times: &[Duration], at: Duration, on: fn(&mut Runtime<Pair>)) -> Vec<(Duration, f32, f32)> {
+    fn run(
+        times: &[Duration],
+        at: Duration,
+        on: fn(&mut Runtime<Pair>),
+    ) -> Vec<(Duration, f32, f32)> {
         let start = Instant::now();
         let mut clock = FrameClock::new(start);
         let mut rt = runtime();
-        times.iter().map(|&t| {
-            if t == FRAME { rt.update(|s, _| s.a = 212.0); }
-            if t == at { on(&mut rt); }
-            clock.advance(&mut rt, start + t, false);
-            (t, width(&rt, "a"), width(&rt, "b"))
-        }).collect()
+        times
+            .iter()
+            .map(|&t| {
+                if t == FRAME {
+                    rt.update(|s, _| s.a = 212.0);
+                }
+                if t == at {
+                    on(&mut rt);
+                }
+                clock.advance(&mut rt, start + t, false);
+                (t, width(&rt, "a"), width(&rt, "b"))
+            })
+            .collect()
     }
 
     fn at(frames: &[(Duration, f32, f32)], t: Duration) -> (f32, f32) {
-        frames.iter().find(|f| f.0 == t).map(|f| (f.1, f.2)).unwrap()
+        frames
+            .iter()
+            .find(|f| f.0 == t)
+            .map(|f| (f.1, f.2))
+            .unwrap()
     }
 
     const LATE: Duration = Duration::from_micros(6 * 16_667 + 49_300);
@@ -280,8 +381,14 @@ mod tests {
         for t in after {
             let (expected, _) = at(&steady, t);
             let (got, _) = at(&hitched, t);
-            assert!(expected < 211.0, "the spring must still be moving at {t:?}: {expected}");
-            assert!((got - expected).abs() < 0.01, "at {t:?} width={got}, unbroken cadence={expected}");
+            assert!(
+                expected < 211.0,
+                "the spring must still be moving at {t:?}: {expected}"
+            );
+            assert!(
+                (got - expected).abs() < 0.01,
+                "at {t:?} width={got}, unbroken cadence={expected}"
+            );
         }
     }
 
@@ -299,8 +406,14 @@ mod tests {
         };
         let short = first_pose(FRAME);
         let long = first_pose(Duration::from_secs(2));
-        assert!(short > 12.0 && short < 20.0, "the first frame shows one step of motion: {short}");
-        assert!((long - short).abs() < 0.001, "idle time must not age motion that starts after it: {long} vs {short}");
+        assert!(
+            short > 12.0 && short < 20.0,
+            "the first frame shows one step of motion: {short}"
+        );
+        assert!(
+            (long - short).abs() < 0.001,
+            "idle time must not age motion that starts after it: {long} vs {short}"
+        );
     }
 
     #[test]
@@ -323,7 +436,10 @@ mod tests {
             let drawn = first_pose(false, gap);
             let routed = first_pose(true, gap);
             assert!(drawn > 12.0 && drawn < 20.0, "one step of motion: {drawn}");
-            assert!((routed - drawn).abs() < 0.01, "after {gap:?}: {routed} where a drawn start shows {drawn}");
+            assert!(
+                (routed - drawn).abs() < 0.01,
+                "after {gap:?}: {routed} where a drawn start shows {drawn}"
+            );
         }
     }
 
@@ -342,12 +458,19 @@ mod tests {
         plain.push(LATE);
         let (expected, _) = at(&run(&plain, Duration::MAX, |_| {}), LATE);
         let (a, b) = at(&run(&plain, LATE, |rt| rt.update(|s, _| s.b = 212.0)), LATE);
-        assert!(expected < 211.0 && (a - expected).abs() < 0.01, "running motion catches up the whole gap: a={a}, expected={expected}");
-        assert!((b - fresh).abs() < 0.01, "new motion takes one 1/120 s step, not the 49 ms gap: b={b}, one step={fresh}");
+        assert!(
+            expected < 211.0 && (a - expected).abs() < 0.01,
+            "running motion catches up the whole gap: a={a}, expected={expected}"
+        );
+        assert!(
+            (b - fresh).abs() < 0.01,
+            "new motion takes one 1/120 s step, not the 49 ms gap: b={b}, one step={fresh}"
+        );
     }
 
     #[test]
-    fn motion_a_frame_starts_and_runs_late_on_moves_one_frame_next_while_running_motion_keeps_time() {
+    fn motion_a_frame_starts_and_runs_late_on_moves_one_frame_next_while_running_motion_keeps_time()
+    {
         // `a` springs from FRAME; `b` starts on the frame at 3 × FRAME, whose own work then runs
         // 50 ms past its target. The next frame comes a frame after that.
         let overrun = Duration::from_millis(50);
@@ -358,10 +481,23 @@ mod tests {
             let mut clock = FrameClock::new(start);
             let mut rt = runtime();
             for t in [Duration::ZERO, FRAME, 2 * FRAME, starts, next] {
-                if t == FRAME { rt.update(|s, _| s.a = 212.0); }
-                if t == starts { rt.update(|s, _| s.b = 212.0); }
+                if t == FRAME {
+                    rt.update(|s, _| s.a = 212.0);
+                }
+                if t == starts {
+                    rt.update(|s, _| s.b = 212.0);
+                }
                 clock.advance(&mut rt, start + t, false);
-                clock.presented(&mut rt, start + t + if late && t == starts { overrun } else { Duration::ZERO });
+                clock.presented(
+                    &mut rt,
+                    start
+                        + t
+                        + if late && t == starts {
+                            overrun
+                        } else {
+                            Duration::ZERO
+                        },
+                );
             }
             (width(&rt, "a"), width(&rt, "b"))
         };
@@ -377,9 +513,18 @@ mod tests {
         };
         let (a, b) = poses(true);
         let (on_time_a, on_time_b) = poses(false);
-        assert!((b - one_frame_on).abs() < 0.01, "b moved one frame from its first pose: b={b}, one frame on={one_frame_on}");
-        assert!(on_time_b - b > 5.0, "without the overrun, b moves the whole gap: {on_time_b} vs {b}");
-        assert!(a < 211.0 && (a - on_time_a).abs() < 0.01, "running motion keeps real time: a={a}, on time={on_time_a}");
+        assert!(
+            (b - one_frame_on).abs() < 0.01,
+            "b moved one frame from its first pose: b={b}, one frame on={one_frame_on}"
+        );
+        assert!(
+            on_time_b - b > 5.0,
+            "without the overrun, b moves the whole gap: {on_time_b} vs {b}"
+        );
+        assert!(
+            a < 211.0 && (a - on_time_a).abs() < 0.01,
+            "running motion keeps real time: a={a}, on time={on_time_a}"
+        );
     }
 
     #[test]
@@ -397,7 +542,10 @@ mod tests {
         for t in [LATE, LATE + FRAME, LATE + 2 * FRAME] {
             let (got, _) = at(&hitched, t);
             let (expected, _) = at(&reference, t);
-            assert!((got - expected).abs() < 0.01, "at {t:?} a={got}, turning on its old curve gives {expected}");
+            assert!(
+                (got - expected).abs() < 0.01,
+                "at {t:?} a={got}, turning on its old curve gives {expected}"
+            );
         }
     }
 
@@ -407,22 +555,46 @@ mod tests {
         let mut clock = FrameClock::new(start);
         let mut rt = runtime();
         let (trace, buffer) = rune_motion::MotionTrace::in_memory(&rune_motion::TraceHeader {
-            launch: "frames".into(), width: 400.0, height: 50.0, hz: 60.0, scale: 1.0,
+            launch: "frames".into(),
+            width: 400.0,
+            height: 50.0,
+            hz: 60.0,
+            scale: 1.0,
         });
         rt.scene.set_trace(Some(trace));
         clock.advance(&mut rt, start, false);
         rt.update(|s, _| s.a = 212.0);
-        for k in 1..=3 { clock.advance(&mut rt, start + k * FRAME, false); }
+        for k in 1..=3 {
+            clock.advance(&mut rt, start + k * FRAME, false);
+        }
         let polls = rt.state().polls;
         // `Window::show` settles everything, then the next frame is late with motion running.
         rt.settle_all();
         assert!(rt.animating);
-        clock.advance(&mut rt, start + 3 * FRAME + Duration::from_millis(49), false);
-        assert_eq!(rt.state().polls - polls, 1, "poll runs once per presented frame");
-        assert!(rt.settled, "the settle cut must survive into the presented frame");
+        clock.advance(
+            &mut rt,
+            start + 3 * FRAME + Duration::from_millis(49),
+            false,
+        );
+        assert_eq!(
+            rt.state().polls - polls,
+            1,
+            "poll runs once per presented frame"
+        );
+        assert!(
+            rt.settled,
+            "the settle cut must survive into the presented frame"
+        );
         rt.scene.take_trace().unwrap().flush().unwrap();
-        let frames = buffer.contents().lines().filter(|line| line.starts_with(r#"{"t":"#)).count();
-        assert_eq!(frames, 5, "the motion trace records one frame per presented frame");
+        let frames = buffer
+            .contents()
+            .lines()
+            .filter(|line| line.starts_with(r#"{"t":"#))
+            .count();
+        assert_eq!(
+            frames, 5,
+            "the motion trace records one frame per presented frame"
+        );
     }
 
     #[test]
@@ -433,8 +605,15 @@ mod tests {
         rt.update(|s, _| s.b = 212.0);
         advance_by(&mut rt, 1.0);
         let b = width(&rt, "b");
-        assert!(b > 12.0 && b < 20.0, "a tap after a second of idle starts with one small step: {b}");
-        assert!((rt.clock - clock - 1.0).abs() < 1e-9, "timers still see the whole second: {}", rt.clock - clock);
+        assert!(
+            b > 12.0 && b < 20.0,
+            "a tap after a second of idle starts with one small step: {b}"
+        );
+        assert!(
+            (rt.clock - clock - 1.0).abs() < 1e-9,
+            "timers still see the whole second: {}",
+            rt.clock - clock
+        );
         // Then running motion keeps real time.
         let mut steady = runtime();
         steady.frame(0.0);
@@ -442,6 +621,9 @@ mod tests {
         steady.frame(RESUME_STEP);
         steady.frame(0.049);
         advance_by(&mut rt, 0.049);
-        assert!((width(&rt, "b") - width(&steady, "b")).abs() < 0.01, "a late headless frame keeps its time");
+        assert!(
+            (width(&rt, "b") - width(&steady, "b")).abs() < 0.01,
+            "a late headless frame keeps its time"
+        );
     }
 }

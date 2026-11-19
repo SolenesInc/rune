@@ -20,14 +20,27 @@ pub(crate) enum Life {
 }
 
 impl Life {
-    pub(crate) fn shown(self) -> bool { matches!(self, Life::Shown { .. }) }
+    pub(crate) fn shown(self) -> bool {
+        matches!(self, Life::Shown { .. })
+    }
 
     /// Shown, and on screen as far as anything says.
-    pub(crate) fn uncovered(self) -> bool { self == Life::Shown { sight: Sight::Seen } }
+    pub(crate) fn uncovered(self) -> bool {
+        self == Life::Shown { sight: Sight::Seen }
+    }
 
-    pub(crate) fn covered(self) -> bool { matches!(self, Life::Shown { sight: Sight::Covered(_) }) }
+    pub(crate) fn covered(self) -> bool {
+        matches!(
+            self,
+            Life::Shown {
+                sight: Sight::Covered(_)
+            }
+        )
+    }
 
-    pub(crate) fn finished(self) -> bool { self == Life::Finished }
+    pub(crate) fn finished(self) -> bool {
+        self == Life::Finished
+    }
 
     /// When it last hid, for reopening.
     pub(crate) fn hidden_at(self) -> Option<u64> {
@@ -39,26 +52,34 @@ impl Life {
 
     /// Comes on screen, uncovered. False for a window closed for good, which stays closed.
     pub(crate) fn show(&mut self) -> bool {
-        if self.finished() { return false; }
+        if self.finished() {
+            return false;
+        }
         *self = Life::Shown { sight: Sight::Seen };
         true
     }
 
     /// Leaves the screen; a window that wasn't shown keeps its state and stamp.
     pub(crate) fn hide(&mut self, stamp: impl FnOnce() -> u64) {
-        if self.shown() { *self = Life::Hidden { at: stamp() }; }
+        if self.shown() {
+            *self = Life::Hidden { at: stamp() };
+        }
     }
 
     /// `cover` starts or stops saying a shown window can't be seen. Returns whether it was
     /// covered. A window off screen has nothing to cover: showing uncovers it.
     pub(crate) fn cover(&mut self, cover: Cover, on: bool) -> bool {
-        let Life::Shown { sight } = self else { return false };
+        let Life::Shown { sight } = self else {
+            return false;
+        };
         let was = sight.covered();
         *sight = sight.step(cover, on);
         was
     }
 
-    pub(crate) fn finish(&mut self) { *self = Life::Finished; }
+    pub(crate) fn finish(&mut self) {
+        *self = Life::Finished;
+    }
 
     /// Whether a close runs `App::on_close`: the window is shown, or it isn't and
     /// `keep_running` doesn't keep it. A window hidden without its native window closes as

@@ -28,7 +28,9 @@ pub struct Taskbar {
 }
 
 impl Taskbar {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn progress(mut self, progress: TaskbarProgress) -> Self {
         self.progress = progress;
@@ -38,10 +40,21 @@ impl Taskbar {
     /// A count over the button's corner (above 9 it reads "9+"); 0 shows none. `description` is
     /// what the taskbar tells a screen reader, such as "2 sessions need you".
     pub fn badge(mut self, count: u32, description: impl Into<String>) -> Self {
-        self.badge = (count, if count == 0 { String::new() } else { description.into() });
+        self.badge = (
+            count,
+            if count == 0 {
+                String::new()
+            } else {
+                description.into()
+            },
+        );
         self
     }
 
-    pub fn count(&self) -> u32 { self.badge.0 }
-    pub fn shown_progress(&self) -> TaskbarProgress { self.progress }
+    pub fn count(&self) -> u32 {
+        self.badge.0
+    }
+    pub fn shown_progress(&self) -> TaskbarProgress {
+        self.progress
+    }
 }

@@ -53,7 +53,10 @@ pub(super) fn step(seq: &mut Seq, state: &mut Hold, event: Event) -> Effects<Eff
             Effects::one(Effect::WakeAt(due))
         }
         Event::Due { attempt, now } => match state {
-            Hold::Held { attempt: armed, due } if *armed == attempt && *due <= now + SLACK => {
+            Hold::Held {
+                attempt: armed,
+                due,
+            } if *armed == attempt && *due <= now + SLACK => {
                 *state = Hold::Free;
                 Effects::none()
             }

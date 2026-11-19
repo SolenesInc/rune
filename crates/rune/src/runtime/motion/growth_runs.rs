@@ -29,7 +29,17 @@ impl GrowthRun {
         let tracks: Vec<&GrowTrack> = ids.iter().map(|id| grows.get(id)).collect::<Option<_>>()?;
         let spring = tracks[0].glide()?;
         let mut track = GrowTrack::settled(tracks.iter().map(|g| g.h).sum());
-        track.set_kind(false, true, Some((FoldGlide { spring, feather: tracks[0].feather() }, f32::INFINITY)));
+        track.set_kind(
+            false,
+            true,
+            Some((
+                FoldGlide {
+                    spring,
+                    feather: tracks[0].feather(),
+                },
+                f32::INFINITY,
+            )),
+        );
         track.retarget(tracks.iter().map(|g| g.target).sum());
         Some(GrowthRun::Formed {
             rows: ids.to_vec(),
@@ -43,13 +53,32 @@ impl GrowthRun {
     /// still stand together in `order`. Otherwise it breaks, and each row carries on alone from
     /// where it is, the row at the edge with the block's speed.
     fn commit(&mut self, order: &[NodeId], grows: &mut HashMap<NodeId, GrowTrack>) -> bool {
-        let GrowthRun::Formed { rows, targets, track, .. } = self else { return false };
-        let aims = rows.iter().zip(&*targets).all(|(id, &t)| grows.get(id).is_none_or(|g| (g.target - t).abs() < 1e-4));
-        let present: Vec<usize> = rows.iter().filter_map(|id| order.iter().position(|o| o == id)).collect();
-        if aims && present.windows(2).all(|w| w[1] == w[0] + 1) { return true; }
+        let GrowthRun::Formed {
+            rows,
+            targets,
+            track,
+            ..
+        } = self
+        else {
+            return false;
+        };
+        let aims = rows
+            .iter()
+            .zip(&*targets)
+            .all(|(id, &t)| grows.get(id).is_none_or(|g| (g.target - t).abs() < 1e-4));
+        let present: Vec<usize> = rows
+            .iter()
+            .filter_map(|id| order.iter().position(|o| o == id))
+            .collect();
+        if aims && present.windows(2).all(|w| w[1] == w[0] + 1) {
+            return true;
+        }
         let speed = track.v;
         for id in rows.iter() {
-            if let Some(g) = grows.get_mut(id) && g.h > 1e-4 && g.h < g.target.max(g.h) - 1e-4 {
+            if let Some(g) = grows.get_mut(id)
+                && g.h > 1e-4
+                && g.h < g.target.max(g.h) - 1e-4
+            {
                 g.v = speed;
             }
         }
@@ -72,8 +101,22 @@ impl GrowthRun {
 
     /// Steps the block and gives each row its share: rows above the edge whole, the row at the
     /// edge its part and the feather, rows past it nothing. Returns how far the rows grew.
-    fn step(&mut self, steps: usize, spring: rune_motion::Spring, edge: &crate::growth::StreamEdge, grows: &mut HashMap<NodeId, GrowTrack>) -> f32 {
-        let GrowthRun::Formed { rows, extents, track, .. } = self else { return 0.0 };
+    fn step(
+        &mut self,
+        steps: usize,
+        spring: rune_motion::Spring,
+        edge: &crate::growth::StreamEdge,
+        grows: &mut HashMap<NodeId, GrowTrack>,
+    ) -> f32 {
+        let GrowthRun::Formed {
+            rows,
+            extents,
+            track,
+            ..
+        } = self
+        else {
+            return 0.0;
+        };
         for _ in 0..steps {
             track.step(spring, edge, false);
         }
@@ -96,37 +139,58 @@ impl RuntimeCore {
     /// At a commit, after the stack's rows have their new targets: breaks blocks this commit
     /// changed and forms new ones from runs of rows in `order` that were `opened` (new fold rows
     /// growing from nothing) or `shut` (fold rows that left) by it.
-    pub(super) fn link_growth_runs(&mut self, stack: &mut Stack, order: &[NodeId], opened: &[NodeId], shut: &[NodeId]) {
+    pub(super) fn link_growth_runs(
+        &mut self,
+        stack: &mut Stack,
+        order: &[NodeId],
+        opened: &[NodeId],
+        shut: &[NodeId],
+    ) {
         let grows = &mut self.grows;
         stack.runs.retain_mut(|run| run.commit(order, grows));
         for id in shut {
-            if let Some(g) = grows.get_mut(id) { g.retarget(0.0); }
+            if let Some(g) = grows.get_mut(id) {
+                g.retarget(0.0);
+            }
         }
         let fold = |g: &GrowTrack| (g.glide(), g.feather());
         for set in [opened, shut] {
             let mut block: Vec<NodeId> = Vec::new();
             for id in order.iter().map(Some).chain([None]) {
-                let eligible = id.filter(|id| set.contains(id))
+                let eligible = id
+                    .filter(|id| set.contains(id))
                     .and_then(|id| grows.get(id))
                     .filter(|g| g.glide().is_some() && !g.staged() && g.lift() == 0.0);
                 if let (Some(g), Some(id)) = (eligible, id)
-                    && block.last().and_then(|last| grows.get(last)).is_none_or(|last| fold(last) == fold(g))
+                    && block
+                        .last()
+                        .and_then(|last| grows.get(last))
+                        .is_none_or(|last| fold(last) == fold(g))
                 {
                     block.push(*id);
                     continue;
                 }
-                if block.len() > 1 && let Some(run) = GrowthRun::link(&block, grows) {
+                if block.len() > 1
+                    && let Some(run) = GrowthRun::link(&block, grows)
+                {
                     stack.runs.push(run);
                 }
                 block.clear();
-                if let (Some(_), Some(id)) = (eligible, id) { block.push(*id); }
+                if let (Some(_), Some(id)) = (eligible, id) {
+                    block.push(*id);
+                }
             }
         }
     }
 
     /// Steps a stack's blocks before its rows, and returns the rows they moved (which skip their
     /// own step this frame) and how far they grew.
-    pub(super) fn step_growth_runs(stack: &mut Stack, grows: &mut HashMap<NodeId, GrowTrack>, steps: usize, spec: crate::el::GrowthSpec) -> (Vec<NodeId>, f32) {
+    pub(super) fn step_growth_runs(
+        stack: &mut Stack,
+        grows: &mut HashMap<NodeId, GrowTrack>,
+        steps: usize,
+        spec: crate::el::GrowthSpec,
+    ) -> (Vec<NodeId>, f32) {
         let (mut rows, mut grown) = (Vec::new(), 0.0);
         stack.runs.retain_mut(|run| {
             grown += run.step(steps, spec.spring, &spec.edge, grows);

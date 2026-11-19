@@ -57,7 +57,9 @@ impl InputClick {
     }
 
     /// The runtime's held press is an input-selection press.
-    pub(super) fn captured(&self) -> bool { matches!(self.capture, Capture::Held { .. }) }
+    pub(super) fn captured(&self) -> bool {
+        matches!(self.capture, Capture::Held { .. })
+    }
 
     pub(super) fn clear(&mut self) {
         self.presses.clear();
@@ -72,7 +74,9 @@ impl InputClick {
     /// The field stops following the press: queued drag steps do nothing, and the press keeps
     /// the pointer until it releases.
     pub(super) fn drop_drag(&mut self) {
-        if let Capture::Held { dragging } = &mut self.capture { *dragging = None; }
+        if let Capture::Held { dragging } = &mut self.capture {
+            *dragging = None;
+        }
         self.cancel_drag_steps();
     }
 
@@ -98,27 +102,52 @@ impl InputClick {
     }
 }
 
-pub(super) fn hit(e: &crate::edit::TextEdit, l: TextFlow<'_>, x: f32, y: f32, s: f32, single: bool) -> Hit {
+pub(super) fn hit(
+    e: &crate::edit::TextEdit,
+    l: TextFlow<'_>,
+    x: f32,
+    y: f32,
+    s: f32,
+    single: bool,
+) -> Hit {
     let h = (l.height() - 1e-3).max(0.0);
-    let ys = if single || x < 0.0 { (y * s).clamp(0.0, h) } else { (y * s).max(0.0) };
+    let ys = if single || x < 0.0 {
+        (y * s).clamp(0.0, h)
+    } else {
+        (y * s).max(0.0)
+    };
     let at = l.hit(x * s, ys);
     let caret = e.model_index(at.index);
     let cluster = at.before.map_or(caret, |b| e.model_index(b));
-    Hit { caret, side: at.side, cluster }
+    Hit {
+        caret,
+        side: at.side,
+        cluster,
+    }
 }
 
 fn unit_at(e: &crate::edit::TextEdit, h: Hit, unit: Unit) -> (usize, usize) {
     if unit == Unit::Char {
         let to = e
             .pills()
-            .find_map(|(r, _)| (r.start < h.caret && h.caret < r.end).then(|| if h.caret - r.start < r.end - h.caret { r.start } else { r.end }))
+            .find_map(|(r, _)| {
+                (r.start < h.caret && h.caret < r.end).then(|| {
+                    if h.caret - r.start < r.end - h.caret {
+                        r.start
+                    } else {
+                        r.end
+                    }
+                })
+            })
             .unwrap_or(h.caret);
         return (to, to);
     }
     if e.is_secure() || (unit == Unit::Paragraph && e.is_single_line()) {
         return (0, e.text.len());
     }
-    let pill = e.pills().find_map(|(r, _)| r.contains(&h.cluster).then_some((r.start, r.end)));
+    let pill = e
+        .pills()
+        .find_map(|(r, _)| r.contains(&h.cluster).then_some((r.start, r.end)));
     if unit == Unit::Word
         && let Some(p) = pill
     {
@@ -155,10 +184,17 @@ impl RuntimeCore {
             self.input_click.presses.clear();
             1
         } else {
-            self.input_click.presses.press(&path, now, (x, y), self.double_click_interval).min(3) as u8
+            self.input_click
+                .presses
+                .press(&path, now, (x, y), self.double_click_interval)
+                .min(3) as u8
         };
-        self.input_click.capture = Capture::Held { dragging: Some(path.clone()) };
-        self.input_click.steps.push_back((path.clone(), Step::Down { clicks, shift }));
+        self.input_click.capture = Capture::Held {
+            dragging: Some(path.clone()),
+        };
+        self.input_click
+            .steps
+            .push_back((path.clone(), Step::Down { clicks, shift }));
         self.queue.push(Action::Focus(path.clone(), ix, iy));
         let d = Drag {
             phase: Phase::Down,
@@ -176,18 +212,37 @@ impl RuntimeCore {
             window: [x, y],
             screen: self.screen_at(x, y),
         };
-        self.press.hold(capture::Held::new(path, d, crate::PointerButton::Primary, (x, y), down_at, second, None));
+        self.press.hold(capture::Held::new(
+            path,
+            d,
+            crate::PointerButton::Primary,
+            (x, y),
+            down_at,
+            second,
+            None,
+        ));
     }
 
     pub(super) fn input_drag(&mut self, x: f32, y: f32, drag_move: bool) {
         if !drag_move {
             return;
         }
-        let Some(path) = self.input_click.dragging_path().map(str::to_owned) else { return };
-        if self.press.held().is_some_and(|h| !press_run::within_slop(h.at, (x, y))) {
+        let Some(path) = self.input_click.dragging_path().map(str::to_owned) else {
+            return;
+        };
+        if self
+            .press
+            .held()
+            .is_some_and(|h| !press_run::within_slop(h.at, (x, y)))
+        {
             self.input_click.presses.clear();
         }
-        let Some(ji) = self.nodes.iter().enumerate().position(|(i, n)| n.path == path && !self.subtree_exiting(i) && n.input.is_some()) else {
+        let Some(ji) = self
+            .nodes
+            .iter()
+            .enumerate()
+            .position(|(i, n)| n.path == path && !self.subtree_exiting(i) && n.input.is_some())
+        else {
             self.input_click.drop_drag();
             return;
         };
@@ -199,19 +254,33 @@ impl RuntimeCore {
     }
 
     pub(super) fn focus_input(&mut self, path: String, x: f32, y: f32, one: &mut Tx) -> bool {
-        let step = if self.input_click.steps.front().is_some_and(|(p, _)| *p == path) {
+        let step = if self
+            .input_click
+            .steps
+            .front()
+            .is_some_and(|(p, _)| *p == path)
+        {
             self.input_click.steps.pop_front().unwrap().1
         } else {
-            Step::Down { clicks: 1, shift: false }
+            Step::Down {
+                clicks: 1,
+                shift: false,
+            }
         };
         if matches!(step, Step::Cancelled) {
             return false;
         }
-        let Some(access) = self.node(&path).and_then(|n| n.input.as_ref()?.access.clone()) else {
+        let Some(access) = self
+            .node(&path)
+            .and_then(|n| n.input.as_ref()?.access.clone())
+        else {
             self.input_click.drop_drag();
             return false;
         };
-        let single = self.node(&path).and_then(|n| n.input.as_ref()).is_some_and(|i| i.single_line);
+        let single = self
+            .node(&path)
+            .and_then(|n| n.input.as_ref())
+            .is_some_and(|i| i.single_line);
         let layout = self.node(&path).and_then(|n| n.text_layout.clone());
         let s = self.env.scale;
         let scroll = self.input_scroll.get(&path).copied().unwrap_or(0.0);
@@ -249,7 +318,9 @@ impl RuntimeCore {
                         self.input_click.origin = origin;
                         e.set_selection(origin.0, origin.1);
                         // A caret put down where two runs meet stays on the side pressed.
-                        if origin == (h.caret, h.caret) { e.affinity = h.side; }
+                        if origin == (h.caret, h.caret) {
+                            e.affinity = h.side;
+                        }
                     }
                 }
                 one.commit = one.commit.instant();

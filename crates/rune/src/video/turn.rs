@@ -102,7 +102,16 @@ fn take_poster(c: &mut Control, port: &mut impl Port) {
 fn follow(c: &mut Control, port: &mut impl Port, frame_time: Option<f64>, now: Instant) {
     let current = port.current();
     let stopped = c.stage.running() && port.stopped();
-    send(c, port, Event::Follow { current, stopped, frame_time, now });
+    send(
+        c,
+        port,
+        Event::Follow {
+            current,
+            stopped,
+            frame_time,
+            now,
+        },
+    );
 }
 
 /// One pull of a video, or one tick of audio: take a finished load, make or update the player,

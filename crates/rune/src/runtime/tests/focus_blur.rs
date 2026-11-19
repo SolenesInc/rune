@@ -44,11 +44,15 @@ fn click(rt: &mut Runtime<Form>, key: &str) {
 }
 
 #[test]
-fn a_press_that_takes_focus_off_a_field_blurs_it_in_the_frame_it_lands_though_poll_never_sees_it_gone() {
+fn a_press_that_takes_focus_off_a_field_blurs_it_in_the_frame_it_lands_though_poll_never_sees_it_gone()
+ {
     let mut rt = form();
     click(&mut rt, "field");
     rt.frame(0.0);
-    rt.key(KeyEvent { key: crate::Key::Text("typed".into()), mods: Default::default() });
+    rt.key(KeyEvent {
+        key: crate::Key::Text("typed".into()),
+        mods: Default::default(),
+    });
     rt.frame(0.0);
     assert_eq!(focused(&rt), Some("field"));
     click(&mut rt, "heading");
@@ -56,7 +60,12 @@ fn a_press_that_takes_focus_off_a_field_blurs_it_in_the_frame_it_lands_though_po
     assert_ne!(focused(&rt), Some("field"));
     assert_eq!(rt.state().blurs, 1);
     assert!(
-        rt.state().polls.last().unwrap().as_deref().is_some_and(|f| f.ends_with("field")),
+        rt.state()
+            .polls
+            .last()
+            .unwrap()
+            .as_deref()
+            .is_some_and(|f| f.ends_with("field")),
         "poll runs before the frame's input, so it alone would not see the focus leave"
     );
     click(&mut rt, "field");
@@ -69,7 +78,10 @@ fn tab_and_the_window_losing_focus_each_blur_the_focused_field() {
     let mut rt = form();
     click(&mut rt, "field");
     rt.frame(0.0);
-    rt.key(KeyEvent { key: crate::Key::Tab, mods: Default::default() });
+    rt.key(KeyEvent {
+        key: crate::Key::Tab,
+        mods: Default::default(),
+    });
     rt.frame(0.0);
     assert_eq!(focused(&rt), Some("next"));
     assert_eq!(rt.state().blurs, 1);
@@ -78,7 +90,11 @@ fn tab_and_the_window_losing_focus_each_blur_the_focused_field() {
     rt.frame(0.0);
     rt.window_focus(false);
     rt.frame(0.0);
-    assert_eq!(rt.state().blurs, 2, "the window going inactive blurs it, as a page's input");
+    assert_eq!(
+        rt.state().blurs,
+        2,
+        "the window going inactive blurs it, as a page's input"
+    );
 }
 
 #[test]

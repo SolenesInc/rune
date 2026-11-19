@@ -8,7 +8,9 @@
 //! pixels. A scroll viewport carries its offset as its own transform, so scrolling changes one
 //! node, not every row under it.
 
-use accesskit::{Affine, Node as AkNode, NodeId as AkId, Rect as AkRect, Role, TreeId, TreeInfo, TreeUpdate};
+use accesskit::{
+    Affine, Node as AkNode, NodeId as AkId, Rect as AkRect, Role, TreeId, TreeInfo, TreeUpdate,
+};
 
 use super::*;
 
@@ -24,13 +26,23 @@ const LINK_BASE: u64 = 0x8000;
 /// The lines an element can own before their ids run into its links'.
 pub(crate) const LINES_MAX: usize = LINK_BASE as usize - 1;
 
-pub(crate) fn element_id(id: NodeId) -> AkId { AkId(id.0 << SUB) }
-pub(crate) fn line_id(id: NodeId, line: usize) -> AkId { AkId((id.0 << SUB) | (1 + line as u64).min(LINK_BASE - 1)) }
-pub(crate) fn link_id(id: NodeId, k: usize) -> AkId { AkId((id.0 << SUB) | (LINK_BASE + k as u64).min((1 << SUB) - 1)) }
+pub(crate) fn element_id(id: NodeId) -> AkId {
+    AkId(id.0 << SUB)
+}
+pub(crate) fn line_id(id: NodeId, line: usize) -> AkId {
+    AkId((id.0 << SUB) | (1 + line as u64).min(LINK_BASE - 1))
+}
+pub(crate) fn link_id(id: NodeId, k: usize) -> AkId {
+    AkId((id.0 << SUB) | (LINK_BASE + k as u64).min((1 << SUB) - 1))
+}
 /// The runtime node an AccessKit id names, and which of its own nodes: 0 the element, a line
 /// `1..LINK_BASE`, a link from `LINK_BASE`.
-pub(crate) fn split_id(id: AkId) -> (NodeId, u64) { (NodeId(id.0 >> SUB), id.0 & ((1 << SUB) - 1)) }
-pub(crate) fn sub_link(sub: u64) -> Option<usize> { (sub >= LINK_BASE).then(|| (sub - LINK_BASE) as usize) }
+pub(crate) fn split_id(id: AkId) -> (NodeId, u64) {
+    (NodeId(id.0 >> SUB), id.0 & ((1 << SUB) - 1))
+}
+pub(crate) fn sub_link(sub: u64) -> Option<usize> {
+    (sub >= LINK_BASE).then(|| (sub - LINK_BASE) as usize)
+}
 
 /// An element as assistive technology reads it ([`Runtime::accessible_elements`]).
 #[derive(Clone, Debug, PartialEq)]
@@ -129,20 +141,31 @@ pub(super) fn hash_str(s: &str) -> u64 {
 }
 
 /// Folds `v` into `h`, order-sensitively.
-pub(super) fn mix(h: u64, v: u64) -> u64 { (h.rotate_left(5) ^ v).wrapping_mul(0x517c_c1b7_2722_0a95) }
+pub(super) fn mix(h: u64, v: u64) -> u64 {
+    (h.rotate_left(5) ^ v).wrapping_mul(0x517c_c1b7_2722_0a95)
+}
 
-pub(super) fn round(v: f32) -> f64 { (f64::from(v) * 32.0).round() / 32.0 }
+pub(super) fn round(v: f32) -> f64 {
+    (f64::from(v) * 32.0).round() / 32.0
+}
 
 pub(super) fn rect(r: [f32; 4], shift: [f32; 2]) -> AkRect {
     let (x, y) = (round(r[0] + shift[0]), round(r[1] + shift[1]));
-    AkRect { x0: x, y0: y, x1: x + round(r[2].max(0.0)), y1: y + round(r[3].max(0.0)) }
+    AkRect {
+        x0: x,
+        y0: y,
+        x1: x + round(r[2].max(0.0)),
+        y1: y + round(r[3].max(0.0)),
+    }
 }
 
 impl RuntimeCore {
     /// An assistive client asked for this surface's tree: the next update holds all of it.
     /// Text an [`crate::El::a11y_text_from`] reads changed without the view running again, as
     /// a compositor's own drawing does: the next update reads it again.
-    pub fn a11y_text_changed(&mut self) { self.a11y_text_changes = self.a11y_text_changes.wrapping_add(1); }
+    pub fn a11y_text_changed(&mut self) {
+        self.a11y_text_changes = self.a11y_text_changes.wrapping_add(1);
+    }
 
     /// An assistive client started listening, as the platform adapter hears it: updates
     /// ([`Self::a11y_update`]) now carry the tree. `name` names the root when the runtime has
@@ -155,24 +178,47 @@ impl RuntimeCore {
     }
 
     /// Nobody listens any more: drop the tree and stop building it.
-    pub(crate) fn a11y_deactivate(&mut self) { self.a11y = None; }
+    pub(crate) fn a11y_deactivate(&mut self) {
+        self.a11y = None;
+    }
 
     /// The update to send the adapter, when the tree is active and something it shows changed
     /// since the last one. `None` before the first frame has laid anything out.
     pub fn a11y_update(&mut self) -> Option<TreeUpdate> {
-        if self.a11y.is_none() || self.drawn.len() != self.nodes.len() || self.nodes.is_empty() { return None; }
+        if self.a11y.is_none() || self.drawn.len() != self.nodes.len() || self.nodes.is_empty() {
+            return None;
+        }
         let stamp = self.a11y_stamp();
         let tree = self.a11y.as_ref()?;
-        if !tree.full && tree.stamp.as_ref() == Some(&stamp) { return None; }
+        if !tree.full && tree.stamp.as_ref() == Some(&stamp) {
+            return None;
+        }
         // Only scrolled: the rows keep their bounds in their viewport's content space, so only
         // the viewports' offsets change. Sticky elements move against the content; they don't.
-        let scrolled_only = !tree.full && !self.has_sticky
-            && tree.stamp.as_ref().is_some_and(|s| Stamp { scrolls: stamp.scrolls, ..s.clone() } == stamp);
-        if scrolled_only { return self.a11y_scrolled(stamp); }
+        let scrolled_only = !tree.full
+            && !self.has_sticky
+            && tree.stamp.as_ref().is_some_and(|s| {
+                Stamp {
+                    scrolls: stamp.scrolls,
+                    ..s.clone()
+                } == stamp
+            });
+        if scrolled_only {
+            return self.a11y_scrolled(stamp);
+        }
         let found = self.a11y_walk();
         let tree = self.a11y.as_ref()?;
         let full = tree.full;
-        let changed: Vec<bool> = found.slots.iter().map(|s| full || tree.sent.get(&s.id.0).is_none_or(|old| old.print != s.print)).collect();
+        let changed: Vec<bool> = found
+            .slots
+            .iter()
+            .map(|s| {
+                full || tree
+                    .sent
+                    .get(&s.id.0)
+                    .is_none_or(|old| old.print != s.print)
+            })
+            .collect();
         let nodes = self.a11y_build(&found, &changed, &tree.name);
         let tree = self.a11y.as_mut()?;
         tree.stamp = Some(stamp);
@@ -180,7 +226,9 @@ impl RuntimeCore {
         tree.pass = tree.pass.wrapping_add(1);
         let pass = tree.pass;
         for s in &found.slots {
-            if let Some(old) = tree.sent.get_mut(&s.id.0) { old.pass = pass; }
+            if let Some(old) = tree.sent.get_mut(&s.id.0) {
+                old.pass = pass;
+            }
         }
         let mut out = Vec::with_capacity(nodes.len());
         for (id, node, print) in nodes {
@@ -192,35 +240,71 @@ impl RuntimeCore {
                     old.node = node.clone();
                 }
                 None => {
-                    tree.sent.insert(id.0, Sent { print, pass, node: node.clone() });
+                    tree.sent.insert(
+                        id.0,
+                        Sent {
+                            print,
+                            pass,
+                            node: node.clone(),
+                        },
+                    );
                 }
             }
             out.push((id, node));
         }
         // Lines and links of unchanged texts stay: mark them seen.
-        for s in found.slots.iter().zip(&changed).filter(|(_, c)| !**c).map(|(s, _)| s) {
-            let kids: Vec<u64> = tree.sent.get(&s.id.0).map(|o| o.node.children().iter().map(|c| c.0).collect()).unwrap_or_default();
+        for s in found
+            .slots
+            .iter()
+            .zip(&changed)
+            .filter(|(_, c)| !**c)
+            .map(|(s, _)| s)
+        {
+            let kids: Vec<u64> = tree
+                .sent
+                .get(&s.id.0)
+                .map(|o| o.node.children().iter().map(|c| c.0).collect())
+                .unwrap_or_default();
             for k in kids.into_iter().filter(|&k| split_id(AkId(k)).1 != 0) {
-                if let Some(old) = tree.sent.get_mut(&k) { old.pass = pass; }
+                if let Some(old) = tree.sent.get_mut(&k) {
+                    old.pass = pass;
+                }
             }
         }
         tree.sent.retain(|_, s| s.pass == pass);
         tree.scrollers = found.scrollers;
         #[cfg(test)]
         self.a11y_check_sent();
-        Some(TreeUpdate { nodes: out, tree: full.then(|| self.a11y_info()), tree_id: TreeId::ROOT, focus: found.focus })
+        Some(TreeUpdate {
+            nodes: out,
+            tree: full.then(|| self.a11y_info()),
+            tree_id: TreeId::ROOT,
+            focus: found.focus,
+        })
     }
 
     /// Tests: what was sent is what a whole build gives now.
     #[cfg(test)]
     fn a11y_check_sent(&self) {
-        if !CHECK_SENT.get() { return; }
-        let Some(tree) = self.a11y.as_ref() else { return };
+        if !CHECK_SENT.get() {
+            return;
+        }
+        let Some(tree) = self.a11y.as_ref() else {
+            return;
+        };
         let whole = self.accessibility_tree();
-        assert_eq!(whole.nodes.len(), tree.sent.len(), "the sent tree has the whole tree's nodes");
+        assert_eq!(
+            whole.nodes.len(),
+            tree.sent.len(),
+            "the sent tree has the whole tree's nodes"
+        );
         for (id, node) in &whole.nodes {
             let sent = tree.sent.get(&id.0).map(|s| &s.node);
-            assert_eq!(sent, Some(node), "node {id:?} changed without its fingerprint");
+            assert_eq!(
+                sent,
+                Some(node),
+                "node {id:?} changed without its fingerprint"
+            );
         }
     }
 
@@ -229,13 +313,19 @@ impl RuntimeCore {
         let scrollers = std::mem::take(&mut self.a11y.as_mut()?.scrollers);
         let mut changed = Vec::new();
         for &(i, w) in &scrollers {
-            let Some(role) = self.a11y_role(i) else { continue };
+            let Some(role) = self.a11y_role(i) else {
+                continue;
+            };
             let mut node = self.a11y_node(i, role, &w);
             let id = element_id(self.nodes[i].id);
             let tree = self.a11y.as_mut()?;
-            let Some(old) = tree.sent.get_mut(&id.0) else { continue };
+            let Some(old) = tree.sent.get_mut(&id.0) else {
+                continue;
+            };
             node.set_children(old.node.children().to_vec());
-            if let Some(size) = old.node.size_of_set() { node.set_size_of_set(size); }
+            if let Some(size) = old.node.size_of_set() {
+                node.set_size_of_set(size);
+            }
             if old.node != node {
                 changed.push((id, node.clone()));
                 old.node = node;
@@ -247,16 +337,28 @@ impl RuntimeCore {
         tree.scrollers = scrollers;
         tree.stamp = Some(stamp);
         let focus = self.a11y_focus_now();
-        Some(TreeUpdate { nodes: changed, tree: None, tree_id: TreeId::ROOT, focus })
+        Some(TreeUpdate {
+            nodes: changed,
+            tree: None,
+            tree_id: TreeId::ROOT,
+            focus,
+        })
     }
 
     /// The node holding keyboard focus, when it is in the sent tree.
     fn a11y_focus_now(&self) -> AkId {
-        let Some(i) = self.focused_index().or_else(|| self.a11y_key_holder()) else { return ROOT };
+        let Some(i) = self.focused_index().or_else(|| self.a11y_key_holder()) else {
+            return ROOT;
+        };
         let n = &self.nodes[i];
-        let id = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
+        let id = self
+            .link_focus()
+            .filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
             .map_or(element_id(n.id), |k| link_id(n.id, k));
-        let sent = self.a11y.as_ref().is_some_and(|t| t.sent.contains_key(&id.0));
+        let sent = self
+            .a11y
+            .as_ref()
+            .is_some_and(|t| t.sent.contains_key(&id.0));
         if sent { id } else { ROOT }
     }
 
@@ -264,8 +366,17 @@ impl RuntimeCore {
     pub fn accessibility_tree(&self) -> TreeUpdate {
         let found = self.a11y_walk();
         let name = self.a11y.as_ref().map_or("", |t| t.name.as_str());
-        let nodes = self.a11y_build(&found, &vec![true; found.slots.len()], name).into_iter().map(|(id, n, _)| (id, n)).collect();
-        TreeUpdate { nodes, tree: Some(self.a11y_info()), tree_id: TreeId::ROOT, focus: found.focus }
+        let nodes = self
+            .a11y_build(&found, &vec![true; found.slots.len()], name)
+            .into_iter()
+            .map(|(id, n, _)| (id, n))
+            .collect();
+        TreeUpdate {
+            nodes,
+            tree: Some(self.a11y_info()),
+            tree_id: TreeId::ROOT,
+            focus: found.focus,
+        }
     }
 
     /// [`Runtime::accessibility_tree`] as nested JSON, as `--tree` writes it under
@@ -280,37 +391,62 @@ impl RuntimeCore {
     /// tree does finds it in [`Runtime::elements`] by its path.
     pub fn accessible_elements(&self) -> Vec<AccessibleElement> {
         let tree = self.accessibility_tree();
-        let paths: HashMap<u64, &str> = self.nodes.iter().map(|n| (n.id.0, n.path.as_str())).collect();
-        crate::a11y::dump::roles_and_names(&tree).into_iter().filter_map(|(id, role, name)| {
-            let (node, sub) = split_id(id);
-            let path = paths.get(&node.0)?;
-            let path = match sub_link(sub) {
-                Some(k) => format!("{path}#link-{k}"),
-                None if sub == 0 => (*path).to_owned(),
-                None => return None,
-            };
-            Some(AccessibleElement { path, role, name })
-        }).collect()
+        let paths: HashMap<u64, &str> = self
+            .nodes
+            .iter()
+            .map(|n| (n.id.0, n.path.as_str()))
+            .collect();
+        crate::a11y::dump::roles_and_names(&tree)
+            .into_iter()
+            .filter_map(|(id, role, name)| {
+                let (node, sub) = split_id(id);
+                let path = paths.get(&node.0)?;
+                let path = match sub_link(sub) {
+                    Some(k) => format!("{path}#link-{k}"),
+                    None if sub == 0 => (*path).to_owned(),
+                    None => return None,
+                };
+                Some(AccessibleElement { path, role, name })
+            })
+            .collect()
     }
 
     fn a11y_info(&self) -> TreeInfo {
-        TreeInfo { root: ROOT, toolkit_name: Some("Rune".into()), toolkit_version: Some(env!("CARGO_PKG_VERSION").into()) }
+        TreeInfo {
+            root: ROOT,
+            toolkit_name: Some("Rune".into()),
+            toolkit_version: Some(env!("CARGO_PKG_VERSION").into()),
+        }
     }
 
     fn a11y_stamp(&self) -> Stamp {
         let mut scrolls = 0u64;
         for (id, s) in &self.scrolls {
-            scrolls = scrolls.wrapping_add(id.0.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (s.drawn_x.to_bits() as u64) << 32 ^ s.drawn.y().to_bits() as u64);
+            scrolls = scrolls.wrapping_add(
+                id.0.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                    ^ (s.drawn_x.to_bits() as u64) << 32
+                    ^ s.drawn.y().to_bits() as u64,
+            );
         }
-        let focus = self.focus.path().map_or(0, hash_str) ^ self.link_focus().map_or(0, |k| k as u64 + 1) << 48;
+        let focus = self.focus.path().map_or(0, hash_str)
+            ^ self.link_focus().map_or(0, |k| k as u64 + 1) << 48;
         Stamp {
             commits: self.commits,
             scrolls,
             focus,
             animating: self.animating,
-            viewport: (self.viewport.0.to_bits(), self.viewport.1.to_bits(), self.env.scale.to_bits()),
+            viewport: (
+                self.viewport.0.to_bits(),
+                self.viewport.1.to_bits(),
+                self.env.scale.to_bits(),
+            ),
             name: self.window_title.current().map_or(0, hash_str),
-            tooltip: self.help_tooltip().map_or(0, |(t, r)| mix(hash_str(t), r[0].to_bits() as u64 ^ (r[1].to_bits() as u64) << 32)),
+            tooltip: self.help_tooltip().map_or(0, |(t, r)| {
+                mix(
+                    hash_str(t),
+                    r[0].to_bits() as u64 ^ (r[1].to_bits() as u64) << 32,
+                )
+            }),
             announced: self.announcement.said(),
             own_text: self.a11y_text_changes,
         }
@@ -320,7 +456,14 @@ impl RuntimeCore {
     fn a11y_walk(&self) -> Found {
         let n_nodes = self.nodes.len();
         let mut slots = Vec::with_capacity(n_nodes / 2 + 2);
-        slots.push(Slot { id: ROOT, element: None, walk: Walk::default(), role: Role::Window, print: 0, set_size: None });
+        slots.push(Slot {
+            id: ROOT,
+            element: None,
+            walk: Walk::default(),
+            role: Role::Window,
+            print: 0,
+            set_size: None,
+        });
         let mut kids = Vec::with_capacity(n_nodes / 2 + 2);
         let mut walk = vec![Walk::default(); n_nodes];
         let mut scrollers = Vec::new();
@@ -344,47 +487,107 @@ impl RuntimeCore {
         for i in 0..n_nodes {
             let n = &self.nodes[i];
             let up = n.parent.map(|p| walk[p]).unwrap_or_default();
-            let mut w = Walk { slot: up.slot, gone: up.gone, shift: up.shift, scrolled: up.scrolled };
-            if let Some(p) = n.parent && let Some(st) = self.scrolls.get(&self.nodes[p].id) {
+            let mut w = Walk {
+                slot: up.slot,
+                gone: up.gone,
+                shift: up.shift,
+                scrolled: up.scrolled,
+            };
+            if let Some(p) = n.parent
+                && let Some(st) = self.scrolls.get(&self.nodes[p].id)
+            {
                 let [x, y] = self.content_to_window(p, [st.drawn_x, st.drawn.y()]);
                 w.shift = [w.shift[0] + x, w.shift[1] + y];
                 w.scrolled = true;
             }
             if !w.gone {
-                w.gone = n.is_moved_stub() || n.a11y.hidden || n.vis.opacity <= 0.01 || self.is_exiting(n.id)
-                    || !self.scene.contains(n.id) || (modal && !self.modal_member(i) && !holds_modal[i]);
+                w.gone = n.is_moved_stub()
+                    || n.a11y.hidden
+                    || n.vis.opacity <= 0.01
+                    || self.is_exiting(n.id)
+                    || !self.scene.contains(n.id)
+                    || (modal && !self.modal_member(i) && !holds_modal[i]);
             }
-            if !w.gone && let Some(role) = self.a11y_role(i) {
+            if !w.gone
+                && let Some(role) = self.a11y_role(i)
+            {
                 let id = element_id(n.id);
-                let mut print = mix(self.a11y_print(i, role, &w), content.get(i).copied().unwrap_or(0));
-                if let Some(index) = self.a11y_index_in_list(i) { print = mix(print, index as u64 + 1); }
-                if n.scroll.is_some() && self.scrolls.contains_key(&n.id) { scrollers.push((i, w)); }
-                if let Some((_, size)) = n.a11y.more.as_ref().and_then(|m| m.set) { slots[w.slot].set_size = Some(size); }
+                let mut print = mix(
+                    self.a11y_print(i, role, &w),
+                    content.get(i).copied().unwrap_or(0),
+                );
+                if let Some(index) = self.a11y_index_in_list(i) {
+                    print = mix(print, index as u64 + 1);
+                }
+                if n.scroll.is_some() && self.scrolls.contains_key(&n.id) {
+                    scrollers.push((i, w));
+                }
+                if let Some((_, size)) = n.a11y.more.as_ref().and_then(|m| m.set) {
+                    slots[w.slot].set_size = Some(size);
+                }
                 kids.push((w.slot, id));
                 if focused == Some(i) {
-                    focus = self.link_focus().filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
+                    focus = self
+                        .link_focus()
+                        .filter(|&k| n.text.as_ref().is_some_and(|t| k < t.cold.links.len()))
                         .map_or(id, |k| link_id(n.id, k));
                 }
-                if holder.is_none() && n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) { holder = Some(id); }
-                slots.push(Slot { id, element: Some(i), walk: w, role, print, set_size: None });
+                if holder.is_none() && n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) {
+                    holder = Some(id);
+                }
+                slots.push(Slot {
+                    id,
+                    element: Some(i),
+                    walk: w,
+                    role,
+                    print,
+                    set_size: None,
+                });
                 w.slot = slots.len() - 1;
             }
             walk[i] = w;
         }
         // The root: its title, size, scale and the tooltip showing.
-        let tip = self.help_tooltip().map_or(0, |(t, r)| mix(hash_str(t), r.iter().fold(0, |h, v| mix(h, v.to_bits() as u64))));
+        let tip = self.help_tooltip().map_or(0, |(t, r)| {
+            mix(
+                hash_str(t),
+                r.iter().fold(0, |h, v| mix(h, v.to_bits() as u64)),
+            )
+        });
         let title = self.window_title.current().map_or(0, hash_str);
         let said = u64::from(self.announcement.said());
-        slots[0].print = [self.viewport.0.to_bits() as u64, self.viewport.1.to_bits() as u64, self.env.scale.to_bits() as u64, tip, title, said]
-            .into_iter().fold(0, mix);
+        slots[0].print = [
+            self.viewport.0.to_bits() as u64,
+            self.viewport.1.to_bits() as u64,
+            self.env.scale.to_bits() as u64,
+            tip,
+            title,
+            said,
+        ]
+        .into_iter()
+        .fold(0, mix);
         // Each node's children and set size are part of what it shows.
         let mut kid_prints = vec![0u64; slots.len()];
-        for &(parent, id) in &kids { kid_prints[parent] = mix(kid_prints[parent], id.0); }
-        for (k, s) in slots.iter_mut().enumerate() {
-            s.print = mix(mix(s.print, kid_prints[k]), s.set_size.map_or(0, |n| n as u64 + 1));
+        for &(parent, id) in &kids {
+            kid_prints[parent] = mix(kid_prints[parent], id.0);
         }
-        if focused.is_none() && let Some(holder) = holder { focus = holder; }
-        Found { slots, kids, focus, scrollers }
+        for (k, s) in slots.iter_mut().enumerate() {
+            s.print = mix(
+                mix(s.print, kid_prints[k]),
+                s.set_size.map_or(0, |n| n as u64 + 1),
+            );
+        }
+        if focused.is_none()
+            && let Some(holder) = holder
+        {
+            focus = holder;
+        }
+        Found {
+            slots,
+            kids,
+            focus,
+            scrollers,
+        }
     }
 
     /// The first element in the tree that [`El::holds_keys`], which assistive technology
@@ -393,25 +596,40 @@ impl RuntimeCore {
         let sent = self.a11y.as_ref()?;
         (0..self.nodes.len()).find(|&i| {
             let n = &self.nodes[i];
-            n.a11y.more.as_ref().is_some_and(|m| m.holds_keys) && sent.sent.contains_key(&element_id(n.id).0)
+            n.a11y.more.as_ref().is_some_and(|m| m.holds_keys)
+                && sent.sent.contains_key(&element_id(n.id).0)
         })
     }
 
     /// The nodes of `found` whose `changed` flag is set, built, with their lines and links:
     /// (id, node, fingerprint).
-    fn a11y_build(&self, found: &Found, changed: &[bool], fallback_name: &str) -> Vec<(AkId, AkNode, u64)> {
+    fn a11y_build(
+        &self,
+        found: &Found,
+        changed: &[bool],
+        fallback_name: &str,
+    ) -> Vec<(AkId, AkNode, u64)> {
         let mut children: Vec<Vec<AkId>> = vec![Vec::new(); found.slots.len()];
         for &(parent, id) in &found.kids {
-            if changed[parent] { children[parent].push(id); }
+            if changed[parent] {
+                children[parent].push(id);
+            }
         }
         let mut out = Vec::with_capacity(changed.iter().filter(|c| **c).count());
         for (k, s) in found.slots.iter().enumerate().filter(|(k, _)| changed[*k]) {
             let Some(i) = s.element else {
                 let mut root = AkNode::new(Role::Window);
                 root.set_transform(Affine::scale(f64::from(self.env.scale)));
-                root.set_bounds(AkRect { x0: 0.0, y0: 0.0, x1: round(self.viewport.0), y1: round(self.viewport.1) });
+                root.set_bounds(AkRect {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: round(self.viewport.0),
+                    y1: round(self.viewport.1),
+                });
                 let title = self.window_title.current().unwrap_or(fallback_name);
-                if !title.is_empty() { root.set_label(title); }
+                if !title.is_empty() {
+                    root.set_label(title);
+                }
                 let mut kids = std::mem::take(&mut children[k]);
                 // Rune draws `El::help` tooltips itself off macOS: the one showing is the root's child.
                 if let Some((tip, r)) = self.help_tooltip() {
@@ -425,21 +643,42 @@ impl RuntimeCore {
                 // that appeared.
                 let mut node = AkNode::new(Role::Status);
                 let (words, how) = self.announcement.words().unwrap_or_default();
-                if !words.is_empty() { node.set_label(words); }
-                node.set_live(if how == crate::LiveRegion::Assertive { accesskit::Live::Assertive } else { accesskit::Live::Polite });
-                node.set_bounds(AkRect { x0: 0.0, y0: 0.0, x1: 1.0, y1: 1.0 });
+                if !words.is_empty() {
+                    node.set_label(words);
+                }
+                node.set_live(if how == crate::LiveRegion::Assertive {
+                    accesskit::Live::Assertive
+                } else {
+                    accesskit::Live::Polite
+                });
+                node.set_bounds(AkRect {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 1.0,
+                    y1: 1.0,
+                });
                 kids.push(ANNOUNCER);
                 out.push((ANNOUNCER, node, s.print));
-                if let Some(size) = s.set_size { root.set_size_of_set(size); }
+                if let Some(size) = s.set_size {
+                    root.set_size_of_set(size);
+                }
                 root.set_children(kids);
                 out.push((ROOT, root, s.print));
                 continue;
             };
             let mut node = self.a11y_node(i, s.role, &s.walk);
-            if let Some(list) = self.virtuals.get(&self.nodes[i].path) { node.set_size_of_set(list.keys.len()); }
+            if let Some(list) = self.virtuals.get(&self.nodes[i].path) {
+                node.set_size_of_set(list.keys.len());
+            }
             // An app's own place in the set wins over the virtual list's index.
-            if node.position_in_set().is_none() && let Some(index) = self.a11y_index_in_list(i) { node.set_position_in_set(index); }
-            if let Some(size) = s.set_size { node.set_size_of_set(size); }
+            if node.position_in_set().is_none()
+                && let Some(index) = self.a11y_index_in_list(i)
+            {
+                node.set_position_in_set(index);
+            }
+            if let Some(size) = s.set_size {
+                node.set_size_of_set(size);
+            }
             // Its text's lines and links come first, then its element children.
             let mut text = vec![(s.id, node)];
             self.a11y_text_nodes(i, &s.walk, &mut text);

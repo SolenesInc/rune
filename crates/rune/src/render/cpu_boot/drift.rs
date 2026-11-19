@@ -27,15 +27,35 @@ pub struct Pixels<'a> {
 }
 
 impl<'a> Pixels<'a> {
-    pub fn bgra(data: &'a [u8], width: u32, height: u32, stride: usize) -> Self { Pixels { data, width, height, stride, rgba: false } }
+    pub fn bgra(data: &'a [u8], width: u32, height: u32, stride: usize) -> Self {
+        Pixels {
+            data,
+            width,
+            height,
+            stride,
+            rgba: false,
+        }
+    }
 
-    pub fn rgba(data: &'a [u8], width: u32, height: u32, stride: usize) -> Self { Pixels { data, width, height, stride, rgba: true } }
+    pub fn rgba(data: &'a [u8], width: u32, height: u32, stride: usize) -> Self {
+        Pixels {
+            data,
+            width,
+            height,
+            stride,
+            rgba: true,
+        }
+    }
 
     /// Pixel `(x, y)` as B, G, R, A.
     fn bgra_at(&self, x: u32, y: u32) -> [u8; 4] {
         let at = y as usize * self.stride + x as usize * 4;
         let p = &self.data[at..at + 4];
-        if self.rgba { [p[2], p[1], p[0], p[3]] } else { [p[0], p[1], p[2], p[3]] }
+        if self.rgba {
+            [p[2], p[1], p[0], p[3]]
+        } else {
+            [p[0], p[1], p[2], p[3]]
+        }
     }
 }
 
@@ -50,18 +70,28 @@ pub fn drift_wanted() -> bool {
 /// result for [`last_drift`] and logs it.
 pub fn drift(cpu: Pixels<'_>, gpu: Pixels<'_>) -> Drift {
     let (w, h) = (cpu.width.min(gpu.width), cpu.height.min(gpu.height));
-    let mut d = Drift { pixels: u64::from(w) * u64::from(h), ..Drift::default() };
+    let mut d = Drift {
+        pixels: u64::from(w) * u64::from(h),
+        ..Drift::default()
+    };
     for y in 0..h {
         for x in 0..w {
             let (a, b) = (cpu.bgra_at(x, y), gpu.bgra_at(x, y));
             let m = (0..4).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0);
-            if m > 0 { d.differ += 1; }
-            if m > 2 { d.over_two += 1; }
+            if m > 0 {
+                d.differ += 1;
+            }
+            if m > 2 {
+                d.over_two += 1;
+            }
             d.max = d.max.max(m);
         }
     }
     *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some(d);
-    eprintln!("rune: cpu boot drift: {} of {} px differ from the GPU's first frame, {} by more than 2 (max {})", d.differ, d.pixels, d.over_two, d.max);
+    eprintln!(
+        "rune: cpu boot drift: {} of {} px differ from the GPU's first frame, {} by more than 2 (max {})",
+        d.differ, d.pixels, d.over_two, d.max
+    );
     d
 }
 

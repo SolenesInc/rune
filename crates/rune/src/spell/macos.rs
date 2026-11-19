@@ -40,7 +40,9 @@ pub(super) fn suggest(word: &str) -> Vec<String> {
     // SAFETY: as in `misspelled`; `range` is all of `string`.
     unsafe {
         let checker = NSSpellChecker::sharedSpellChecker();
-        let Some(guesses) = checker.guessesForWordRange_inString_language_inSpellDocumentWithTag(range, &string, None, 0) else {
+        let Some(guesses) = checker
+            .guessesForWordRange_inString_language_inSpellDocumentWithTag(range, &string, None, 0)
+        else {
             return Vec::new();
         };
         guesses.iter().map(|g| g.to_string()).collect()

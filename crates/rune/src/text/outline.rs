@@ -93,26 +93,59 @@ impl Outline {
         let x1 = bbox[2] * s + r + 1.0;
         let y0 = bbox[1] * s - reach - 1.0;
         let y1 = bbox[3] * s + 2.0 * r + reach + 1.0;
-        [self.pen[0] + x0 * z, self.pen[1] - y1 * z, (x1 - x0) * z, (y1 - y0) * z]
+        [
+            self.pen[0] + x0 * z,
+            self.pen[1] - y1 * z,
+            (x1 - x0) * z,
+            (y1 - y0) * z,
+        ]
     }
 }
 
 /// `glyph`'s outline in font units leaning by `skew` degrees, built into a store record: the
 /// design outline, or the one its TrueType hints fit to the pixel grid at `hinted` ppem.
-pub(crate) fn extract(cx: &mut ScaleContext, font: FontRef<'_>, index: u32, coords: &[i16], glyph: u16, skew: u8, hinting: Hinting) -> Option<build::Built> {
+pub(crate) fn extract(
+    cx: &mut ScaleContext,
+    font: FontRef<'_>,
+    index: u32,
+    coords: &[i16],
+    glyph: u16,
+    skew: u8,
+    hinting: Hinting,
+) -> Option<build::Built> {
     let upem = font.metrics(coords).units_per_em;
-    let lean = if skew == 0 { 0.0 } else { (skew as f64).to_radians().tan() };
+    let lean = if skew == 0 {
+        0.0
+    } else {
+        (skew as f64).to_radians().tan()
+    };
     let size = match hinting {
         Hinting::None => upem as f32,
         Hinting::TrueType(ppem) | Hinting::Auto(ppem) | Hinting::Vertical(ppem) => ppem,
     };
     let mut built = if let Hinting::Auto(ppem) | Hinting::Vertical(ppem) = hinting {
-        let path = skrifa_hinted(font.data, index, coords, glyph, ppem, matches!(hinting, Hinting::Vertical(_)))?;
+        let path = skrifa_hinted(
+            font.data,
+            index,
+            coords,
+            glyph,
+            ppem,
+            matches!(hinting, Hinting::Vertical(_)),
+        )?;
         build::build(path.iter().copied(), upem as f64 / size as f64, lean)?
     } else {
-        let mut scaler = cx.builder(font).size(size).hint(hinting != Hinting::None).normalized_coords(coords.iter().copied()).build();
+        let mut scaler = cx
+            .builder(font)
+            .size(size)
+            .hint(hinting != Hinting::None)
+            .normalized_coords(coords.iter().copied())
+            .build();
         let outline = scaler.scale_outline(glyph)?;
-        build::build(swash::zeno::PathData::commands(&outline.path()), upem as f64 / size as f64, lean)?
+        build::build(
+            swash::zeno::PathData::commands(&outline.path()),
+            upem as f64 / size as f64,
+            lean,
+        )?
     };
     built.upem = upem as f32;
     Some(built)
@@ -121,21 +154,54 @@ pub(crate) fn extract(cx: &mut ScaleContext, font: FontRef<'_>, index: u32, coor
 /// `glyph`'s outline at `ppem` px, y up, after FreeType's light autohint (skrifa's), as Chromium
 /// draws text on Linux with `hintslight`; or, `vertical`, after the font's own TrueType hints run
 /// by the v40 interpreter, which applies them vertically only, as DirectWrite does on Windows.
-fn skrifa_hinted(data: &[u8], index: u32, coords: &[i16], glyph: u16, ppem: f32, vertical: bool) -> Option<Vec<swash::zeno::Command>> {
+fn skrifa_hinted(
+    data: &[u8],
+    index: u32,
+    coords: &[i16],
+    glyph: u16,
+    ppem: f32,
+    vertical: bool,
+) -> Option<Vec<swash::zeno::Command>> {
     use skrifa::MetadataProvider;
-    use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, SmoothMode, Target};
+    use skrifa::outline::{
+        DrawSettings, Engine, HintingInstance, HintingOptions, SmoothMode, Target,
+    };
     let font = skrifa::FontRef::from_index(data, index).ok()?;
     let outlines = font.outline_glyphs();
-    let coords: Vec<skrifa::instance::NormalizedCoord> = coords.iter().map(|&c| skrifa::instance::NormalizedCoord::from_bits(c)).collect();
+    let coords: Vec<skrifa::instance::NormalizedCoord> = coords
+        .iter()
+        .map(|&c| skrifa::instance::NormalizedCoord::from_bits(c))
+        .collect();
     let options = if vertical {
-        HintingOptions { engine: Engine::Interpreter, target: Target::Smooth { mode: SmoothMode::Normal, symmetric_rendering: true, preserve_linear_metrics: true } }
+        HintingOptions {
+            engine: Engine::Interpreter,
+            target: Target::Smooth {
+                mode: SmoothMode::Normal,
+                symmetric_rendering: true,
+                preserve_linear_metrics: true,
+            },
+        }
     } else {
-        HintingOptions { engine: Engine::Auto(None), target: Target::Smooth { mode: SmoothMode::Light, symmetric_rendering: true, preserve_linear_metrics: true } }
+        HintingOptions {
+            engine: Engine::Auto(None),
+            target: Target::Smooth {
+                mode: SmoothMode::Light,
+                symmetric_rendering: true,
+                preserve_linear_metrics: true,
+            },
+        }
     };
-    let instance = HintingInstance::new(&outlines, skrifa::instance::Size::new(ppem), skrifa::instance::LocationRef::new(&coords), options).ok()?;
+    let instance = HintingInstance::new(
+        &outlines,
+        skrifa::instance::Size::new(ppem),
+        skrifa::instance::LocationRef::new(&coords),
+        options,
+    )
+    .ok()?;
     let g = outlines.get(skrifa::GlyphId::new(glyph as u32))?;
     let mut pen = Pen(Vec::new());
-    g.draw(DrawSettings::hinted(&instance, false), &mut pen).ok()?;
+    g.draw(DrawSettings::hinted(&instance, false), &mut pen)
+        .ok()?;
     Some(pen.0)
 }
 
@@ -143,11 +209,26 @@ fn skrifa_hinted(data: &[u8], index: u32, coords: &[i16], glyph: u16, ppem: f32,
 struct Pen(Vec<swash::zeno::Command>);
 
 impl skrifa::outline::OutlinePen for Pen {
-    fn move_to(&mut self, x: f32, y: f32) { self.0.push(swash::zeno::Command::MoveTo([x, y].into())); }
-    fn line_to(&mut self, x: f32, y: f32) { self.0.push(swash::zeno::Command::LineTo([x, y].into())); }
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) { self.0.push(swash::zeno::Command::QuadTo([cx0, cy0].into(), [x, y].into())); }
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.0.push(swash::zeno::Command::CurveTo([cx0, cy0].into(), [cx1, cy1].into(), [x, y].into()));
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.0.push(swash::zeno::Command::MoveTo([x, y].into()));
     }
-    fn close(&mut self) { self.0.push(swash::zeno::Command::Close); }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.0.push(swash::zeno::Command::LineTo([x, y].into()));
+    }
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.0.push(swash::zeno::Command::QuadTo(
+            [cx0, cy0].into(),
+            [x, y].into(),
+        ));
+    }
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        self.0.push(swash::zeno::Command::CurveTo(
+            [cx0, cy0].into(),
+            [cx1, cy1].into(),
+            [x, y].into(),
+        ));
+    }
+    fn close(&mut self) {
+        self.0.push(swash::zeno::Command::Close);
+    }
 }

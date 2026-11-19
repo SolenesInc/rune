@@ -8,7 +8,10 @@
 //! loss through the command buffer's error instead.
 
 use super::Gpu;
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 /// The distinct messages `Gpu::made` has printed, bounded: an error inside the frame would
 /// otherwise print on every frame.
@@ -19,7 +22,12 @@ impl Gpu {
     /// watches it for loss, and on a surface device logs its uncaptured errors rather than
     /// letting wgpu's default handler panic the app. That handler replaces any handler set on
     /// the device before it was handed over.
-    pub fn from_device(instance: wgpu::Instance, adapter: wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Gpu {
+    pub fn from_device(
+        instance: wgpu::Instance,
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+    ) -> Gpu {
         Self::made(instance, adapter, device, queue, true)
     }
 
@@ -27,8 +35,13 @@ impl Gpu {
     /// `Overlay::attach`): only those log uncaptured errors. A headless device is usually a
     /// test's or an offscreen render's, where a validation error should still fail loudly, and
     /// under `cfg(test)` nothing logs so Rune's own tests see wgpu's panic.
-    pub(crate) fn made(instance: wgpu::Instance, adapter: wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue,
-        draws_surfaces: bool) -> Gpu {
+    pub(crate) fn made(
+        instance: wgpu::Instance,
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        draws_surfaces: bool,
+    ) -> Gpu {
         let lost = Arc::new(AtomicBool::new(false));
         let lost_by_callback = lost.clone();
         device.set_device_lost_callback(move |reason, message| {
@@ -37,14 +50,24 @@ impl Gpu {
             lost_by_callback.store(true, Ordering::Release);
             eprintln!("rune: the GPU device was lost ({reason:?}): {message}");
         });
-        if draws_surfaces && !cfg!(test) { log_uncaptured(&device); }
-        Gpu { instance, adapter, device, queue, lost }
+        if draws_surfaces && !cfg!(test) {
+            log_uncaptured(&device);
+        }
+        Gpu {
+            instance,
+            adapter,
+            device,
+            queue,
+            lost,
+        }
     }
 
     /// Whether the device went away: a driver reset, a GPU removed, a resume from Modern Standby.
     /// Nothing can be drawn with it, and its surfaces can't be configured, so its owner makes a
     /// new GPU and surface instead (`Host::reattach`).
-    pub fn is_lost(&self) -> bool { self.lost.load(Ordering::Acquire) }
+    pub fn is_lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
+    }
 }
 
 /// What `log_uncaptured` has printed: each distinct message once, up to `PRINTED`, then one

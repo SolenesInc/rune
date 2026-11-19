@@ -1,12 +1,12 @@
 //! Native panel presentation: prewarm, sharing, and fenced fades. `Presence` decides; this
 //! carries out what it asks of AppKit.
 
-use std::{cell::Cell, rc::Rc, time::Duration};
+use super::presence::{Effect, Event, Presence};
+use super::{Panel, set_sharing};
+use crate::machine::{Attempt, Effects};
 use objc2::{msg_send, rc::Retained};
 use objc2_app_kit::NSPanel;
-use crate::machine::{Attempt, Effects};
-use super::{Panel, set_sharing};
-use super::presence::{Effect, Event, Presence};
+use std::{cell::Cell, rc::Rc, time::Duration};
 
 pub(crate) struct Prewarm {
     presence: Rc<Cell<Presence>>,
@@ -33,13 +33,17 @@ fn carry_out(panel: &Retained<NSPanel>, presence: &Rc<Cell<Presence>>, effects: 
         match effect {
             Effect::SetSharing(exclude) => set_sharing(panel, exclude),
             Effect::RejoinSpaces => rejoin_spaces(panel),
-            Effect::OrderIn { clear_alpha } => if !panel.isVisible() {
-                // SAFETY: AppKit calls on the main thread.
-                unsafe {
-                    if clear_alpha { panel.setAlphaValue(0.0); }
-                    panel.orderFrontRegardless();
+            Effect::OrderIn { clear_alpha } => {
+                if !panel.isVisible() {
+                    // SAFETY: AppKit calls on the main thread.
+                    unsafe {
+                        if clear_alpha {
+                            panel.setAlphaValue(0.0);
+                        }
+                        panel.orderFrontRegardless();
+                    }
                 }
-            },
+            }
             Effect::OrderOut => panel.orderOut(None),
             // SAFETY: an AppKit call on the main thread.
             Effect::SetAlpha(alpha) => unsafe { panel.setAlphaValue(alpha) },
@@ -63,9 +67,13 @@ fn rejoin_spaces(panel: &NSPanel) {
     // SAFETY: AppKit calls on the main thread.
     unsafe {
         let behavior = panel.collectionBehavior();
-        if !behavior.contains(Behavior::CanJoinAllSpaces) { return; }
+        if !behavior.contains(Behavior::CanJoinAllSpaces) {
+            return;
+        }
         if panel.isVisible() {
-            if panel.isOnActiveSpace() { return; }
+            if panel.isOnActiveSpace() {
+                return;
+            }
             panel.orderOut(None);
         }
         panel.setCollectionBehavior(Behavior::Default);
@@ -75,7 +83,12 @@ fn rejoin_spaces(panel: &NSPanel) {
 
 /// Animates the panel's alpha to `alpha`, replacing any fade in flight. Over a length, its
 /// completion reports back under the fence; with none, it lands at once.
-fn fade(panel: &Retained<NSPanel>, presence: &Rc<Cell<Presence>>, alpha: f64, over: Option<(Duration, Attempt)>) {
+fn fade(
+    panel: &Retained<NSPanel>,
+    presence: &Rc<Cell<Presence>>,
+    alpha: f64,
+    over: Option<(Duration, Attempt)>,
+) {
     use objc2::runtime::{AnyClass, AnyObject};
     // SAFETY: AppKit calls on the main thread; the completion handler runs there too.
     unsafe {
@@ -95,7 +108,9 @@ fn fade(panel: &Retained<NSPanel>, presence: &Rc<Cell<Presence>>, alpha: f64, ov
             let _: () = msg_send![animator, setAlphaValue: alpha];
             let _: () = msg_send![context, endGrouping];
         }
-        if over.is_none() { panel.setAlphaValue(alpha); }
+        if over.is_none() {
+            panel.setAlphaValue(alpha);
+        }
     }
 }
 
@@ -113,7 +128,10 @@ impl Panel {
         debug_assert!(self.options.prewarm);
         let effects = step(&self.presence, Event::PrewarmBegins);
         carry_out(&self.panel, &self.presence, effects);
-        Prewarm { presence: self.presence.clone(), panel: self.panel.clone() }
+        Prewarm {
+            presence: self.presence.clone(),
+            panel: self.panel.clone(),
+        }
     }
 
     /// Hides the panel, fading its alpha out over `fade` (instantly when zero). Input stops at

@@ -68,7 +68,9 @@ pub(super) fn floor_boundary(text: &str, i: usize) -> usize {
 }
 
 /// The char boundary before byte `i` (a boundary) of `text`.
-fn prev_boundary(text: &str, i: usize) -> usize { floor_boundary(text, i.saturating_sub(1)) }
+fn prev_boundary(text: &str, i: usize) -> usize {
+    floor_boundary(text, i.saturating_sub(1))
+}
 
 /// The range of `unit` at byte `i` of `text`: a word (or run of spaces or punctuation) by
 /// Unicode word boundaries, Chinese, Japanese, Thai, Lao, Khmer and Burmese words by ICU's
@@ -78,19 +80,28 @@ fn prev_boundary(text: &str, i: usize) -> usize { floor_boundary(text, i.saturat
 pub(crate) fn unit_at(text: &str, i: usize, unit: Unit) -> (usize, usize) {
     use icu_segmenter::{WordSegmenter, options::WordBreakInvariantOptions};
     let mut i = floor_boundary(text, i);
-    if i > 0 && i == text.len() && unit != Unit::Char { i = prev_boundary(text, i); }
+    if i > 0 && i == text.len() && unit != Unit::Char {
+        i = prev_boundary(text, i);
+    }
     match unit {
         Unit::Char => (i, i),
         Unit::Word => {
             if i > 0 && text[i..].starts_with(['\n', '\r']) && !text[..i].ends_with('\n') {
                 i = prev_boundary(text, i);
-                if text[i..].starts_with('\r') && i > 0 && !text[..i].ends_with('\n') { i = prev_boundary(text, i); }
+                if text[i..].starts_with('\r') && i > 0 && !text[..i].ends_with('\n') {
+                    i = prev_boundary(text, i);
+                }
             }
             let mut last = (i, i);
             let mut start = 0;
-            for end in WordSegmenter::new_dictionary(WordBreakInvariantOptions::default()).segment_str(text).filter(|&b| b > 0) {
+            for end in WordSegmenter::new_dictionary(WordBreakInvariantOptions::default())
+                .segment_str(text)
+                .filter(|&b| b > 0)
+            {
                 last = (start, end);
-                if i < end { return last; }
+                if i < end {
+                    return last;
+                }
                 start = end;
             }
             last
@@ -105,17 +116,36 @@ pub(crate) fn unit_at(text: &str, i: usize, unit: Unit) -> (usize, usize) {
 
 /// The selection a drag from unit range `origin` to unit range `at` makes: (anchor, focus).
 pub(crate) fn extend(origin: (usize, usize), at: (usize, usize)) -> (usize, usize) {
-    if at.0 < origin.0 { (origin.1, at.0) } else { (origin.0, at.1.max(origin.1)) }
+    if at.0 < origin.0 {
+        (origin.1, at.0)
+    } else {
+        (origin.0, at.1.max(origin.1))
+    }
 }
 
 /// Pushes the selection boxes of bytes `a..b` of `layout`, whose top-left draws at `origin`
 /// (device px) `k` times its size. Text fields and selectable text both draw through here, so
 /// their highlights match.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn push_selection(out: &mut Vec<Instance>, layout: &Layout<Ink>, a: usize, b: usize, origin: [f32; 2], k: f32,
-    fill: [f32; 4], s: f32, clip: [f32; 4], fade: [f32; 4]) {
+pub(super) fn push_selection(
+    out: &mut Vec<Instance>,
+    layout: &Layout<Ink>,
+    a: usize,
+    b: usize,
+    origin: [f32; 2],
+    k: f32,
+    fill: [f32; 4],
+    s: f32,
+    clip: [f32; 4],
+    fade: [f32; 4],
+) {
     for (bb, _) in crate::text::range_boxes(layout, a, b, true) {
-        let rect = [origin[0] + bb.x0 as f32 * k, origin[1] + bb.y0 as f32 * k, (bb.x1 - bb.x0) as f32 * k, (bb.y1 - bb.y0) as f32 * k];
+        let rect = [
+            origin[0] + bb.x0 as f32 * k,
+            origin[1] + bb.y0 as f32 * k,
+            (bb.x1 - bb.x0) as f32 * k,
+            (bb.y1 - bb.y0) as f32 * k,
+        ];
         let radius = 2.0 * s * k;
         extend_run(out, rect, fill, radius, clip, fade, 40.0 * s * k);
     }
@@ -123,10 +153,25 @@ pub(super) fn push_selection(out: &mut Vec<Instance>, layout: &Layout<Ink>, a: u
 
 /// A text field's selection: one layout, so no runs to join, and a field's own fill behind it
 /// is the field, not a chip the highlight should stretch to.
-pub(super) fn push_field_selection(out: &mut Vec<Instance>, layout: TextFlow<'_>, a: usize, b: usize, origin: [f32; 2], k: f32,
-    fill: [f32; 4], s: f32, clip: [f32; 4], fade: [f32; 4]) {
+pub(super) fn push_field_selection(
+    out: &mut Vec<Instance>,
+    layout: TextFlow<'_>,
+    a: usize,
+    b: usize,
+    origin: [f32; 2],
+    k: f32,
+    fill: [f32; 4],
+    s: f32,
+    clip: [f32; 4],
+    fade: [f32; 4],
+) {
     for (bb, _) in layout.range_boxes(a, b, true) {
-        let rect = [origin[0] + bb.x0 as f32 * k, origin[1] + bb.y0 as f32 * k, (bb.x1 - bb.x0) as f32 * k, (bb.y1 - bb.y0) as f32 * k];
+        let rect = [
+            origin[0] + bb.x0 as f32 * k,
+            origin[1] + bb.y0 as f32 * k,
+            (bb.x1 - bb.x0) as f32 * k,
+            (bb.y1 - bb.y0) as f32 * k,
+        ];
         out.push(rect_inst(rect, fill, 2.0 * s * k, clip, fade));
     }
 }
@@ -136,30 +181,61 @@ pub(super) fn push_field_selection(out: &mut Vec<Instance>, layout: TextFlow<'_>
 /// it, so a run reads as one rect with no seams, as tall as the line's tallest text. When
 /// something filled was drawn in between (a chip's background), a rect of its own is drawn on
 /// top, reaching back to where the last one ended.
-fn extend_run(out: &mut Vec<Instance>, mut rect: [f32; 4], fill: [f32; 4], radius: f32, clip: [f32; 4], fade: [f32; 4], reach: f32) {
+fn extend_run(
+    out: &mut Vec<Instance>,
+    mut rect: [f32; 4],
+    fill: [f32; 4],
+    radius: f32,
+    clip: [f32; 4],
+    fade: [f32; 4],
+    reach: f32,
+) {
     let from = out.len().saturating_sub(256);
-    let found = out[from..].iter().rposition(|i| {
-        let gap = rect[0] - (i.rect[0] + i.rect[2]);
-        let overlap = (i.rect[1] + i.rect[3]).min(rect[1] + rect[3]) - i.rect[1].max(rect[1]);
-        i.fill == fill && i.clip == clip && i.radii == [radius; 4] && i.params[1] == crate::render::KIND_RECT
-            && (-1.0..=reach).contains(&gap) && overlap > 0.6 * i.rect[3].min(rect[3])
-    }).map(|k| from + k);
+    let found = out[from..]
+        .iter()
+        .rposition(|i| {
+            let gap = rect[0] - (i.rect[0] + i.rect[2]);
+            let overlap = (i.rect[1] + i.rect[3]).min(rect[1] + rect[3]) - i.rect[1].max(rect[1]);
+            i.fill == fill
+                && i.clip == clip
+                && i.radii == [radius; 4]
+                && i.params[1] == crate::render::KIND_RECT
+                && (-1.0..=reach).contains(&gap)
+                && overlap > 0.6 * i.rect[3].min(rect[3])
+        })
+        .map(|k| from + k);
     let Some(at) = found else {
         // First on its line, inside a chip's background: start the highlight at the chip's edge.
-        let chip = out[from..].iter().rev().find(|i| {
-            let overlap = (i.rect[1] + i.rect[3]).min(rect[1] + rect[3]) - i.rect[1].max(rect[1]);
-            i.params[1] == crate::render::KIND_RECT && i.fill != fill && i.fill[3] > 0.0 && i.rect[0] >= rect[0] - reach && i.rect[0] < rect[0]
-                && i.rect[0] + i.rect[2] > rect[0] && i.rect[3] <= 1.8 * rect[3] && overlap > 0.6 * rect[3]
-        }).map(|i| i.rect);
+        let chip = out[from..]
+            .iter()
+            .rev()
+            .find(|i| {
+                let overlap =
+                    (i.rect[1] + i.rect[3]).min(rect[1] + rect[3]) - i.rect[1].max(rect[1]);
+                i.params[1] == crate::render::KIND_RECT
+                    && i.fill != fill
+                    && i.fill[3] > 0.0
+                    && i.rect[0] >= rect[0] - reach
+                    && i.rect[0] < rect[0]
+                    && i.rect[0] + i.rect[2] > rect[0]
+                    && i.rect[3] <= 1.8 * rect[3]
+                    && overlap > 0.6 * rect[3]
+            })
+            .map(|i| i.rect);
         if let Some(c) = chip {
             let (top, bottom) = (c[1].min(rect[1]), (c[1] + c[3]).max(rect[1] + rect[3]));
             rect = [c[0], top, rect[0] + rect[2] - c[0], bottom - top];
         }
         return out.push(rect_inst(rect, fill, radius, clip, fade));
     };
-    let covered = out[at + 1..].iter().any(|i| i.params[1] == crate::render::KIND_RECT && i.fill != fill && i.fill[3] > 0.0);
+    let covered = out[at + 1..]
+        .iter()
+        .any(|i| i.params[1] == crate::render::KIND_RECT && i.fill != fill && i.fill[3] > 0.0);
     let prev = &mut out[at];
-    let (top, bottom) = (prev.rect[1].min(rect[1]), (prev.rect[1] + prev.rect[3]).max(rect[1] + rect[3]));
+    let (top, bottom) = (
+        prev.rect[1].min(rect[1]),
+        (prev.rect[1] + prev.rect[3]).max(rect[1] + rect[3]),
+    );
     if covered {
         let left = (prev.rect[0] + prev.rect[2]).min(rect[0]);
         rect = [left, top, rect[0] + rect[2] - left, bottom - top];
@@ -174,15 +250,30 @@ fn extend_run(out: &mut Vec<Instance>, mut rect: [f32; 4], fill: [f32; 4], radiu
 /// a selection, a change inside it doesn't. With nothing selected in it (`upto` 0) only text
 /// appended keeps it.
 pub(super) fn kept(then: &str, now: &str, upto: usize) -> bool {
-    if upto == 0 { return now.starts_with(then); }
+    if upto == 0 {
+        return now.starts_with(then);
+    }
     then.get(..upto).is_some_and(|a| now.get(..upto) == Some(a))
 }
 
 /// `r`, a word, without the [`El::uncopied`] bytes at its ends, unless that leaves nothing.
-pub(super) fn trim_uncopied(uncopied: &[(u32, u32)], (mut a, mut b): (usize, usize)) -> (usize, usize) {
+pub(super) fn trim_uncopied(
+    uncopied: &[(u32, u32)],
+    (mut a, mut b): (usize, usize),
+) -> (usize, usize) {
     let r0 = (a, b);
-    while let Some(&(_, e)) = uncopied.iter().find(|r| (r.0 as usize) <= a && a < r.1 as usize && a < b) { a = (e as usize).min(b); }
-    while let Some(&(st, _)) = uncopied.iter().find(|r| (r.0 as usize) < b && b <= r.1 as usize && a < b) { b = (st as usize).max(a); }
+    while let Some(&(_, e)) = uncopied
+        .iter()
+        .find(|r| (r.0 as usize) <= a && a < r.1 as usize && a < b)
+    {
+        a = (e as usize).min(b);
+    }
+    while let Some(&(st, _)) = uncopied
+        .iter()
+        .find(|r| (r.0 as usize) < b && b <= r.1 as usize && a < b)
+    {
+        b = (st as usize).max(a);
+    }
     if a < b { (a, b) } else { r0 }
 }
 
@@ -192,19 +283,29 @@ pub(super) fn range_in(ranges: &[(usize, usize, usize)], i: usize) -> Option<(us
 }
 
 /// How far `x` is outside box `r` (x0, y0, x1, y1) horizontally.
-fn dist_x(r: [f32; 4], x: f32) -> f32 { (r[0] - x).max(x - r[2]).max(0.0) }
+fn dist_x(r: [f32; 4], x: f32) -> f32 {
+    (r[0] - x).max(x - r[2]).max(0.0)
+}
 
 /// Whether `a` and `b` have the same keyed segments and the same unkeyed tail after their last
 /// key, so a keyed text keeps its selection when a sibling shifts an unkeyed ancestor's index.
 pub(super) fn same_keyed_path(a: &str, b: &str) -> bool {
     fn split(p: &str) -> Option<(&str, &str)> {
-        let last_key = p.rmatch_indices('/').find(|&(i, _)| !p[i + 1..].starts_with('#'))
+        let last_key = p
+            .rmatch_indices('/')
+            .find(|&(i, _)| !p[i + 1..].starts_with('#'))
             .map_or_else(|| (!p.starts_with('#')).then_some(0), |(i, _)| Some(i + 1))?;
         let end = last_key + p[last_key..].find('/').unwrap_or(p.len() - last_key);
         Some((&p[..end], &p[end..]))
     }
-    let (Some((ka, ta)), Some((kb, tb))) = (split(a), split(b)) else { return false };
-    ta == tb && ka.split('/').filter(|s| !s.starts_with('#')).eq(kb.split('/').filter(|s| !s.starts_with('#')))
+    let (Some((ka, ta)), Some((kb, tb))) = (split(a), split(b)) else {
+        return false;
+    };
+    ta == tb
+        && ka
+            .split('/')
+            .filter(|s| !s.starts_with('#'))
+            .eq(kb.split('/').filter(|s| !s.starts_with('#')))
 }
 
 impl RuntimeCore {
@@ -214,35 +315,50 @@ impl RuntimeCore {
     }
 
     pub(super) fn live(&self, path: &str) -> Option<usize> {
-        (0..self.nodes.len()).find(|&i| self.nodes[i].path == path && !self.subtree_exiting(i) && self.allowed(i))
+        (0..self.nodes.len())
+            .find(|&i| self.nodes[i].path == path && !self.subtree_exiting(i) && self.allowed(i))
     }
 
     pub(super) fn content_of(&self, i: usize) -> &str {
-        self.nodes[i].text.as_ref().map_or("", |t| t.content.as_str())
+        self.nodes[i]
+            .text
+            .as_ref()
+            .map_or("", |t| t.content.as_str())
     }
 
     /// The selection group node `i` is in: its nearest `El::selection_group` ancestor.
     pub(super) fn group_of(&self, i: usize) -> Option<usize> {
-        std::iter::successors(self.nodes[i].parent, |&p| self.nodes[p].parent).find(|&p| self.nodes[p].selection_group)
+        std::iter::successors(self.nodes[i].parent, |&p| self.nodes[p].parent)
+            .find(|&p| self.nodes[p].selection_group)
     }
 
     /// Node `j` is a selectable text of group `g` (not of a group inside it).
     pub(super) fn member(&self, j: usize, g: usize) -> bool {
-        self.is_selectable(j) && self.group_of(j) == Some(g) && !self.subtree_exiting(j) && self.allowed(j)
+        self.is_selectable(j)
+            && self.group_of(j) == Some(g)
+            && !self.subtree_exiting(j)
+            && self.allowed(j)
     }
 
     /// Group `g`'s selectable texts, in tree order.
     pub(crate) fn group_texts(&self, g: usize) -> Vec<usize> {
         // Nodes are in tree order, so a subtree is the run after its root.
-        let inside = |j: usize| std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == g);
-        (g + 1..self.nodes.len()).take_while(|&j| inside(j)).filter(|&j| self.member(j, g)).collect()
+        let inside = |j: usize| {
+            std::iter::successors(self.nodes[j].parent, |&p| self.nodes[p].parent).any(|p| p == g)
+        };
+        (g + 1..self.nodes.len())
+            .take_while(|&j| inside(j))
+            .filter(|&j| self.member(j, g))
+            .collect()
     }
 
     /// The range of `unit` at byte `at` of node `i`'s text, a word without uncopied ends.
     pub(super) fn unit_in(&self, i: usize, at: usize, unit: Unit) -> (usize, usize) {
         let r = unit_at(self.content_of(i), at, unit);
         match (unit, &self.nodes[i].text) {
-            (Unit::Word, Some(t)) if !t.cold.uncopied.is_empty() => trim_uncopied(&t.cold.uncopied, r),
+            (Unit::Word, Some(t)) if !t.cold.uncopied.is_empty() => {
+                trim_uncopied(&t.cold.uncopied, r)
+            }
             _ => r,
         }
     }
@@ -256,7 +372,10 @@ impl RuntimeCore {
             EndRef::Mounted(i) => Some(i),
             EndRef::Offscreen(vi, ti) => match self.focus_holder_end(h) {
                 Some(EndRef::Mounted(j)) => Some(j),
-                _ => self.end_group_path(h).and_then(|g| self.live(g)).or_else(|| self.live(&self.offscreen_text(vi, ti).list_path)),
+                _ => self
+                    .end_group_path(h)
+                    .and_then(|g| self.live(g))
+                    .or_else(|| self.live(&self.offscreen_text(vi, ti).list_path)),
             },
         }
     }
@@ -264,37 +383,67 @@ impl RuntimeCore {
     /// Every text the selection covers with its selected bytes, in tree order, none empty.
     pub(super) fn selection_ranges(&self) -> Vec<(usize, usize, usize)> {
         use virtual_selection::EndRef;
-        let Some(h) = self.selection_holder_end() else { return Vec::new() };
-        let Some(f) = self.focus_holder_end(h) else { return Vec::new() };
-        let Some(sel) = self.selectable.phase.selection() else { return Vec::new() };
+        let Some(h) = self.selection_holder_end() else {
+            return Vec::new();
+        };
+        let Some(f) = self.focus_holder_end(h) else {
+            return Vec::new();
+        };
+        let Some(sel) = self.selectable.phase.selection() else {
+            return Vec::new();
+        };
         if f == h {
-            let EndRef::Mounted(i) = h else { return Vec::new() };
+            let EndRef::Mounted(i) = h else {
+                return Vec::new();
+            };
             let (a, b) = (sel.anchor.min(sel.focus), sel.anchor.max(sel.focus));
-            return if a < b && b <= self.content_of(i).len() { vec![(i, a, b)] } else { Vec::new() };
+            return if a < b && b <= self.content_of(i).len() {
+                vec![(i, a, b)]
+            } else {
+                Vec::new()
+            };
         }
         let ((first, a), (last, b)) = if self.tree_order(h) < self.tree_order(f) {
             ((h, sel.anchor), (f, sel.focus))
         } else {
             ((f, sel.focus), (h, sel.anchor))
         };
-        let Some(g_path) = self.end_group_path(h) else { return Vec::new() };
-        let Some(g) = self.live(g_path) else { return Vec::new() };
+        let Some(g_path) = self.end_group_path(h) else {
+            return Vec::new();
+        };
+        let Some(g) = self.live(g_path) else {
+            return Vec::new();
+        };
         if let (EndRef::Mounted(i0), EndRef::Mounted(i1)) = (first, last) {
-            return (i0..=i1).filter(|&j| self.member(j, g)).filter_map(|j| {
-                let len = self.content_of(j).len();
-                let (a, b) = (if j == i0 { a.min(len) } else { 0 }, if j == i1 { b.min(len) } else { len });
-                (a < b).then_some((j, a, b))
-            }).collect();
+            return (i0..=i1)
+                .filter(|&j| self.member(j, g))
+                .filter_map(|j| {
+                    let len = self.content_of(j).len();
+                    let (a, b) = (
+                        if j == i0 { a.min(len) } else { 0 },
+                        if j == i1 { b.min(len) } else { len },
+                    );
+                    (a < b).then_some((j, a, b))
+                })
+                .collect();
         }
         let (first_ord, last_ord) = (self.tree_order(first), self.tree_order(last));
-        self.group_texts(g).into_iter().filter_map(|j| {
-            let end_j = EndRef::Mounted(j);
-            let ord = self.tree_order(end_j);
-            if ord < first_ord || ord > last_ord { return None; }
-            let len = self.content_of(j).len();
-            let (a, b) = (if end_j == first { a.min(len) } else { 0 }, if end_j == last { b.min(len) } else { len });
-            (a < b).then_some((j, a, b))
-        }).collect()
+        self.group_texts(g)
+            .into_iter()
+            .filter_map(|j| {
+                let end_j = EndRef::Mounted(j);
+                let ord = self.tree_order(end_j);
+                if ord < first_ord || ord > last_ord {
+                    return None;
+                }
+                let len = self.content_of(j).len();
+                let (a, b) = (
+                    if end_j == first { a.min(len) } else { 0 },
+                    if end_j == last { b.min(len) } else { len },
+                );
+                (a < b).then_some((j, a, b))
+            })
+            .collect()
     }
 
     /// The text holding the selection's anchor and its selected byte range there (empty after a
@@ -345,9 +494,18 @@ impl RuntimeCore {
             return self.collect_virtual_selection(None);
         }
         let ranges = self.selection_ranges();
-        if ranges.is_empty() { return None; }
-        let texts = ranges.iter().map(|&(i, a, b)| self.selected_piece(i, a..b, None)).collect();
-        Some(TextSelection { texts, text: self.joined(&ranges), backward: self.selection_backward() })
+        if ranges.is_empty() {
+            return None;
+        }
+        let texts = ranges
+            .iter()
+            .map(|&(i, a, b)| self.selected_piece(i, a..b, None))
+            .collect();
+        Some(TextSelection {
+            texts,
+            text: self.joined(&ranges),
+            backward: self.selection_backward(),
+        })
     }
 
     /// [`Runtime::selection`] for a handler's `Tx`, kept until a commit or the selection changes.
@@ -355,11 +513,16 @@ impl RuntimeCore {
         self.selectable.phase.selection()?;
         {
             let cache = self.sel_snapshot.borrow();
-            if let Some(s) = cache.as_ref().filter(|s| self.same_from(&s.from)) { return s.selection.clone(); }
+            if let Some(s) = cache.as_ref().filter(|s| self.same_from(&s.from)) {
+                return s.selection.clone();
+            }
         }
         let from = self.selection_from();
         let selection = self.selection().map(Rc::new);
-        *self.sel_snapshot.borrow_mut() = Some(Snapshot { from, selection: selection.clone() });
+        *self.sel_snapshot.borrow_mut() = Some(Snapshot {
+            from,
+            selection: selection.clone(),
+        });
         selection
     }
 
@@ -379,32 +542,65 @@ impl RuntimeCore {
     fn selection_from(&self) -> Basis {
         let phase = &self.selectable.phase;
         let sel = phase.selection();
-        (self.commits, sel.map(|s| s.path.clone()), sel.map_or(0, |s| s.anchor), sel.map_or(0, |s| s.focus),
-            sel.and_then(|s| s.far.as_ref()).map(|f| f.path.clone()), phase.dragging())
+        (
+            self.commits,
+            sel.map(|s| s.path.clone()),
+            sel.map_or(0, |s| s.anchor),
+            sel.map_or(0, |s| s.focus),
+            sel.and_then(|s| s.far.as_ref()).map(|f| f.path.clone()),
+            phase.dragging(),
+        )
     }
 
     /// No `El::on_selection_change` call is owed: the selection is as the last check heard it.
     pub(in crate::runtime) fn selection_heard(&self) -> bool {
-        !self.sel_heard.pressed && self.sel_heard.from.as_ref().is_some_and(|f| self.same_from(f))
+        !self.sel_heard.pressed
+            && self
+                .sel_heard
+                .from
+                .as_ref()
+                .is_some_and(|f| self.same_from(f))
     }
 
     /// The `El::on_selection_change` calls owed since the last check: each element whose part
     /// of the selection changed, started or cleared.
     pub(super) fn selection_changes(&mut self) -> Vec<Action> {
-        if self.selection_heard() { return Vec::new(); }
+        if self.selection_heard() {
+            return Vec::new();
+        }
         // A release is heard by whoever holds the selection, though it didn't change.
         let pressed = self.sel_heard.pressed || self.sel_heard.from.as_ref().is_some_and(|f| f.5);
         let released = pressed && !self.selectable.phase.dragging();
         self.sel_heard.from = Some(self.selection_from());
         self.sel_heard.pressed = false;
-        if self.sel_heard.by_path.is_empty() && !self.nodes.iter().any(|n| n.handlers.get().is_some_and(|h| h.on_selection_change.is_some())) {
+        if self.sel_heard.by_path.is_empty()
+            && !self.nodes.iter().any(|n| {
+                n.handlers
+                    .get()
+                    .is_some_and(|h| h.on_selection_change.is_some())
+            })
+        {
             return Vec::new();
         }
         let watchers: Vec<usize> = (0..self.nodes.len())
-            .filter(|&i| self.nodes[i].handlers.get().is_some_and(|h| h.on_selection_change.is_some()) && !self.subtree_exiting(i) && self.allowed(i))
+            .filter(|&i| {
+                self.nodes[i]
+                    .handlers
+                    .get()
+                    .is_some_and(|h| h.on_selection_change.is_some())
+                    && !self.subtree_exiting(i)
+                    && self.allowed(i)
+            })
             .collect();
-        if watchers.is_empty() && self.sel_heard.by_path.is_empty() { return Vec::new(); }
-        let mut selected: Vec<usize> = self.selection_ranges().into_iter().filter(|r| r.1 < r.2).map(|r| r.0).collect();
+        if watchers.is_empty() && self.sel_heard.by_path.is_empty() {
+            return Vec::new();
+        }
+        let mut selected: Vec<usize> = self
+            .selection_ranges()
+            .into_iter()
+            .filter(|r| r.1 < r.2)
+            .map(|r| r.0)
+            .collect();
         if self.has_nonempty_selection()
             && let Some(h) = self.selection_holder_end()
         {
@@ -417,17 +613,32 @@ impl RuntimeCore {
                 }
             }
         }
-        let inside = |w: usize, j: usize| std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == w);
-        if self.sel_heard.by_path.is_empty() && !watchers.iter().any(|&w| selected.iter().any(|&j| inside(w, j))) {
+        let inside = |w: usize, j: usize| {
+            std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == w)
+        };
+        if self.sel_heard.by_path.is_empty()
+            && !watchers
+                .iter()
+                .any(|&w| selected.iter().any(|&j| inside(w, j)))
+        {
             return Vec::new();
         }
-        let sel = (!selected.is_empty()).then(|| self.selection_snapshot()).flatten();
+        let sel = (!selected.is_empty())
+            .then(|| self.selection_snapshot())
+            .flatten();
         let (mut out, mut heard) = (Vec::new(), HashMap::default());
         for w in watchers {
             let path = self.nodes[w].path.clone();
-            let now = sel.clone().filter(|_| selected.iter().any(|&j| inside(w, j)));
+            let now = sel
+                .clone()
+                .filter(|_| selected.iter().any(|&j| inside(w, j)));
             let before = self.sel_heard.by_path.remove(&path).or_else(|| {
-                let k = self.sel_heard.by_path.keys().find(|k| same_keyed_path(k, &path))?.clone();
+                let k = self
+                    .sel_heard
+                    .by_path
+                    .keys()
+                    .find(|k| same_keyed_path(k, &path))?
+                    .clone();
                 self.sel_heard.by_path.remove(&k)
             });
             let same = match (&before, &now) {
@@ -448,33 +659,70 @@ impl RuntimeCore {
                 (a, b) => a.is_none() && b.is_none(),
             };
             if !same || (released && now.is_some()) {
-                let change = SelectionChange { selection: now.clone(), was: before.is_some(), dragging: self.selectable.phase.dragging() };
+                let change = SelectionChange {
+                    selection: now.clone(),
+                    was: before.is_some(),
+                    dragging: self.selectable.phase.dragging(),
+                };
                 out.push(Action::SelectionChange(path.clone(), change));
             }
-            if let Some(now) = now { heard.insert(path, now); }
+            if let Some(now) = now {
+                heard.insert(path, now);
+            }
         }
         self.sel_heard.by_path = heard;
         out
     }
 
     /// Node `i` as a [`SelectedText`] with `range` selected, its path relative to `base`'s.
-    pub(super) fn selected_piece(&self, i: usize, range: Range<usize>, base: Option<usize>) -> SelectedText {
+    pub(super) fn selected_piece(
+        &self,
+        i: usize,
+        range: Range<usize>,
+        base: Option<usize>,
+    ) -> SelectedText {
         let n = &self.nodes[i];
         let path = match base {
             Some(b) if b == i => String::new(),
-            Some(b) => n.path.strip_prefix(&self.nodes[b].path).and_then(|p| p.strip_prefix('/')).unwrap_or(&n.path).to_owned(),
+            Some(b) => n
+                .path
+                .strip_prefix(&self.nodes[b].path)
+                .and_then(|p| p.strip_prefix('/'))
+                .unwrap_or(&n.path)
+                .to_owned(),
             None => n.path.clone(),
         };
         let len = self.content_of(i).len();
-        let (full_a, full_b) = n.text.as_ref().filter(|t| !t.cold.uncopied.is_empty())
+        let (full_a, full_b) = n
+            .text
+            .as_ref()
+            .filter(|t| !t.cold.uncopied.is_empty())
             .map_or((0, len), |t| trim_uncopied(&t.cold.uncopied, (0, len)));
         let whole = !range.is_empty() && len > 0 && range.start <= full_a && range.end >= full_b;
-        let text = n.text.as_ref().and_then(|t| t.copy_slice(range.start as u32, range.end as u32)).unwrap_or_default();
-        let content = self.content_of(i).get(range.clone()).unwrap_or_default().to_owned();
-        let authored = n.text.as_ref().map_or(range.clone(), |t| t.authored(range.start)..t.authored(range.end));
-        SelectedText { path, key: n.key.clone(), range, authored, len, whole, text, content }
+        let text = n
+            .text
+            .as_ref()
+            .and_then(|t| t.copy_slice(range.start as u32, range.end as u32))
+            .unwrap_or_default();
+        let content = self
+            .content_of(i)
+            .get(range.clone())
+            .unwrap_or_default()
+            .to_owned();
+        let authored = n.text.as_ref().map_or(range.clone(), |t| {
+            t.authored(range.start)..t.authored(range.end)
+        });
+        SelectedText {
+            path,
+            key: n.key.clone(),
+            range,
+            authored,
+            len,
+            whole,
+            text,
+            content,
+        }
     }
-
 
     /// What copying the selection puts on the clipboard: the nearest [`El::selection_copy`]
     /// around it says, else the text as drawn.
@@ -485,18 +733,37 @@ impl RuntimeCore {
         let ranges = self.selection_ranges();
         let (&(first, ..), &(last, ..)) = (ranges.first()?, ranges.last()?);
         let drawn = self.joined(&ranges);
-        let around = |a: usize, j: usize| std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == a);
+        let around = |a: usize, j: usize| {
+            std::iter::successors(Some(j), |&p| self.nodes[p].parent).any(|p| p == a)
+        };
         let provider = std::iter::successors(Some(first), |&p| self.nodes[p].parent)
             .find(|&p| self.nodes[p].handlers.selection_copy.is_some() && around(p, last));
-        if let Some(p) = provider && let Some(f) = self.nodes[p].handlers.selection_copy.clone() {
+        if let Some(p) = provider
+            && let Some(f) = self.nodes[p].handlers.selection_copy.clone()
+        {
             let g = self.group_of(first);
             let texts = (p..self.nodes.len())
                 .take_while(|&j| around(p, j))
                 .filter(|&j| self.is_selectable(j) && !self.subtree_exiting(j) && self.allowed(j))
-                .filter(|&j| match g { Some(g) => self.group_of(j) == Some(g), None => j == first })
-                .map(|j| self.selected_piece(j, range_in(&ranges, j).map_or(0..0, |(a, b)| a..b), Some(p)))
+                .filter(|&j| match g {
+                    Some(g) => self.group_of(j) == Some(g),
+                    None => j == first,
+                })
+                .map(|j| {
+                    self.selected_piece(
+                        j,
+                        range_in(&ranges, j).map_or(0..0, |(a, b)| a..b),
+                        Some(p),
+                    )
+                })
                 .collect();
-            if let Some(text) = f(&TextSelection { texts, text: drawn.clone(), backward: self.selection_backward() }) { return Some(text); }
+            if let Some(text) = f(&TextSelection {
+                texts,
+                text: drawn.clone(),
+                backward: self.selection_backward(),
+            }) {
+                return Some(text);
+            }
         }
         (!drawn.is_empty()).then_some(drawn)
     }
@@ -506,9 +773,19 @@ impl RuntimeCore {
         let mut out = CopyJoin::default();
         let mut prev: Option<usize> = None;
         for &(i, a, b) in ranges {
-            let Some(spec) = self.nodes[i].text.as_ref() else { continue };
-            let Some(piece) = spec.copy_slice(a as u32, b as u32) else { continue };
-            out.push(spec, a..b, &piece, prev.is_some_and(|p| self.beside(p, i)), usize::MAX);
+            let Some(spec) = self.nodes[i].text.as_ref() else {
+                continue;
+            };
+            let Some(piece) = spec.copy_slice(a as u32, b as u32) else {
+                continue;
+            };
+            out.push(
+                spec,
+                a..b,
+                &piece,
+                prev.is_some_and(|p| self.beside(p, i)),
+                usize::MAX,
+            );
             prev = Some(i);
         }
         out.finish()
@@ -529,7 +806,9 @@ impl RuntimeCore {
 
     /// The held press is selecting text by dragging, and has selected some.
     pub(super) fn selected_by_drag(&self) -> bool {
-        self.selectable.phase.dragging() && self.press.held().is_some_and(|h| h.moved) && (!self.selection_ranges().is_empty() || self.has_nonempty_selection())
+        self.selectable.phase.dragging()
+            && self.press.held().is_some_and(|h| h.moved)
+            && (!self.selection_ranges().is_empty() || self.has_nonempty_selection())
     }
 
     pub(super) fn clear_text_selection(&mut self) {
@@ -543,7 +822,9 @@ impl RuntimeCore {
     }
 
     fn carry_select(&mut self, effects: crate::machine::Effects<phase::Effect>) {
-        if self.selectable.phase.dragging() { self.sel_heard.pressed = true; }
+        if self.selectable.phase.dragging() {
+            self.sel_heard.pressed = true;
+        }
         for effect in effects {
             match effect {
                 phase::Effect::SyncPins => self.sync_selection_pins(),
@@ -562,7 +843,11 @@ impl RuntimeCore {
         let [ox, oy] = links::origin(n, spec, layout, rect, s, z);
         let px = s / z;
         let at = crate::text::cursor_from_point(layout, (x - ox) * px, (y - oy) * px).index();
-        Some(n.elided.map_or(at, |e| e.content(at)).min(spec.content.len()))
+        Some(
+            n.elided
+                .map_or(at, |e| e.content(at))
+                .min(spec.content.len()),
+        )
     }
 
     /// The text of group `g` a drag from `anchor` reaches at (x, y), and the byte there. Texts
@@ -570,27 +855,46 @@ impl RuntimeCore {
     /// takes the text nearest it across. Between bands a drag down stops at the end of the band
     /// above, and a drag up at the start of the band below, so it reaches no further than the
     /// pointer has.
-    fn group_point(&self, g: usize, anchor: virtual_selection::EndRef, x: f32, y: f32) -> Option<(usize, usize)> {
+    fn group_point(
+        &self,
+        g: usize,
+        anchor: virtual_selection::EndRef,
+        x: f32,
+        y: f32,
+    ) -> Option<(usize, usize)> {
         use virtual_selection::EndRef;
-        let mut boxes: Vec<_> = self.group_texts(g).into_iter().filter_map(|j| Some((j, self.shown_box(j)?))).collect();
+        let mut boxes: Vec<_> = self
+            .group_texts(g)
+            .into_iter()
+            .filter_map(|j| Some((j, self.shown_box(j)?)))
+            .collect();
         boxes.sort_by(|a, b| a.1[1].total_cmp(&b.1[1]));
         // Bands as (top, bottom, first text, last text), with their texts in `boxes[from..to]`.
         let mut bands: Vec<(f32, f32, usize, usize)> = Vec::new();
         for (k, &(_, r)) in boxes.iter().enumerate() {
             match bands.last_mut() {
-                Some(b) if r[1] < b.1 => { b.1 = b.1.max(r[3]); b.3 = k + 1; }
+                Some(b) if r[1] < b.1 => {
+                    b.1 = b.1.max(r[3]);
+                    b.3 = k + 1;
+                }
                 _ => bands.push((r[1], r[3], k, k + 1)),
             }
         }
         let texts = |b: &(f32, f32, usize, usize)| boxes[b.2..b.3].iter().map(|t| t.0);
         if let Some(b) = bands.iter().find(|b| y >= b.0 && y < b.1) {
-            let &(j, _) = boxes[b.2..b.3].iter().min_by(|p, q| dist_x(p.1, x).total_cmp(&dist_x(q.1, x)))?;
+            let &(j, _) = boxes[b.2..b.3]
+                .iter()
+                .min_by(|p, q| dist_x(p.1, x).total_cmp(&dist_x(q.1, x)))?;
             return Some((j, self.text_index_at(j, x, y)?));
         }
         let above = bands.iter().rev().find(|b| b.1 <= y);
         let below = bands.iter().find(|b| b.0 > y);
         match (above, below) {
-            (a, Some(b)) if a.is_none() || self.tree_order(EndRef::Mounted(texts(b).min()?)) <= self.tree_order(anchor) => {
+            (a, Some(b))
+                if a.is_none()
+                    || self.tree_order(EndRef::Mounted(texts(b).min()?))
+                        <= self.tree_order(anchor) =>
+            {
                 Some((texts(b).min()?, 0))
             }
             (Some(a), _) => texts(a).max().map(|j| (j, self.content_of(j).len())),
@@ -604,11 +908,20 @@ impl RuntimeCore {
     /// selected everything between it and the press.
     fn shown_box(&self, j: usize) -> Option<[f32; 4]> {
         let r = self.drawn_box(j);
-        if self.inh_scratch.len() != self.nodes.len() || self.drawn.get(j).is_none_or(|d| d[2] <= 0.0 && d[3] <= 0.0) {
+        if self.inh_scratch.len() != self.nodes.len()
+            || self.drawn.get(j).is_none_or(|d| d[2] <= 0.0 && d[3] <= 0.0)
+        {
             return Some(r);
         }
-        let c = self.screen_clip_of_parent(Some(j)).map(|v| v / self.env.scale);
-        let v = [r[0].max(c[0]), r[1].max(c[1]), r[2].min(c[2]), r[3].min(c[3])];
+        let c = self
+            .screen_clip_of_parent(Some(j))
+            .map(|v| v / self.env.scale);
+        let v = [
+            r[0].max(c[0]),
+            r[1].max(c[1]),
+            r[2].min(c[2]),
+            r[3].min(c[3]),
+        ];
         (v[0] < v[2] && v[1] < v[3]).then_some(v)
     }
 
@@ -618,27 +931,52 @@ impl RuntimeCore {
     /// clears the selection.
     pub(super) fn selection_down(&mut self, target: Option<usize>, x: f32, y: f32) {
         use virtual_selection::EndRef;
-        let Some(i) = target.filter(|&i| self.is_selectable(i) && self.link_at(i, x, y).is_none_or(|k| self.link_drag_selects(i, k))) else {
+        let Some(i) = target.filter(|&i| {
+            self.is_selectable(i)
+                && self
+                    .link_at(i, x, y)
+                    .is_none_or(|k| self.link_drag_selects(i, k))
+        }) else {
             self.clear_text_selection();
             self.selectable.presses.clear();
             return;
         };
-        let Some(at) = self.text_index_at(i, x, y) else { return };
+        let Some(at) = self.text_index_at(i, x, y) else {
+            return;
+        };
         let path = self.nodes[i].path.clone();
         let content = self.content_of(i).to_owned();
         let now = self.now_clock();
-        let clicks = self.selectable.presses.press(&path, now, (x, y), self.double_click_interval).min(3);
+        let clicks = self
+            .selectable
+            .presses
+            .press(&path, now, (x, y), self.double_click_interval)
+            .min(3);
         let i_end = EndRef::Mounted(i);
-        let holder = self.selection_holder_end().filter(|&h| h == i_end || self.end_same_group(h, i_end));
+        let holder = self
+            .selection_holder_end()
+            .filter(|&h| h == i_end || self.end_same_group(h, i_end));
         match holder {
             // Keep the anchor; the focus follows the pointer from here.
             Some(h) if clicks == 1 && self.selectable.shift => {
-                self.select_step(phase::Event::Extend { focus: at, far: (h != i_end).then(|| phase::Far::new(path, content)) });
+                self.select_step(phase::Event::Extend {
+                    focus: at,
+                    far: (h != i_end).then(|| phase::Far::new(path, content)),
+                });
             }
             _ => {
-                let unit = match clicks { 1 => Unit::Char, 2 => Unit::Word, _ => Unit::Paragraph };
+                let unit = match clicks {
+                    1 => Unit::Char,
+                    2 => Unit::Word,
+                    _ => Unit::Paragraph,
+                };
                 let origin = self.unit_in(i, at, unit);
-                self.select_step(phase::Event::Press { path, content, unit, origin });
+                self.select_step(phase::Event::Press {
+                    path,
+                    content,
+                    unit,
+                    origin,
+                });
             }
         }
     }
@@ -648,15 +986,22 @@ impl RuntimeCore {
     /// clickable row), so this follows the selection's own text.
     pub(super) fn selection_drag(&mut self, x: f32, y: f32) {
         use virtual_selection::EndRef;
-        let phase::Phase::Dragging { unit, selection } = &self.selectable.phase else { return };
+        let phase::Phase::Dragging { unit, selection } = &self.selectable.phase else {
+            return;
+        };
         let (unit, origin) = (*unit, selection.origin);
-        let Some(h) = self.selection_holder_end() else { self.clear_text_selection(); return };
+        let Some(h) = self.selection_holder_end() else {
+            self.clear_text_selection();
+            return;
+        };
         let g = self.end_group_path(h).and_then(|gp| self.live(gp));
         let Some((j, at)) = (match (g, h) {
             (Some(g), _) => self.group_point(g, h, x, y),
             (None, EndRef::Mounted(hi)) => self.text_index_at(hi, x, y).map(|at| (hi, at)),
             (None, EndRef::Offscreen(..)) => None,
-        }) else { return };
+        }) else {
+            return;
+        };
         let j_end = EndRef::Mounted(j);
         let at = self.unit_in(j, at, unit);
         let (anchor, focus) = if j_end == h {
@@ -670,9 +1015,19 @@ impl RuntimeCore {
             phase::Reach::Anchor
         } else {
             let n = &self.nodes[j];
-            phase::Reach::Far { path: &n.path, content: n.text.as_ref().map_or("", |t| t.content.as_str()) }
+            phase::Reach::Far {
+                path: &n.path,
+                content: n.text.as_ref().map_or("", |t| t.content.as_str()),
+            }
         };
-        let effects = phase::step(&mut self.selectable.phase, phase::Event::Drag { anchor, focus, reach });
+        let effects = phase::step(
+            &mut self.selectable.phase,
+            phase::Event::Drag {
+                anchor,
+                focus,
+                reach,
+            },
+        );
         self.carry_select(effects);
     }
 
@@ -681,16 +1036,29 @@ impl RuntimeCore {
     /// an AppKit text view first responder), unless a text field has the keyboard. Only the plain
     /// chord: with Shift, Option (Alt) or Control added it's the app's shortcut.
     pub(super) fn selection_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
-        let crate::Key::Command(c @ ('c' | 'a')) = ev.key else { return false };
+        let crate::Key::Command(c @ ('c' | 'a')) = ev.key else {
+            return false;
+        };
         let m = ev.mods;
         let plain = m.cmd && !m.shift && !m.alt && !(m.ctrl && m.logo);
-        if !plain || self.focused_input().is_some() || (c == 'c' && self.selectable.phase.selection().is_none()) { return false; }
+        if !plain
+            || self.focused_input().is_some()
+            || (c == 'c' && self.selectable.phase.selection().is_none())
+        {
+            return false;
+        }
         let holder = self.selection_holder_end();
-        if holder.is_none() { self.clear_text_selection(); }
-        if c == 'a' { return self.select_all_key(); }
+        if holder.is_none() {
+            self.clear_text_selection();
+        }
+        if c == 'a' {
+            return self.select_all_key();
+        }
         let Some(h) = holder else { return false };
         let path = self.end_path(h).to_owned();
-        let Some(text) = self.copy_text() else { return false };
+        let Some(text) = self.copy_text() else {
+            return false;
+        };
         log_event!(self, "copy {path}");
         tx.copy(text);
         true
@@ -701,8 +1069,12 @@ impl RuntimeCore {
     /// the selection, as AppKit text does; elsewhere the selection stays as it is, as Chromium's
     /// does on Windows and Linux. False when the app's handler should run instead.
     pub(super) fn selection_menu(&mut self, path: &str, x: f32, y: f32) -> bool {
-        let Some(i) = self.live(path) else { return false };
-        if !self.is_selectable(i) || self.nodes[i].handlers.on_secondary_press.is_some() { return false; }
+        let Some(i) = self.live(path) else {
+            return false;
+        };
+        if !self.is_selectable(i) || self.nodes[i].handlers.on_secondary_press.is_some() {
+            return false;
+        }
         if SECONDARY_SELECTS_WORD
             && let Some(at) = self.text_index_at(i, x, y)
             && range_in(&self.selection_ranges(), i).is_none_or(|(a, b)| at < a || at >= b)
@@ -710,18 +1082,30 @@ impl RuntimeCore {
             let content = self.content_of(i).to_owned();
             let (a, b) = self.unit_in(i, at, Unit::Word);
             self.selectable.presses = Default::default();
-            self.select_step(phase::Event::Select(phase::Selection::new(path.to_owned(), content, (a, b), (a, b))));
+            self.select_step(phase::Event::Select(phase::Selection::new(
+                path.to_owned(),
+                content,
+                (a, b),
+                (a, b),
+            )));
         }
         let text = self.copy_text();
-        let mut copy = crate::PopupItem::new("copy", crate::labels::label(crate::Label::Copy)).enabled(text.is_some());
+        let mut copy = crate::PopupItem::new("copy", crate::labels::label(crate::Label::Copy))
+            .enabled(text.is_some());
         // The primary modifier, as the copy key handler takes it: ⌘C on macOS, Ctrl+C elsewhere.
-        if let Ok(shortcut) = "mod+c".parse::<crate::Shortcut>() { copy = copy.key_equivalent(shortcut); }
+        if let Ok(shortcut) = "mod+c".parse::<crate::Shortcut>() {
+            copy = copy.key_equivalent(shortcut);
+        }
         log_event!(self, "selection menu {path}");
         self.popups.push_back(crate::popup_menu::Request {
             menu: crate::PopupMenu::new().item(copy),
             anchor: crate::PopupAnchor::Point(x, y),
             on_pick: Box::new(move |_, picked, tx| {
-                if picked == Some("copy") && let Some(text) = text { tx.copy(text); }
+                if picked == Some("copy")
+                    && let Some(text) = text
+                {
+                    tx.copy(text);
+                }
             }),
             field: None,
         });
@@ -743,10 +1127,22 @@ mod tests {
     fn units_cover_words_spaces_and_paragraphs() {
         let s = "opencode --port 4096\nnext line";
         assert_eq!(unit_at(s, 3, Unit::Word), (0, 8));
-        assert_eq!(unit_at(s, 8, Unit::Word), (8, 9), "a space run is its own word");
+        assert_eq!(
+            unit_at(s, 8, Unit::Word),
+            (8, 9),
+            "a space run is its own word"
+        );
         assert_eq!(unit_at(s, 12, Unit::Word), (11, 15));
-        assert_eq!(unit_at(s, s.len(), Unit::Word), (26, 30), "past the end takes the last word");
-        assert_eq!(unit_at(s, 5, Unit::Paragraph), (0, 21), "a paragraph takes its line break");
+        assert_eq!(
+            unit_at(s, s.len(), Unit::Word),
+            (26, 30),
+            "past the end takes the last word"
+        );
+        assert_eq!(
+            unit_at(s, 5, Unit::Paragraph),
+            (0, 21),
+            "a paragraph takes its line break"
+        );
         assert_eq!(unit_at(s, 23, Unit::Paragraph), (21, s.len()));
         assert_eq!(unit_at("", 0, Unit::Word), (0, 0));
     }
@@ -754,11 +1150,23 @@ mod tests {
     #[test]
     fn line_ends_take_the_lines_last_word_and_paragraph() {
         let s = "first line\nsecond";
-        assert_eq!(unit_at(s, 10, Unit::Word), (6, 10), "on the break: the line's last word");
+        assert_eq!(
+            unit_at(s, 10, Unit::Word),
+            (6, 10),
+            "on the break: the line's last word"
+        );
         assert_eq!(unit_at("a\r\nb", 1, Unit::Word), (0, 1));
-        assert_eq!(unit_at("first line\n", 11, Unit::Paragraph), (0, 11), "past the end: the last paragraph");
+        assert_eq!(
+            unit_at("first line\n", 11, Unit::Paragraph),
+            (0, 11),
+            "past the end: the last paragraph"
+        );
         assert_eq!(unit_at("first line\n", 11, Unit::Word), (6, 10));
-        assert_eq!(unit_at("a\n\nb", 2, Unit::Word), (2, 3), "an empty line's break is its own word");
+        assert_eq!(
+            unit_at("a\n\nb", 2, Unit::Word),
+            (2, 3),
+            "an empty line's break is its own word"
+        );
     }
 
     #[test]
@@ -767,7 +1175,10 @@ mod tests {
         for i in 0..=s.len() + 2 {
             for unit in [Unit::Char, Unit::Word, Unit::Paragraph] {
                 let (a, b) = unit_at(s, i, unit);
-                assert!(s.is_char_boundary(a) && s.is_char_boundary(b), "{i} {unit:?}");
+                assert!(
+                    s.is_char_boundary(a) && s.is_char_boundary(b),
+                    "{i} {unit:?}"
+                );
             }
         }
     }

@@ -53,14 +53,38 @@ pub(crate) struct Held {
 
 impl Held {
     /// A press that just went down at `at`, inside its element and still.
-    pub(crate) fn new(path: String, drag: Drag, button: PointerButton, at: (f32, f32), down_at: f64, second: bool, drag_out: Option<f32>) -> Self {
-        Self { path, drag, button, at, down_at, hit: Hit::Inside, moved: false, second, drag_out, left: false, link: None }
+    pub(crate) fn new(
+        path: String,
+        drag: Drag,
+        button: PointerButton,
+        at: (f32, f32),
+        down_at: f64,
+        second: bool,
+        drag_out: Option<f32>,
+    ) -> Self {
+        Self {
+            path,
+            drag,
+            button,
+            at,
+            down_at,
+            hit: Hit::Inside,
+            moved: false,
+            second,
+            drag_out,
+            left: false,
+            link: None,
+        }
     }
 
-    pub(crate) fn inside(&self) -> bool { self.hit == Hit::Inside }
+    pub(crate) fn inside(&self) -> bool {
+        self.hit == Hit::Inside
+    }
 
     /// Began on link `link` of its text.
-    pub(crate) fn on_link(self, link: Option<usize>) -> Self { Self { link, ..self } }
+    pub(crate) fn on_link(self, link: Option<usize>) -> Self {
+        Self { link, ..self }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -70,7 +94,9 @@ pub(crate) enum Press {
 }
 
 impl Default for Press {
-    fn default() -> Self { Self::Up { first: None } }
+    fn default() -> Self {
+        Self::Up { first: None }
+    }
 }
 
 impl Press {
@@ -88,12 +114,18 @@ impl Press {
         }
     }
 
-    pub(crate) fn path(&self) -> Option<&str> { self.held().map(|h| h.path.as_str()) }
+    pub(crate) fn path(&self) -> Option<&str> {
+        self.held().map(|h| h.path.as_str())
+    }
 
-    pub(crate) fn is_held(&self) -> bool { matches!(self, Self::Held(_)) }
+    pub(crate) fn is_held(&self) -> bool {
+        matches!(self, Self::Held(_))
+    }
 
     /// Held, and inside its element.
-    pub(crate) fn inside(&self) -> bool { self.held().is_some_and(Held::inside) }
+    pub(crate) fn inside(&self) -> bool {
+        self.held().is_some_and(Held::inside)
+    }
 
     /// Lets go of a held press without a click to pair: a cancel, a drag-out taking the pointer,
     /// a modal opening. Returns it.
@@ -123,7 +155,9 @@ impl Press {
         }
     }
 
-    pub(crate) fn hold(&mut self, held: Held) { *self = Self::Held(Box::new(held)); }
+    pub(crate) fn hold(&mut self, held: Held) {
+        *self = Self::Held(Box::new(held));
+    }
 }
 
 /// The secondary button's hold: the element whose menu it opens on release, the link of its
@@ -132,7 +166,11 @@ impl Press {
 pub(crate) enum Secondary {
     #[default]
     Up,
-    Held { path: String, link: Option<usize>, left: bool },
+    Held {
+        path: String,
+        link: Option<usize>,
+        left: bool,
+    },
 }
 
 impl Secondary {
@@ -143,5 +181,7 @@ impl Secondary {
         }
     }
 
-    pub(crate) fn is_held(&self) -> bool { matches!(self, Self::Held { .. }) }
+    pub(crate) fn is_held(&self) -> bool {
+        matches!(self, Self::Held { .. })
+    }
 }

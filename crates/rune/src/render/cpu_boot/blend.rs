@@ -32,7 +32,10 @@ impl Src {
     #[inline]
     pub(super) fn new(c: [f32; 4]) -> Src {
         let bgra = [steps(c[2]), steps(c[1]), steps(c[0]), steps(c[3])];
-        Src { bgra, keep: 1.0 - bgra[3] / 255.0 }
+        Src {
+            bgra,
+            keep: 1.0 - bgra[3] / 255.0,
+        }
     }
 
     /// The pixel it writes over anything when it's opaque.
@@ -55,7 +58,10 @@ pub(super) fn over(p: &mut [u8], s: &Src) {
         let d = _mm_cvtepi32_ps(_mm_unpacklo_epi16(_mm_unpacklo_epi8(px, zero), zero));
         let src = _mm_loadu_ps(s.bgra.as_ptr());
         let r = _mm_add_ps(src, _mm_mul_ps(d, _mm_set1_ps(s.keep)));
-        let r = _mm_add_ps(_mm_min_ps(_mm_max_ps(r, _mm_setzero_ps()), _mm_set1_ps(255.0)), _mm_set1_ps(MAGIC));
+        let r = _mm_add_ps(
+            _mm_min_ps(_mm_max_ps(r, _mm_setzero_ps()), _mm_set1_ps(255.0)),
+            _mm_set1_ps(MAGIC),
+        );
         let bytes = _mm_and_si128(_mm_castps_si128(r), _mm_set1_epi32(0xff));
         let packed = _mm_packus_epi16(_mm_packs_epi32(bytes, zero), zero);
         p[..4].copy_from_slice(&_mm_cvtsi128_si32(packed).to_ne_bytes());
@@ -80,12 +86,18 @@ pub(super) fn over_rgba(p: &mut [u8], c: [f32; 4]) {
         // R, G, B, A to B, G, R, A, then `steps`: × 255, clamped, rounded.
         let c = _mm_loadu_ps(c.as_ptr());
         let c = _mm_shuffle_ps::<0b11_00_01_10>(c, c);
-        let s = _mm_sub_ps(_mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_mul_ps(c, hi), lo), hi), magic), magic);
+        let s = _mm_sub_ps(
+            _mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_mul_ps(c, hi), lo), hi), magic),
+            magic,
+        );
         let a = _mm_shuffle_ps::<0b11_11_11_11>(s, s);
         let keep = _mm_sub_ps(_mm_set1_ps(1.0), _mm_div_ps(a, hi));
         let px = _mm_cvtsi32_si128(i32::from_ne_bytes([p[0], p[1], p[2], p[3]]));
         let d = _mm_cvtepi32_ps(_mm_unpacklo_epi16(_mm_unpacklo_epi8(px, zero), zero));
-        let r = _mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_add_ps(s, _mm_mul_ps(d, keep)), lo), hi), magic);
+        let r = _mm_add_ps(
+            _mm_min_ps(_mm_max_ps(_mm_add_ps(s, _mm_mul_ps(d, keep)), lo), hi),
+            magic,
+        );
         let bytes = _mm_and_si128(_mm_castps_si128(r), _mm_set1_epi32(0xff));
         let packed = _mm_packus_epi16(_mm_packs_epi32(bytes, zero), zero);
         p[..4].copy_from_slice(&_mm_cvtsi128_si32(packed).to_ne_bytes());
@@ -97,7 +109,12 @@ pub(super) fn over_rgba(p: &mut [u8], c: [f32; 4]) {
 /// The B, G, R, A bytes an opaque premultiplied RGBA `c` (`c[3] == 1`) writes over any pixel.
 #[inline]
 pub(super) fn opaque(c: [f32; 4]) -> [u8; 4] {
-    [q(c[2] * 255.0), q(c[1] * 255.0), q(c[0] * 255.0), q(c[3] * 255.0)]
+    [
+        q(c[2] * 255.0),
+        q(c[1] * 255.0),
+        q(c[0] * 255.0),
+        q(c[3] * 255.0),
+    ]
 }
 
 /// A layer's row composited whole (inside its clip, no hole) over B, G, R, A pixels: each texel
@@ -134,7 +151,12 @@ unsafe fn over4(row: &mut [u8], src: &[[f32; 4]], opacity: f32) {
     // SAFETY (whole body): SSE2 is baseline on x86-64; every load and store is inside `row`
     // (16 bytes a step) and `src` (four texels a step).
     unsafe {
-        let (lo, hi, magic, one) = (_mm_setzero_ps(), _mm_set1_ps(255.0), _mm_set1_ps(MAGIC), _mm_set1_ps(1.0));
+        let (lo, hi, magic, one) = (
+            _mm_setzero_ps(),
+            _mm_set1_ps(255.0),
+            _mm_set1_ps(MAGIC),
+            _mm_set1_ps(1.0),
+        );
         let k = _mm_set1_ps(opacity);
         let byte = _mm_set1_epi32(0xff);
         for (p, s) in row.chunks_exact_mut(16).zip(src.chunks_exact(4)) {
@@ -144,14 +166,35 @@ unsafe fn over4(row: &mut [u8], src: &[[f32; 4]], opacity: f32) {
             let mut t3 = _mm_mul_ps(_mm_loadu_ps(s[3].as_ptr()), k);
             _MM_TRANSPOSE4_PS(&mut t0, &mut t1, &mut t2, &mut t3);
             // t0..t3: R, G, B, A of the four texels. `steps`: × 255, clamped, rounded.
-            let steps = |v: __m128| _mm_sub_ps(_mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_mul_ps(v, hi), lo), hi), magic), magic);
+            let steps = |v: __m128| {
+                _mm_sub_ps(
+                    _mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_mul_ps(v, hi), lo), hi), magic),
+                    magic,
+                )
+            };
             let (r, g, b, a) = (steps(t0), steps(t1), steps(t2), steps(t3));
             let keep = _mm_sub_ps(one, _mm_div_ps(a, hi));
             let px = _mm_loadu_si128(p.as_ptr() as *const __m128i);
-            let ch = |shift: i32| _mm_cvtepi32_ps(_mm_and_si128(_mm_srl_epi32(px, _mm_cvtsi32_si128(shift)), byte));
-            let out = |s: __m128, d: __m128| _mm_and_si128(_mm_castps_si128(_mm_add_ps(_mm_min_ps(_mm_max_ps(_mm_add_ps(s, _mm_mul_ps(d, keep)), lo), hi), magic)), byte);
+            let ch = |shift: i32| {
+                _mm_cvtepi32_ps(_mm_and_si128(
+                    _mm_srl_epi32(px, _mm_cvtsi32_si128(shift)),
+                    byte,
+                ))
+            };
+            let out = |s: __m128, d: __m128| {
+                _mm_and_si128(
+                    _mm_castps_si128(_mm_add_ps(
+                        _mm_min_ps(_mm_max_ps(_mm_add_ps(s, _mm_mul_ps(d, keep)), lo), hi),
+                        magic,
+                    )),
+                    byte,
+                )
+            };
             let (ob, og, or, oa) = (out(b, ch(0)), out(g, ch(8)), out(r, ch(16)), out(a, ch(24)));
-            let packed = _mm_or_si128(_mm_or_si128(ob, _mm_slli_epi32::<8>(og)), _mm_or_si128(_mm_slli_epi32::<16>(or), _mm_slli_epi32::<24>(oa)));
+            let packed = _mm_or_si128(
+                _mm_or_si128(ob, _mm_slli_epi32::<8>(og)),
+                _mm_or_si128(_mm_slli_epi32::<16>(or), _mm_slli_epi32::<24>(oa)),
+            );
             _mm_storeu_si128(p.as_mut_ptr() as *mut __m128i, packed);
         }
     }
@@ -159,9 +202,15 @@ unsafe fn over4(row: &mut [u8], src: &[[f32; 4]], opacity: f32) {
 /// Blends `s` over every pixel of `row`.
 #[inline]
 pub(super) fn over_row(row: &mut [u8], s: &Src) {
-    if let Some(px) = s.opaque() { return fill_row(row, px); }
-    if s.bgra == [0.0; 4] { return; }
-    for p in row.chunks_exact_mut(4) { over(p, s); }
+    if let Some(px) = s.opaque() {
+        return fill_row(row, px);
+    }
+    if s.bgra == [0.0; 4] {
+        return;
+    }
+    for p in row.chunks_exact_mut(4) {
+        over(p, s);
+    }
 }
 
 /// The dual-source blend of subpixel text: each colour channel kept by its own `1 − k`, where
@@ -169,8 +218,15 @@ pub(super) fn over_row(row: &mut [u8], s: &Src) {
 #[inline]
 pub(super) fn over_lcd(p: &mut [u8], c: [f32; 4], k: [f32; 3]) {
     let s = [steps(c[2]), steps(c[1]), steps(c[0]), steps(c[3])];
-    let keep = [1.0 - steps(k[2]) / 255.0, 1.0 - steps(k[1]) / 255.0, 1.0 - steps(k[0]) / 255.0, 1.0 - s[3] / 255.0];
-    for ch in 0..4 { p[ch] = q(s[ch] + p[ch] as f32 * keep[ch]); }
+    let keep = [
+        1.0 - steps(k[2]) / 255.0,
+        1.0 - steps(k[1]) / 255.0,
+        1.0 - steps(k[0]) / 255.0,
+        1.0 - s[3] / 255.0,
+    ];
+    for ch in 0..4 {
+        p[ch] = q(s[ch] + p[ch] as f32 * keep[ch]);
+    }
 }
 
 /// Writes pixel `px` over every pixel of `row`, as words when the row is word aligned.
@@ -178,6 +234,10 @@ pub(super) fn over_lcd(p: &mut [u8], c: [f32; 4], k: [f32; 3]) {
 pub(super) fn fill_row(row: &mut [u8], px: [u8; 4]) {
     match bytemuck::try_cast_slice_mut::<u8, u32>(row) {
         Ok(words) => words.fill(u32::from_ne_bytes(px)),
-        Err(_) => for p in row.chunks_exact_mut(4) { p.copy_from_slice(&px) },
+        Err(_) => {
+            for p in row.chunks_exact_mut(4) {
+                p.copy_from_slice(&px)
+            }
+        }
     }
 }

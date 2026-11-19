@@ -43,10 +43,17 @@ pub(super) fn of_text(text: &str, chosen: Option<Language>) -> Option<Language> 
     }
     let mut han = false;
     let tag = text.chars().find_map(|ch| match ch as u32 {
-        0x3041..=0x309F | 0x30A0..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F => Some(b"ja" as &[u8]),
-        0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7AF | 0xD7B0..=0xD7FF => Some(b"ko"),
+        0x3041..=0x309F | 0x30A0..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9F => {
+            Some(b"ja" as &[u8])
+        }
+        0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7AF | 0xD7B0..=0xD7FF => {
+            Some(b"ko")
+        }
         0x3100..=0x312F | 0x31A0..=0x31BF => Some(b"zh-TW"),
-        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF => { han = true; None }
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x3FFFF => {
+            han = true;
+            None
+        }
         _ => None,
     });
     let cjk = |l: &Language| matches!(l.language(), "ja" | "ko" | "zh");
@@ -58,7 +65,8 @@ pub(super) fn of_text(text: &str, chosen: Option<Language>) -> Option<Language> 
         None => return chosen,
     };
     static TAGS: std::sync::OnceLock<[Option<Language>; 4]> = std::sync::OnceLock::new();
-    let [ja, ko, tw, cn] = TAGS.get_or_init(|| ["ja", "ko", "zh-TW", "zh-CN"].map(|t| Language::parse(t).ok()));
+    let [ja, ko, tw, cn] =
+        TAGS.get_or_init(|| ["ja", "ko", "zh-TW", "zh-CN"].map(|t| Language::parse(t).ok()));
     match tag {
         b"ja" => *ja,
         b"ko" => *ko,
@@ -104,24 +112,63 @@ struct Writing {
 }
 
 const JAPANESE: Writing = Writing {
-    families: &["Hiragino Sans", "Hiragino Kaku Gothic", "ヒラギノ角ゴ", "Yu Gothic", "Meiryo", "CJK JP", "Noto Sans JP", "Source Han Sans JP"],
+    families: &[
+        "Hiragino Sans",
+        "Hiragino Kaku Gothic",
+        "ヒラギノ角ゴ",
+        "Yu Gothic",
+        "Meiryo",
+        "CJK JP",
+        "Noto Sans JP",
+        "Source Han Sans JP",
+    ],
     // Hiragino Sans GB is Chinese despite its name.
     not: &[" GB"],
 };
 const KOREAN: Writing = Writing {
-    families: &["SD Gothic", "Malgun", "CJK KR", "Noto Sans KR", " KR", "AppleGothic", "Nanum"],
+    families: &[
+        "SD Gothic",
+        "Malgun",
+        "CJK KR",
+        "Noto Sans KR",
+        " KR",
+        "AppleGothic",
+        "Nanum",
+    ],
     not: &[],
 };
 const SIMPLIFIED: Writing = Writing {
-    families: &["PingFang SC", "Microsoft YaHei", "CJK SC", "Noto Sans SC", "Source Han Sans SC", "Hiragino Sans GB"],
+    families: &[
+        "PingFang SC",
+        "Microsoft YaHei",
+        "CJK SC",
+        "Noto Sans SC",
+        "Source Han Sans SC",
+        "Hiragino Sans GB",
+    ],
     not: &[],
 };
 const TRADITIONAL: Writing = Writing {
-    families: &["PingFang TC", "Microsoft JhengHei", "CJK TC", "Noto Sans TC", "Source Han Sans TC"],
+    families: &[
+        "PingFang TC",
+        "Microsoft JhengHei",
+        "CJK TC",
+        "Noto Sans TC",
+        "Source Han Sans TC",
+    ],
     not: &[],
 };
 const HONG_KONG: Writing = Writing {
-    families: &["PingFang HK", "CJK HK", "Noto Sans HK", "Source Han Sans HC", "PingFang TC", "Microsoft JhengHei", "CJK TC", "Noto Sans TC"],
+    families: &[
+        "PingFang HK",
+        "CJK HK",
+        "Noto Sans HK",
+        "Source Han Sans HC",
+        "PingFang TC",
+        "Microsoft JhengHei",
+        "CJK TC",
+        "Noto Sans TC",
+    ],
     not: &[],
 };
 
@@ -152,11 +199,22 @@ fn order(names: &[Option<String>], writing: &Writing) -> Vec<usize> {
 /// writing each script and language implies: Han by language (Simplified Chinese when none),
 /// kana for Japanese, Hangul for Korean, Bopomofo for Traditional Chinese.
 pub(super) fn register(collection: &mut Collection, fallbacks: &[FamilyId]) {
-    let names: Vec<Option<String>> = fallbacks.iter().map(|id| collection.family_name(*id).map(str::to_owned)).collect();
-    let ordered = |writing: &Writing| order(&names, writing).into_iter().map(|i| fallbacks[i]).collect::<Vec<_>>();
+    let names: Vec<Option<String>> = fallbacks
+        .iter()
+        .map(|id| collection.family_name(*id).map(str::to_owned))
+        .collect();
+    let ordered = |writing: &Writing| {
+        order(&names, writing)
+            .into_iter()
+            .map(|i| fallbacks[i])
+            .collect::<Vec<_>>()
+    };
     let mut add = |script: &[u8; 4], locale: Option<&str>, writing: &Writing| {
         let locale = locale.and_then(|tag| Language::parse(tag).ok());
-        collection.set_fallbacks(FallbackKey::new(Script::from_bytes(*script), locale.as_ref()), ordered(writing).into_iter());
+        collection.set_fallbacks(
+            FallbackKey::new(Script::from_bytes(*script), locale.as_ref()),
+            ordered(writing).into_iter(),
+        );
     };
     // `zh-CN` is Han's default key, the one text with no language uses.
     add(b"Hani", None, &SIMPLIFIED);
@@ -182,17 +240,40 @@ mod tests {
     /// Each language's fonts come first, in its order, and the rest keep theirs.
     #[test]
     fn fallback_order_follows_the_language() {
-        let mac = named(&["PingFang SC", "PingFang TC", "PingFang HK", "Hiragino Sans GB", "Hiragino Sans", "Apple SD Gothic Neo"]);
-        assert_eq!(order(&mac, &JAPANESE)[0], 4, "Hiragino Sans, not Hiragino Sans GB");
+        let mac = named(&[
+            "PingFang SC",
+            "PingFang TC",
+            "PingFang HK",
+            "Hiragino Sans GB",
+            "Hiragino Sans",
+            "Apple SD Gothic Neo",
+        ]);
+        assert_eq!(
+            order(&mac, &JAPANESE)[0],
+            4,
+            "Hiragino Sans, not Hiragino Sans GB"
+        );
         assert_eq!(order(&mac, &KOREAN)[0], 5);
         assert_eq!(order(&mac, &SIMPLIFIED)[..2], [0, 3]);
         assert_eq!(order(&mac, &TRADITIONAL)[0], 1);
         assert_eq!(order(&mac, &HONG_KONG)[..2], [2, 1]);
-        let windows = named(&["Microsoft YaHei", "Yu Gothic", "Meiryo", "Malgun Gothic", "Microsoft JhengHei"]);
+        let windows = named(&[
+            "Microsoft YaHei",
+            "Yu Gothic",
+            "Meiryo",
+            "Malgun Gothic",
+            "Microsoft JhengHei",
+        ]);
         assert_eq!(order(&windows, &JAPANESE), [1, 2, 0, 3, 4]);
         assert_eq!(order(&windows, &KOREAN)[0], 3);
         assert_eq!(order(&windows, &TRADITIONAL)[0], 4);
-        let linux = named(&["Noto Sans CJK SC", "Noto Sans CJK TC", "Noto Sans CJK HK", "Noto Sans CJK JP", "Noto Sans CJK KR"]);
+        let linux = named(&[
+            "Noto Sans CJK SC",
+            "Noto Sans CJK TC",
+            "Noto Sans CJK HK",
+            "Noto Sans CJK JP",
+            "Noto Sans CJK KR",
+        ]);
         assert_eq!(order(&linux, &JAPANESE)[0], 3);
         assert_eq!(order(&linux, &KOREAN)[0], 4);
         assert_eq!(order(&linux, &SIMPLIFIED)[0], 0);

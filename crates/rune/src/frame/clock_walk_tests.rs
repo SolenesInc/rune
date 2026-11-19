@@ -30,24 +30,40 @@ impl Reference {
 
     fn apply(&mut self, input: Input<'_>) -> Output {
         match input {
-            Input::Hold(at) => { self.hold(at); Output::None }
+            Input::Hold(at) => {
+                self.hold(at);
+                Output::None
+            }
             Input::Advance(at, running, started) => {
                 let gap = at.saturating_duration_since(self.last).as_secs_f64();
                 self.hold(at);
-                let step = if !running { Step { catch_up: 0.0, dt: 1.0 / 120.0 } } else {
+                let step = if !running {
+                    Step {
+                        catch_up: 0.0,
+                        dt: 1.0 / 120.0,
+                    }
+                } else {
                     let total = gap.clamp(0.0, 0.25);
                     let dt = total.min(1.0 / 120.0);
-                    Step { catch_up: total - dt, dt }
+                    Step {
+                        catch_up: total - dt,
+                        dt,
+                    }
                 };
                 self.starts.clear();
                 self.starts.extend_from_slice(started);
                 Output::Frame(step)
             }
             Input::Present(done) => {
-                let late = done.saturating_duration_since(self.last).as_secs_f64().min(0.25);
+                let late = done
+                    .saturating_duration_since(self.last)
+                    .as_secs_f64()
+                    .min(0.25);
                 let effect = if late > 0.0 && !self.starts.is_empty() {
                     Output::Delay(self.starts.clone(), late)
-                } else { Output::None };
+                } else {
+                    Output::None
+                };
                 self.starts.clear();
                 effect
             }
@@ -64,19 +80,32 @@ fn clock_walk_matches_previous_frames() {
     let a = store.set(NodeId(1), x, 0.0);
     let b = store.set(NodeId(2), x, 0.0);
     use Input::*;
-    let alphabet = [Hold(at(1)), Hold(at(12)), Advance(at(4), true, &[a]),
-        Advance(at(35), false, &[b, a]), Advance(at(300), true, &[]),
-        Present(at(4)), Present(at(60)), Present(at(600))];
+    let alphabet = [
+        Hold(at(1)),
+        Hold(at(12)),
+        Advance(at(4), true, &[a]),
+        Advance(at(35), false, &[b, a]),
+        Advance(at(300), true, &[]),
+        Present(at(4)),
+        Present(at(60)),
+        Present(at(600)),
+    ];
     for sequence in 0..alphabet.len().pow(5) {
         let mut clock = FrameClock::new(start);
-        let mut reference = Reference { last: start, starts: Vec::new() };
+        let mut reference = Reference {
+            last: start,
+            starts: Vec::new(),
+        };
         let mut n = sequence;
         for _ in 0..5 {
             let input = alphabet[n % alphabet.len()];
             n /= alphabet.len();
             let expected = reference.apply(input);
             let got = match input {
-                Hold(at) => { clock.hold(at); Output::None }
+                Hold(at) => {
+                    clock.hold(at);
+                    Output::None
+                }
                 Advance(at, running, started) => {
                     let (step, starts) = clock.begin(at, running);
                     starts.extend_from_slice(started);
@@ -84,17 +113,26 @@ fn clock_walk_matches_previous_frames() {
                 }
                 Present(done) => match clock.step(Event::Present(done)) {
                     Effects::None => Output::None,
-                    Effects::One(Effect::Delay(late, starts)) => Output::Delay(starts.to_vec(), late),
+                    Effects::One(Effect::Delay(late, starts)) => {
+                        Output::Delay(starts.to_vec(), late)
+                    }
                     _ => panic!("unexpected presentation effect"),
                 },
             };
             assert_eq!(got, expected, "sequence {sequence}, input {input:?}");
-            assert_eq!(clock.last(), reference.last, "sequence {sequence}, input {input:?}");
+            assert_eq!(
+                clock.last(),
+                reference.last,
+                "sequence {sequence}, input {input:?}"
+            );
             let pending = match &clock.phase {
                 Phase::Stepped { starts, .. } => starts.as_slice(),
                 _ => &[],
             };
-            assert_eq!(pending, reference.starts, "sequence {sequence}, input {input:?}");
+            assert_eq!(
+                pending, reference.starts,
+                "sequence {sequence}, input {input:?}"
+            );
         }
     }
 }

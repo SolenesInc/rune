@@ -34,9 +34,18 @@ pub(super) fn emit_block_decorations(
 
     let flush_code = |instances: &mut Vec<Instance>, run: &mut Option<(f32, f32)>| {
         if let Some((top, bot)) = run.take() {
-            let pad_y = if tk == 1.0 { (2.0 * s).round() } else { 2.0 * s * tk };
+            let pad_y = if tk == 1.0 {
+                (2.0 * s).round()
+            } else {
+                2.0 * s * tk
+            };
             instances.push(rect_inst(
-                [x0 + glide[0], top - pad_y + glide[1], box_w, (bot - top) + 2.0 * pad_y],
+                [
+                    x0 + glide[0],
+                    top - pad_y + glide[1],
+                    box_w,
+                    (bot - top) + 2.0 * pad_y,
+                ],
                 premul(spec.rich_style().code_block_bg, o, srgb),
                 6.0 * s * tk,
                 clip,
@@ -46,11 +55,28 @@ pub(super) fn emit_block_decorations(
     };
     let flush_quote = |instances: &mut Vec<Instance>, run: &mut Option<(f32, f32)>| {
         if let Some((top, bot)) = run.take() {
-            let bar_w = if tk == 1.0 { (3.0 * s).round().max(2.0) } else { (3.0 * s * tk).max(2.0 * tk) };
-            let bar_x = if tk == 1.0 { (origin[0] + 2.0 * s).round() } else { origin[0] + 2.0 * s * tk } + glide[0];
-            let inset_y = if tk == 1.0 { (2.0 * s).round() } else { 2.0 * s * tk };
+            let bar_w = if tk == 1.0 {
+                (3.0 * s).round().max(2.0)
+            } else {
+                (3.0 * s * tk).max(2.0 * tk)
+            };
+            let bar_x = if tk == 1.0 {
+                (origin[0] + 2.0 * s).round()
+            } else {
+                origin[0] + 2.0 * s * tk
+            } + glide[0];
+            let inset_y = if tk == 1.0 {
+                (2.0 * s).round()
+            } else {
+                2.0 * s * tk
+            };
             instances.push(rect_inst(
-                [bar_x, top + inset_y + glide[1], bar_w, (bot - top - 2.0 * inset_y).max(4.0 * s * tk)],
+                [
+                    bar_x,
+                    top + inset_y + glide[1],
+                    bar_w,
+                    (bot - top - 2.0 * inset_y).max(4.0 * s * tk),
+                ],
                 premul(spec.rich_style().quote_bar, o, srgb),
                 bar_w * 0.5,
                 clip,
@@ -62,8 +88,17 @@ pub(super) fn emit_block_decorations(
     let mut had_lines = false;
     for line in layout.block_lines(spec.style.line_px() * s) {
         had_lines = true;
-        let blk = spec.cold.blocks.get(para_idx).copied().unwrap_or(Block::Paragraph);
-        let is_soft = spec.cold.soft_breaks.binary_search(&(para_idx as u32)).is_ok();
+        let blk = spec
+            .cold
+            .blocks
+            .get(para_idx)
+            .copied()
+            .unwrap_or(Block::Paragraph);
+        let is_soft = spec
+            .cold
+            .soft_breaks
+            .binary_search(&(para_idx as u32))
+            .is_ok();
         let top = origin[1] + line.top * tk;
         let bot = origin[1] + line.bottom * tk;
         let baseline = origin[1] + line.baseline * tk;
@@ -125,9 +160,7 @@ pub(super) fn emit_block_decorations(
         }
     }
 
-    if !had_lines
-        && let Some(&blk) = spec.cold.blocks.first()
-    {
+    if !had_lines && let Some(&blk) = spec.cold.blocks.first() {
         let top = origin[1];
         let bot = top + line_h_default;
         let baseline = top + spec.style.size * 0.8 * s * tk;
@@ -150,32 +183,70 @@ pub(super) fn emit_block_decorations(
     flush_quote(instances, &mut quote_run);
 
     if !markers.is_empty() {
-        let marker_color = spec.rich_style().marker.unwrap_or_else(|| text_color.alpha(0.68));
+        let marker_color = spec
+            .rich_style()
+            .marker
+            .unwrap_or_else(|| text_color.alpha(0.68));
         let mc = premul(marker_color, o, srgb);
         for (indent_px, baseline_y, blk, num) in markers {
             match blk {
                 Block::Bullet(lvl) => {
-                    let d = if tk == 1.0 { (4.5 * s).round().max(3.0) } else { (4.5 * s * tk).max(3.0 * tk) };
+                    let d = if tk == 1.0 {
+                        (4.5 * s).round().max(3.0)
+                    } else {
+                        (4.5 * s * tk).max(3.0 * tk)
+                    };
                     let cx = origin[0] + (indent_px - (7.0 * s).round()) * tk - d;
                     let cy = baseline_y - 0.34 * spec.style.size * s * tk - d * 0.5;
-                    let (cx, cy) = if tk == 1.0 { (cx.round(), cy.round()) } else { (cx, cy) };
+                    let (cx, cy) = if tk == 1.0 {
+                        (cx.round(), cy.round())
+                    } else {
+                        (cx, cy)
+                    };
                     let radius = if lvl >= 2 { 1.0 * s * tk } else { d * 0.5 };
-                    let c = if lvl == 1 { premul(marker_color.alpha(marker_color.a * 0.65), o, srgb) } else { mc };
-                    instances.push(rect_inst([cx + glide[0], cy + glide[1], d, d], c, radius, clip, fade));
+                    let c = if lvl == 1 {
+                        premul(marker_color.alpha(marker_color.a * 0.65), o, srgb)
+                    } else {
+                        mc
+                    };
+                    instances.push(rect_inst(
+                        [cx + glide[0], cy + glide[1], d, d],
+                        c,
+                        radius,
+                        clip,
+                        fade,
+                    ));
                 }
                 Block::Numbered(_) => {
                     let label = format!("{num}.");
                     let ml = text_sys.layout_rich(&label, &[], spec.style, s, None);
                     let mw = ml.full_width();
-                    let m_base = ml.lines().next().map_or(spec.style.size * 0.8 * s, |l| l.metrics().baseline);
+                    let m_base = ml
+                        .lines()
+                        .next()
+                        .map_or(spec.style.size * 0.8 * s, |l| l.metrics().baseline);
                     let mx = origin[0] + (indent_px - (5.0 * s).round() - mw) * tk;
                     let my = baseline_y - m_base * tk;
-                    let m_origin = if tk == 1.0 { [mx.round(), my.round()] } else { [mx, my] };
-                    let m_r_origin = if scale_motion == ScaleMotion::Still { m_origin } else { [0.0, 0.0] };
+                    let m_origin = if tk == 1.0 {
+                        [mx.round(), my.round()]
+                    } else {
+                        [mx, my]
+                    };
+                    let m_r_origin = if scale_motion == ScaleMotion::Still {
+                        m_origin
+                    } else {
+                        [0.0, 0.0]
+                    };
                     glyph_scratch.clear();
                     text_sys.set_glyph_inks(marker_color, &[]);
                     text_sys.set_glide(glide);
-                    text_sys.glyphs_for_layout_scaled(&ml, m_r_origin, raster, false, glyph_scratch);
+                    text_sys.glyphs_for_layout_scaled(
+                        &ml,
+                        m_r_origin,
+                        raster,
+                        false,
+                        glyph_scratch,
+                    );
                     text_sys.set_glide([0.0; 2]);
                     for q in &*glyph_scratch {
                         instances.extend(
@@ -191,22 +262,56 @@ pub(super) fn emit_block_decorations(
 }
 
 /// Pixel caret and logical-point IME area use the same shaped cursor geometry.
-pub(super) fn input_caret(n: &Node, r: [f32; 4], scale: f32, s: f32, gliding: bool, scrolls: &mut HashMap<String, f32>) -> Option<([f32; 4], [f32; 4])> {
+pub(super) fn input_caret(
+    n: &Node,
+    r: [f32; 4],
+    scale: f32,
+    s: f32,
+    gliding: bool,
+    scrolls: &mut HashMap<String, f32>,
+) -> Option<([f32; 4], [f32; 4])> {
     let (spec, laid, input) = (n.text.as_ref()?, n.text_layout.as_ref()?, n.input.as_ref()?);
     let layout = laid.view();
     let e = &input.edit;
     let ins = n.inset.map(|v| v * scale * s);
     let (x0, x1) = (r[0] + ins[0], r[2] - ins[2]);
     // The text scales with its box, so the caret does too.
-    let mut x = text_x(spec, x0, x1, (layout.full_width() * scale).ceil(), layout.flow());
-    if input.single_line && let Some(l) = laid.single() {
-        x -= single_line_scroll(scrolls, &n.path, input, &spec.content, l, s, (x1 - x0) / scale.max(1e-4)) * scale;
+    let mut x = text_x(
+        spec,
+        x0,
+        x1,
+        (layout.full_width() * scale).ceil(),
+        layout.flow(),
+    );
+    if input.single_line
+        && let Some(l) = laid.single()
+    {
+        x -= single_line_scroll(
+            scrolls,
+            &n.path,
+            input,
+            &spec.content,
+            l,
+            s,
+            (x1 - x0) / scale.max(1e-4),
+        ) * scale;
     }
     let bb = layout.caret(caret_index(e, &spec.content), e.affinity, 1.5 * s);
-    let (cx, cy) = (x + bb.x0 as f32 * scale, r[1] + ins[1] + bb.y0 as f32 * scale);
-    let h = (if bb.y1 > bb.y0 { (bb.y1 - bb.y0) as f32 } else { spec.style.line_px() * s }) * scale;
+    let (cx, cy) = (
+        x + bb.x0 as f32 * scale,
+        r[1] + ins[1] + bb.y0 as f32 * scale,
+    );
+    let h = (if bb.y1 > bb.y0 {
+        (bb.y1 - bb.y0) as f32
+    } else {
+        spec.style.line_px() * s
+    }) * scale;
     let (caret_x, caret_w) = if (scale - 1.0).abs() <= 1e-5 {
-        let gx = if gliding { pixel_snap::text_glide(r[0]) } else { 0.0 };
+        let gx = if gliding {
+            pixel_snap::text_glide(r[0])
+        } else {
+            0.0
+        };
         ((cx - gx).round() + gx, (1.5 * s).round().max(1.0))
     } else {
         (cx, (1.5 * s * scale).max(1.0))
@@ -216,9 +321,16 @@ pub(super) fn input_caret(n: &Node, r: [f32; 4], scale: f32, s: f32, gliding: bo
     let area = match (e.preedit_target(), e.range().0) {
         (Some((ta, tb)), at) => {
             let len = spec.content.len();
-            let (a, b) = (layout.caret((at + ta).min(len), e.affinity, 0.0), layout.caret((at + tb).min(len), e.affinity, 0.0));
+            let (a, b) = (
+                layout.caret((at + ta).min(len), e.affinity, 0.0),
+                layout.caret((at + tb).min(len), e.affinity, 0.0),
+            );
             let (ax, ay) = (x + a.x0 as f32 * scale, r[1] + ins[1] + a.y0 as f32 * scale);
-            let w = if (b.y0 - a.y0).abs() < 0.5 && b.x0 > a.x0 { (b.x0 - a.x0) as f32 * scale } else { 2.0 * scale * s };
+            let w = if (b.y0 - a.y0).abs() < 0.5 && b.x0 > a.x0 {
+                (b.x0 - a.x0) as f32 * scale
+            } else {
+                2.0 * scale * s
+            };
             [ax / s, ay / s, w / s, h / s]
         }
         (None, _) => [cx / s, cy / s, 2.0 * scale, h / s],
@@ -228,7 +340,14 @@ pub(super) fn input_caret(n: &Node, r: [f32; 4], scale: f32, s: f32, gliding: bo
 
 /// Whether `looping`'s sampled value multiplies the element's opacity.
 pub(super) fn fades(looping: Option<rune_motion::LoopSpec>) -> bool {
-    matches!(looping.map(|l| l.kind), Some(rune_motion::LoopKind::Opacity { .. } | rune_motion::LoopKind::OpacityCycle(_) | rune_motion::LoopKind::Sequence(_)))
+    matches!(
+        looping.map(|l| l.kind),
+        Some(
+            rune_motion::LoopKind::Opacity { .. }
+                | rune_motion::LoopKind::OpacityCycle(_)
+                | rune_motion::LoopKind::Sequence(_)
+        )
+    )
 }
 
 /// How many separate things node `n` paints itself (fill, border, gradient, shape, image,
@@ -243,7 +362,10 @@ pub(super) fn own_paints(n: &Node) -> usize {
         v.pixels.is_some(),
         !v.shadows.is_empty(),
         n.text.is_some(),
-    ].into_iter().filter(|&b| b).count()
+    ]
+    .into_iter()
+    .filter(|&b| b)
+    .count()
 }
 
 /// Whether `rect` (edges) lies a pixel or more inside the rounded rectangle `mask` (edges) with
@@ -252,34 +374,80 @@ pub(super) fn own_paints(n: &Node) -> usize {
 /// as its whole corner square.
 pub(super) fn inside_rounded(rect: [f32; 4], mask: [f32; 4], radii: [f32; 4]) -> bool {
     const AA: f32 = 1.0;
-    if rect[2] <= rect[0] || rect[3] <= rect[1] { return true; }
-    if rect[0] < mask[0] || rect[1] < mask[1] || rect[2] > mask[2] || rect[3] > mask[3] { return false; }
-    let corners = [(mask[0], mask[1], 1.0, 1.0), (mask[2], mask[1], -1.0, 1.0), (mask[2], mask[3], -1.0, -1.0), (mask[0], mask[3], 1.0, -1.0)];
-    corners.iter().zip(radii).all(|(&(cx, cy, sx, sy), radius)| {
-        let e = crate::render::corner_extent(radius);
-        [(rect[0], rect[1]), (rect[2], rect[1]), (rect[2], rect[3]), (rect[0], rect[3])].iter().all(|&(x, y)| {
-            let (dx, dy) = ((x - cx) * sx, (y - cy) * sy);
-            if dx >= e || dy >= e { return true; }
-            radius > 0.0 && (radius - dx).hypot(radius - dy) <= radius - AA
+    if rect[2] <= rect[0] || rect[3] <= rect[1] {
+        return true;
+    }
+    if rect[0] < mask[0] || rect[1] < mask[1] || rect[2] > mask[2] || rect[3] > mask[3] {
+        return false;
+    }
+    let corners = [
+        (mask[0], mask[1], 1.0, 1.0),
+        (mask[2], mask[1], -1.0, 1.0),
+        (mask[2], mask[3], -1.0, -1.0),
+        (mask[0], mask[3], 1.0, -1.0),
+    ];
+    corners
+        .iter()
+        .zip(radii)
+        .all(|(&(cx, cy, sx, sy), radius)| {
+            let e = crate::render::corner_extent(radius);
+            [
+                (rect[0], rect[1]),
+                (rect[2], rect[1]),
+                (rect[2], rect[3]),
+                (rect[0], rect[3]),
+            ]
+            .iter()
+            .all(|&(x, y)| {
+                let (dx, dy) = ((x - cx) * sx, (y - cy) * sy);
+                if dx >= e || dy >= e {
+                    return true;
+                }
+                radius > 0.0 && (radius - dx).hypot(radius - dy) <= radius - AA
+            })
         })
-    })
 }
 
 /// `rect` (x, y, w, h) magnified `k` times from `r_origin` to `origin`.
-pub(super) fn scale_about(rect: [f32; 4], origin: [f32; 2], r_origin: [f32; 2], k: f32) -> [f32; 4] {
-    [origin[0] + (rect[0] - r_origin[0]) * k, origin[1] + (rect[1] - r_origin[1]) * k, rect[2] * k, rect[3] * k]
+pub(super) fn scale_about(
+    rect: [f32; 4],
+    origin: [f32; 2],
+    r_origin: [f32; 2],
+    k: f32,
+) -> [f32; 4] {
+    [
+        origin[0] + (rect[0] - r_origin[0]) * k,
+        origin[1] + (rect[1] - r_origin[1]) * k,
+        rect[2] * k,
+        rect[3] * k,
+    ]
 }
 
 /// A glyph instance drawn `k` times its rasterized size about `origin`. An alpha glyph keeps
 /// its atlas footprint in `uv.zw`, so the shader samples it filtered.
-pub(super) fn zoom_glyph(mut g: Instance, origin: [f32; 2], r_origin: [f32; 2], k: f32) -> Instance {
-    if k == 1.0 && origin == r_origin { return g; }
+pub(super) fn zoom_glyph(
+    mut g: Instance,
+    origin: [f32; 2],
+    r_origin: [f32; 2],
+    k: f32,
+) -> Instance {
+    if k == 1.0 && origin == r_origin {
+        return g;
+    }
     if g.params[1] == KIND_GLYPH && g.radii[3] > 0.0 {
         // An outline glyph (`text::Outline`) magnifies its pen and pixel instead of its mask.
-        g.radii = [origin[0] + (g.radii[0] - r_origin[0]) * k, origin[1] + (g.radii[1] - r_origin[1]) * k, g.radii[2], g.radii[3] * k];
+        g.radii = [
+            origin[0] + (g.radii[0] - r_origin[0]) * k,
+            origin[1] + (g.radii[1] - r_origin[1]) * k,
+            g.radii[2],
+            g.radii[3] * k,
+        ];
     } else if g.params[1] == KIND_GLYPH && g.uv[2] == 0.0 {
         // A subpixel mask's footprint is three texels a pixel wide.
-        (g.uv[2], g.uv[3]) = (g.rect[2] * if g.radii[0] > 0.5 { 3.0 } else { 1.0 }, g.rect[3]);
+        (g.uv[2], g.uv[3]) = (
+            g.rect[2] * if g.radii[0] > 0.5 { 3.0 } else { 1.0 },
+            g.rect[3],
+        );
     }
     g.rect = [
         origin[0] + (g.rect[0] - r_origin[0]) * k,
@@ -292,7 +460,14 @@ pub(super) fn zoom_glyph(mut g: Instance, origin: [f32; 2], r_origin: [f32; 2], 
 
 /// A text glyph's instance: alpha-atlas coverage tinted by `fill`, or a colour glyph's image
 /// at `fill`'s alpha. None when the image atlas can't place it.
-pub(super) fn glyph_or_image(q: &GlyphQuad, text: &TextSystem, images: &mut crate::pixels::ImageAtlas, fill: [f32; 4], clip: [f32; 4], fade: [f32; 4]) -> Option<Instance> {
+pub(super) fn glyph_or_image(
+    q: &GlyphQuad,
+    text: &TextSystem,
+    images: &mut crate::pixels::ImageAtlas,
+    fill: [f32; 4],
+    clip: [f32; 4],
+    fade: [f32; 4],
+) -> Option<Instance> {
     if q.color == 0 {
         let mut g = glyph(q, fill, clip, fade);
         g.params[3] = text.coverage_exponent(fill);
@@ -304,14 +479,25 @@ pub(super) fn glyph_or_image(q: &GlyphQuad, text: &TextSystem, images: &mut crat
         radii: [0.0; 4],
         fill: [0.0, 0.0, 0.0, fill[3]],
         border: [0.0; 4],
-        params: [image.page as f32, KIND_IMAGE, image.premultiplied as u8 as f32, 1.0],
+        params: [
+            image.page as f32,
+            KIND_IMAGE,
+            image.premultiplied as u8 as f32,
+            1.0,
+        ],
         uv: image.rect.map(|v| v as f32),
         clip,
         fade: crate::render::pack_fade(fade, clip, clip),
     })
 }
 
-pub(super) fn rect_inst(rect: [f32; 4], fill: [f32; 4], radius: f32, clip: [f32; 4], fade: [f32; 4]) -> Instance {
+pub(super) fn rect_inst(
+    rect: [f32; 4],
+    fill: [f32; 4],
+    radius: f32,
+    clip: [f32; 4],
+    fade: [f32; 4],
+) -> Instance {
     Instance {
         rect,
         radii: [radius; 4],

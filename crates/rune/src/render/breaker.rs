@@ -8,9 +8,9 @@
 //! A native device answers at once. A browser's error scopes answer a little later, so on the
 //! web a frame or two draw that fallback while the answer comes (`Renderer::checking_gpu`).
 
-use std::sync::{Arc, Mutex};
-use crate::machine::{Attempt, Effects, Seq};
 use super::{Blend, Renderer, layer_blur, layers::FORMAT};
+use crate::machine::{Attempt, Effects, Seq};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Feature {
@@ -53,7 +53,10 @@ pub(super) enum Event {
     /// It was built, with what the device said.
     Built(Verdict),
     /// The browser answered the check `attempt`.
-    Answered { attempt: Attempt, error: Option<String> },
+    Answered {
+        attempt: Attempt,
+        error: Option<String>,
+    },
     /// The uber shader changed (`variant::Uber`); what was built from the old one goes.
     ShaderChanged,
 }
@@ -73,11 +76,20 @@ impl Health {
         match (&*self, event) {
             (Health::Untried, Event::Wanted) => Effects::one(Effect::Build),
             (Health::Untried, Event::Built(Verdict::Later(answer))) => {
-                *self = Health::Checking { attempt: seq.next(), answer };
+                *self = Health::Checking {
+                    attempt: seq.next(),
+                    answer,
+                };
                 Effects::none()
             }
             (Health::Untried, Event::Built(Verdict::Now(error))) => self.settle(error),
-            (Health::Checking { attempt, .. }, Event::Answered { attempt: answered, error }) if *attempt == answered => self.settle(error),
+            (
+                Health::Checking { attempt, .. },
+                Event::Answered {
+                    attempt: answered,
+                    error,
+                },
+            ) if *attempt == answered => self.settle(error),
             (Health::Untried, Event::ShaderChanged) => Effects::none(),
             (_, Event::ShaderChanged) => {
                 *self = Health::Untried;
@@ -89,18 +101,31 @@ impl Health {
 
     fn settle(&mut self, error: Option<String>) -> Effects<Effect> {
         match error {
-            None => { *self = Health::Working; Effects::none() }
-            Some(why) => { *self = Health::Broken; Effects::two(Effect::Drop, Effect::Report(why)) }
+            None => {
+                *self = Health::Working;
+                Effects::none()
+            }
+            Some(why) => {
+                *self = Health::Broken;
+                Effects::two(Effect::Drop, Effect::Report(why))
+            }
         }
     }
 
-    pub(super) fn working(&self) -> bool { matches!(self, Health::Working) }
+    pub(super) fn working(&self) -> bool {
+        matches!(self, Health::Working)
+    }
 
     /// The browser's answer to the check under way, if it has come.
     fn answered(&self) -> Option<Event> {
-        let Health::Checking { attempt, answer } = self else { return None };
+        let Health::Checking { attempt, answer } = self else {
+            return None;
+        };
         let error = answer.lock().unwrap_or_else(|e| e.into_inner()).take()?;
-        Some(Event::Answered { attempt: *attempt, error })
+        Some(Event::Answered {
+            attempt: *attempt,
+            error,
+        })
     }
 }
 
@@ -136,7 +161,9 @@ impl Breakers {
 
     /// Whether a check is waiting on the browser, which a later frame picks up.
     pub(super) fn checking(&self) -> bool {
-        [&self.isolation, &self.plus_lighter, &self.layer_blur].iter().any(|h| matches!(h, Health::Checking { .. }))
+        [&self.isolation, &self.plus_lighter, &self.layer_blur]
+            .iter()
+            .any(|h| matches!(h, Health::Checking { .. }))
     }
 }
 
@@ -146,25 +173,38 @@ impl Renderer {
     /// Whether a frame drew a fallback while the browser checks a pipeline; draw another soon, and
     /// it draws with the pipeline if the device took it.
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-    pub(crate) fn checking_gpu(&self) -> bool { self.breakers.checking() }
+    pub(crate) fn checking_gpu(&self) -> bool {
+        self.breakers.checking()
+    }
 
     /// Takes the answers that came since the last frame, then builds what `wanted` needs.
-    pub(super) fn check_features(&mut self, device: &wgpu::Device, wanted: impl Fn(Feature) -> bool) {
+    pub(super) fn check_features(
+        &mut self,
+        device: &wgpu::Device,
+        wanted: impl Fn(Feature) -> bool,
+    ) {
         for feature in FEATURES {
-            if let Some(answer) = self.breakers.health(feature).answered() { self.run_breaker(device, feature, answer); }
-            if wanted(feature) { self.run_breaker(device, feature, Event::Wanted); }
+            if let Some(answer) = self.breakers.health(feature).answered() {
+                self.run_breaker(device, feature, answer);
+            }
+            if wanted(feature) {
+                self.run_breaker(device, feature, Event::Wanted);
+            }
         }
     }
 
     /// The uber shader changed: the features built from it are built again, and checked again,
     /// when a frame next needs them.
     pub(super) fn shader_changed(&mut self, device: &wgpu::Device) {
-        for feature in [Feature::Isolation, Feature::PlusLighter] { self.run_breaker(device, feature, Event::ShaderChanged); }
+        for feature in [Feature::Isolation, Feature::PlusLighter] {
+            self.run_breaker(device, feature, Event::ShaderChanged);
+        }
     }
 
     /// Steps `feature`'s breaker on `event` and carries out what it asks, until nothing is left.
     fn run_breaker(&mut self, device: &wgpu::Device, feature: Feature, event: Event) {
-        let mut queue: std::collections::VecDeque<Effect> = self.breakers.step(feature, event).into_iter().collect();
+        let mut queue: std::collections::VecDeque<Effect> =
+            self.breakers.step(feature, event).into_iter().collect();
         while let Some(effect) = queue.pop_front() {
             match effect {
                 Effect::Build => {
@@ -179,24 +219,57 @@ impl Renderer {
 
     fn build_feature(&mut self, device: &wgpu::Device, feature: Feature) {
         #[cfg(test)]
-        let format = if self.breakers.refuse == Some(feature) { wgpu::TextureFormat::Rgba32Uint } else { FORMAT };
+        let format = if self.breakers.refuse == Some(feature) {
+            wgpu::TextureFormat::Rgba32Uint
+        } else {
+            FORMAT
+        };
         #[cfg(not(test))]
         let format = FORMAT;
         match feature {
             Feature::Isolation => {
                 if !self.extra.iter().any(|(f, _)| *f == FORMAT) {
-                    let pipeline = Self::pipeline(device, &self.layout, &self.shader, format, self.vertex_entry, Blend::SourceOver);
+                    let pipeline = Self::pipeline(
+                        device,
+                        &self.layout,
+                        &self.shader,
+                        format,
+                        self.vertex_entry,
+                        Blend::SourceOver,
+                    );
                     self.extra.push((FORMAT, pipeline));
                 }
-                let formats: Vec<_> = [self.format].into_iter().chain(self.extra.iter().map(|(f, _)| *f)).collect();
-                for format in formats { self.add_layer_format(device, format); }
+                let formats: Vec<_> = [self.format]
+                    .into_iter()
+                    .chain(self.extra.iter().map(|(f, _)| *f))
+                    .collect();
+                for format in formats {
+                    self.add_layer_format(device, format);
+                }
             }
             Feature::PlusLighter => {
                 self.layers.additive = Some((
-                    Self::pipeline(device, &self.layout, &self.shader, format, self.vertex_entry, Blend::PlusLighter),
-                    Self::pipeline(device, &self.layout, &self.shader, format, "vs", Blend::PlusLighter)));
+                    Self::pipeline(
+                        device,
+                        &self.layout,
+                        &self.shader,
+                        format,
+                        self.vertex_entry,
+                        Blend::PlusLighter,
+                    ),
+                    Self::pipeline(
+                        device,
+                        &self.layout,
+                        &self.shader,
+                        format,
+                        "vs",
+                        Blend::PlusLighter,
+                    ),
+                ));
             }
-            Feature::LayerBlur => self.layers.blur = Some(layer_blur::Pipeline::new(device, format)),
+            Feature::LayerBlur => {
+                self.layers.blur = Some(layer_blur::Pipeline::new(device, format))
+            }
         }
     }
 
@@ -241,12 +314,20 @@ fn checked(device: &wgpu::Device, build: impl FnOnce()) -> Verdict {
 
 fn report(device: &wgpu::Device, feature: Feature, why: &str) {
     let fallback = match feature {
-        Feature::Isolation => "isolated layers draw straight into their parent, without their opacity, blur, clip or turn",
+        Feature::Isolation => {
+            "isolated layers draw straight into their parent, without their opacity, blur, clip or turn"
+        }
         Feature::PlusLighter => "plus-lighter layers draw source-over",
         Feature::LayerBlur => "layers draw unblurred",
     };
     #[cfg(target_arch = "wasm32")]
-    web_sys::console::error_1(&format!("rune: a pipeline the GPU refused ({why}) on {}; {fallback}", crate::platform::web::health::summary(device)).into());
+    web_sys::console::error_1(
+        &format!(
+            "rune: a pipeline the GPU refused ({why}) on {}; {fallback}",
+            crate::platform::web::health::summary(device)
+        )
+        .into(),
+    );
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = device;

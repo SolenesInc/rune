@@ -1,8 +1,8 @@
 use super::*;
+use crate::render::Blend;
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
-use crate::render::Blend;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -65,7 +65,12 @@ struct TimingPool {
 }
 impl TimingPool {
     fn take(self: &Arc<Self>) -> Option<Arc<TimingSlot>> {
-        self.free.lock().unwrap().pop().map(|start| Arc::new(TimingSlot { pool: self.clone(), start }))
+        self.free.lock().unwrap().pop().map(|start| {
+            Arc::new(TimingSlot {
+                pool: self.clone(),
+                start,
+            })
+        })
     }
 }
 struct TimingSlot {
@@ -111,7 +116,11 @@ impl SurfaceRenderer {
         panic!("native surfaces are unsupported on web")
     }
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn build(_: &wgpu::Device, _: wgpu::TextureFormat, _: Box<dyn FnOnce() + Send>) -> Building {
+    pub(crate) fn build(
+        _: &wgpu::Device,
+        _: wgpu::TextureFormat,
+        _: Box<dyn FnOnce() + Send>,
+    ) -> Building {
         panic!("native surfaces are unsupported on web")
     }
     #[cfg(target_arch = "wasm32")]
@@ -130,19 +139,35 @@ impl SurfaceRenderer {
     /// it's ready. The shader compiler can take hundreds of milliseconds, which
     /// on the UI thread froze a window's input and held the first picture back.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn build(device: &wgpu::Device, format: wgpu::TextureFormat, done: Box<dyn FnOnce() + Send>) -> Building {
+    pub(crate) fn build(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        done: Box<dyn FnOnce() + Send>,
+    ) -> Building {
         let layout = Self::bind_layout(device);
         let (sender, built) = std::sync::mpsc::sync_channel(1);
         let (punch_sender, punch) = std::sync::mpsc::sync_channel(1);
         let (device_for, layout_for) = (device.clone(), layout.clone());
-        let spawned = std::thread::Builder::new().name("rune-video-pipeline".into()).spawn(move || {
-            let _ = sender.send(Self::pipeline(&device_for, &layout_for, format, Blend::SourceOver));
-            done();
-            // A clip's layer (Windows) needs the punch; it compiles once the pictures can show.
-            drop(punch_sender);
-        });
+        let spawned = std::thread::Builder::new()
+            .name("rune-video-pipeline".into())
+            .spawn(move || {
+                let _ = sender.send(Self::pipeline(
+                    &device_for,
+                    &layout_for,
+                    format,
+                    Blend::SourceOver,
+                ));
+                done();
+                // A clip's layer (Windows) needs the punch; it compiles once the pictures can show.
+                drop(punch_sender);
+            });
         let ok = spawned.is_ok();
-        Building { format, layout, built: ok.then_some(built), punch: std::sync::Mutex::new(ok.then_some(punch)) }
+        Building {
+            format,
+            layout,
+            built: ok.then_some(built),
+            punch: std::sync::Mutex::new(ok.then_some(punch)),
+        }
     }
 
     /// The renderer `building` made, once its pipeline is ready; a build whose thread couldn't
@@ -153,24 +178,33 @@ impl SurfaceRenderer {
             Some(built) => built.try_recv().ok()?,
             None => Self::pipeline(device, &building.layout, building.format, Blend::SourceOver),
         };
-        let mut renderer = Self::with_pipeline(device, building.format, building.layout.clone(), pipeline);
+        let mut renderer =
+            Self::with_pipeline(device, building.format, building.layout.clone(), pipeline);
         // The punch arrives on this later.
         renderer.punch_building = building.punch.lock().unwrap().take();
         Some(renderer)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn with_pipeline(device: &wgpu::Device, format: wgpu::TextureFormat, layout: wgpu::BindGroupLayout, pipeline: wgpu::RenderPipeline) -> Self {
-        let timing_pool = device.features().contains(wgpu::Features::TIMESTAMP_QUERY).then(|| {
-            Arc::new(TimingPool {
-                queries: device.create_query_set(&wgpu::QuerySetDescriptor {
-                    label: Some("video frame timestamps"),
-                    ty: wgpu::QueryType::Timestamp,
-                    count: TIMING_SLOTS * 2,
-                }),
-                free: std::sync::Mutex::new((0..TIMING_SLOTS).map(|i| i * 2).collect()),
-            })
-        });
+    fn with_pipeline(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        layout: wgpu::BindGroupLayout,
+        pipeline: wgpu::RenderPipeline,
+    ) -> Self {
+        let timing_pool = device
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
+            .then(|| {
+                Arc::new(TimingPool {
+                    queries: device.create_query_set(&wgpu::QuerySetDescriptor {
+                        label: Some("video frame timestamps"),
+                        ty: wgpu::QueryType::Timestamp,
+                        count: TIMING_SLOTS * 2,
+                    }),
+                    free: std::sync::Mutex::new((0..TIMING_SLOTS).map(|i| i * 2).collect()),
+                })
+            });
         let (completion, receiver) = std::sync::mpsc::sync_channel(1);
         let poll_device = device.clone();
         std::thread::Builder::new()
@@ -262,11 +296,21 @@ impl SurfaceRenderer {
         }
     }
 
-    fn pipeline(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, format: wgpu::TextureFormat, blend: Blend) -> wgpu::RenderPipeline {
+    fn pipeline(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        format: wgpu::TextureFormat,
+        blend: Blend,
+    ) -> wgpu::RenderPipeline {
         Self::pipeline_with(device, layout, format, blend.state())
     }
 
-    fn pipeline_with(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, format: wgpu::TextureFormat, blend: wgpu::BlendState) -> wgpu::RenderPipeline {
+    fn pipeline_with(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        format: wgpu::TextureFormat,
+        blend: wgpu::BlendState,
+    ) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("video"),
             source: wgpu::ShaderSource::Wgsl(include_str!("video.wgsl").into()),
@@ -285,7 +329,10 @@ impl SurfaceRenderer {
                 compilation_options: Default::default(),
                 buffers: &[],
             },
-            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleStrip, ..Default::default() },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                ..Default::default()
+            },
             depth_stencil: None,
             multisample: Default::default(),
             fragment: Some(wgpu::FragmentState {
@@ -305,17 +352,29 @@ impl SurfaceRenderer {
 
     pub(crate) fn add_format(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) {
         if format != self.format && !self.extra.iter().any(|(f, _)| *f == format) {
-            self.extra.push((format, Self::pipeline(device, &self.layout, format, Blend::SourceOver)));
+            self.extra.push((
+                format,
+                Self::pipeline(device, &self.layout, format, Blend::SourceOver),
+            ));
         }
     }
 
     pub(crate) fn add_plus_lighter(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) {
         if self.additive.as_ref().is_none_or(|(f, _)| *f != format) {
-            self.additive = Some((format, Self::pipeline(device, &self.layout, format, Blend::PlusLighter)));
+            self.additive = Some((
+                format,
+                Self::pipeline(device, &self.layout, format, Blend::PlusLighter),
+            ));
         }
     }
 
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, draws: &[SurfaceDraw], viewport: (u32, u32)) {
+    pub fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        draws: &[SurfaceDraw],
+        viewport: (u32, u32),
+    ) {
         *self.queries_used.get_mut() = false;
         // Release an unsubmitted preparation before acquiring its replacement. Submitted
         // slots stay leased by their completion callbacks, including the deferred resolve.
@@ -324,7 +383,8 @@ impl SurfaceRenderer {
         if draws.iter().any(|d| d.surface.observed()) {
             self.queries = self.timing_pool.as_ref().and_then(TimingPool::take);
         }
-        self.cache.retain(|key, _| draws.iter().any(|d| d.surface.key() == *key));
+        self.cache
+            .retain(|key, _| draws.iter().any(|d| d.surface.key() == *key));
         // Keep uniforms/bindings on unchanged frames. The source is latched here, after scene build.
         let mut count = 0;
         for d in draws {
@@ -336,7 +396,10 @@ impl SurfaceRenderer {
                 continue;
             }
             let key = d.surface.key();
-            let changed = self.cache.get(&key).is_none_or(|v| !Arc::ptr_eq(&v.frame, &frame));
+            let changed = self
+                .cache
+                .get(&key)
+                .is_none_or(|v| !Arc::ptr_eq(&v.frame, &frame));
             if changed {
                 match self.import(device, queue, frame) {
                     Ok(imported) => {
@@ -371,26 +434,53 @@ impl SurfaceRenderer {
                         Format::Nv12Video => 1.0,
                         Format::Nv12Full => 2.0,
                     },
-                    if f.color.matrix == Matrix::Bt709 { 1.0 } else { 0.0 },
-                    if self.srgb_blend { 2.0 } else if f.color.transfer == Transfer::Srgb { 0.0 } else { 1.0 },
+                    if f.color.matrix == Matrix::Bt709 {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                    if self.srgb_blend {
+                        2.0
+                    } else if f.color.transfer == Transfer::Srgb {
+                        0.0
+                    } else {
+                        1.0
+                    },
                     d.opacity,
                 ],
-                sampling: [if exact { 1.0 } else { 0.0 }, f.size[0] as f32, f.size[1] as f32, if mirrored { 1.0 } else { 0.0 }],
+                sampling: [
+                    if exact { 1.0 } else { 0.0 },
+                    f.size[0] as f32,
+                    f.size[1] as f32,
+                    if mirrored { 1.0 } else { 0.0 },
+                ],
                 orient: f.orient.0.map(f32::from),
             };
             // The same draw with a new picture keeps its uniform buffer, and its bind group too
             // when the picture is in textures it bound before.
-            if let Some(p) = self.draws.get_mut(count).filter(|p| p.surface.key() == d.surface.key() || Arc::ptr_eq(&p.imported, &imported)) {
+            if let Some(p) = self.draws.get_mut(count).filter(|p| {
+                p.surface.key() == d.surface.key() || Arc::ptr_eq(&p.imported, &imported)
+            }) {
                 *p.drawn.get_mut() = false;
                 match &self.staging {
                     Some(s) => s.write_buffer(&p.uniform, 0, bytemuck::bytes_of(&u)),
                     None => queue.write_buffer(&p.uniform, 0, bytemuck::bytes_of(&u)),
                 }
-                if !Arc::ptr_eq(&p.imported, &imported) && p.imported.textures != imported.textures {
-                    let old = std::mem::replace(&mut p.bind, match p.binds.iter().position(|(t, _)| *t == imported.textures) {
-                        Some(i) => p.binds.remove(i).1,
-                        None => bind_group(device, &self.layout, &self.sampler, &p.uniform, &imported.textures),
-                    });
+                if !Arc::ptr_eq(&p.imported, &imported) && p.imported.textures != imported.textures
+                {
+                    let old = std::mem::replace(
+                        &mut p.bind,
+                        match p.binds.iter().position(|(t, _)| *t == imported.textures) {
+                            Some(i) => p.binds.remove(i).1,
+                            None => bind_group(
+                                device,
+                                &self.layout,
+                                &self.sampler,
+                                &p.uniform,
+                                &imported.textures,
+                            ),
+                        },
+                    );
                     p.binds.push((p.imported.textures.clone(), old));
                     if p.binds.len() > KEPT_BINDS {
                         p.binds.remove(0);
@@ -405,7 +495,13 @@ impl SurfaceRenderer {
                     contents: bytemuck::bytes_of(&u),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
-                let bind = bind_group(device, &self.layout, &self.sampler, &uniform, &imported.textures);
+                let bind = bind_group(
+                    device,
+                    &self.layout,
+                    &self.sampler,
+                    &uniform,
+                    &imported.textures,
+                );
                 let p = Prepared {
                     drawn: std::sync::atomic::AtomicBool::new(false),
                     before: d.before_instance,
@@ -435,8 +531,17 @@ impl SurfaceRenderer {
         }
     }
 
-    fn import(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, frame: Arc<Frame>) -> Result<Imported, String> {
-        if frame.size.iter().any(|v| *v > device.limits().max_texture_dimension_2d) {
+    fn import(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        frame: Arc<Frame>,
+    ) -> Result<Imported, String> {
+        if frame
+            .size
+            .iter()
+            .any(|v| *v > device.limits().max_texture_dimension_2d)
+        {
             return Err("video dimensions exceed this GPU device's texture limit".into());
         }
         let textures = match &frame.source {
@@ -456,7 +561,14 @@ impl SurfaceRenderer {
                 let b = if b.format == Format::Bgra {
                     a.clone()
                 } else {
-                    upload(device, queue, b.width / 2, b.height / 2, wgpu::TextureFormat::Rg8Unorm, &b.planes[1])
+                    upload(
+                        device,
+                        queue,
+                        b.width / 2,
+                        b.height / 2,
+                        wgpu::TextureFormat::Rg8Unorm,
+                        &b.planes[1],
+                    )
                 };
                 [a, b]
             }
@@ -466,7 +578,10 @@ impl SurfaceRenderer {
                     self.importer = Some(macos::Importer::new(device)?);
                 }
                 objc2_video::rc::autoreleasepool(|_| {
-                    self.importer.as_ref().unwrap().import(b, frame.format, frame.size)
+                    self.importer
+                        .as_ref()
+                        .unwrap()
+                        .import(b, frame.format, frame.size)
                 })?
             }
         };
@@ -480,7 +595,9 @@ impl SurfaceRenderer {
     }
     #[cfg(all(test, target_os = "macos"))]
     pub(super) fn live_planes(&self) -> usize {
-        self.importer.as_ref().map_or(0, |i| i.live_planes.load(std::sync::atomic::Ordering::SeqCst))
+        self.importer.as_ref().map_or(0, |i| {
+            i.live_planes.load(std::sync::atomic::Ordering::SeqCst)
+        })
     }
     #[cfg(target_os = "macos")]
     pub(crate) fn draws_nothing(&self) -> bool {
@@ -496,7 +613,8 @@ impl SurfaceRenderer {
             return None;
         }
         self.queries.as_ref().map(|slot| {
-            self.queries_used.store(true, std::sync::atomic::Ordering::Relaxed);
+            self.queries_used
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             wgpu::RenderPassTimestampWrites {
                 query_set: &slot.pool.queries,
                 beginning_of_pass_write_index: Some(slot.start),
@@ -506,10 +624,18 @@ impl SurfaceRenderer {
     }
 
     /// Draws `index` in the window's own pass: punched out when asked, else as any other.
-    pub(crate) fn draw_main(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, format: wgpu::TextureFormat, blend: Blend) {
+    pub(crate) fn draw_main(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        index: usize,
+        format: wgpu::TextureFormat,
+        blend: Blend,
+    ) {
         match (&self.punch, self.draws[index].punch) {
             (Some(punch), true) => {
-                self.draws[index].drawn.store(true, std::sync::atomic::Ordering::Relaxed);
+                self.draws[index]
+                    .drawn
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
                 pass.set_pipeline(punch);
                 pass.set_bind_group(0, &self.draws[index].bind, &[]);
                 pass.draw(0..4, 0..1);
@@ -519,8 +645,16 @@ impl SurfaceRenderer {
     }
 
     /// Draws `index` inside an isolated layer.
-    pub(crate) fn draw_isolated(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, format: wgpu::TextureFormat, blend: Blend) {
-        self.draws[index].isolated.store(true, std::sync::atomic::Ordering::Relaxed);
+    pub(crate) fn draw_isolated(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        index: usize,
+        format: wgpu::TextureFormat,
+        blend: Blend,
+    ) {
+        self.draws[index]
+            .isolated
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         self.draw_blended(pass, index, format, blend);
     }
 
@@ -529,34 +663,69 @@ impl SurfaceRenderer {
     }
     /// Reproject one draw into a bounded layer without moving its screen-space clip or UVs.
     pub(crate) fn target(&self, queue: &wgpu::Queue, index: usize, bounds: [f32; 4]) {
-        self.write(queue, &self.draws[index].uniform, bytemuck::cast_slice(&[bounds[2], bounds[3], bounds[0], bounds[1]]));
+        self.write(
+            queue,
+            &self.draws[index].uniform,
+            bytemuck::cast_slice(&[bounds[2], bounds[3], bounds[0], bounds[1]]),
+        );
     }
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, index: usize) {
         self.draw_format(pass, index, self.format);
     }
-    pub(crate) fn draw_format(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, format: wgpu::TextureFormat) {
+    pub(crate) fn draw_format(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        index: usize,
+        format: wgpu::TextureFormat,
+    ) {
         self.draw_blended(pass, index, format, Blend::SourceOver);
     }
-    pub(crate) fn draw_blended(&self, pass: &mut wgpu::RenderPass<'_>, index: usize, format: wgpu::TextureFormat, blend: Blend) {
-        self.draws[index].drawn.store(true, std::sync::atomic::Ordering::Relaxed);
+    pub(crate) fn draw_blended(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        index: usize,
+        format: wgpu::TextureFormat,
+        blend: Blend,
+    ) {
+        self.draws[index]
+            .drawn
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         pass.set_pipeline(if blend == Blend::PlusLighter {
             let (f, pipeline) = self.additive.as_ref().expect("prepared dissolve surface");
             assert_eq!(*f, format);
             pipeline
-        } else if format == self.format { &self.pipeline } else {
-            &self.extra.iter().find(|(f, _)| *f == format).expect("SurfaceRenderer::add_format first").1
+        } else if format == self.format {
+            &self.pipeline
+        } else {
+            &self
+                .extra
+                .iter()
+                .find(|(f, _)| *f == format)
+                .expect("SurfaceRenderer::add_format first")
+                .1
         });
         pass.set_bind_group(0, &self.draws[index].bind, &[]);
         pass.draw(0..4, 0..1);
     }
     #[cfg(target_arch = "wasm32")]
-    pub fn submit(&self, queue: &wgpu::Queue, encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
-        assert!(self.draws.is_empty(), "native video surfaces are unsupported on web");
+    pub fn submit(
+        &self,
+        queue: &wgpu::Queue,
+        encoder: wgpu::CommandEncoder,
+    ) -> wgpu::SubmissionIndex {
+        assert!(
+            self.draws.is_empty(),
+            "native video surfaces are unsupported on web"
+        );
         queue.submit([encoder.finish()])
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn submit(&self, queue: &wgpu::Queue, encoder: wgpu::CommandEncoder) -> wgpu::SubmissionIndex {
+    pub fn submit(
+        &self,
+        queue: &wgpu::Queue,
+        encoder: wgpu::CommandEncoder,
+    ) -> wgpu::SubmissionIndex {
         let submitted_at = Instant::now();
         let frames: Vec<_> = self
             .draws
@@ -585,8 +754,10 @@ impl SurfaceRenderer {
         }
         // A caller may use Renderer::draw_timed with its own query set. Never resolve our
         // unwritten counters in that case; CPU submission/completion notifications still work.
-        if let Some(queries) =
-            self.queries.as_ref().filter(|_| self.queries_used.load(std::sync::atomic::Ordering::Relaxed))
+        if let Some(queries) = self
+            .queries
+            .as_ref()
+            .filter(|_| self.queries_used.load(std::sync::atomic::Ordering::Relaxed))
         {
             let resolve = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("video timestamps"),
@@ -611,32 +782,48 @@ impl SurfaceRenderer {
             encoder.on_submitted_work_done(move || {
                 let completed_at = Instant::now();
                 let mut timestamps = device.create_command_encoder(&Default::default());
-                timestamps.resolve_query_set(&queries.pool.queries, queries.start..queries.start + 2, &resolve, 0);
+                timestamps.resolve_query_set(
+                    &queries.pool.queries,
+                    queries.start..queries.start + 2,
+                    &resolve,
+                    0,
+                );
                 timestamps.copy_buffer_to_buffer(&resolve, 0, &readback, 0, 16);
                 let result = readback.clone();
-                timestamps.map_buffer_on_submit(&readback, wgpu::MapMode::Read, .., move |status| {
-                    let times = if status.is_ok() {
-                        let bytes = result.slice(..).get_mapped_range().expect("mapped timestamps");
-                        let a = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-                        let b = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-                        (b >= a && b != 0).then_some((a as f64 * seconds_per_tick, b as f64 * seconds_per_tick))
-                    } else {
-                        None
-                    };
-                    if status.is_ok() {
-                        result.unmap();
-                    }
-                    // The sample pair must survive both GPU submissions and CPU mapping.
-                    drop(queries);
-                    for (s, _, mut t) in frames {
-                        t.completed_at = Some(completed_at);
-                        if let Some((a, b)) = times {
-                            t.gpu_start_seconds = Some(a);
-                            t.gpu_end_seconds = Some(b);
+                timestamps.map_buffer_on_submit(
+                    &readback,
+                    wgpu::MapMode::Read,
+                    ..,
+                    move |status| {
+                        let times = if status.is_ok() {
+                            let bytes = result
+                                .slice(..)
+                                .get_mapped_range()
+                                .expect("mapped timestamps");
+                            let a = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+                            let b = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+                            (b >= a && b != 0).then_some((
+                                a as f64 * seconds_per_tick,
+                                b as f64 * seconds_per_tick,
+                            ))
+                        } else {
+                            None
+                        };
+                        if status.is_ok() {
+                            result.unmap();
                         }
-                        s.report(t);
-                    }
-                });
+                        // The sample pair must survive both GPU submissions and CPU mapping.
+                        drop(queries);
+                        for (s, _, mut t) in frames {
+                            t.completed_at = Some(completed_at);
+                            if let Some((a, b)) = times {
+                                t.gpu_start_seconds = Some(a);
+                                t.gpu_end_seconds = Some(b);
+                            }
+                            s.report(t);
+                        }
+                    },
+                );
                 queue.submit([timestamps.finish()]);
                 let _ = completion.try_send(());
             });
@@ -661,10 +848,18 @@ impl SurfaceRenderer {
     }
 }
 
-pub(super) fn descriptor(width: u32, height: u32, format: wgpu::TextureFormat) -> wgpu::TextureDescriptor<'static> {
+pub(super) fn descriptor(
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+) -> wgpu::TextureDescriptor<'static> {
     wgpu::TextureDescriptor {
         label: Some("video plane"),
-        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -701,16 +896,36 @@ fn upload(
     );
     texture
 }
-fn bind_group(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, uniform: &wgpu::Buffer, textures: &[wgpu::Texture; 2]) -> wgpu::BindGroup {
-    let views = textures.each_ref().map(|t| t.create_view(&Default::default()));
+fn bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    uniform: &wgpu::Buffer,
+    textures: &[wgpu::Texture; 2],
+) -> wgpu::BindGroup {
+    let views = textures
+        .each_ref()
+        .map(|t| t.create_view(&Default::default()));
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("video frame"),
         layout,
         entries: &[
-            wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&views[0]) },
-            wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&views[1]) },
-            wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(sampler) },
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&views[0]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&views[1]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
         ],
     })
 }

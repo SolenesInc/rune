@@ -29,7 +29,9 @@ pub(super) enum TitleEvent {
 impl Title {
     /// The title the window opens with, before any handler sets one.
     pub(crate) fn start(&mut self, title: &str) {
-        *self = std::mem::take(self).step(TitleEvent::Start(title.to_owned())).0;
+        *self = std::mem::take(self)
+            .step(TitleEvent::Start(title.to_owned()))
+            .0;
     }
 
     pub(super) fn set(&mut self, title: String) {
@@ -55,7 +57,9 @@ impl Title {
         match (self, event) {
             (Title::Unset, TitleEvent::Start(title)) => (Title::Shown(title), false),
             (title, TitleEvent::Start(_)) => (title, false),
-            (title, TitleEvent::Set(next)) if title.current() == Some(next.as_str()) => (title, false),
+            (title, TitleEvent::Set(next)) if title.current() == Some(next.as_str()) => {
+                (title, false)
+            }
             (_, TitleEvent::Set(title)) => (Title::Pending(title), false),
             (Title::Pending(title), TitleEvent::Shown) => (Title::Shown(title), true),
             (title, TitleEvent::Shown) => (title, false),
@@ -89,7 +93,9 @@ impl FitWindow {
     /// Whether the window should be asked for `height`: it isn't already asked for it, nor
     /// (asked for nothing since it was last resized) already `current` tall.
     fn ask(&mut self, height: f32, current: f32) -> bool {
-        if self.asked.unwrap_or(current) == height { return false; }
+        if self.asked.unwrap_or(current) == height {
+            return false;
+        }
         self.asked = Some(height);
         true
     }
@@ -98,14 +104,20 @@ impl FitWindow {
     /// commit asks for the content's height again. True when that differs from what it asked
     /// (or, never asked, from `current`).
     fn resized(&mut self, height: f32, current: f32) -> bool {
-        if (self.asked.unwrap_or(current) - height).abs() <= 0.5 { return false; }
+        if (self.asked.unwrap_or(current) - height).abs() <= 0.5 {
+            return false;
+        }
         self.asked = None;
         true
     }
 
     /// The frame steps its motion: whether a commit asked it to hold.
     fn frame_holds(&mut self) -> bool {
-        self.hold = if self.hold == FitHold::Asked { FitHold::Held } else { FitHold::None };
+        self.hold = if self.hold == FitHold::Asked {
+            FitHold::Held
+        } else {
+            FitHold::None
+        };
         self.hold == FitHold::Held
     }
 
@@ -121,13 +133,20 @@ impl RuntimeCore {
     /// commit, a viewport change and `Tx::instant` jump.
     pub(super) fn fit_window(&mut self, height: f32, tx: &Tx, first: bool) {
         let height = height.ceil_to(self.env.scale).max(1.0);
-        if !self.fit.ask(height, self.viewport.1) { return; }
+        if !self.fit.ask(height, self.viewport.1) {
+            return;
+        }
         let jump = first || tx.commit.snaps() || tx.relayout || self.reduced_motion;
         // Only a macOS window and headless runs move the frame on a spring.
-        if !jump && self.window_resting && (cfg!(target_os = "macos") || self.wall_start.is_none()) { self.fit.hold = FitHold::Asked; }
+        if !jump && self.window_resting && (cfg!(target_os = "macos") || self.wall_start.is_none())
+        {
+            self.fit.hold = FitHold::Asked;
+        }
         let request = crate::window::frame::FrameRequest {
-            size: Some((self.viewport.0, height)), animate: !jump,
-            spring: (!jump).then(|| tx.motion.map_or(motion::DEFAULT, MotionSource::spring)), center: false,
+            size: Some((self.viewport.0, height)),
+            animate: !jump,
+            spring: (!jump).then(|| tx.motion.map_or(motion::DEFAULT, MotionSource::spring)),
+            center: false,
         };
         self.window_frame = Some(self.window_frame.unwrap_or_default().merge(request));
     }
@@ -137,19 +156,29 @@ impl RuntimeCore {
     /// height.
     pub fn content_height(&mut self) -> f32 {
         let measured = self.measure_pass(&Tx::default(), false);
-        let height = measured.nodes.first().map_or(self.viewport.1, |root| root.local.h);
+        let height = measured
+            .nodes
+            .first()
+            .map_or(self.viewport.1, |root| root.local.h);
         self.discard_measured(measured);
-        (height * self.zoom.k).ceil_to(self.zoom.window_scale).max(1.0)
+        (height * self.zoom.k)
+            .ceil_to(self.zoom.window_scale)
+            .max(1.0)
     }
 
     /// Someone resized a window that fits its content (not a page's band) to `height`: it
     /// goes back to the content's height.
     pub(super) fn fit_resized(&mut self, height: f32) -> bool {
-        self.fit_height && self.page.is_none() && self.window_resting && self.fit.resized(height, self.viewport.1)
+        self.fit_height
+            && self.page.is_none()
+            && self.window_resting
+            && self.fit.resized(height, self.viewport.1)
     }
 
     /// Whether this frame holds its motion for the window (see [`FitHold`]).
-    pub(super) fn fit_frame_holds(&mut self) -> bool { self.fit.frame_holds() }
+    pub(super) fn fit_frame_holds(&mut self) -> bool {
+        self.fit.frame_holds()
+    }
 }
 
 #[cfg(test)]

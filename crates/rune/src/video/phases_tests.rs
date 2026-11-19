@@ -34,7 +34,11 @@ enum OldSettle {
 
 impl OldSettle {
     fn seek(&mut self, to: f64, same_frame: bool, now: Instant) {
-        *self = if same_frame { OldSettle::Holding { to } } else { OldSettle::Seeking { since: now, to } };
+        *self = if same_frame {
+            OldSettle::Holding { to }
+        } else {
+            OldSettle::Seeking { since: now, to }
+        };
     }
     fn framed(&mut self) {
         if let OldSettle::Seeking { .. } = self {
@@ -43,8 +47,12 @@ impl OldSettle {
     }
     fn observe(&mut self, current: f64, playing: bool, audio: bool) {
         match *self {
-            OldSettle::Seeking { to, .. } if audio && (current - to).abs() < 0.25 => *self = OldSettle::Still,
-            OldSettle::Holding { to } if playing || (current - to).abs() < 1e-3 => *self = OldSettle::Still,
+            OldSettle::Seeking { to, .. } if audio && (current - to).abs() < 0.25 => {
+                *self = OldSettle::Still
+            }
+            OldSettle::Holding { to } if playing || (current - to).abs() < 1e-3 => {
+                *self = OldSettle::Still
+            }
             _ => {}
         }
     }
@@ -162,7 +170,11 @@ impl Old {
         self.anchor = None;
     }
     fn seek(&mut self, seconds: f64) {
-        let seconds = if seconds.is_finite() { seconds.max(0.0) } else { 0.0 };
+        let seconds = if seconds.is_finite() {
+            seconds.max(0.0)
+        } else {
+            0.0
+        };
         let seconds = self.duration.map_or(seconds, |d| seconds.min(d));
         self.seek = Some(seconds);
         self.time = seconds;
@@ -260,14 +272,22 @@ impl Old {
         }
     }
     fn preload(&mut self) {
-        if self.audio || self.player.is_some() || self.poster != OldPoster::Unasked || self.failed.is_some() {
+        if self.audio
+            || self.player.is_some()
+            || self.poster != OldPoster::Unasked
+            || self.failed.is_some()
+        {
             return;
         }
         let at = self.time;
         self.request_poster(at);
     }
     fn request_poster(&mut self, at: f64) {
-        self.poster = if !self.audio { OldPoster::Due } else { OldPoster::Withheld };
+        self.poster = if !self.audio {
+            OldPoster::Due
+        } else {
+            OldPoster::Withheld
+        };
         // differs from dev: a video request for a new time fences the ones before it.
         if !self.audio && self.fence_at != Some(at) {
             self.fence += 1;
@@ -279,7 +299,9 @@ impl Old {
         self.log.push(Cmd::Ask(at));
     }
     fn take_poster(&mut self, surface: bool) {
-        let Some((asked, done)) = self.done.take() else { return };
+        let Some((asked, done)) = self.done.take() else {
+            return;
+        };
         // A failed clip ignores the answer.
         if self.failed.is_some() {
             return;
@@ -297,7 +319,13 @@ impl Old {
                 if !self.opened() {
                     self.open(Ok(old_meta()));
                 }
-                if current && !self.overtaken() && done != Done::Facts && surface && self.player.is_none() && self.poster == OldPoster::Due {
+                if current
+                    && !self.overtaken()
+                    && done != Done::Facts
+                    && surface
+                    && self.player.is_none()
+                    && self.poster == OldPoster::Due
+                {
                     let id = self.next_frame_id();
                     if done == Done::FrameFails {
                         self.fail("poster push failed".into());
@@ -313,7 +341,10 @@ impl Old {
     /// the clip's length, so a seek past the end is the poster's own time.
     fn overtaken(&self) -> bool {
         let clamp = |t: f64| self.duration.map_or(t, |d| t.min(d));
-        self.fence_at.is_some_and(|asked| self.seek.is_some_and(|target| clamp(target) != clamp(asked)))
+        self.fence_at.is_some_and(|asked| {
+            self.seek
+                .is_some_and(|target| clamp(target) != clamp(asked))
+        })
     }
     fn drop_player(&mut self) {
         if self.player.take().is_some() {
@@ -324,7 +355,9 @@ impl Old {
         let p = self.player.as_mut().unwrap();
         let failure = if s.item == Reports::Failed {
             Some("item failed".to_string())
-        } else if s.item != Reports::Ready && now.saturating_duration_since(p.created) > Duration::from_secs(30) {
+        } else if s.item != Reports::Ready
+            && now.saturating_duration_since(p.created) > Duration::from_secs(30)
+        {
             Some("timed out loading after 30 s".to_string())
         } else {
             None
@@ -361,7 +394,14 @@ impl Old {
         if self.time > 0.0 && self.seek.is_none() {
             self.seek = Some(self.time);
         }
-        self.player = Some(OldPlayer { rate: 0.0, muted: false, ready: false, created: now, settle: OldSettle::Still, shown: None });
+        self.player = Some(OldPlayer {
+            rate: 0.0,
+            muted: false,
+            ready: false,
+            created: now,
+            settle: OldSettle::Still,
+            shown: None,
+        });
         // A video player fences the poster requests before it.
         if !self.audio {
             self.fence += 1;
@@ -381,7 +421,11 @@ impl Old {
             && let Some(t) = self.seek.take()
         {
             self.log.push(Cmd::Seek(t));
-            let same_frame = !self.playing && self.meta.zip(p.shown).is_some_and(|(m, shown)| m.frame_index(shown) == m.frame_index(t));
+            let same_frame = !self.playing
+                && self
+                    .meta
+                    .zip(p.shown)
+                    .is_some_and(|(m, shown)| m.frame_index(shown) == m.frame_index(t));
             p.settle.seek(t, same_frame, now);
         }
         if p.ready {
@@ -394,7 +438,8 @@ impl Old {
     }
     fn follow(&mut self, s: &Script, now: Instant, frame_time: Option<f64>) {
         let mut p = self.player.unwrap();
-        p.settle.observe(s.current, self.playing, frame_time.is_none());
+        p.settle
+            .observe(s.current, self.playing, frame_time.is_none());
         let seeking = p.settle.pending();
         let stopped = p.rate > 0.0 && {
             self.log.push(Cmd::ReadRate);
@@ -438,7 +483,10 @@ impl Old {
             return false;
         }
         if self.player.is_none() && !self.playing {
-            let want = self.seek.take().or_else(|| (self.poster == OldPoster::Unasked).then_some(self.time));
+            let want = self
+                .seek
+                .take()
+                .or_else(|| (self.poster == OldPoster::Unasked).then_some(self.time));
             if let Some(at) = want {
                 self.request_poster(at);
             }
@@ -608,11 +656,19 @@ impl Old {
 }
 
 fn old_meta() -> OldMeta {
-    OldMeta { duration: 1.0, size: Some((64, 36)), frame: 0.25 }
+    OldMeta {
+        duration: 1.0,
+        size: Some((64, 36)),
+        frame: 0.25,
+    }
 }
 
 fn old_item_meta() -> OldMeta {
-    OldMeta { duration: 2.0, size: Some((32, 18)), frame: 1.0 / 30.0 }
+    OldMeta {
+        duration: 2.0,
+        size: Some((32, 18)),
+        frame: 1.0 / 30.0,
+    }
 }
 
 // The script both sides follow.
@@ -643,16 +699,58 @@ struct Script {
 }
 
 impl Script {
-    const LOADING: Script = Script { on_main: true, make_fails: false, item: Reports::Loading, frame: Frame::Same, item_time: 0.0, current: 0.0, player_rate: 0.0 };
-    const READY: Script = Script { item: Reports::Ready, player_rate: 1.0, item_time: 0.4, current: 0.4, ..Script::LOADING };
-    const FRAME: Script = Script { frame: Frame::New(0.3), item_time: 0.3, current: 0.3, ..Script::READY };
-    const AT_SEEK: Script = Script { item_time: 0.3, current: 0.3, ..Script::READY };
-    const END: Script = Script { item_time: 1.0, current: 1.0, ..Script::READY };
-    const STOPPED: Script = Script { player_rate: 0.0, ..Script::READY };
-    const ITEM_FAILS: Script = Script { item: Reports::Failed, ..Script::LOADING };
-    const MAKE_FAILS: Script = Script { make_fails: true, ..Script::LOADING };
-    const PUSH_FAILS: Script = Script { frame: Frame::PushFails, ..Script::READY };
-    const OFF_MAIN: Script = Script { on_main: false, ..Script::READY };
+    const LOADING: Script = Script {
+        on_main: true,
+        make_fails: false,
+        item: Reports::Loading,
+        frame: Frame::Same,
+        item_time: 0.0,
+        current: 0.0,
+        player_rate: 0.0,
+    };
+    const READY: Script = Script {
+        item: Reports::Ready,
+        player_rate: 1.0,
+        item_time: 0.4,
+        current: 0.4,
+        ..Script::LOADING
+    };
+    const FRAME: Script = Script {
+        frame: Frame::New(0.3),
+        item_time: 0.3,
+        current: 0.3,
+        ..Script::READY
+    };
+    const AT_SEEK: Script = Script {
+        item_time: 0.3,
+        current: 0.3,
+        ..Script::READY
+    };
+    const END: Script = Script {
+        item_time: 1.0,
+        current: 1.0,
+        ..Script::READY
+    };
+    const STOPPED: Script = Script {
+        player_rate: 0.0,
+        ..Script::READY
+    };
+    const ITEM_FAILS: Script = Script {
+        item: Reports::Failed,
+        ..Script::LOADING
+    };
+    const MAKE_FAILS: Script = Script {
+        make_fails: true,
+        ..Script::LOADING
+    };
+    const PUSH_FAILS: Script = Script {
+        frame: Frame::PushFails,
+        ..Script::READY
+    };
+    const OFF_MAIN: Script = Script {
+        on_main: false,
+        ..Script::READY
+    };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -775,7 +873,15 @@ impl Port for Fake {
             return Some((attempt, Err("load failed".into())));
         }
         self.kept = Some(done);
-        Some((attempt, Ok(Meta { duration: 1.0, size: Some((64, 36)), frame: 0.25, sound: false })))
+        Some((
+            attempt,
+            Ok(Meta {
+                duration: 1.0,
+                size: Some((64, 36)),
+                frame: 0.25,
+                sound: false,
+            }),
+        ))
     }
     fn show_poster(&mut self, next_id: &mut dyn FnMut() -> u64) -> Result<(), String> {
         match (self.kept.take(), self.surface) {
@@ -822,7 +928,12 @@ impl Port for Fake {
         self.log.push(Cmd::Orient);
     }
     fn item_facts(&self) -> Meta {
-        Meta { duration: 2.0, size: Some((32, 18)), frame: 1.0 / 30.0, sound: false }
+        Meta {
+            duration: 2.0,
+            size: Some((32, 18)),
+            frame: 1.0 / 30.0,
+            sound: false,
+        }
     }
     fn alive(&self) -> bool {
         self.player
@@ -874,8 +985,23 @@ impl New {
     fn new(audio: bool, now: Instant) -> Self {
         let kind = if audio { Kind::Audio } else { Kind::Video };
         Self {
-            c: Control { muted: !audio, kind, ..Control::default() },
-            fake: Fake { script: Script::READY, checked: false, surface: !audio, done: None, kept: None, asked: Attempt::default(), pending: Vec::new(), player: false, now, log: Vec::new() },
+            c: Control {
+                muted: !audio,
+                kind,
+                ..Control::default()
+            },
+            fake: Fake {
+                script: Script::READY,
+                checked: false,
+                surface: !audio,
+                done: None,
+                kept: None,
+                asked: Attempt::default(),
+                pending: Vec::new(),
+                player: false,
+                now,
+                log: Vec::new(),
+            },
         }
     }
 
@@ -896,7 +1022,9 @@ impl New {
             Turn::Loading => true,
             Turn::Finished => {
                 let (active, park) = (self.c.active(), self.c.parkable());
-                self.fake.log.push(if park { Cmd::Park } else { Cmd::Unpark });
+                self.fake
+                    .log
+                    .push(if park { Cmd::Park } else { Cmd::Unpark });
                 active
             }
         }
@@ -950,13 +1078,20 @@ impl New {
             Sym::Rate(r) => self.send(Event::Rate(r)),
             Sym::Looping(l) => self.c.looping = l,
             Sym::Muted(m) => self.c.muted = m,
-            Sym::Open => self.c.open(Ok(Meta { duration: 1.0, size: Some((64, 36)), frame: 0.25, sound: false })),
+            Sym::Open => self.c.open(Ok(Meta {
+                duration: 1.0,
+                size: Some((64, 36)),
+                frame: 0.25,
+                sound: false,
+            })),
             Sym::OpenFails => self.c.open(Err("open failed".into())),
             Sym::Fail => self.c.fail("failed".into()),
             Sym::Clock(t) => self.c.advance_virtual(t),
             Sym::Preload => self.send(Event::Preload),
             Sym::LoadAudio => self.send(Event::LoadAudio),
-            Sym::Done(done) => self.fake.done = Some((answer(&mut self.fake.pending, self.fake.asked), done)),
+            Sym::Done(done) => {
+                self.fake.done = Some((answer(&mut self.fake.pending, self.fake.asked), done))
+            }
             Sym::Wait(s) => self.fake.now += Duration::from_secs(s),
             Sym::Park => {
                 step(&mut self.c, Event::Parked);
@@ -972,10 +1107,23 @@ impl New {
 
     fn view(&self) -> View {
         let c = &self.c;
-        assert_eq!(c.stage.has_player(), self.fake.player, "the stage says what the native side holds");
+        assert_eq!(
+            c.stage.has_player(),
+            self.fake.player,
+            "the stage says what the native side holds"
+        );
         let (created, player_muted, player_rate, settle, shown) = match c.stage {
-            Stage::Loading { created, muted, .. } => (Some(created), muted, 0.0, Settle::Still, None),
-            Stage::Ready { created, muted, rate, settle, shown, .. } => (Some(created), muted, rate, settle, shown),
+            Stage::Loading { created, muted, .. } => {
+                (Some(created), muted, 0.0, Settle::Still, None)
+            }
+            Stage::Ready {
+                created,
+                muted,
+                rate,
+                settle,
+                shown,
+                ..
+            } => (Some(created), muted, rate, settle, shown),
             _ => (None, false, 0.0, Settle::Still, None),
         };
         View {
@@ -983,7 +1131,11 @@ impl New {
             playing: c.playing(),
             ended: c.run == Run::Ended,
             drawn: matches!(c.run, Run::Failed { drawn: true, .. }),
-            anchor: if let Run::Playing { anchor } = c.run { anchor } else { None },
+            anchor: if let Run::Playing { anchor } = c.run {
+                anchor
+            } else {
+                None
+            },
             rate: c.rate,
             seek: c.seek,
             time: c.time,
@@ -1026,11 +1178,22 @@ fn queue<T>(pending: &mut Vec<T>, request: T) {
 /// The request a finished load answers: the one in flight, else (a load the script made up) the
 /// newest.
 fn answer<T: Copy>(pending: &mut Vec<T>, newest: T) -> T {
-    if pending.is_empty() { newest } else { pending.remove(0) }
+    if pending.is_empty() {
+        newest
+    } else {
+        pending.remove(0)
+    }
 }
 
 /// Walks every sequence up to `depth` from `(new, old)`, comparing after every symbol.
-fn descend(new: &New, old: &Old, alphabet: &[Sym], depth: usize, seq: &mut Vec<Sym>, walked: &mut u64) {
+fn descend(
+    new: &New,
+    old: &Old,
+    alphabet: &[Sym],
+    depth: usize,
+    seq: &mut Vec<Sym>,
+    walked: &mut u64,
+) {
     if depth == 0 {
         return;
     }
@@ -1068,18 +1231,53 @@ fn walk(prefix: &[Sym], alphabet: &[Sym], depth: usize) {
     }
 }
 
-use Sym::{Apply, Done as Land, Fail, LoadAudio, Looping, Muted, Open, OpenFails, Park, Pause, Play, Preload, Pull, Rate, Seek, Wait};
+use Sym::{
+    Apply, Done as Land, Fail, LoadAudio, Looping, Muted, Open, OpenFails, Park, Pause, Play,
+    Preload, Pull, Rate, Seek, Wait,
+};
 
 #[test]
 fn the_handle_and_the_headless_clock_match_the_old_flags() {
     let clock = Sym::Clock;
-    walk(&[], &[Play, Pause, Seek(0.3), Seek(9.0), Seek(f64::NAN), Rate(2.0), Looping(true), Open, OpenFails, Fail, clock(0.0), clock(0.4), clock(2.0)], 5);
+    walk(
+        &[],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Seek(9.0),
+            Seek(f64::NAN),
+            Rate(2.0),
+            Looping(true),
+            Open,
+            OpenFails,
+            Fail,
+            clock(0.0),
+            clock(0.4),
+            clock(2.0),
+        ],
+        5,
+    );
 }
 
 #[test]
 fn a_playing_headless_clip_ends_loops_and_rewinds_like_the_old_flags() {
     let clock = Sym::Clock;
-    walk(&[Open, Play], &[Play, Pause, Seek(0.3), Rate(2.0), Looping(true), Looping(false), clock(0.0), clock(0.4), clock(2.0)], 6);
+    walk(
+        &[Open, Play],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Rate(2.0),
+            Looping(true),
+            Looping(false),
+            clock(0.0),
+            clock(0.4),
+            clock(2.0),
+        ],
+        6,
+    );
 }
 
 #[test]
@@ -1118,28 +1316,78 @@ fn every_report_in_any_order_matches_the_old_flags() {
 fn posters_and_players_race_like_the_old_flags() {
     walk(
         &[],
-        &[Play, Pause, Seek(0.3), Land(Done::Frame), Land(Done::Facts), Preload, Pull(Script::LOADING), Pull(Script::FRAME), Park],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Land(Done::Frame),
+            Land(Done::Facts),
+            Preload,
+            Pull(Script::LOADING),
+            Pull(Script::FRAME),
+            Park,
+        ],
         7,
     );
 }
 
 #[test]
 fn a_failing_poster_or_frame_stops_the_clip_like_the_old_flags() {
-    walk(&[], &[Play, Land(Done::FrameFails), Land(Done::Frame), Pull(Script::LOADING), Pull(Script::PUSH_FAILS), Pull(Script::FRAME), Park], 6);
+    walk(
+        &[],
+        &[
+            Play,
+            Land(Done::FrameFails),
+            Land(Done::Frame),
+            Pull(Script::LOADING),
+            Pull(Script::PUSH_FAILS),
+            Pull(Script::FRAME),
+            Park,
+        ],
+        6,
+    );
 }
 
 #[test]
 fn a_ready_player_seeks_ends_and_parks_like_the_old_flags() {
     walk(
         &[Open, Play, Pull(Script::READY)],
-        &[Play, Pause, Seek(0.3), Seek(0.31), Rate(2.0), Looping(true), Wait(3), Apply, Park, Pull(Script::FRAME), Pull(Script::AT_SEEK), Pull(Script::END), Pull(Script::STOPPED)],
+        &[
+            Play,
+            Pause,
+            Seek(0.3),
+            Seek(0.31),
+            Rate(2.0),
+            Looping(true),
+            Wait(3),
+            Apply,
+            Park,
+            Pull(Script::FRAME),
+            Pull(Script::AT_SEEK),
+            Pull(Script::END),
+            Pull(Script::STOPPED),
+        ],
         6,
     );
 }
 
 #[test]
 fn a_loading_player_times_out_like_the_old_flags() {
-    walk(&[Play, Land(Done::Facts), Pull(Script::LOADING)], &[Seek(0.3), Muted(false), Pause, Wait(31), Wait(3), Apply, Pull(Script::LOADING), Pull(Script::READY), Park], 5);
+    walk(
+        &[Play, Land(Done::Facts), Pull(Script::LOADING)],
+        &[
+            Seek(0.3),
+            Muted(false),
+            Pause,
+            Wait(31),
+            Wait(3),
+            Apply,
+            Pull(Script::LOADING),
+            Pull(Script::READY),
+            Park,
+        ],
+        5,
+    );
 }
 
 #[path = "phases_poster_tests.rs"]
@@ -1165,7 +1413,10 @@ fn a_seek_lands_with_a_frame_or_for_audio_at_its_position() {
     let mut video = Settle::default();
     video.seek(2.0, false, now);
     video.observe(2.0, false, false);
-    assert!(video.waiting(), "video waits for the frame, not the position");
+    assert!(
+        video.waiting(),
+        "video waits for the frame, not the position"
+    );
     video.framed();
     assert_eq!(video, Settle::Still);
 
