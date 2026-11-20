@@ -399,6 +399,7 @@ mod hit;
 mod build;
 #[path = "runtime/input/heard.rs"]
 mod heard;
+use heard::Heard;
 #[path = "runtime/input/keys.rs"]
 mod keys;
 #[path = "runtime/input/pointer.rs"]

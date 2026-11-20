@@ -131,4 +131,12 @@ impl Tx {
     pub fn keep_on_screen(&mut self, key: impl Into<String>) {
         self.keep_on_screen.push(key.into());
     }
+    /// [`Tx::keep_on_screen`] for whatever has focus once the input this handler runs in has
+    /// moved it, when the last frame drew it whole: a field's `on_blur` that adds a line above
+    /// the control a click is moving focus to keeps that control where the person clicked it,
+    /// though the handler runs before the focus moves and can't name it. A focus the last frame
+    /// drew out of view, or only in part, is left to be revealed as focus moves reveal it.
+    pub fn keep_focus_on_screen(&mut self) {
+        self.keep_focus_on_screen = true;
+    }
 }

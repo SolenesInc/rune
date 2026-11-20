@@ -259,7 +259,7 @@ impl RuntimeCore {
 
     pub(super) fn transaction(&self) -> Tx {
         Tx { trace: self.tracing().then(crate::el::TraceCalls::default), mods: self.held_mods, selection: self.selection_snapshot(),
-            input_time: crate::input::time::current(), clock: self.clock, focus_visible: self.focus.keyboard(), focused: self.focused_key(), assistive: self.a11y.is_some(), ..Tx::default() }
+            input_time: crate::input::time::current(), inputs: crate::input::acts::current(), clock: self.clock, focus_visible: self.focus.keyboard(), focused: self.focused_key(), assistive: self.a11y.is_some(), ..Tx::default() }
     }
 
     /// A scalar from the actual draw path (e.g. `shell.width`). Values hold until resampled.
@@ -486,8 +486,9 @@ impl RuntimeCore {
         #[cfg(debug_assertions)]
         let mut ran_other = ran;
         let mut pointer_hover = false;
-        for Queued { action, at } in queue {
+        for Queued { action, at, acts } in queue {
             let _input = crate::input::time::scope(at);
+            let _acts = crate::input::acts::scope(acts);
             pointer_hover |= matches!(action, Action::Hover(_));
             // State may have requested focus on a newly mounted field. Resolve the
             // new tree before routing this frame's text, not after it has gone to
@@ -598,6 +599,7 @@ impl RuntimeCore {
         #[cfg(debug_assertions)]
         { self.live_check = None; }
         tx.keep_on_screen.clear();
+        tx.keep_focus_on_screen = false;
         let mut scroll_to = std::mem::take(&mut tx.scroll_to);
         if let Some(path) = self.focus_asked_reveal.take() {
             scroll_to.splice(0..0, self.focus_reveals(&path));
