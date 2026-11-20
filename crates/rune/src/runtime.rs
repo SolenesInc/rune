@@ -257,6 +257,9 @@ pub use selectable::{SelectedText, SelectionChange, TextSelection};
 #[path = "runtime/clip_outset_tests.rs"]
 mod clip_outset_tests;
 #[cfg(test)]
+#[path = "runtime/group_clip_tests.rs"]
+mod group_clip_tests;
+#[cfg(test)]
 #[path = "runtime/timer_wake_tests.rs"]
 mod timer_wake_tests;
 #[cfg(test)]

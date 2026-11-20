@@ -1170,7 +1170,7 @@ impl RuntimeCore {
             }
             // A scroll viewport clips its content with a hard edge unless it sets soft ones.
             if let Some(f) = n.vis.clip.or(n.scroll.map(|_| [0.0; 4])) {
-                let r = n.vis.clip_rect(r, sc * s);
+                let r = n.vis.group_clip_rect(r, sc * s, group);
                 clip = intersect(r, clip);
                 let (own, origin) = self.scroll_edge_fade(i, f, r, sc * s, p.rect.edges()[3]);
                 inherit_fade(&mut fade, &mut fade_origin, origin, own);

@@ -503,6 +503,21 @@ impl El {
         self.clipped_visual().cold_mut().clip_outset = [left, top, right, bottom].map(|v| v.max(0.0));
         self
     }
+    /// Move this element's clip in from its box by `rest` points on each side (left, top, right,
+    /// bottom), and by `hovered` while the nearest ancestor group is hovered, its fades moving
+    /// with it: a row's words end in a fade before the controls its hover shows over them. Paint
+    /// only, like [`Self::group_opacity`]: layout doesn't change. The clip never moves between
+    /// the two: it lands with the pointer and goes back on the first frame the pointer is off,
+    /// whatever the group's hover track does after. Without a [`Self::clip_fade`] the edge is
+    /// hard.
+    pub fn group_clip(mut self, rest: [f32; 4], hovered: [f32; 4]) -> Self {
+        if self.clipped_visual().clip.is_none() {
+            self.set_clip([0.0; 4]);
+        }
+        let clamp = |v: [f32; 4]| v.map(|v| v.max(0.0));
+        self.clipped_visual().cold_mut().group_clip = Some(Box::new([clamp(rest), clamp(hovered)]));
+        self
+    }
     /// [`Self::clip_fade`] with linear ramps: alpha falls in proportion to distance, from whole
     /// `width` in from each side to nothing at it, rather than easing at both ends. A mask that
     /// runs straight into an edge, such as a transcript fading into the top of a composer.
