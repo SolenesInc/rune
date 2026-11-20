@@ -353,15 +353,15 @@ pub(super) fn compute_layout(taffy: &mut LayoutEngine, root: SlotId, room: Size<
                 let r = text.run_layout(run, spec.style, scale);
                 if let Some(w) = r.advance(*at, scale) {
                     return Size {
-                        width: known.width.unwrap_or(w),
-                        height: known.height.unwrap_or(crate::text::spec_height(&r.layout, spec.style, scale, spec.exact_lines) / scale),
+                        width: known.width.unwrap_or(summable(w)),
+                        height: known.height.unwrap_or(summable(crate::text::spec_height(&r.layout, spec.style, scale, spec.exact_lines) / scale)),
                     };
                 }
             }
             let laid = text.layout_text(spec, nodes[i].input.is_some(), scale, w.map(|w| w * scale), parley::Alignment::Start, nodes[i].text_layout.as_ref());
             let l = laid.view();
             // Spaces hanging past a wrapped line's end take no room, as in CSS.
-            let mut lw = ((if w.is_some() { l.width() } else { l.full_width() }) / scale).ceil_to(scale);
+            let mut lw = summable(((if w.is_some() { l.width() } else { l.full_width() }) / scale).ceil_to(scale));
             if (spec.truncate || spec.truncate_fade || spec.max_lines > 0)
                 && let AvailableSpace::Definite(a) = avail.width
             {
@@ -369,13 +369,21 @@ pub(super) fn compute_layout(taffy: &mut LayoutEngine, root: SlotId, room: Size<
             }
             Size {
                 width: known.width.unwrap_or(lw),
-                height: known.height.unwrap_or(match laid.single() {
+                height: known.height.unwrap_or(summable(match laid.single() {
                     Some(l) => clamped_height(l, spec, scale),
                     None => l.spec_height(spec.style, scale, spec.exact_lines),
-                } / scale),
+                } / scale)),
             }
         })
     });
+}
+
+/// A measured text's width or height, as a 256th of a point at most past it. Taffy sums a row's
+/// items in one order to size the row and in another to break its lines, and a size in thirds or
+/// fifths of a point (a device pixel at 150% or 130%) rounds differently in f32 each time, so a row
+/// as wide as its items could break before its last. Binary fractions sum exactly in either order.
+fn summable(v: f32) -> f32 {
+    (v * 256.0).ceil() / 256.0
 }
 
 /// A measured picture's size (`flatten::Picture::Measured`): the side it's given, and the other

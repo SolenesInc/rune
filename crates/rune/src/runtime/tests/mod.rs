@@ -55,6 +55,7 @@ mod titlebar_press;
 mod unseen_entrances;
 mod wheel_chain;
 mod window_wake;
+mod wrap_zoom;
 
 thread_local! {
     /// Runs once inside the next frame, after layout and just before live values latch: a
