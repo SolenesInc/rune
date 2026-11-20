@@ -599,6 +599,9 @@ impl RuntimeCore {
         { self.live_check = None; }
         tx.keep_on_screen.clear();
         let mut scroll_to = std::mem::take(&mut tx.scroll_to);
+        if let Some(path) = self.focus_asked_reveal.take() {
+            scroll_to.splice(0..0, self.focus_reveals(&path));
+        }
         for (path, v) in &mut self.virtuals {
             if let Some(key) = v.reveal_selected.take() && !pointer_hover {
                 // Use the keyed ancestor path so identical row keys in other lists do not
