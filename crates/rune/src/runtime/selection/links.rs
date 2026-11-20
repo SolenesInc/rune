@@ -362,6 +362,7 @@ impl RuntimeCore {
                     item_selected: false,
                     help: l.help.clone(),
                     strikes: Vec::new(),
+                    text_ink: None,
                     ..text.clone()
                 });
             }
@@ -490,6 +491,7 @@ impl RuntimeCore {
                     expanded: None,
                     item_selected: false,
                     strikes: Vec::new(),
+                    text_ink: None,
                     ..text.clone()
                 });
             }

@@ -49,6 +49,7 @@ impl Default for ElementInfo {
             item_selected: false,
             stuck: 0.0,
             picture: None,
+            text_ink: None,
         }
     }
 }

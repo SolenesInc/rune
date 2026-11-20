@@ -447,6 +447,17 @@ impl<'a> TextFlow<'a> {
         out
     }
 
+    /// [`Self::extent`] without the whitespace that hangs past a line's end: where its glyphs
+    /// draw.
+    pub(crate) fn ink_extent(self) -> Option<(f32, f32)> {
+        let (lo, hi) = self.pieces().flat_map(|p| p.layout.lines().map(|l| {
+            let m = l.metrics();
+            (m.offset, m.advance - m.hanging_advance)
+        }))
+            .fold((f32::MAX, 0.0f32), |(lo, hi), (offset, advance)| (lo.min(offset), hi.max(offset + advance)));
+        (lo <= hi).then_some((lo, hi))
+    }
+
     /// The span its lines cover across, from the leftmost line start to the rightmost end, or
     /// `None` with no lines.
     pub(crate) fn extent(self) -> Option<(f32, f32)> {

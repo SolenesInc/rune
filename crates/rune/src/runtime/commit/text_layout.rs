@@ -87,6 +87,23 @@ pub(super) fn text_x(spec: &TextSpec, x0: f32, x1: f32, width: f32, flow: crate:
 }
 
 impl Node {
+    /// The box its laid-out lines cover inside its drawn box `r`, both in window points, where
+    /// the node draws `zoom` times its own size and `scale` is the layout's device scale. Unlike
+    /// [`text_extent`] it keeps running past `r`, unless the text shows cut.
+    pub(crate) fn text_ink(&self, r: [f32; 4], scale: f32, zoom: f32) -> Option<[f32; 4]> {
+        let (spec, layout) = (self.text.as_ref()?, self.text_layout.as_ref()?.view());
+        let k = zoom / scale;
+        let (x0, x1) = (r[0] + self.inset[0] * zoom, r[0] + r[2] - self.inset[2] * zoom);
+        let (lo, hi) = layout.ink_extent().unwrap_or((0.0, layout.width()));
+        let x = text_x(spec, x0, x1, layout.full_width() * k, layout.flow()) + lo * k;
+        let mut w = (hi - lo) * k;
+        if self.text_cut(scale) {
+            w = w.min((x1 - x).max(0.0));
+        }
+        let y = r[1] + self.inset[1] * zoom;
+        Some([x, y, w, (r[3] - (self.inset[1] + self.inset[3]) * zoom).max(0.0)])
+    }
+
     /// Whether the text shows less than its whole content: cut by `El::truncate` or a line
     /// clamp, or running past its box under `El::truncate_fade`. A fade keeps the whole
     /// content in its layout, so it has no [`Elision`]; it only reads as cut.

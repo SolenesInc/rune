@@ -269,6 +269,9 @@ mod truncate_tests;
 #[path = "runtime/truncate_fade_tests.rs"]
 mod truncate_fade_tests;
 #[cfg(test)]
+#[path = "runtime/text_ink_tests.rs"]
+mod text_ink_tests;
+#[cfg(test)]
 #[path = "runtime/line_clamp_tests.rs"]
 mod line_clamp_tests;
 #[cfg(test)]

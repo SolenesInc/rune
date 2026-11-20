@@ -80,6 +80,11 @@ pub struct ElementInfo {
     /// For an element that draws pixels ([`El::pixels`](crate::El::pixels)), the size of the
     /// sharpest level they hold ([`Pixels::sharpest`](crate::Pixels::sharpest)).
     pub picture: Option<(u32, u32)>,
+    /// For a text, the box its laid-out lines cover, in window points as `rect` is: where its
+    /// glyphs draw, which runs past `rect` when the text is wider than its box, and lies inside
+    /// `rect` away from its padding otherwise. A text that shows cut (truncated, clamped or
+    /// faded) covers no more than its box. `None` for an element that lays out no text.
+    pub text_ink: Option<[f32; 4]>,
 }
 
 /// An element [`Runtime::element_at`] found.
@@ -356,6 +361,7 @@ impl RuntimeCore {
                     item_selected: n.focus.selected,
                     stuck: self.stuck.get(i).copied().unwrap_or(0.0),
                     picture: n.vis.pixels.as_ref().and_then(crate::pixels::Pixels::sharpest),
+                    text_ink: n.text_ink(rect, s, self.inh_scratch.get(i).map_or(1.0, |h| h.scale)),
                     virtual_extent: self.virtuals.contains_key(&n.path) && n.vis.fill.a == 0.0
                         && n.vis.border_width() == 0.0 && n.vis.shadows.is_empty() && n.text.is_none() && n.vis.icon.is_none(),
                 })
@@ -379,6 +385,7 @@ impl RuntimeCore {
                     (r.edges()[3].min(c[3]) - r.y.max(c[1])).max(0.0)],
                 revealing: true, in_growing_row: false, scrolling: false, scrolled: [0.0; 2], virtual_extent: false, live_intent: 0, caret: None, drag_out: false,
                 help: None, selected: None, level: None, expanded: None, item_selected: false, stuck: 0.0, picture: None,
+                text_ink: None,
             });
         }
         self.link_elements(&mut elements);
