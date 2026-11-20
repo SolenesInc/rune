@@ -65,6 +65,23 @@ impl El {
         self
     }
 
+    /// The bytes of `text` each text [`El::line_groups`] makes of it holds, the newline between
+    /// two groups left out. A newline that ends the text stays in the last group, which lays it
+    /// out as the one text did.
+    pub fn line_group_bytes(text: &str, lines: usize) -> Vec<std::ops::Range<usize>> {
+        let mut groups = Vec::new();
+        let (mut start, mut seen) = (0, 0);
+        for (i, _) in text.bytes().enumerate().filter(|&(_, b)| b == b'\n') {
+            seen += 1;
+            if seen % lines == 0 && i + 1 < text.len() {
+                groups.push(start..i);
+                start = i + 1;
+            }
+        }
+        groups.push(start..text.len());
+        groups
+    }
+
     /// This text as texts of `lines` lines each (a line being what a newline ends), to stack
     /// in a column in place of it: a change to one line then shapes that line's text, not the
     /// whole one, so a long text that grows a line at a time (a code block streaming in) costs
@@ -86,21 +103,10 @@ impl El {
         if whole {
             return vec![self];
         }
-        // Each group's bytes, the newline between two groups left out. A newline that ends the
-        // text stays in the last group, which lays it out as the one text did.
-        let mut groups: Vec<(u32, u32)> = Vec::new();
-        let (mut start, mut seen) = (0, 0);
-        for (i, _) in t.content.bytes().enumerate().filter(|&(_, b)| b == b'\n') {
-            seen += 1;
-            if seen % lines == 0 && i + 1 < t.content.len() {
-                groups.push((start as u32, i as u32));
-                start = i + 1;
-            }
-        }
-        if groups.is_empty() {
+        let groups: Vec<(u32, u32)> = El::line_group_bytes(&t.content, lines).into_iter().map(|g| (g.start as u32, g.end as u32)).collect();
+        if groups.len() == 1 {
             return vec![self];
         }
-        groups.push((start as u32, t.content.len() as u32));
         // The parts of `s..e` in each group it reaches, as that group's bytes.
         let parts = |s: u32, e: u32| {
             let first = groups.partition_point(|g| g.1 <= s);

@@ -25,8 +25,8 @@ pub struct DrawnText {
 }
 
 /// Where a [`DrawnText`] sits, one step down from the document: the [`Block`]s it is in, by
-/// index among their siblings, and the item, table row and cell, diff line or `<details>`
-/// summary that holds it.
+/// index among their siblings, and the item, table row and cell, diff line, `<details>`
+/// summary or group of a code block's lines that holds it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DrawnStep {
     Block(usize),
@@ -36,6 +36,9 @@ pub enum DrawnStep {
     Cell(usize),
     Line(usize),
     Summary,
+    /// The `k`th text of a code block longer than one text holds: its lines from `k` times
+    /// the group's length on, as the block draws them.
+    Group(usize),
 }
 
 use DrawnStep as Step;
@@ -70,6 +73,7 @@ impl Drawn {
                 Some(b'r') => seg[1..].parse().ok().map(Step::Row),
                 Some(b'c') => seg[1..].parse().ok().map(Step::Cell),
                 Some(b'l') => seg[1..].parse().ok().map(Step::Line),
+                Some(b'g') => seg[1..].parse().ok().map(Step::Group),
                 _ if seg == "th" => Some(Step::Head),
                 _ if seg == "summary" => Some(Step::Summary),
                 _ => None,
@@ -80,6 +84,10 @@ impl Drawn {
             if candidates(&deeper) > 0 {
                 at = deeper;
             }
+        }
+        let first_group = [at.as_slice(), &[Step::Group(0)]].concat();
+        if candidates(&at) > 1 && candidates(&first_group) > 0 {
+            at = first_group;
         }
         let mut found = self.texts.iter().enumerate().filter(|(_, t)| t.at.starts_with(&at));
         let (i, _) = found.next()?;
@@ -143,25 +151,18 @@ fn collect(blocks: &[Block], maps: &[BlockMap], at: &mut Vec<Step>, code_style: 
         at.push(Step::Block(i));
         match (b, map) {
             (Block::Para(inl) | Block::Heading(_, inl), m) => push(out, at, &inl.text, inline_map(m)),
-            (Block::Code(code), m) => push_code(out, at, code, inline_map(m), code_style),
+            (Block::Code(code), m) => push_code_block(out, at, code, inline_map(m), code_style),
             #[cfg(feature = "mermaid")]
             (Block::Mermaid(code), _) if crate::mermaid::supported(code) => {}
-            (Block::Mermaid(code), m) => push_code(out, at, code, inline_map(m), code_style),
+            (Block::Mermaid(code), m) => push_code_block(out, at, code, inline_map(m), code_style),
             (Block::Diff(code), m) => {
                 let map = inline_map(m);
                 let mut start = 0;
                 for (n, line) in code.split('\n').enumerate() {
                     let end = start + line.len();
                     let shown = line.strip_suffix('\r').unwrap_or(line);
-                    let line_map = map.iter().filter_map(|(src, text)| {
-                        let (a, b) = (text.start.max(start), text.end.min(start + shown.len()));
-                        (a < b).then(|| {
-                            let src = if src.len() == text.len() { src.start + (a - text.start)..src.start + (b - text.start) } else { src.clone() };
-                            (src, a - start..b - start)
-                        })
-                    }).collect();
                     at.push(Step::Line(n));
-                    push_code(out, at, if shown.is_empty() { " " } else { shown }, line_map, code_style);
+                    push_code(out, at, if shown.is_empty() { " " } else { shown }, map_within(&map, start..start + shown.len()), code_style);
                     at.pop();
                     start = end + 1;
                 }
@@ -224,4 +225,31 @@ fn push_code(out: &mut Vec<DrawnText>, at: &[Step], code: &str, map: Vec<(Range<
     let (shown, shift) = render::tab_shown(code, style);
     let map = map.into_iter().map(|(src, text)| (src, shift(text.start)..shift(text.end))).collect();
     out.push(DrawnText { at: at.to_vec(), text: shown, map });
+}
+
+/// A code block's texts as the renderer draws them: one, or for a block longer than
+/// [`render::CODE_GROUP_LINES`] lines, one per group of that many lines, each a
+/// [`Step::Group`].
+fn push_code_block(out: &mut Vec<DrawnText>, at: &[Step], code: &str, map: Vec<(Range<usize>, Range<usize>)>, style: TextStyle) {
+    push_code(out, at, code, map, style);
+    let groups = El::line_group_bytes(&out.last().expect("the block's text").text, render::CODE_GROUP_LINES);
+    if groups.len() == 1 {
+        return;
+    }
+    let whole = out.pop().expect("the block's text");
+    for (k, g) in groups.into_iter().enumerate() {
+        let map = map_within(&whole.map, g.clone());
+        out.push(DrawnText { at: [at, &[Step::Group(k)]].concat(), text: whole.text[g].to_owned(), map });
+    }
+}
+
+/// The pairs of `map` over text bytes `range`, as bytes from its start.
+fn map_within(map: &[(Range<usize>, Range<usize>)], range: Range<usize>) -> Vec<(Range<usize>, Range<usize>)> {
+    map.iter().filter_map(|(src, text)| {
+        let (a, b) = (text.start.max(range.start), text.end.min(range.end));
+        (a < b).then(|| {
+            let src = if src.len() == text.len() { src.start + (a - text.start)..src.start + (b - text.start) } else { src.clone() };
+            (src, a - range.start..b - range.start)
+        })
+    }).collect()
 }

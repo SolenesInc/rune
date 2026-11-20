@@ -229,20 +229,43 @@ fn smart_punctuation_sets_prose_and_maps_each_piece_to_its_source() {
 
 const DRAWN: &str = "# A \"title\"\n\nHello **world** &amp; [a link](https://x.dev) -- it's `code`.\n\n- one\n- two\n\n  second paragraph\n  - nested\n\n- [ ] a task\n\n> quoted\n\n> [!NOTE]\n> noted\n\n<details>\n<summary>More</summary>\n\nhidden body\n\n</details>\n\n| a | b |\n|---|---|\n| c | d |\n\n```rust\nfn main() {}\n```\n\n```diff\n-old\n+new\n```\n";
 
-fn drawn_view(src: &String, _: &mut Cx<String>) -> El {
-    col().w_full().child(Markdown::new(src.clone()).smart_punctuation(true).selectable(true).build(&Kit::neutral(true)).key("md"))
+fn drawn_view((src, wide): &(String, bool), _: &mut Cx<(String, bool)>) -> El {
+    col().w_full().child(Markdown::new(src.clone()).smart_punctuation(true).selectable(true).scroll_wide(*wide).build(&Kit::neutral(true)).key("md"))
 }
 
 #[test]
 fn each_selectable_text_a_document_draws_is_drawn_text_found_by_its_path() {
-    let mut rt = Runtime::new(DRAWN.to_owned(), drawn_view, (480.0, 2000.0), Env::new(true, 1.0));
+    each_selected_text_is_drawn_text_found_by_its_path(DRAWN, false);
+}
+
+#[test]
+fn each_text_of_a_long_code_block_is_drawn_text_found_by_its_path() {
+    let lines = |name: &str, n: usize| (1..=n).map(|i| format!("{name}_{i}\n")).collect::<String>();
+    let src = format!("Intro.\n\n```rust\n{}```\n\n- item\n\n  ```\n{}  ```\n\n```\n{}```\n", lines("a", 70), lines("  b", 40), lines("c", 32));
+    for wide in [false, true] {
+        each_selected_text_is_drawn_text_found_by_its_path(&src, wide);
+    }
+    let drawn = Markdown::new(src.as_str()).drawn(&Kit::neutral(true));
+    let a: Vec<&DrawnText> = drawn.texts().iter().filter(|t| t.text.starts_with("a_")).collect();
+    use DrawnStep::*;
+    assert_eq!(a.iter().map(|t| t.at()).collect::<Vec<_>>(), [&[Block(1), Group(0)][..], &[Block(1), Group(1)], &[Block(1), Group(2)]]);
+    let line = a[1].text.find("a_40").unwrap();
+    assert_eq!(&src[a[1].source(line..line + 4)[0].clone()], "a_40", "a group's text maps to its own lines' source");
+    assert_eq!(drawn.at("b1/g2"), drawn.texts().iter().position(|t| std::ptr::eq(t, a[2])));
+    assert_eq!(drawn.at("b1"), drawn.texts().iter().position(|t| std::ptr::eq(t, a[0])), "a path that names no group is the first one's");
+    let c: Vec<&[DrawnStep]> = drawn.texts().iter().filter(|t| t.text.starts_with("c_")).map(DrawnText::at).collect();
+    assert_eq!(c, [&[Block(3)][..]], "a block of 32 lines is one text");
+}
+
+fn each_selected_text_is_drawn_text_found_by_its_path(src: &str, wide: bool) {
+    let mut rt = Runtime::new((src.to_owned(), wide), drawn_view, (480.0, 4000.0), Env::new(true, 1.0));
     rt.frame(0.0);
-    let first = rt.elements().into_iter().find(|e| e.path.ends_with("md/b1")).expect("the first paragraph");
+    let first = rt.elements().into_iter().find(|e| e.path.ends_with("md/b0")).expect("the first block");
     rt.pointer_down(first.rect[0] + 2.0, first.rect[1] + 4.0);
     rt.pointer_up(first.rect[0] + 2.0, first.rect[1] + 4.0);
     rt.key(rune::KeyEvent { key: rune::Key::Command('a'), mods: rune::Mods { cmd: true, ctrl: cfg!(not(target_os = "macos")), ..rune::Mods::default() } });
     rt.frame(1.0 / 60.0);
-    let drawn = Markdown::new(DRAWN).smart_punctuation(true).drawn(&Kit::neutral(true));
+    let drawn = Markdown::new(src).smart_punctuation(true).drawn(&Kit::neutral(true));
     let sel = rt.selection().expect("everything selected");
     let elements = rt.elements();
     let mut seen = vec![0; drawn.texts().len()];
