@@ -60,3 +60,38 @@ fn a_long_list_with_more_room_below_stays_below() {
     let r = menu(S { top: 50.0, rows: 40, fit: true });
     assert_eq!((r[1], r[3]), (84.0, 207.0));
 }
+
+fn beside_view(s: &S, _: &mut Cx<S>) -> El {
+    let rows = col().key("rows").children((0..s.rows).map(|i| el().key(format!("row{i}")).w(100.0).h(20.0)));
+    let list = col().key("scroll").shrink().min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(rows);
+    let menu = col().key("menu").w(100.0).child(list);
+    let menu = if s.fit {
+        menu.anchored_fit("target", Side::Right, Align::Start, 4.0)
+    } else {
+        menu.anchored("target", Side::Right, Align::Start, 4.0)
+    };
+    col().size(400.0, 300.0).child(el().key("target").absolute(20.0, s.top).size(100.0, 30.0)).child(menu)
+}
+
+fn beside(s: S) -> [f32; 4] {
+    let mut rt = Runtime::new(s, beside_view, (400.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    for _ in 0..120 { rt.frame(1.0 / 120.0); }
+    rt.presented("menu").unwrap().0
+}
+
+#[test]
+fn a_menu_beside_its_anchor_taller_than_the_window_fits_it_and_scrolls() {
+    // The window is 300 tall, so the menu is at most 300 - 8 - 8 = 284, from 8.
+    let r = beside(S { top: 20.0, rows: 40, fit: true });
+    assert_eq!((r[1], r[3]), (8.0, 284.0));
+    // Without fit it is 800 tall and runs off the window.
+    let r = beside(S { top: 20.0, rows: 40, fit: false });
+    assert_eq!(r[3], 800.0);
+}
+
+#[test]
+fn a_menu_beside_its_anchor_that_fits_is_left_alone() {
+    let r = beside(S { top: 20.0, rows: 5, fit: true });
+    assert_eq!((r[1], r[3]), (20.0, 100.0));
+}

@@ -77,6 +77,18 @@ fn fit_bound(a: &Anchor, t: [f32; 4], len: f32, vp: (f32, f32)) -> Option<f32> {
     Some((own.max(other) - 0.5).floor().max(0.0))
 }
 
+/// The longest an `anchored_fit` overlay `len` long may be across its side, or `None` when it
+/// fits: the window less [`MARGIN`] at each end, so [`anchor_position`]'s shift keeps all of it
+/// inside, as a beside menu taller than the window would otherwise run off it.
+fn across_bound(a: &Anchor, len: f32, vp: (f32, f32)) -> Option<f32> {
+    let room = match a.side {
+        Side::Over => return None,
+        Side::Top | Side::Bottom => vp.0,
+        Side::Left | Side::Right => vp.1,
+    } - 2.0 * MARGIN;
+    (len > room).then(|| room.floor().max(0.0))
+}
+
 impl Measurement<'_> {
     /// Places every node from `taffy`'s layout: ids, local and window rects, insets, and
     /// anchored overlays beside their anchors.
@@ -119,7 +131,8 @@ impl Measurement<'_> {
     }
 
     /// Bounds each placed `anchored_fit` overlay that fits on neither side of its anchor to the
-    /// larger room, through its style. True when any changed, so layout runs again.
+    /// larger room, and one longer across its side than the window to the window, through its
+    /// style. True when any changed, so layout runs again.
     pub(super) fn fit_anchored(&self, taffy: &mut LayoutEngine, nodes: &[Node]) -> bool {
         let mut changed = false;
         for (i, n) in nodes.iter().enumerate() {
@@ -132,12 +145,18 @@ impl Measurement<'_> {
             let zoomed;
             let a = if k == 1.0 { a } else { zoomed = zoomed_gap(a, k); &zoomed };
             let vertical = matches!(a.side, Side::Top | Side::Bottom);
-            let len = if vertical { n.local.h } else { n.local.w };
-            let Some(bound) = fit_bound(a, target, len * k, self.viewport) else { continue };
+            let (len, across) = if vertical { (n.local.h, n.local.w) } else { (n.local.w, n.local.h) };
+            let along = fit_bound(a, target, len * k, self.viewport);
+            let across = across_bound(a, across * k, self.viewport);
+            if along.is_none() && across.is_none() {
+                continue;
+            }
             let mut style = taffy.style(n.taffy).clone();
-            if vertical {
+            let (height, width) = if vertical { (along, across) } else { (across, along) };
+            if let Some(bound) = height {
                 style.set_max_height(length(bound / k));
-            } else {
+            }
+            if let Some(bound) = width {
                 style.set_max_width(length(bound / k));
             }
             taffy.set_style_and_mark_ancestors(

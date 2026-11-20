@@ -33,13 +33,10 @@ pub fn anchored(k: &Kit, content: El, anchor_key: &str, placement: Placement, ga
         .token_motion(k.motion.overlay)
 }
 
-/// Above or below its anchor a dropdown fits the available height; beside it, it only flips.
+/// A dropdown or a popover fits the window on every side of its anchor: one that would run off
+/// it is bounded, so what scrolls inside it scrolls.
 pub(crate) fn fit(content: El, anchor: &str, side: Side, align: Align, gap: f32) -> El {
-    if matches!(side, Side::Top | Side::Bottom) {
-        content.anchored_fit(anchor, side, align, gap)
-    } else {
-        content.anchored(anchor, side, align, gap)
-    }
+    content.anchored_fit(anchor, side, align, gap)
 }
 
 /// The popover surface style: raised fill, half-strength border, `radius` corners and the

@@ -47,3 +47,22 @@ fn anchored_mounts_beside_its_trigger() {
     assert!((word[0] - trigger[0]).abs() < 8.0, "{word:?} under {trigger:?}");
     assert!(word[1] >= trigger[1] + trigger[3] + 4.0, "{word:?} below {trigger:?}");
 }
+
+#[test]
+fn a_popover_beside_its_trigger_taller_than_the_window_ends_inside_it() {
+    fn view(_: &(), _: &mut Cx<()>) -> El {
+        let k = Kit::neutral(true);
+        let surface = col().key("pop").w(120.0).min_h(0.0).child(
+            col().shrink().min_h(0.0).scroll(rune::ScrollSpec { stick_bottom: false }).child(el().w(120.0).h(900.0)),
+        );
+        let layer = vec![anchored(&k, surface, "t", Placement::RightStart, 4.0)];
+        crate::root(col().padding(40.0).child(el().key("t").w(50.0).h(20.0)), layer)
+    }
+    let mut rt = Runtime::new((), view, WIN, Env::new(true, 1.0));
+    rt.frame(0.0);
+    for _ in 0..30 {
+        rt.frame(1.0);
+    }
+    let pop = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("pop")).unwrap().target;
+    assert!(pop[1] >= 8.0 && pop[1] + pop[3] <= WIN.1 - 8.0, "{pop:?} runs off a {WIN:?} window");
+}
