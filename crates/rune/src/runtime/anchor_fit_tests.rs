@@ -95,3 +95,46 @@ fn a_menu_beside_its_anchor_that_fits_is_left_alone() {
     let r = beside(S { top: 20.0, rows: 5, fit: true });
     assert_eq!((r[1], r[3]), (20.0, 100.0));
 }
+
+#[derive(Clone, Copy)]
+struct Big {
+    side: Side,
+    w: f32,
+    h: f32,
+}
+
+fn big_view(s: &Big, _: &mut Cx<Big>) -> El {
+    let inside = el().w(s.w).h(s.h);
+    let list = col().key("scroll").shrink().min_h(0.0).min_w(0.0).scroll(ScrollSpec { stick_bottom: false }).child(inside);
+    let menu = col().key("menu").min_w(0.0).min_h(0.0).child(list).anchored_fit("target", s.side, Align::Start, 4.0);
+    col().size(400.0, 300.0).child(el().key("target").absolute(150.0, 120.0).size(100.0, 30.0)).child(menu)
+}
+
+fn big(s: Big) -> [f32; 4] {
+    let mut rt = Runtime::new(s, big_view, (400.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    for _ in 0..120 { rt.frame(1.0 / 120.0); }
+    rt.presented("menu").unwrap().0
+}
+
+#[test]
+fn an_overlay_wider_and_taller_than_the_window_is_bounded_to_it_on_both_axes_on_every_side() {
+    for side in [Side::Top, Side::Bottom, Side::Left, Side::Right] {
+        let r = big(Big { side, w: 900.0, h: 900.0 });
+        assert!(r[0] >= 8.0 && r[0] + r[2] <= 392.0 + 0.5, "{side:?}: {r:?} runs off the window's width");
+        assert!(r[1] >= 8.0 && r[1] + r[3] <= 292.0 + 0.5, "{side:?}: {r:?} runs off the window's height");
+    }
+}
+
+#[test]
+fn an_overlay_that_fits_keeps_its_side_of_the_anchor() {
+    // The anchor spans 150..250 across and 120..150 down.
+    let r = big(Big { side: Side::Left, w: 60.0, h: 40.0 });
+    assert_eq!((r[0], r[1], r[2], r[3]), (86.0, 120.0, 60.0, 40.0), "left of it");
+    let r = big(Big { side: Side::Right, w: 60.0, h: 40.0 });
+    assert_eq!((r[0], r[1]), (254.0, 120.0), "right of it");
+    let r = big(Big { side: Side::Top, w: 60.0, h: 40.0 });
+    assert_eq!((r[0], r[1]), (150.0, 76.0), "above it");
+    let r = big(Big { side: Side::Bottom, w: 60.0, h: 40.0 });
+    assert_eq!((r[0], r[1]), (150.0, 154.0), "below it");
+}
