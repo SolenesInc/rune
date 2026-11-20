@@ -230,42 +230,61 @@ fn scroll_x_with_multiple_children_unwraps_w_full_text_column() {
 }
 
 
-#[test]
-fn scroll_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_start_from_above() {
-    // Short rows, one 500pt row in a 200pt viewport, and a varying tail after it.
-    fn view(tail: &usize, _: &mut Cx<usize>) -> El {
-        let n = 31 + *tail;
-        let stack = col()
-            .key("rows")
-            .w_full()
-            .growth(GrowthSpec::default())
-            .virtual_rows(n, 20.0, |_: &usize, i| format!("r{i}").into(), |_: &usize, i| {
-                row().w_full().h(if i == 30 { 500.0 } else { 20.0 })
-            });
-        col()
-            .key("scroll")
-            .size(200.0, 200.0)
-            .scroll(ScrollSpec { stick_bottom: false })
-            .child(stack)
+/// Short rows, one 500pt row (`r30`) in a 200pt viewport, and a varying tail after it.
+fn tall_row_view(tail: &usize, _: &mut Cx<usize>) -> El {
+    let n = 31 + *tail;
+    let stack = col()
+        .key("rows")
+        .w_full()
+        .growth(GrowthSpec::default())
+        .virtual_rows(n, 20.0, |_: &usize, i| format!("r{i}").into(), |_: &usize, i| {
+            row().w_full().h(if i == 30 { 500.0 } else { 20.0 })
+        });
+    col()
+        .key("scroll")
+        .size(200.0, 200.0)
+        .scroll(ScrollSpec { stick_bottom: false })
+        .child(stack)
+}
+
+/// Reveals `r30` from the top of the list with `reveal`, then again thirty times, and returns
+/// where it landed each time.
+fn reveal_tall_row(tail: usize, reveal: fn(&mut Tx)) -> ([f32; 4], [f32; 4]) {
+    let mut rt = Runtime::new(tail, tall_row_view, (200.0, 200.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.update(|_, tx| reveal(tx));
+    for _ in 0..30 {
+        rt.frame(1.0 / 120.0);
     }
+    let r30 = |rt: &Runtime<usize>| rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r30")).expect("r30 revealed").rect;
+    let first = r30(&rt);
+    for _ in 0..30 {
+        rt.update(|_, tx| reveal(tx));
+        rt.frame(1.0 / 120.0);
+    }
+    (first, r30(&rt))
+}
+
+#[test]
+fn scroll_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_end_from_above() {
     for tail in [0usize, 1, 2, 5] {
-        let mut rt = Runtime::new(tail, view, (200.0, 200.0), Env::new(true, 1.0));
-        rt.frame(0.0);
-        rt.update(|_, tx| tx.scroll_into_view("r30"));
-        for _ in 0..30 {
-            rt.frame(1.0 / 120.0);
-        }
-        let r30 = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r30")).expect("r30 revealed");
+        let (first, again) = reveal_tall_row(tail, |tx| tx.scroll_into_view("r30"));
         assert!(
-            r30.rect[1].abs() < 0.05 && r30.rect[3] > 200.0,
-            "tail {tail}: moving down, the row's start lands at the viewport's top, not its end at the bottom: {:?}",
-            r30.rect
+            (first[1] + first[3] - 200.0).abs() < 0.05,
+            "tail {tail}: moving down, the row's end lands at the viewport's bottom, not its top: {first:?}"
         );
-        for _ in 0..30 {
-            rt.update(|_, tx| tx.scroll_into_view("r30"));
-            rt.frame(1.0 / 120.0);
-        }
-        let again = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r30")).unwrap();
-        assert_eq!(again.rect[1], r30.rect[1], "tail {tail}: revealing the row again leaves it where it fills the viewport");
+        assert_eq!(again[1], first[1], "tail {tail}: revealing the row again leaves it where it fills the viewport");
+    }
+}
+
+#[test]
+fn scroll_row_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_start_from_above() {
+    for tail in [0usize, 1, 2, 5] {
+        let (first, again) = reveal_tall_row(tail, |tx| tx.scroll_row_into_view_in("scroll", "r30"));
+        assert!(
+            first[1].abs() < 0.05 && first[3] > 200.0,
+            "tail {tail}: moving down, the row's start lands at the viewport's top, not its end at the bottom: {first:?}"
+        );
+        assert_eq!(again[1], first[1], "tail {tail}: revealing the row again leaves it where it fills the viewport");
     }
 }

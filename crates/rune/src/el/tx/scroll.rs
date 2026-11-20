@@ -24,6 +24,14 @@ impl Tx {
     pub fn scroll_into_view_in(&mut self, scope: impl Into<String>, key: impl Into<String>) {
         self.scroll_to.push(crate::runtime::ScrollReveal::into_view(Some(scope.into()), key.into()));
     }
+    /// [`Tx::scroll_into_view_in`] for a row the user picked, such as a list's selected result:
+    /// a row taller than its viewport shows from its start, from either side, so its title is
+    /// what the reader reaches; one that fits moves as little as `scroll_into_view_in` moves it.
+    /// A place inside a row, such as a find match or a caret's line, takes `scroll_into_view_in`,
+    /// whose tall row reached from above lands its end.
+    pub fn scroll_row_into_view_in(&mut self, scope: impl Into<String>, key: impl Into<String>) {
+        self.scroll_to.push(crate::runtime::ScrollReveal::row_into_view(Some(scope.into()), key.into()));
+    }
     /// Reveal and vertically centre a keyed element, virtual row or [`crate::TextHighlight`],
     /// gliding on the spring [`Tx::scroll_to`] uses (a jump under [`Tx::instant`], reduced
     /// motion or a settled frame). `"row/mark"` mounts virtual row `row` first and centres

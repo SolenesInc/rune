@@ -9,6 +9,7 @@
 //!
 //! Events that test every request on every frame are types of their own, generic over what
 //! they measure, so a caller's measurements compile into the loop with no indirect call.
+use super::reveal::Landing;
 use super::sticky::{Keep, Reveal};
 use crate::machine::Effects;
 
@@ -19,7 +20,7 @@ pub(super) enum Request {
     /// The row below a fold's header, held where it shows: it takes the viewport's earlier
     /// keeps, while a reveal of the same viewport stays.
     FoldAnchor(Keep),
-    /// A `Tx::scroll_into_view` or `Tx::scroll_center` target.
+    /// A `Tx::scroll_into_view`, `Tx::scroll_row_into_view_in` or `Tx::scroll_center` target.
     Reveal(Reveal),
 }
 
@@ -34,7 +35,7 @@ pub(super) enum Event<'a> {
     /// A reveal placed its target: `from` and `to` are its viewport's offset before and after,
     /// and `first` says whether this is the placement that created it.
     Place { first: bool, scope: Option<&'a str>, key: &'a str, viewport: &'a str,
-        center: bool, at_end: bool, from: f64, to: f64 },
+        landing: Landing, at_end: bool, from: f64, to: f64 },
     /// A virtual list's last row left the view: an end-pinned reveal follows the row that took
     /// its place.
     NewTail { viewport: &'a str, key: &'a str },
@@ -131,10 +132,10 @@ impl Transition for Event<'_> {
     fn apply(self, requests: &mut Requests) -> Effects<Effect> {
         match self {
             Event::Arrive(request) => requests.arrive(request),
-            Event::Place { first, scope, key, viewport, center, at_end, from, to } => {
+            Event::Place { first, scope, key, viewport, landing, at_end, from, to } => {
                 if first {
                     requests.arrive(Request::Reveal(Reveal { scope: scope.map(str::to_owned),
-                        key: key.to_owned(), viewport: viewport.to_owned(), center, at_end }));
+                        key: key.to_owned(), viewport: viewport.to_owned(), landing, at_end }));
                 } else if let Some(r) = requests.reveals.iter_mut().find(|r| r.viewport == viewport) {
                     r.at_end |= at_end;
                 }

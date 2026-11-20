@@ -18,16 +18,22 @@ fn partial(width: f32, strength: f32) -> (f32, f32) {
 }
 
 /// The scroll offset that shows `[top, top + height)` with `margin` to spare, moving as little
-/// as possible from `offset` (unclamped). A row taller than the viewport shows from its start,
-/// from either side, so its heading is what the reader reaches; once it fills the viewport it
-/// stays put, so placing it again doesn't move it.
+/// as possible from `offset` (unclamped). A row taller than the viewport that already fills it
+/// stays put, so placing it again doesn't flip it from its end to its start.
 pub(super) fn reveal(offset: f64, top: f64, height: f64, viewport: f64, margin: f64) -> f64 {
     let margin = margin.min(((viewport - height) / 2.0).max(0.0));
     let (start, end) = (top - margin, top + height + margin);
     if start <= offset && end >= offset + viewport { offset }
-    else if start < offset || end - start > viewport { start }
+    else if start < offset { start }
     else if end > offset + viewport { end - viewport }
     else { offset }
+}
+
+/// [`reveal`], except that a row taller than the viewport shows from its start from either side,
+/// so its heading is what the reader reaches; once it fills the viewport it stays put.
+pub(super) fn reveal_start(offset: f64, top: f64, height: f64, viewport: f64, margin: f64) -> f64 {
+    let fills = top <= offset && top + height >= offset + viewport;
+    if height > viewport && !fills { top } else { reveal(offset, top, height, viewport, margin) }
 }
 
 impl RuntimeCore {
@@ -144,9 +150,22 @@ mod tests {
         assert_eq!(reveal(100.0, 90.0, 20.0, 200.0, 24.0), 66.0, "and above");
         assert_eq!(reveal(100.0, 150.0, 20.0, 200.0, 24.0), 100.0, "already clear: no move");
         assert_eq!(reveal(100.0, 300.0, 180.0, 200.0, 24.0), 290.0, "a tall row splits what space is left");
-        assert_eq!(reveal(100.0, 300.0, 500.0, 200.0, 24.0), 300.0, "a row taller than the viewport, below: its start");
-        assert_eq!(reveal(300.0, 300.0, 500.0, 200.0, 24.0), 300.0, "and placing it again leaves it there");
+        assert_eq!(reveal(100.0, 300.0, 500.0, 200.0, 24.0), 600.0, "a row taller than the viewport, below: its end");
+        assert_eq!(reveal(600.0, 300.0, 500.0, 200.0, 24.0), 600.0, "and placing it again leaves it there");
         assert_eq!(reveal(400.0, 300.0, 500.0, 200.0, 24.0), 400.0, "a row filling the viewport: no move");
         assert_eq!(reveal(700.0, 300.0, 500.0, 200.0, 24.0), 300.0, "its end in view: its start");
+    }
+
+    #[test]
+    fn reveal_start_shows_a_row_taller_than_the_viewport_from_its_start_from_either_side() {
+        assert_eq!(reveal_start(100.0, 300.0, 500.0, 200.0, 24.0), 300.0, "below: its start");
+        assert_eq!(reveal_start(300.0, 300.0, 500.0, 200.0, 24.0), 300.0, "and placing it again leaves it there");
+        assert_eq!(reveal_start(400.0, 300.0, 500.0, 200.0, 24.0), 400.0, "a row filling the viewport: no move");
+        assert_eq!(reveal_start(700.0, 300.0, 500.0, 200.0, 24.0), 300.0, "its end in view: its start");
+        assert_eq!(reveal_start(900.0, 300.0, 500.0, 200.0, 24.0), 300.0, "above: its start");
+        for (offset, top, height) in [(100.0, 300.0, 20.0), (100.0, 90.0, 20.0), (100.0, 150.0, 20.0), (100.0, 300.0, 180.0), (100.0, 300.0, 200.0)] {
+            assert_eq!(reveal_start(offset, top, height, 200.0, 24.0), reveal(offset, top, height, 200.0, 24.0),
+                "a row that fits moves as little as reveal moves it: {offset} {top} {height}");
+        }
     }
 }

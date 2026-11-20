@@ -2,39 +2,54 @@
 //! virtual row or `TextHighlight` inside its scroll viewport.
 use super::*;
 
-/// One `Tx::scroll_into_view` or `Tx::scroll_center` request.
+/// Where a reveal lands its target in the viewport.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Landing {
+    /// Just into view, moving as little as possible: `Tx::scroll_into_view`.
+    Nearest,
+    /// Just into view, and a target taller than the viewport from its start:
+    /// `Tx::scroll_row_into_view_in`.
+    Start,
+    /// Centred vertically: `Tx::scroll_center`.
+    Center,
+}
+
+/// One `Tx::scroll_into_view`, `Tx::scroll_row_into_view_in` or `Tx::scroll_center` request.
 #[derive(Clone, Debug)]
 pub(crate) struct ScrollReveal {
     pub scope: Option<String>,
     pub key: String,
-    /// Centre the target vertically rather than scroll it just into view.
-    pub center: bool,
+    pub landing: Landing,
     /// Glide there on the scroll spring rather than jump.
     pub animated: bool,
 }
 
 impl ScrollReveal {
     pub fn into_view(scope: Option<String>, key: String) -> Self {
-        ScrollReveal { scope, key, center: false, animated: false }
+        ScrollReveal { scope, key, landing: Landing::Nearest, animated: false }
+    }
+
+    pub fn row_into_view(scope: Option<String>, key: String) -> Self {
+        ScrollReveal { scope, key, landing: Landing::Start, animated: false }
     }
 
     pub fn center(scope: Option<String>, key: String, animated: bool) -> Self {
-        ScrollReveal { scope, key, center: true, animated }
+        ScrollReveal { scope, key, landing: Landing::Center, animated }
     }
 }
 
-/// The offset that centres `[top, top + height)` in the viewport, or that scrolls it into view
-/// from `offset`, before clamping.
-pub(super) fn place(center: bool, offset: f64, top: f64, height: f64, viewport: f64, margin: f64) -> f64 {
-    if center {
-        (top - ((viewport - height) * 0.5).max(0.0)).max(0.0)
-    } else {
-        scroll_edge::reveal(offset, top, height, viewport, margin)
+/// The offset that lands `[top, top + height)` in the viewport as `landing` says, from
+/// `offset`, before clamping.
+pub(super) fn place(landing: Landing, offset: f64, top: f64, height: f64, viewport: f64, margin: f64) -> f64 {
+    match landing {
+        Landing::Nearest => scroll_edge::reveal(offset, top, height, viewport, margin),
+        Landing::Start => scroll_edge::reveal_start(offset, top, height, viewport, margin),
+        Landing::Center => (top - ((viewport - height) * 0.5).max(0.0)).max(0.0),
     }
 }
 
 impl RuntimeCore {
-    /// Scrolls so row or highlight `r.key` shows, or sits centred when `r.center`. A virtual row
+    /// Scrolls so row or highlight `r.key` shows, landing as `r.landing` says. A virtual row
     /// placed by estimates may measure differently once mounted, along with the rows around it,
     /// so this places it again from what the commit measured until it stays put. Those commits
     /// are `instant` when the request's was, or when it glides: the glide then starts back
@@ -42,10 +57,10 @@ impl RuntimeCore {
     pub(super) fn reveal_row(&mut self, r: &ScrollReveal, instant: bool) {
         let (scope, key) = (r.scope.as_deref(), r.key.as_str());
         let glide = r.animated && !instant && !self.reduced_motion && !self.settled;
-        let (mut window, was) = self.reveal_row_once(scope, key, r.center, true, instant || glide);
+        let (mut window, was) = self.reveal_row_once(scope, key, r.landing, true, instant || glide);
         for _ in 0..8 {
             if !window { break; }
-            window = self.reveal_row_once(scope, key, r.center, false, instant || glide).0;
+            window = self.reveal_row_once(scope, key, r.landing, false, instant || glide).0;
         }
         if glide && let Some(Was { id, offset: start, glide: v, viewport }) = was
             && let Some(st) = self.scrolls.get_mut(&id)
@@ -68,7 +83,7 @@ impl RuntimeCore {
     /// One placement of [`Self::reveal_row`]: whether it committed, and on the first, where the
     /// viewport stood before. After the first, it moves only when the row would land somewhere
     /// else.
-    fn reveal_row_once(&mut self, scope: Option<&str>, key: &str, center: bool, first: bool, instant: bool) -> (bool, Option<Was>) {
+    fn reveal_row_once(&mut self, scope: Option<&str>, key: &str, landing: Landing, first: bool, instant: bool) -> (bool, Option<Was>) {
         let target_node = self.nodes.iter().enumerate().find_map(|(i, row)| {
             if !row.named(key) || self.subtree_exiting(i) || !row.parent.is_none_or(|p| in_scope(&self.nodes[p].path, scope)) {
                 return None;
@@ -141,12 +156,12 @@ impl RuntimeCore {
         let was = first.then_some(Was { id, offset: scroll.offset, glide: scroll.glide(), viewport });
         scroll.max = max;
         if first { scroll.halt(); }
-        let offset = place(center, scroll.offset, top, height, viewport, margin).clamp(0.0, scroll.max);
+        let offset = place(landing, scroll.offset, top, height, viewport, margin).clamp(0.0, scroll.max);
         let laid_max = (laid_end - viewport).max(0.0);
-        let laid_to = place(center, scroll.offset, laid_top, laid_h, viewport, margin).clamp(0.0, laid_max);
+        let laid_to = place(landing, scroll.offset, laid_top, laid_h, viewport, margin).clamp(0.0, laid_max);
         let at_end = stick && (scroll.pinned() || offset >= scroll.max - 0.5) && laid_to >= laid_max - 0.5;
         let effects = self.requests.step(requests::Event::Place { first, scope, key, viewport: &path,
-            center, at_end, from: scroll.offset, to: offset });
+            landing, at_end, from: scroll.offset, to: offset });
         let Some(effect) = effects.into_iter().next() else { return (false, was) };
         match effect {
             requests::Effect::Move(to) => {

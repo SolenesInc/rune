@@ -43,7 +43,7 @@ pub(super) struct Reveal {
     pub scope: Option<String>,
     pub key: String,
     pub viewport: String,
-    pub center: bool,
+    pub landing: super::reveal::Landing,
     /// Whether this reveal lands at the bottom of a `stick_bottom` viewport.
     pub at_end: bool,
 }
@@ -638,7 +638,7 @@ impl RuntimeCore {
             let growing = self.scroll_stack(s).and_then(|c| self.stacks.get(&self.nodes[c].id)).is_some_and(|st| st.growing);
             let Some(st) = self.scrolls.get_mut(&self.nodes[s].id) else { continue };
             let top = st.offset + rel_top;
-            let to = reveal::place(r.center, st.offset, top, height, viewport, margin).clamp(0.0, st.max);
+            let to = reveal::place(r.landing, st.offset, top, height, viewport, margin).clamp(0.0, st.max);
             // A `Tx::scroll_center` glide follows its target once the target moves.
             if let ScrollMode::Glide { v, to: aim, .. } = st.mode {
                 if aim.offset().is_none_or(|g| (to - g).abs() >= 1.0 / 64.0) {

@@ -16,6 +16,10 @@ enum Input {
 }
 use Input::*;
 
+fn landing_of(viewport: &str) -> Landing {
+    if viewport == "a" { Landing::Center } else { Landing::Nearest }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 struct Old {
     keeps: Vec<OldKeep>,
@@ -24,7 +28,7 @@ struct Old {
 #[derive(Clone, Debug, PartialEq)]
 struct OldKeep { path: String, viewport: String, was: f32, virtual_row: Option<(String, String, f32)>, hold: Option<(String, f32)> }
 #[derive(Clone, Debug, PartialEq)]
-struct OldReveal { viewport: String, scope: Option<String>, key: String, center: bool, at_end: bool }
+struct OldReveal { viewport: String, scope: Option<String>, key: String, landing: Landing, at_end: bool }
 
 #[derive(Debug, PartialEq)]
 enum Placement { None, Rest, Move(f64) }
@@ -54,7 +58,7 @@ impl Old {
                 if first {
                     self.scroll_reveals.retain(|r| r.viewport != viewport);
                     self.scroll_reveals.push(OldReveal { viewport: viewport.into(), scope: Some("scope".into()),
-                        key: "mark".into(), center: viewport == "a", at_end });
+                        key: "mark".into(), landing: landing_of(viewport), at_end });
                 } else if let Some(r) = self.scroll_reveals.iter_mut().find(|r| r.viewport == viewport) {
                     r.at_end |= at_end;
                 }
@@ -116,7 +120,7 @@ fn drive(requests: &mut Requests, input: Input) -> Placement {
         FoldOpen { viewport, mounted, end } => requests.step(FoldOpens { viewport, end,
             index: |path: &str| (Some(path) == mounted).then_some(1) }),
         Place { viewport, first, to, at_end } => requests.step(Event::Place { viewport, scope: Some("scope"),
-            key: "mark", center: viewport == "a", first, at_end, from: 5.0, to }),
+            key: "mark", landing: landing_of(viewport), first, at_end, from: 5.0, to }),
         Tail => requests.step(Event::NewTail { viewport: "a", key: "new" }),
         EndGives { header, pinned } => requests.step(EndTakesOver { giving: &[&header.to_string()],
             pinned: |v: &str| v == pinned }),
@@ -146,7 +150,7 @@ fn walk(inputs: &[Input], old: &Old, real: &Requests, sequence: &mut Vec<Input>)
         let snapshot = Old { keeps: real.keeps().map(|k| OldKeep { path: k.path.clone(), viewport: k.viewport.clone(),
             was: k.was, virtual_row: k.virtual_row.clone(), hold: k.hold.as_ref().map(|h| (h.path.clone(), h.inset)) }).collect(),
             scroll_reveals: real.reveals().map(|r| OldReveal { viewport: r.viewport.clone(), scope: r.scope.clone(),
-                key: r.key.clone(), center: r.center, at_end: r.at_end }).collect() };
+                key: r.key.clone(), landing: r.landing, at_end: r.at_end }).collect() };
         assert_eq!(snapshot, old, "{sequence:?}");
         walk(inputs, &old, &real, sequence);
         sequence.pop();
