@@ -245,6 +245,31 @@ impl RuntimeCore {
         self.focus.shown() && self.focus.is(&self.nodes[i].path)
     }
     /// Focus is on node `i` or inside it (CSS `:focus-within`), however it got there.
+    /// What showing the focused node at `path` scrolls: the control that draws its ring, the
+    /// outermost one inside the node's own viewport, with the ring's reach; then each viewport
+    /// around that in the one around it, as far out as they go.
+    pub(crate) fn focus_reveals(&self, path: &str) -> Vec<crate::runtime::ScrollReveal> {
+        use crate::runtime::ScrollReveal;
+        let Some(i) = self.nodes.iter().position(|n| n.path == path) else {
+            return vec![ScrollReveal::into_view(None, path.to_owned())];
+        };
+        let viewport = self.viewport_of(i);
+        let own = self.nodes[i].focus.ring.map(|ring| (i, ring));
+        let (owner, ring) = std::iter::successors(self.nodes[i].parent, |&p| self.nodes[p].parent)
+            .take_while(|&p| Some(p) != viewport)
+            .filter(|&p| self.nodes[p].focus.within)
+            .filter_map(|p| self.nodes[p].focus.ring.map(|ring| (p, ring)))
+            .last()
+            .or(own)
+            .map_or((i, None), |(p, ring)| (p, Some(ring)));
+        let reach = ring.filter(|_| !self.nodes[owner].focus.ring_off).map_or(0.0, |r| (r.width + r.offset).max(0.0));
+        let shown = |through: Option<String>| ScrollReveal { reach, through, ..ScrollReveal::into_view(None, self.nodes[owner].path.clone()) };
+        std::iter::once(shown(None))
+            .chain(std::iter::successors(viewport, |&v| self.viewport_of(v))
+                .skip(1)
+                .map(|v| shown(Some(self.nodes[v].path.clone()))))
+            .collect()
+    }
     pub(super) fn focus_within(&self, i: usize) -> bool {
         let path = self.nodes[i].path.as_str();
         self.focus.path().is_some_and(|f| f.strip_prefix(path).is_some_and(|rest| rest.is_empty() || rest.starts_with('/')))
@@ -451,6 +476,9 @@ impl RuntimeCore {
             _ => self.focus.keyboard(),
         };
         self.focus_returned = matches!(&asked, Some((p, _, crate::el::FocusAsk::Return)) if next.as_deref() == Some(p.as_str()));
+        if let Some((p, ..)) = &asked && next.as_deref() == Some(p.as_str()) && !self.focus.is(p) {
+            self.focus_asked_reveal = Some(p.clone());
+        }
         self.focus_blurred = blur && next.is_none();
         std::mem::swap(&mut self.nodes, nodes);
         self.nodes_replaced();
@@ -543,7 +571,7 @@ impl RuntimeCore {
             .and_then(|p| order.iter().copied().find(|&j| self.nodes[j].path == p));
         let path = self.nodes[remembered.unwrap_or(first)].path.clone();
         self.set_focus(Some(path.clone()), true);
-        tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+        tx.scroll_to.extend(self.focus_reveals(&path));
         true
     }
     fn is_landmark(&self, i: usize) -> bool {
@@ -615,7 +643,7 @@ impl RuntimeCore {
             };
             let path = self.nodes[order[next]].path.clone();
             self.set_focus(Some(path.clone()), true);
-            tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+            tx.scroll_to.extend(self.focus_reveals(&path));
             self.enter_links(order[next], ev.mods.shift);
             return true;
         }
@@ -670,7 +698,7 @@ impl RuntimeCore {
                 let action = follows.then(|| n.handlers.on_press.clone()).flatten();
                 let path = n.path.clone();
                 self.set_focus(Some(path.clone()), true);
-                tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+                tx.scroll_to.extend(self.focus_reveals(&path));
                 if let Some(f) = action { f(self.app.states(), tx); }
                 return true;
             }
@@ -1674,3 +1702,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "focus_reveal_tests.rs"]
+mod focus_reveal_tests;
