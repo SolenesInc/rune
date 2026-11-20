@@ -279,11 +279,9 @@ impl Measurement<'_> {
 }
 
 /// Each `row_or_column` node, by index, with the width its children take in a row at their
-/// natural widths: its subtree laid out alone at max-content, from the row style it was built
-/// with, before the commit's layout, which lays the subtree out again. A node inside another
-/// stays a row.
+/// natural widths: its max-content width from the row style it was built with, measured
+/// without placing anything. A node inside another stays a row.
 fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem, scale: f32) -> Vec<(usize, f32)> {
-    let unbounded = Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent };
     let mut rows = Vec::new();
     for (i, n) in nodes.iter().enumerate() {
         let Some(row) = n.row_or_column.as_deref() else { continue };
@@ -297,8 +295,7 @@ fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem,
         let nested = std::iter::successors(n.parent, |&p| nodes[p].parent).any(|p| nodes[p].row_or_column.is_some());
         debug_assert!(!nested, "a row_or_column element inside another lays out as a row: {}", n.path);
         if nested { continue; }
-        compute_layout(taffy, n.taffy, unbounded, nodes, text, scale);
-        rows.push((i, taffy.box_layout(n.taffy).w));
+        rows.push((i, max_content_width(taffy, n.taffy, nodes, text, scale)));
     }
     rows
 }

@@ -15,7 +15,8 @@ use taffy::DetailedGridInfo;
 use taffy::compute::compute_root_layout;
 use taffy::geometry::Size;
 use taffy::style::AvailableSpace;
-use taffy::tree::{ClearState, DetailedLayoutInfo, Layout, LayoutInput, LayoutOutput, NodeId};
+use taffy::geometry::Line;
+use taffy::tree::{ClearState, DetailedLayoutInfo, Layout, LayoutInput, LayoutOutput, LayoutPartialTree, NodeId, RequestedAxis, RunMode, SizingMode};
 
 use crate::cache::CompactCache;
 use crate::style::CompactStyle;
@@ -592,6 +593,29 @@ impl LayoutStore {
             measure_leaf,
         };
         compute_root_layout(&mut view, root.to_taffy(), available_space);
+    }
+
+    /// The border-box width `root` takes laid out on its own at max-content: a size-only pass
+    /// that places no box, whose sizes stay in the layout cache for the next full layout.
+    pub fn max_content_width<F>(&mut self, root: SlotId, measure_leaf: F) -> f32
+    where
+        F: FnMut(LayoutInput, Option<usize>, &CompactStyle) -> LayoutOutput,
+    {
+        let mut view = LayoutStoreView {
+            store: self,
+            measure_leaf,
+        };
+        let input = LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            sizing_mode: SizingMode::InherentSize,
+            axis: RequestedAxis::Horizontal,
+            known_dimensions: Size::NONE,
+            known_dimensions_are_definite: Size { width: true, height: true },
+            parent_size: Size::NONE,
+            available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },
+            vertical_margins_are_collapsible: Line::FALSE,
+        };
+        view.compute_child_layout(root.to_taffy(), input).size.width
     }
 
     pub fn storage_stats(&self) -> StorageStats {

@@ -62,6 +62,27 @@ fn a_row_that_fits_lays_out_as_a_plain_row_does() {
     }
 }
 
+/// The options under a heading and beside words, so a row out of place shows.
+fn beside_words(width: &f32, track: El) -> El {
+    col().child(
+        col().w(*width).gap(6.0)
+            .child(text("Default agent"))
+            .child(row().gap(8.0).child(text("Used for new sessions").grow(1.0).shrink().min_w(0.0)).child(track.shrink().min_w(0.0))),
+    )
+}
+
+#[test]
+fn a_row_that_fits_beside_words_keeps_its_place() {
+    fn flagged(w: &f32, _: &mut Cx<f32>) -> El { beside_words(w, options(row().row_or_column())) }
+    fn plain(w: &f32, _: &mut Cx<f32>) -> El { beside_words(w, options(row())) }
+    let (mut a, b) = (run(1000.0, flagged), run(1000.0, plain));
+    assert_eq!(rects(&a), rects(&b));
+    a.update(|_, _| {});
+    a.frame(1.0);
+    assert_eq!(rects(&a), rects(&b), "a commit whose layout comes from the cache keeps it there");
+    assert!(rects(&a)[0][1] > 0.0, "under the heading");
+}
+
 #[test]
 fn a_row_cut_short_becomes_a_column_of_one_width_as_wide_as_it_is_given() {
     let rt = run(160.0, row_or_column);

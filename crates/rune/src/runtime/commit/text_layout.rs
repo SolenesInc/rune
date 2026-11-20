@@ -349,7 +349,22 @@ pub(super) fn edited(was: &str, now: &str) -> bool {
 /// Lays out the flattened tree in `room`, measuring text leaves. Not generic over the app state,
 /// so Taffy's layout code is instantiated once, not once per `Runtime<S>`.
 pub(super) fn compute_layout(taffy: &mut LayoutEngine, root: SlotId, room: Size<AvailableSpace>, nodes: &[Node], text: &mut TextSystem, scale: f32) {
-    taffy.compute_layout(root, room, |inputs, ctx, style| {
+    taffy.compute_layout(root, room, measure_leaf(nodes, text, scale));
+}
+
+/// The width `id` takes laid out on its own at max-content, measured as `compute_layout`
+/// measures it, without placing any box.
+pub(super) fn max_content_width(taffy: &mut LayoutEngine, id: SlotId, nodes: &[Node], text: &mut TextSystem, scale: f32) -> f32 {
+    taffy.max_content_width(id, measure_leaf(nodes, text, scale))
+}
+
+/// How layout measures a leaf: a text at its shaped size, a picture from its ratio, else empty.
+fn measure_leaf<'a>(
+    nodes: &'a [Node],
+    text: &'a mut TextSystem,
+    scale: f32,
+) -> impl FnMut(taffy::LayoutInput, Option<usize>, &CompactStyle) -> taffy::LayoutOutput + 'a {
+    move |inputs, ctx, style| {
         taffy::compute_leaf_layout(inputs, style, |_, _| 0.0, |known, avail| {
             let Some(i) = ctx else { return Size::ZERO };
             let Some(spec) = nodes[i].text.as_ref() else {
@@ -392,7 +407,7 @@ pub(super) fn compute_layout(taffy: &mut LayoutEngine, root: SlotId, room: Size<
                 } / scale)),
             }
         })
-    });
+    }
 }
 
 /// A measured text's width or height, as a 256th of a point at most past it. Taffy sums a row's
