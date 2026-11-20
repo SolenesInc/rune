@@ -31,7 +31,7 @@ fn run(width: f32, view: fn(&f32, &mut Cx<f32>) -> El) -> Runtime<f32> {
     rt
 }
 
-fn rects(rt: &Runtime<f32>) -> Vec<[f32; 4]> {
+fn rects<S: 'static>(rt: &Runtime<S>) -> Vec<[f32; 4]> {
     let all = rt.elements();
     (0..OPTIONS.len())
         .map(|i| all.iter().find(|e| e.key.as_deref() == Some(&format!("o{i}"))).unwrap().target)
@@ -127,4 +127,78 @@ fn a_window_resize_turns_it_without_running_the_view() {
     rt.set_viewport((1200.0, 400.0), 2.0);
     rt.frame(2.0);
     assert!(one_line(&rects(&rt)), "{:?}", rects(&rt));
+}
+
+/// A scroll viewport that takes 16 points for its bar once its content overflows.
+fn scroll(track: El, tall: bool) -> El {
+    col().w_full().child(
+        col().w_full().h(90.0).items_start().key("scroll")
+            .scroll(crate::ScrollSpec { stick_bottom: false }).scroll_room(16.0)
+            .child(track.shrink().min_w(0.0).max_w_frac(1.0))
+            .child(crate::el().h(if tall { 180.0 } else { 12.0 })),
+    )
+}
+
+#[test]
+fn room_a_scroll_bar_takes_after_the_first_pass_is_room_it_decides_in() {
+    fn view(tall: &bool, _: &mut Cx<bool>) -> El { scroll(options(row().row_or_column()), *tall) }
+    let mut wide = Runtime::new(false, view, (1200.0, 400.0), Env::new(true, 2.0));
+    wide.frame(0.0);
+    let natural = wide.elements().iter().find(|e| e.key.as_deref() == Some("track")).unwrap().target[2];
+    let mut rt = Runtime::new(true, view, (natural + 8.0, 400.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+    let first = rects(&rt);
+    assert!(stacked(&first), "a row that fits only without the bar stacks once the bar takes its room: {first:?}");
+    rt.frame(1.0);
+    rt.update(|_, _| {});
+    rt.frame(2.0);
+    assert_eq!(rects(&rt), first, "a later commit at the same width keeps the form");
+    rt.update(|tall, _| *tall = false);
+    rt.frame(3.0);
+    let short = rects(&rt);
+    assert!(one_line(&short), "with the bar gone the row fits again: {short:?}");
+    rt.frame(4.0);
+    assert_eq!(rects(&rt), short);
+    assert!(!rt.animating);
+}
+
+#[test]
+fn it_turns_at_one_width_at_every_text_zoom() {
+    fn view(zoom: &f32, cx: &mut Cx<f32>) -> El {
+        cx.zoom(*zoom);
+        col().w_full().padding(8.0).items_start().child(options(row().row_or_column()).shrink().min_w(0.0).max_w_frac(1.0))
+    }
+    for zoom in [0.7, 1.0, 1.5] {
+        let mut rt = Runtime::new(zoom, view, (1200.0, 400.0), Env::new(true, 2.0));
+        rt.frame(0.0);
+        let natural = rt.elements().iter().find(|e| e.key.as_deref() == Some("track")).unwrap().rect[2];
+        let threshold = ((natural + 16.0) * zoom).round();
+        let widths: Vec<f32> = (-12..=12).map(|i| threshold + i as f32).collect();
+        let mut forms = Vec::new();
+        for sweep in [widths.clone(), widths.iter().rev().copied().collect::<Vec<_>>()] {
+            let mut at = Vec::new();
+            for w in sweep {
+                rt.set_viewport((w, 400.0), 2.0);
+                rt.frame(1.0);
+                let r = rects(&rt);
+                rt.frame(1.0);
+                assert_eq!(rects(&rt), r, "zoom {zoom} at {w}");
+                assert!(!rt.animating);
+                at.push(stacked(&r));
+            }
+            assert_eq!(at.windows(2).filter(|p| p[0] != p[1]).count(), 1, "zoom {zoom}: {at:?}");
+            forms.push(at);
+        }
+        forms[1].reverse();
+        assert_eq!(forms[0], forms[1], "zoom {zoom}: the same form at each width either way");
+    }
+}
+
+#[test]
+#[should_panic(expected = "inside another")]
+fn one_inside_another_is_refused() {
+    fn view(_: &f32, _: &mut Cx<f32>) -> El {
+        col().w_full().child(row().row_or_column().child(options(row().row_or_column())).child(text("more")))
+    }
+    run(165.0, view);
 }

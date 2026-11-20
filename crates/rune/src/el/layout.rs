@@ -71,7 +71,8 @@ impl El {
     /// its options rather than cut one short. Layout decides in the commit that lays it out,
     /// from the width it is offered and its children's natural row, so nothing is read back or
     /// remembered and the column's own width never feeds the choice. Where its width is
-    /// unbounded it is a row. One inside another is laid out as a row.
+    /// unbounded it is a row. It may not sit inside another: debug builds panic, and release
+    /// builds lay the inner one out as a row.
     pub fn row_or_column(mut self) -> Self {
         self.cold_mut().row_or_column = true;
         self

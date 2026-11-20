@@ -234,13 +234,13 @@ impl Measurement<'_> {
             width: AvailableSpace::Definite(self.viewport.0),
             height: if self.fit_height { AvailableSpace::MaxContent } else { AvailableSpace::Definite(self.viewport.1) },
         };
-        {
+        let natural_rows = {
             let _layout_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Layout);
             let natural_rows = natural_rows(&mut taffy, &nodes, &mut self.text, scale);
-            compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows);
             // `aspect_fit` elements laid out filling their room; fix each at the largest box
             // at its ratio inside it and lay out again, so siblings and alignment follow.
-            let mut refit = stack_cut_rows(&mut taffy, &nodes, &natural_rows);
+            let mut refit = false;
             for n in &nodes {
                 if let Some(fit) = &n.aspect_fit {
                     let style = fitted(fit.0, &fit.1, taffy.box_layout(n.taffy).size());
@@ -252,8 +252,9 @@ impl Measurement<'_> {
                     refit = true;
                 }
             }
-            if refit { compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale); }
-        }
+            if refit { lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows); }
+            natural_rows
+        };
         self.stats.layout_nodes = nodes.len();
         #[cfg(debug_assertions)]
         layout_diagnostics::collapsed_scrolls(&taffy, &nodes);
@@ -262,11 +263,11 @@ impl Measurement<'_> {
         // Room one axis takes can make the other overflow, which takes its own: twice at most.
         for _ in 0..2 {
             if !self.take_scroll_room(&mut taffy, &mut nodes) { break; }
-            compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows);
             self.place(&taffy, &mut nodes);
         }
         if self.fit_anchored(&mut taffy, &nodes) {
-            compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows);
             self.place(&taffy, &mut nodes);
         }
         for n in nodes.iter_mut().filter(|n| n.text.is_some()) {
@@ -284,20 +285,50 @@ impl Measurement<'_> {
 fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem, scale: f32) -> Vec<(usize, f32)> {
     let mut rows = Vec::new();
     for (i, n) in nodes.iter().enumerate() {
-        let Some(row) = n.row_or_column.as_deref() else { continue };
-        if taffy.style(n.taffy) != row {
-            taffy.set_style_and_mark_ancestors(
-                n.taffy,
-                row.clone(),
-                std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
-            );
-        }
+        if n.row_or_column.is_none() { continue; }
+        restore_row(taffy, nodes, i);
         let nested = std::iter::successors(n.parent, |&p| nodes[p].parent).any(|p| nodes[p].row_or_column.is_some());
         debug_assert!(!nested, "a row_or_column element inside another lays out as a row: {}", n.path);
         if nested { continue; }
         rows.push((i, max_content_width(taffy, n.taffy, nodes, text, scale)));
     }
     rows
+}
+
+/// Lays the tree out with every `row_or_column` node decided against the width this pass gives
+/// it: each starts as the row it was built as, and one laid narrower than its natural row is
+/// laid out again as a column. Every pass of a commit decides afresh, so room a scroll bar or an
+/// anchored overlay takes after the first pass is room the decision sees.
+fn lay_out(
+    taffy: &mut LayoutEngine,
+    root: SlotId,
+    room: Size<AvailableSpace>,
+    nodes: &[Node],
+    text: &mut TextSystem,
+    scale: f32,
+    natural_rows: &[(usize, f32)],
+) {
+    for &(i, _) in natural_rows {
+        restore_row(taffy, nodes, i);
+    }
+    compute_layout(taffy, root, room, nodes, text, scale);
+    if stack_cut_rows(taffy, nodes, natural_rows) {
+        compute_layout(taffy, root, room, nodes, text, scale);
+    }
+}
+
+/// Gives `row_or_column` node `i` back the row style it was built with, where a pass left it a
+/// column.
+fn restore_row(taffy: &mut LayoutEngine, nodes: &[Node], i: usize) {
+    let n = &nodes[i];
+    let Some(row) = n.row_or_column.as_deref() else { return };
+    if taffy.style(n.taffy) != row {
+        taffy.set_style_and_mark_ancestors(
+            n.taffy,
+            row.clone(),
+            std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
+        );
+    }
 }
 
 /// Turns each `row_or_column` node the layout gave less than its natural row into a column of
