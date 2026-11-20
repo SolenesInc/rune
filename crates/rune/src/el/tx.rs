@@ -24,6 +24,8 @@ pub struct Tx {
     pub(crate) drag_repeat_after: Option<std::time::Duration>,
     /// `Tx::input_time`.
     pub(crate) input_time: Option<crate::time::Instant>,
+    /// `Tx::inputs`.
+    pub(crate) inputs: u64,
     pub(crate) physical_key: Option<crate::PhysicalKeyCode>,
     pub(crate) key_base: Option<char>,
     pub(crate) focused: Option<String>,
@@ -67,6 +69,8 @@ pub struct Tx {
     pub(crate) scroll_offsets: Vec<crate::runtime::ScrollRequest>,
     /// Elements to hold where they show across this commit (`Tx::keep_on_screen`).
     pub(crate) keep_on_screen: Vec<String>,
+    /// `Tx::keep_focus_on_screen`.
+    pub(crate) keep_focus_on_screen: bool,
     pub(crate) wakes: Vec<std::time::Duration>,
     pub(crate) shell: Option<Shell>,
     pub(crate) minimize: bool,

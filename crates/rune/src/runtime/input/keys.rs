@@ -259,7 +259,7 @@ impl RuntimeCore {
     }
 
     pub fn key(&mut self, ev: KeyEvent) {
-        self.heard_input();
+        self.heard_input(Heard::of(!matches!(ev.key, crate::Key::Modifier { .. })));
         self.queue_key(ev, false);
     }
 
@@ -278,7 +278,7 @@ impl RuntimeCore {
     }
 
     pub fn ime(&mut self, ev: Ime) {
-        self.heard_input();
+        self.heard_input(Heard::of(matches!(ev, Ime::Commit(_))));
         self.queue.push(Action::Ime(ev));
     }
 
