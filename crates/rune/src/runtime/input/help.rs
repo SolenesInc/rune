@@ -290,6 +290,26 @@ impl RuntimeCore {
 
     pub(super) fn clear_help_hits(&mut self) { self.help.hits.clear(); }
 
+    /// Node `i`'s tooltip is cut off by `El::inert`: it sits in an inert subtree whose outermost
+    /// inert element is not disabled. A disabled control that made itself inert still says what
+    /// it is and why it is unavailable, as AppKit's disabled controls do.
+    fn help_inert(&self, i: usize) -> bool {
+        let outermost = std::iter::successors(Some(i), |&p| self.nodes[p].parent).take_while(|&p| self.nodes[p].inert).last();
+        outermost.is_some_and(|o| !self.nodes[o].cold.get().is_some_and(|c| c.a11y.disabled))
+    }
+
+    /// The tooltip of node `i` may show: nothing but a disabled control's inertness keeps input
+    /// from it, and it is not behind a modal.
+    fn help_allowed(&self, i: usize) -> bool {
+        !self.help_inert(i) && self.modal_member(i)
+    }
+
+    /// The pointer may reach node `i`'s tooltip: [`Self::help_allowed`], or the open modal lets
+    /// the pointer through to what is behind it.
+    pub(super) fn help_pointer_allowed(&self, i: usize) -> bool {
+        self.help_allowed(i) || (!self.help_inert(i) && self.modal_scope.as_ref().is_some_and(|m| m.pointer_through))
+    }
+
     /// A scroll or key: hide the tooltip until the pointer leaves its element.
     pub(super) fn dismiss_help(&mut self) {
         if self.help.state.target().is_some() { self.step_help(Event::Dismiss); }
@@ -321,7 +341,7 @@ impl RuntimeCore {
         let covered = over.is_some_and(|(k, (top, _))| {
             k > seq && self.node_index.get(top).is_some_and(|&t| !std::iter::successors(Some(t), |&p| self.nodes[p].parent).any(|p| p == h))
         });
-        Some((h, link, self.allowed(h) && !covered))
+        Some((h, link, self.help_allowed(h) && !covered))
     }
 
     /// Whether moving the pointer to (x, y) changes the help element under it, so a host that
@@ -379,7 +399,7 @@ impl RuntimeCore {
             for &(id, r, seq, link) in &self.help.hits {
                 let Some(&i) = self.node_index.get(&id) else { continue };
                 let Some(text) = self.help_text(i, link) else { continue };
-                if self.subtree_exiting(i) || !self.allowed(i) { continue; }
+                if self.subtree_exiting(i) || !self.help_allowed(i) { continue; }
                 let words = crate::el::help_words(text);
                 regions.extend(self.unoccluded(i, r, seq).into_iter().map(|p| (p, words.clone().into_owned())));
             }

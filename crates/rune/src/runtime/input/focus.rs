@@ -25,7 +25,7 @@ pub(super) struct ModalScope {
     index: usize,
     members: Vec<bool>,
     /// `El::modal_press_through`: the pointer reaches what is behind the modal.
-    pointer_through: bool,
+    pub(super) pointer_through: bool,
     /// The element a press-through modal is anchored to, whose press decides about the modal
     /// instead of dismissing it, as a popover's invoker does.
     invoker: Option<usize>,

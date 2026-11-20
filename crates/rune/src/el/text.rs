@@ -539,7 +539,9 @@ impl El {
     /// element's cursor. Handlers inside never run from input, nothing inside takes focus (Tab
     /// skips it, a field asking for focus doesn't get it, and focus already inside drops), and
     /// accessibility reports it inert. `on_layout` and `Cx::layout` still see its rects. For a
-    /// document drawn under an editor that takes its presses itself.
+    /// document drawn under an editor that takes its presses itself. An inert element that is
+    /// also [`El::disabled`] keeps its tooltips and those inside it, as a disabled control still
+    /// says why it is unavailable; it takes nothing else.
     pub fn inert(mut self) -> Self {
         self.flags.set(ElFlags::INERT, true);
         self
