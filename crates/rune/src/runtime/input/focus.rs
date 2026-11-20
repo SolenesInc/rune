@@ -254,6 +254,18 @@ impl RuntimeCore {
             return vec![ScrollReveal::into_view(None, path.to_owned())];
         };
         let viewport = self.viewport_of(i);
+        let (owner, reach) = self.ring_owner(i);
+        let shown = |through: Option<String>| ScrollReveal { reach, through, ..ScrollReveal::into_view(None, self.nodes[owner].path.clone()) };
+        std::iter::once(shown(None))
+            .chain(std::iter::successors(viewport, |&v| self.viewport_of(v))
+                .skip(1)
+                .map(|v| shown(Some(self.nodes[v].path.clone()))))
+            .collect()
+    }
+    /// The control that draws node `i`'s focus ring, the outermost one inside `i`'s own viewport,
+    /// and how far the ring reaches past its box.
+    pub(in crate::runtime) fn ring_owner(&self, i: usize) -> (usize, f32) {
+        let viewport = self.viewport_of(i);
         let own = self.nodes[i].focus.ring.map(|ring| (i, ring));
         let (owner, ring) = std::iter::successors(self.nodes[i].parent, |&p| self.nodes[p].parent)
             .take_while(|&p| Some(p) != viewport)
@@ -262,13 +274,7 @@ impl RuntimeCore {
             .last()
             .or(own)
             .map_or((i, None), |(p, ring)| (p, Some(ring)));
-        let reach = ring.filter(|_| !self.nodes[owner].focus.ring_off).map_or(0.0, |r| (r.width + r.offset).max(0.0));
-        let shown = |through: Option<String>| ScrollReveal { reach, through, ..ScrollReveal::into_view(None, self.nodes[owner].path.clone()) };
-        std::iter::once(shown(None))
-            .chain(std::iter::successors(viewport, |&v| self.viewport_of(v))
-                .skip(1)
-                .map(|v| shown(Some(self.nodes[v].path.clone()))))
-            .collect()
+        (owner, ring.filter(|_| !self.nodes[owner].focus.ring_off).map_or(0.0, |r| (r.width + r.offset).max(0.0)))
     }
     pub(super) fn focus_within(&self, i: usize) -> bool {
         let path = self.nodes[i].path.as_str();

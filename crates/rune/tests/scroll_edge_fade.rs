@@ -1,5 +1,6 @@
 //! `El::scroll_edge_fade`: each edge fades only while content is hidden under it, at strength
-//! hidden / 15 pt. `El::scroll_margin`: revealed rows stop clear of the fade.
+//! hidden / 15 pt, and never over the focused control or its ring. `El::scroll_margin`: revealed
+//! rows stop clear of the fade.
 use rune::render::{Gpu, OFFSCREEN_FORMAT, Offscreen, Renderer, unpack_fade};
 use rune::{Color, Cx, El, Env, GrowthSpec, Runtime, ScrollSpec, col, el};
 
@@ -7,14 +8,15 @@ const SCALE: f32 = 2.0;
 const FADE: f32 = 24.0;
 
 #[derive(Default)]
-struct List { rows: usize, selected: usize, stick: bool, virtual_list: bool, margin: f32 }
+struct List { rows: usize, selected: usize, stick: bool, virtual_list: bool, margin: f32, focusable: bool }
 
 fn view(s: &List, _: &mut Cx<List>) -> El {
     let mut stack = col().w_full();
     if s.virtual_list { stack = stack.growth(GrowthSpec::default()).virtualize(20.0); }
     for i in 0..s.rows {
         let fill = if i == s.selected { Color::WHITE } else { Color::WHITE.alpha(0.999) };
-        stack = stack.child(el().key(format!("row{i}")).w_full().h(20.0).fill(fill));
+        let row = el().key(format!("row{i}")).w_full().h(20.0).fill(fill);
+        stack = stack.child(if s.focusable { row.focusable(true).focus_ring(2.0, 2.0, Color::WHITE) } else { row });
     }
     col().w_full().h_full().child(col().key("scroll").w_full().h(200.0)
         .scroll(ScrollSpec { stick_bottom: s.stick })
@@ -129,4 +131,36 @@ fn edge_pixels_fade_by_the_hidden_extent() {
     let half = alpha_at(&mut rt, 0.25);
     assert!((110..=145).contains(&half), "half strength leaves about half alpha at the edge: {half}");
     assert_eq!(alpha_at(&mut rt, FADE + 0.5), 255, "and is done a full fade width in");
+}
+
+#[test]
+fn an_edge_stays_hard_while_the_focused_control_or_its_ring_sits_in_its_depth() {
+    let mut rt = list(List { rows: 40, focusable: true, ..Default::default() });
+    let rect = |rt: &Runtime<List>, key: &str| rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap().rect;
+    let viewport = rect(&rt, "scroll");
+    rt.update(|_, tx| tx.focus("row10", true));
+    settle(&mut rt);
+    // The wheel moves the focused row under the top edge, five points down, after focus landed.
+    let under_top = rect(&rt, "row10")[1] - viewport[1] - 5.0;
+    rt.wheel(100.0, 100.0, -under_top);
+    settle(&mut rt);
+    assert!((rect(&rt, "row10")[1] - viewport[1] - 5.0).abs() < 0.01, "row 10 sits 5 pt under the top");
+    assert_eq!(edges(&rt).0, [0.0, FADE * SCALE], "the top edge yields to the focused row; the bottom still fades");
+
+    // Its ring alone in the depth is enough: the row 2 pt below the fade, the ring 4 pt out.
+    let ring_only = rect(&rt, "row10")[1] - viewport[1] - (FADE + 2.0);
+    rt.wheel(100.0, 100.0, -ring_only);
+    settle(&mut rt);
+    assert_eq!(edges(&rt).0[0], 0.0, "the ring reaches into the fade, so the top edge stays hard");
+
+    let past = rect(&rt, "row10")[1] - viewport[1] - (FADE + 10.0);
+    rt.wheel(100.0, 100.0, -past);
+    settle(&mut rt);
+    assert_eq!(edges(&rt).0, [FADE * SCALE; 2], "the row and its ring clear of the fade: both edges fade");
+
+    let over_bottom = viewport[1] + viewport[3] - (rect(&rt, "row10")[1] + 20.0) - 5.0;
+    rt.wheel(100.0, 100.0, over_bottom);
+    settle(&mut rt);
+    assert_eq!(edges(&rt).0, [FADE * SCALE, 0.0], "the bottom edge yields the same way");
+    assert!(!rt.frame(1.0 / 60.0), "no extra frames at rest");
 }

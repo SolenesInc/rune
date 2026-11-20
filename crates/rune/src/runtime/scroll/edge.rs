@@ -55,6 +55,14 @@ impl RuntimeCore {
         // What hides past the left and right edges: a right-to-left viewport starts at its right.
         let (left, right) = (st.x.offset, st.x.max - st.x.offset);
         let (left, right) = match st.x.flow { crate::el::Flow::Ltr => (left, right), crate::el::Flow::Rtl => (right, left) };
+        let (offset, below) = match self.focus_span(i, offset) {
+            Some((top, bottom)) => {
+                let height = f64::from(n.target[3] - n.target[1]);
+                let depth = f64::from(width);
+                (if top < depth && bottom > 0.0 { 0.0 } else { offset }, if bottom > height - depth && top < height { 0.0 } else { below })
+            }
+            None => (offset, below),
+        };
         let edges = [(y, 1, offset, -1.0), (y, 3, below, 1.0), (x, 0, left, -1.0), (x, 2, right, 1.0)];
         for (_, edge, hidden, out) in edges.into_iter().filter(|e| e.0 && !(style.end_only && e.3 < 0.0)) {
             let (style, width) = style.edge(width, out > 0.0);
@@ -63,6 +71,17 @@ impl RuntimeCore {
             origin[edge] = r[edge] + out * o * w.abs();
         }
         (own, origin)
+    }
+
+    /// Where the focused control and its ring sit in viewport `i`, scrolled to `offset`, as (top,
+    /// bottom) points from the viewport's top, when focus is inside it. An edge's fade yields
+    /// while that span reaches into its depth, so it never dims the control a person is on.
+    fn focus_span(&self, i: usize, offset: f64) -> Option<(f64, f64)> {
+        let focused = self.focused_index().filter(|&f| f != i && self.focus_within(i))?;
+        let (owner, reach) = self.ring_owner(focused);
+        let [_, top, _, bottom] = self.nodes[owner].target;
+        let at = |y: f32| f64::from(y - self.nodes[i].target[1]) - offset;
+        Some((at(top) - f64::from(reach), at(bottom) + f64::from(reach)))
     }
 
     /// Under [`crate::ScrollFade::below_sticky`], the fade under the header heading `section`
