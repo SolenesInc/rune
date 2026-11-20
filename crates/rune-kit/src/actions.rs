@@ -406,6 +406,7 @@ pub struct IconButton {
     size: Size,
     state: State,
     expanded: Option<bool>,
+    selected: Option<bool>,
     label: Option<String>,
     help: Option<String>,
     shortcut: Option<String>,
@@ -420,6 +421,7 @@ impl IconButton {
             size: Size::Control(ControlSize::Regular),
             state: State::Rest,
             expanded: None,
+            selected: None,
             label: None,
             help: None,
             shortcut: None,
@@ -454,6 +456,12 @@ impl IconButton {
     /// The trigger of a menu or popover, open or not (see [`Button::expanded`]).
     pub fn expanded(mut self, on: bool) -> Self {
         self.expanded = Some(on);
+        self
+    }
+    /// A toggle, on or off, such as the active tool in a tool picker: on draws the pressed fill
+    /// with the accent icon, and assistive technology reads a toggle button, pressed or not.
+    pub fn selected(mut self, on: bool) -> Self {
+        self.selected = Some(on);
         self
     }
     /// The accessible name (the web's `aria-label`): what the button does, as "Close" or
@@ -522,6 +530,10 @@ impl IconButton {
             s.fill = s.pressed;
             s.icon = if self.variant == IconButtonVariant::GhostMuted { k.c.icon_base } else { s.icon };
         }
+        if self.selected == Some(true) {
+            s.fill = over(s.pressed, s.fill);
+            s.icon = k.c.icon_accent;
+        }
         let ink = s.icon;
         let disabled_alpha = s.disabled_opacity;
         let enabled = self.state != State::Disabled;
@@ -530,6 +542,9 @@ impl IconButton {
         // A help text that names the button isn't read twice as its description.
         let description = self.label.is_some().then_some(self.help.as_deref()).flatten();
         e = describe(e, description, self.shortcut.as_deref(), self.expanded);
+        if let Some(on) = self.selected {
+            e = e.checked(on);
+        }
         if let Some(l) = self.label.or(self.help) {
             e = e.label(l);
         }

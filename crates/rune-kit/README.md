@@ -115,7 +115,15 @@ RadioGroup/RadioItem, TextInput, TextArea, TextField (older), Field, Select (inl
 triggers, grouped), Popover, Menu (compact and standard, checkbox/radio items, submenus,
 context menus via `.at(x, y)`), Tooltip (compact, standard, large), HoverCard, Toast and
 ToastRegion, Card, List, Accordion, Collapsible, Badge, Divider, Keybind, Spinner, Loader,
-Progress, ProgressCircle, SegmentedControl.
+Progress, ProgressCircle, SegmentedControl, Slider, NumberStepper, Swatches.
+
+A tool panel's controls: `IconButton::selected(on)` is a toggle, such as the active tool, drawn
+with the pressed fill and the accent icon. `Slider::new(label, value, min..=max)` reports each
+new value with `continues` true for a drag's moves after its first change, so a drag can be one
+undo step. `NumberStepper::new(label, value)` keys its parts `down`, `value` and `up`.
+`Swatches::new(label, &[(colour, name)])` keys each `swatch{i}`, and given `.width` wraps onto
+rows whose lengths are at most one apart. Each is keyed by the caller on its root, so a script
+taps `brush-size/knob` or `colour/swatch3`. They draw no visible label: put one over them.
 
 `Button::new(label).rolling("import-label")` rolls the label's changed characters
 (`RollingText`) and springs the button's width with it; `.label_with(|font, ink| ..)` draws any
@@ -134,8 +142,10 @@ assistive technology runs through the same handlers as pointer and keys.
   `TextInput`, `TextArea`, `ShortcutRecorder`, `ProgressCircle` and `Popover` take `.label` for
   the name when no visible label says it; a text field falls back to its placeholder.
 - **Values**: a select or combobox reads its chosen option, progress its percentage, a pane's
-  grip its width (increment and decrement resize it), a shortcut recorder its keys.
-- **States**: checked (checkbox, switch, radio, segment, checked menu item, task), expanded or
+  grip its width (increment and decrement resize it), a shortcut recorder its keys, a slider
+  and a number stepper their number and reading (increment and decrement step them).
+- **States**: checked (checkbox, switch, radio, segment, swatch, selected icon button, checked
+  menu item, task), expanded or
   collapsed (accordion, collapsible, menu and popover triggers given `.expanded`, select,
   combobox, submenu, tree row, sidebar section, sidebar toggle, diff file), selected and place
   in the set (list, select, popup list, table, tree and sidebar rows), disabled, modal
