@@ -50,15 +50,17 @@ fn hovering_moves_the_clip_in_on_the_hover_frame_with_its_fade() {
 }
 
 #[test]
-fn leaving_puts_the_clip_back_at_the_box() {
+fn leaving_puts_the_clip_back_at_the_box_on_the_first_frame() {
     let mut rt = runtime(Direction::Ltr, 1.0);
     rt.pointer_move(20.0, 30.0);
     rt.frame(1.0 / 120.0);
     rt.pointer_move(250.0, 90.0);
+    rt.frame(1.0 / 120.0);
+    assert_eq!(words(&rt).0, [0.0, 20.0, 200.0, 48.0], "the clip moves after the pointer left");
     for _ in 0..60 {
         rt.frame(1.0 / 120.0);
+        assert_eq!(words(&rt).0, [0.0, 20.0, 200.0, 48.0], "the clip moves after the pointer left");
     }
-    assert_eq!(words(&rt).0, [0.0, 20.0, 200.0, 48.0]);
     assert!(!rt.animating);
 }
 

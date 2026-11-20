@@ -506,8 +506,10 @@ impl El {
     /// Move this element's clip in from its box by `rest` points on each side (left, top, right,
     /// bottom), and by `hovered` while the nearest ancestor group is hovered, its fades moving
     /// with it: a row's words end in a fade before the controls its hover shows over them. Paint
-    /// only, like [`Self::group_opacity`]: layout doesn't change and the clip follows the group's
-    /// hover track, landing with the pointer. Without a [`Self::clip_fade`] the edge is hard.
+    /// only, like [`Self::group_opacity`]: layout doesn't change. The clip never moves between
+    /// the two: it lands with the pointer and goes back on the first frame the pointer is off,
+    /// whatever the group's hover track does after. Without a [`Self::clip_fade`] the edge is
+    /// hard.
     pub fn group_clip(mut self, rest: [f32; 4], hovered: [f32; 4]) -> Self {
         if self.clipped_visual().clip.is_none() {
             self.set_clip([0.0; 4]);

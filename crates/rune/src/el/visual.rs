@@ -331,7 +331,8 @@ impl Visual {
     pub(crate) fn group_clip_rect(&self, r: [f32; 4], k: f32, group: f32) -> [f32; 4] {
         let r = self.clip_rect(r, k);
         let Some(insets) = self.group_clip.as_deref() else { return r };
-        let [l, t, rr, b] = std::array::from_fn(|i| (insets[0][i] + (insets[1][i] - insets[0][i]) * group) * k);
+        let edge = if group >= 1.0 { 1 } else { 0 };
+        let [l, t, rr, b] = std::array::from_fn(|i| insets[edge][i] * k);
         [r[0] + l, r[1] + t, (r[2] - rr).max(r[0] + l), (r[3] - b).max(r[1] + t)]
     }
 }
