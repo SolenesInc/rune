@@ -53,6 +53,8 @@ pub(crate) struct ElCold {
     pub(crate) material: Option<crate::SystemMaterial>,
     /// `El::aspect_fit`'s width over height; 0 when unset.
     pub(crate) aspect_fit: f32,
+    /// `El::row_or_column`.
+    pub(crate) row_or_column: bool,
     /// `El::level` and `El::expanded`.
     pub(crate) a11y: A11y,
     #[cfg(debug_assertions)]
@@ -95,6 +97,7 @@ impl Empty for ElCold {
         help_side: None,
         material: None,
         aspect_fit: 0.0,
+        row_or_column: false,
         a11y: A11y::EMPTY,
         #[cfg(debug_assertions)]
         scroll_source: None,

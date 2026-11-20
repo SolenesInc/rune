@@ -278,6 +278,9 @@ mod line_clamp_tests;
 #[path = "runtime/aspect_fit_tests.rs"]
 mod aspect_fit_tests;
 #[cfg(test)]
+#[path = "runtime/row_or_column_tests.rs"]
+mod row_or_column_tests;
+#[cfg(test)]
 #[path = "runtime/anchor_fit_tests.rs"]
 mod anchor_fit_tests;
 #[cfg(test)]

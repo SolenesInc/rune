@@ -66,6 +66,16 @@ impl El {
         }
         self
     }
+    /// Its children in a row where their row fits the width it is given at their natural widths,
+    /// else in a column with each child as wide as the column, as a segmented control stacks
+    /// its options rather than cut one short. Layout decides in the commit that lays it out,
+    /// from the width it is offered and its children's natural row, so nothing is read back or
+    /// remembered and the column's own width never feeds the choice. Where its width is
+    /// unbounded it is a row. One inside another is laid out as a row.
+    pub fn row_or_column(mut self) -> Self {
+        self.cold_mut().row_or_column = true;
+        self
+    }
     #[inline]
     pub fn w_full(mut self) -> Self {
         self.set_w_full();

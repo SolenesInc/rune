@@ -46,6 +46,8 @@ pub(crate) struct NodeCold {
     pub(super) pixel_aspect: Option<f32>,
     /// `El::aspect_fit`: the ratio and the element's own style, which the fitted size replaces.
     pub(super) aspect_fit: Option<Box<(f32, CompactStyle)>>,
+    /// `El::row_or_column`: its style as a row, which layout restores before it decides.
+    pub(super) row_or_column: Option<Box<CompactStyle>>,
     pub(super) material: Option<crate::SystemMaterial>,
     /// `El::help`.
     pub(super) help: Option<String>,
@@ -81,6 +83,7 @@ impl crate::cold::Empty for NodeCold {
         a11y: crate::el::A11y::EMPTY,
         pixel_aspect: None,
         aspect_fit: None,
+        row_or_column: None,
         material: None,
         help: None,
         help_cut: false,

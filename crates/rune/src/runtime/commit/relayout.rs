@@ -236,10 +236,11 @@ impl Measurement<'_> {
         };
         {
             let _layout_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Layout);
+            let natural_rows = natural_rows(&mut taffy, &nodes, &mut self.text, scale);
             compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
             // `aspect_fit` elements laid out filling their room; fix each at the largest box
             // at its ratio inside it and lay out again, so siblings and alignment follow.
-            let mut refit = false;
+            let mut refit = stack_cut_rows(&mut taffy, &nodes, &natural_rows);
             for n in &nodes {
                 if let Some(fit) = &n.aspect_fit {
                     let style = fitted(fit.0, &fit.1, taffy.box_layout(n.taffy).size());
@@ -276,6 +277,55 @@ impl Measurement<'_> {
         (taffy, nodes)
     }
 }
+
+/// Each `row_or_column` node, by index, with the width its children take in a row at their
+/// natural widths: its subtree laid out alone at max-content, from the row style it was built
+/// with, before the commit's layout, which lays the subtree out again. A node inside another
+/// stays a row.
+fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem, scale: f32) -> Vec<(usize, f32)> {
+    let unbounded = Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent };
+    let mut rows = Vec::new();
+    for (i, n) in nodes.iter().enumerate() {
+        let Some(row) = n.row_or_column.as_deref() else { continue };
+        if taffy.style(n.taffy) != row {
+            taffy.set_style_and_mark_ancestors(
+                n.taffy,
+                row.clone(),
+                std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
+            );
+        }
+        let nested = std::iter::successors(n.parent, |&p| nodes[p].parent).any(|p| nodes[p].row_or_column.is_some());
+        debug_assert!(!nested, "a row_or_column element inside another lays out as a row: {}", n.path);
+        if nested { continue; }
+        compute_layout(taffy, n.taffy, unbounded, nodes, text, scale);
+        rows.push((i, taffy.box_layout(n.taffy).w));
+    }
+    rows
+}
+
+/// Turns each `row_or_column` node the layout gave less than its natural row into a column of
+/// children as wide as it; true when one turned, so the commit lays out again.
+fn stack_cut_rows(taffy: &mut LayoutEngine, nodes: &[Node], natural_rows: &[(usize, f32)]) -> bool {
+    let mut stacked = false;
+    for &(i, natural) in natural_rows {
+        let n = &nodes[i];
+        if taffy.box_layout(n.taffy).w + ROW_SLACK >= natural { continue; }
+        let mut column = taffy.style(n.taffy).clone();
+        column.set_flex_direction(FlexDirection::Column);
+        column.set_align_items(AlignItems::STRETCH);
+        taffy.set_style_and_mark_ancestors(
+            n.taffy,
+            column,
+            std::iter::successors(n.parent, |&p| nodes[p].parent).map(|p| nodes[p].taffy),
+        );
+        stacked = true;
+    }
+    stacked
+}
+
+/// How much narrower than its natural row a laid row may come out from float sums alone, far
+/// under the quarter point a device pixel takes on a 2x display.
+const ROW_SLACK: f32 = 0.01;
 
 /// Partitions the moved nodes of a `relayout` pass into disjoint subtree [`ReusedSpan`]s so
 /// `clear_old_nodes` skips dropping every `moved_stub` and `clean_apply_spans` skips unchanged

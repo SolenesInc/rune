@@ -358,6 +358,7 @@ fn node_cold_needed(c: &NodeCold) -> bool {
         || c.a11y != crate::el::A11y::default()
         || c.pixel_aspect.is_some()
         || c.aspect_fit.is_some()
+        || c.row_or_column.is_some()
         || c.material.is_some()
         || c.help.is_some()
         || c.help_cut
@@ -495,6 +496,7 @@ fn flatten_owned(
     let room_taken = scroll_room::room_taken_before(memo_ctx, id, cold.scroll_edges.room);
     scroll_room::pad_room(&mut style, cold.scroll_edges.room, room_taken, 1.0);
     let time_scale = cold.time_scale;
+    let row_or_column = cold.row_or_column.then(|| Box::new(style.clone()));
     let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
     } else {
@@ -522,6 +524,7 @@ fn flatten_owned(
             a11y: c.a11y,
             pixel_aspect,
             aspect_fit,
+            row_or_column,
             material: c.material,
             help: c.help,
             help_cut: c.help_cut,
@@ -701,6 +704,7 @@ fn flatten_ref(
     if room_taken != [false; 2] {
         scroll_room::pad_room(style.to_mut(), c.scroll_edges.room, room_taken, 1.0);
     }
+    let row_or_column = c.row_or_column.then(|| Box::new(style.clone().into_owned()));
     let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
         crate::cold::Cold::default()
     } else {
@@ -730,6 +734,7 @@ fn flatten_ref(
             a11y: c.a11y.clone(),
             pixel_aspect,
             aspect_fit,
+            row_or_column,
             material: c.material,
             help: c.help.clone(),
             help_cut: c.help_cut,
