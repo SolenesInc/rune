@@ -5,15 +5,19 @@
 //! match for its script and language, the font a GTK or Qt app falls back to.
 
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use parley::fontique::{Collection, CollectionOptions, FallbackKey, FamilyId, GenericFamily, Language, Script, SourceKind};
 
-thread_local! {
-    static SYSTEM: std::cell::RefCell<Option<Collection>> = const { std::cell::RefCell::new(None) };
-}
+/// fontconfig's fonts, read once per process: every window and thread asks the same collection.
+static SYSTEM: LazyLock<Mutex<Collection>> = LazyLock::new(|| {
+    #[cfg(test)]
+    tests::BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Mutex::new(Collection::new(CollectionOptions { shared: false, system_fonts: true }))
+});
 
 fn with_system<R>(f: impl FnOnce(&mut Collection) -> R) -> R {
-    SYSTEM.with_borrow_mut(|system| f(system.get_or_insert_with(|| Collection::new(CollectionOptions { shared: false, system_fonts: true }))))
+    f(&mut SYSTEM.lock().unwrap_or_else(PoisonError::into_inner))
 }
 
 /// Every file of family `id` in the system collection.
@@ -74,3 +78,7 @@ pub(super) fn fallback_family_files(chars: &[char], locale: Option<&str>) -> Vec
         out
     })
 }
+
+#[cfg(test)]
+#[path = "fontconfig_tests.rs"]
+mod tests;
