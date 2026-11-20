@@ -39,7 +39,7 @@ pub(crate) enum ModalEvent {
     /// A modal mounted; `restore` is the focus it hands back on closing.
     Opened { path: String, restore: Option<String>, opened: Opened },
     /// The top modal's element is gone. `kept` is focus the closing change already put outside
-    /// it (a field the handler focused), which stays.
+    /// it (a field the handler focused) or took away with `Tx::blur`, which stays.
     TopRemoved { kept: bool },
     /// Focus is outside the top modal (nothing focused, or behind it).
     FocusOutside,
@@ -98,10 +98,11 @@ impl RuntimeCore {
     /// a modal that opened, and focus that left the top modal.
     pub(super) fn sync_modals(&mut self) {
         let returned = std::mem::take(&mut self.focus_returned);
+        let blurred = std::mem::take(&mut self.focus_blurred);
         // Exiting visuals are already inert, so a closing modal counts as gone.
         while let Some(top) = self.modal_focus.top().map(str::to_owned).filter(|p| self.node(p).is_none()) {
             let inside = |f: &str| f.strip_prefix(top.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
-            let kept = self.focus.path().is_some_and(|f| !inside(f) && self.node(f).is_some());
+            let kept = blurred || self.focus.path().is_some_and(|f| !inside(f) && self.node(f).is_some());
             self.modal_step(ModalEvent::TopRemoved { kept });
         }
         let Some(i) = self.active_modal() else { return };
