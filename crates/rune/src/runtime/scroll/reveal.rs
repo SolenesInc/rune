@@ -22,19 +22,25 @@ pub(crate) struct ScrollReveal {
     pub landing: Landing,
     /// Glide there on the scroll spring rather than jump.
     pub animated: bool,
+    /// The least space to leave between the target and the viewport's edge, such as the reach of
+    /// its focus ring; the viewport's own scroll margin counts toward it.
+    pub reach: f32,
+    /// The viewport to scroll, when it is an outer one: the target then lands where the
+    /// viewports between them have scrolled it.
+    pub through: Option<String>,
 }
 
 impl ScrollReveal {
     pub fn into_view(scope: Option<String>, key: String) -> Self {
-        ScrollReveal { scope, key, landing: Landing::Nearest, animated: false }
+        ScrollReveal { scope, key, landing: Landing::Nearest, animated: false, reach: 0.0, through: None }
     }
 
     pub fn row_into_view(scope: Option<String>, key: String) -> Self {
-        ScrollReveal { scope, key, landing: Landing::Start, animated: false }
+        ScrollReveal { scope, key, landing: Landing::Start, animated: false, reach: 0.0, through: None }
     }
 
     pub fn center(scope: Option<String>, key: String, animated: bool) -> Self {
-        ScrollReveal { scope, key, landing: Landing::Center, animated }
+        ScrollReveal { scope, key, landing: Landing::Center, animated, reach: 0.0, through: None }
     }
 }
 
@@ -57,10 +63,11 @@ impl RuntimeCore {
     pub(super) fn reveal_row(&mut self, r: &ScrollReveal, instant: bool) {
         let (scope, key) = (r.scope.as_deref(), r.key.as_str());
         let glide = r.animated && !instant && !self.reduced_motion && !self.settled;
-        let (mut window, was) = self.reveal_row_once(scope, key, r.landing, true, instant || glide);
+        let through = r.through.as_deref();
+        let (mut window, was) = self.reveal_row_once(scope, key, through, r.landing, r.reach, true, instant || glide);
         for _ in 0..8 {
             if !window { break; }
-            window = self.reveal_row_once(scope, key, r.landing, false, instant || glide).0;
+            window = self.reveal_row_once(scope, key, through, r.landing, r.reach, false, instant || glide).0;
         }
         if glide && let Some(Was { id, offset: start, glide: v, viewport }) = was
             && let Some(st) = self.scrolls.get_mut(&id)
@@ -83,7 +90,8 @@ impl RuntimeCore {
     /// One placement of [`Self::reveal_row`]: whether it committed, and on the first, where the
     /// viewport stood before. After the first, it moves only when the row would land somewhere
     /// else.
-    fn reveal_row_once(&mut self, scope: Option<&str>, key: &str, landing: Landing, first: bool, instant: bool) -> (bool, Option<Was>) {
+    #[allow(clippy::too_many_arguments)]
+    fn reveal_row_once(&mut self, scope: Option<&str>, key: &str, through: Option<&str>, landing: Landing, reach: f32, first: bool, instant: bool) -> (bool, Option<Was>) {
         let target_node = self.nodes.iter().enumerate().find_map(|(i, row)| {
             if !row.named(key) || self.subtree_exiting(i) || !row.parent.is_none_or(|p| in_scope(&self.nodes[p].path, scope)) {
                 return None;
@@ -94,9 +102,17 @@ impl RuntimeCore {
             (!self.subtree_exiting(i)).then_some((i, y0, (y1 - y0).max(0.0), false))
         });
         let geometry = target_node.and_then(|(i, target_top, target_h, is_whole_node)| {
-            let s = self.viewport_of(i)?;
+            let s = match through {
+                Some(path) => self.nodes.iter().position(|n| n.path == path)?,
+                None => self.viewport_of(i)?,
+            };
             let parent = &self.nodes[s];
-            let (laid_top, laid_h) = (target_top - parent.target[1], target_h);
+            let scrolled_between = std::iter::successors(self.viewport_of(i), |&v| self.viewport_of(v))
+                .take_while(|&v| v != s)
+                .filter_map(|v| self.scrolls.get(&self.nodes[v].id))
+                .map(|st| st.offset as f32)
+                .sum::<f32>();
+            let (laid_top, laid_h) = (target_top - parent.target[1] - scrolled_between, target_h);
             let (top, height) = std::iter::successors(Some(i), |&p| self.nodes[p].parent)
                 .take_while(|&p| p != s)
                 .find_map(|r| {
@@ -119,6 +135,7 @@ impl RuntimeCore {
                         Some((r_top + in_row, target_h))
                     }
                 })
+                .map(|(top, height)| (top - scrolled_between, height))
                 .unwrap_or((laid_top, laid_h));
             let laid_end = self.scroll_children(s).map(|c| self.nodes[c].target[3] - parent.target[1]).reduce(f32::max).unwrap_or(0.0);
             Some((parent.path.clone(), f64::from(top), f64::from(height), f64::from(parent.local.h), f64::from(laid_top), f64::from(laid_h), f64::from(laid_end)))
@@ -147,7 +164,7 @@ impl RuntimeCore {
         let Some(cover) = self.stuck_cover(&path, key) else { return (false, None) };
         let (top, height) = (top - cover, height + cover);
         let (laid_top, laid_h) = (laid_top - cover, laid_h + cover);
-        let margin = self.node(&path).map_or(0.0, |n| f64::from(n.scroll_edges.margin));
+        let margin = self.node(&path).map_or(0.0, |n| f64::from(n.scroll_edges.margin.max(reach)));
         let Some(&id) = self.path_ids.get(&path) else { return (false, None) };
         let Some(&s_idx) = self.node_index.get(&id) else { return (false, None) };
         let stick = self.nodes[s_idx].scroll.is_some_and(|s| s.stick_bottom);
