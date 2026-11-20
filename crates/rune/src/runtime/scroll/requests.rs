@@ -27,6 +27,8 @@ pub(super) enum Request {
 pub(super) struct Requests {
     keeps: Vec<Keep>,
     reveals: Vec<Reveal>,
+    /// `El::reveal_on_arrival` elements a commit mounted, by path, for the frame to reveal.
+    arrived: Vec<String>,
 }
 
 pub(super) enum Event<'a> {
@@ -101,6 +103,14 @@ impl Requests {
 
     pub fn restore_keeps(&mut self, keeps: Vec<Keep>) {
         self.keeps = keeps;
+    }
+
+    pub fn note_arrived(&mut self, path: String) {
+        self.arrived.push(path);
+    }
+
+    pub fn take_arrived(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.arrived)
     }
 
     fn arrive(&mut self, request: Request) {

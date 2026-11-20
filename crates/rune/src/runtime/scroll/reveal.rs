@@ -34,6 +34,23 @@ pub(super) fn place(center: bool, offset: f64, top: f64, height: f64, viewport: 
 }
 
 impl RuntimeCore {
+    /// The reveal that shows node `i`, which the keyboard just focused, with its ring: the
+    /// nearest element that draws the ring for it, such as a field's box around the editor that
+    /// holds focus (`El::focus_within_ring`), or else the node itself. The viewport's
+    /// [`El::scroll_margin`] leaves room for the ring's reach.
+    pub(super) fn reveal_focus(&self, i: usize) -> ScrollReveal {
+        let mut at = self.nodes[i].parent;
+        let mut shown = i;
+        while let Some(j) = at {
+            if self.nodes[j].focus.within && self.nodes[j].focus.ring.is_some() {
+                shown = j;
+                break;
+            }
+            at = self.nodes[j].parent;
+        }
+        ScrollReveal::into_view(None, self.nodes[shown].path.clone())
+    }
+
     /// Scrolls so row or highlight `r.key` shows, or sits centred when `r.center`. A virtual row
     /// placed by estimates may measure differently once mounted, along with the rows around it,
     /// so this places it again from what the commit measured until it stays put. Those commits
@@ -183,3 +200,7 @@ struct Was {
     glide: Option<f32>,
     viewport: f64,
 }
+
+#[cfg(test)]
+#[path = "focus_ring_reveal_tests.rs"]
+mod focus_ring_tests;

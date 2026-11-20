@@ -156,6 +156,8 @@ mod reveal;
 mod requests;
 #[path = "runtime/scroll/anchor.rs"]
 mod scroll_anchor;
+#[path = "runtime/scroll/arrival.rs"]
+mod arrival;
 #[path = "runtime/scroll/sticky.rs"]
 mod sticky;
 #[path = "runtime/anchor.rs"]

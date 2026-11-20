@@ -29,6 +29,8 @@ pub(crate) struct FocusSpec {
     pub group: bool,
     pub selected: bool,
     pub reveal: Reveal,
+    /// [`crate::El::reveal_on_arrival`].
+    pub reveal_on_arrival: bool,
     pub preserve_on_press: crate::runtime::selectable::OnPress,
     pub ring: Option<Outline>,
     /// `focus_within_ring`: `ring` shows while focus is on this element or inside it, from
@@ -70,6 +72,7 @@ impl crate::cold::Empty for FocusSpec {
         group: false,
         selected: false,
         reveal: Reveal::Off,
+        reveal_on_arrival: false,
         preserve_on_press: crate::runtime::selectable::OnPress { focus: false, selection: false },
         ring: None,
         within: false,
@@ -157,6 +160,18 @@ impl El {
     /// selected row by its key, `None` when no row is selected.
     pub fn reveal_row(mut self, key: Option<impl Into<String>>) -> Self {
         self.cold_mut().focus.reveal = Reveal::Row(key.map(Into::into));
+        self
+    }
+    /// Shows this element on the frame it arrives in a scroll viewport that is already on
+    /// screen: the viewport moves just far enough to show it, then far enough to show the
+    /// focused control, with no motion, as [`Tx::scroll_into_view`] of each in turn. For a
+    /// refusal that appears below the fold while the button that caused it stays in view. It
+    /// runs once, on arrival: after that the viewport's scroll is the person's, and a change
+    /// that keeps the element mounted moves nothing. An element that mounts with what holds it,
+    /// such as a page that opens on an error far down, leaves the viewport where it opens, as
+    /// does one inside a virtual list, whose rows mount as they scroll in.
+    pub fn reveal_on_arrival(mut self) -> Self {
+        self.cold_mut().focus.reveal_on_arrival = true;
         self
     }
     /// A press on this element or its descendants leaves focus where it was, a field focused

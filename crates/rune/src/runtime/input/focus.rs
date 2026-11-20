@@ -541,9 +541,9 @@ impl RuntimeCore {
         let (mark, first) = marks[next];
         let remembered = self.focus.scope_memory(&self.nodes[mark].path)
             .and_then(|p| order.iter().copied().find(|&j| self.nodes[j].path == p));
-        let path = self.nodes[remembered.unwrap_or(first)].path.clone();
-        self.set_focus(Some(path.clone()), true);
-        tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+        let to = remembered.unwrap_or(first);
+        self.set_focus(Some(self.nodes[to].path.clone()), true);
+        tx.scroll_to.push(self.reveal_focus(to));
         true
     }
     fn is_landmark(&self, i: usize) -> bool {
@@ -613,9 +613,8 @@ impl RuntimeCore {
                 (None, None) if ev.mods.shift => order.len() - 1,
                 (None, None) => 0,
             };
-            let path = self.nodes[order[next]].path.clone();
-            self.set_focus(Some(path.clone()), true);
-            tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+            self.set_focus(Some(self.nodes[order[next]].path.clone()), true);
+            tx.scroll_to.push(self.reveal_focus(order[next]));
             self.enter_links(order[next], ev.mods.shift);
             return true;
         }
@@ -669,8 +668,8 @@ impl RuntimeCore {
                 let follows = n.role == "radio" || n.role == "tab" || self.nodes[g].focus.follows;
                 let action = follows.then(|| n.handlers.on_press.clone()).flatten();
                 let path = n.path.clone();
-                self.set_focus(Some(path.clone()), true);
-                tx.scroll_to.push(crate::runtime::ScrollReveal::into_view(None, path));
+                self.set_focus(Some(path), true);
+                tx.scroll_to.push(self.reveal_focus(items[next]));
                 if let Some(f) = action { f(self.app.states(), tx); }
                 return true;
             }

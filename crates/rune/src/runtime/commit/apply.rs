@@ -397,6 +397,9 @@ impl RuntimeCore {
                     if mounted.is_empty() { mounted.resize(nodes.len(), false); }
                     mounted[i] = true;
                 }
+                if nodes[i].focus.reveal_on_arrival && nodes[i].parent.is_some_and(|p| !mounted.get(p).copied().unwrap_or(false)) {
+                    self.note_arrival(&nodes, i);
+                }
                 let rides_row = row_like || (nodes[i].in_row == RowLayout::Horizontal && nodes[i].parent.is_some_and(|p| mounted.get(p).copied().unwrap_or(false)));
                 let quiet_row = rides_row
                     && nodes[i].transition.as_ref().is_none_or(|t| t.insertion == rune_motion::Effect::IDENTITY)
