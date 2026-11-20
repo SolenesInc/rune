@@ -426,14 +426,35 @@ impl RuntimeCore {
         vertical_viewport(&self.nodes, i)
     }
 
+    /// Whether the last frame's rects describe these nodes: nothing committed since it drew
+    /// them, or what did, such as a press's commit before its focus moves, kept every node.
+    fn drawn_describes_nodes(&self) -> bool {
+        self.drawn.len() == self.nodes.len() && (self.built || self.nodes.iter().map(|n| n.id).eq(self.built_ids.iter().copied()))
+    }
+
+    /// The focused element's path, when the last frame drew it whole in its vertical viewport
+    /// (`Tx::keep_focus_on_screen`).
+    fn focus_drawn_whole(&self) -> Option<String> {
+        if !self.drawn_describes_nodes() { return None; }
+        let path = self.focus.path()?;
+        let i = self.nodes.iter().position(|n| n.path == path)?;
+        let s = self.viewport_of(i)?;
+        let ([_, y, _, h], [_, top, _, height]) = (self.drawn[i], self.drawn[s]);
+        (h > 0.0 && y >= top - 0.5 && y + h <= top + height + 0.5).then(|| path.to_owned())
+    }
+
     /// Records where each `Tx::keep_on_screen` element showed on the last frame, before the
     /// commit moves it.
     pub(super) fn capture_keeps(&mut self, tx: &mut Tx) {
         self.anchor_keeps(tx);
+        // A field's on_blur runs inside the focus move, and what it asks waits in `pending`.
+        let keep_focus = std::mem::take(&mut tx.keep_focus_on_screen) | std::mem::take(&mut self.pending.keep_focus_on_screen);
+        if keep_focus && let Some(path) = self.focus_drawn_whole() {
+            tx.keep_on_screen.push(path);
+        }
         if tx.keep_on_screen.is_empty() { return; }
         let keys = std::mem::take(&mut tx.keep_on_screen);
-        // The last frame's rects describe these nodes only until a commit replaces them.
-        if !self.built || self.drawn.len() != self.nodes.len() { return; }
+        if !self.drawn_describes_nodes() { return; }
         for key in keys {
             let found = (0..self.nodes.len()).find(|&i| {
                 let n = &self.nodes[i];

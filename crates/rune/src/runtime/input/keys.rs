@@ -260,6 +260,7 @@ impl RuntimeCore {
 
     pub fn key(&mut self, ev: KeyEvent) {
         self.heard_input();
+        crate::input::acts::act();
         self.queue_key(ev, false);
     }
 
@@ -279,6 +280,7 @@ impl RuntimeCore {
 
     pub fn ime(&mut self, ev: Ime) {
         self.heard_input();
+        if matches!(ev, Ime::Commit(_)) { crate::input::acts::act(); }
         self.queue.push(Action::Ime(ev));
     }
 

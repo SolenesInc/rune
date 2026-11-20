@@ -68,6 +68,7 @@ impl RuntimeCore {
     /// host with touches calls this for every one; `id` tells fingers apart.
     pub fn touch(&mut self, id: u64, phase: TouchPhase, x: f32, y: f32, time: f64) {
         self.heard_input();
+        if phase == TouchPhase::Started { crate::input::acts::act(); }
         match phase {
             TouchPhase::Started => self.touch_down(id, x, y, time),
             TouchPhase::Moved => self.touch_move(id, x, y, time),

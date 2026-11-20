@@ -11,4 +11,5 @@ pub(crate) mod physical_input;
 #[cfg(any(test, all(unix, not(target_os = "macos"), not(target_os = "ios"), not(target_os = "android"))))]
 pub(crate) mod pointer_observer;
 pub(crate) mod secure_input;
+pub(crate) mod acts;
 pub(crate) mod time;

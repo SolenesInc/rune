@@ -227,6 +227,7 @@ impl RuntimeCore {
 
     pub fn pointer_down(&mut self, x: f32, y: f32) {
         self.heard_input();
+        crate::input::acts::act();
         let other_button_held = self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary);
         self.press_down(x, y);
         if !other_button_held { self.queue_presses_within(x, y, crate::PointerButton::Primary); }
@@ -542,6 +543,12 @@ impl RuntimeCore {
     /// innermost viewport under the pointer with room to move that way.
     pub fn wheel(&mut self, x: f32, y: f32, dy: f32) {
         self.heard_input();
+        crate::input::acts::act();
+        self.wheel_y(x, y, dy);
+    }
+
+    /// Scrolls the innermost vertical viewport under (x, y) with room to move by `dy`.
+    pub(crate) fn wheel_y(&mut self, x: f32, y: f32, dy: f32) {
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();

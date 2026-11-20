@@ -27,6 +27,7 @@ impl RuntimeCore {
         if ev.phase == GesturePhase::Began { self.wheel_began(); }
         let moved = ev.dx != 0.0 || ev.dy != 0.0;
         if moved {
+            crate::input::acts::act();
             self.dismiss_help();
             self.wheel_outside_modal(ev.x, ev.y);
             self.wheel_delta_arrived(ev.dx, ev.dy);
