@@ -39,7 +39,8 @@ pub(crate) enum ModalEvent {
     /// A modal mounted; `restore` is the focus it hands back on closing.
     Opened { path: String, restore: Option<String>, opened: Opened },
     /// The top modal's element is gone. `kept` is focus the closing change already put outside
-    /// it (a field the handler focused) or took away with `Tx::blur`, which stays.
+    /// it (a field the handler focused) or took away with `Tx::blur`, which stays, or that a
+    /// modal opening in the same change takes over.
     TopRemoved { kept: bool },
     /// Focus is outside the top modal (nothing focused, or behind it).
     FocusOutside,
@@ -62,6 +63,13 @@ impl ModalFocus {
         match self {
             Self::Closed => None,
             Self::Open(layers) => layers.last().map(|l| l.path.as_str()),
+        }
+    }
+
+    fn top_restore(&self) -> Option<Option<String>> {
+        match self {
+            Self::Closed => None,
+            Self::Open(layers) => layers.last().map(|l| l.restore.clone()),
         }
     }
 
@@ -99,10 +107,15 @@ impl RuntimeCore {
     pub(super) fn sync_modals(&mut self) {
         let returned = std::mem::take(&mut self.focus_returned);
         let blurred = std::mem::take(&mut self.focus_blurred);
+        // A modal that opens as another closes replaces it: it takes focus itself, and hands
+        // focus back where the one it replaced would have.
+        let replacing = self.active_modal().is_some_and(|i| !self.modal_focus.holds(&self.nodes[i].path));
+        let mut replaced_restore = None;
         // Exiting visuals are already inert, so a closing modal counts as gone.
         while let Some(top) = self.modal_focus.top().map(str::to_owned).filter(|p| self.node(p).is_none()) {
             let inside = |f: &str| f.strip_prefix(top.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
-            let kept = blurred || self.focus.path().is_some_and(|f| !inside(f) && self.node(f).is_some());
+            let kept = replacing || blurred || self.focus.path().is_some_and(|f| !inside(f) && self.node(f).is_some());
+            replaced_restore = self.modal_focus.top_restore().filter(|_| replacing);
             self.modal_step(ModalEvent::TopRemoved { kept });
         }
         let Some(i) = self.active_modal() else { return };
@@ -112,7 +125,11 @@ impl RuntimeCore {
         // which a web menu does only after the dialog has noted the item): closing returns to
         // what had focus before.
         let inside = self.focused_index().is_some_and(|j| self.allowed(j));
-        let restore = if inside || returned { self.focus_before_commit.clone() } else { self.focus.owned() };
+        let restore = match replaced_restore {
+            Some(restore) => restore,
+            None if inside || returned => self.focus_before_commit.clone(),
+            None => self.focus.owned(),
+        };
         let menu = |j: usize| MENU_ROLES.contains(&self.nodes[j].role);
         let is_menu = menu(i) || (i + 1..self.nodes.len()).take_while(|&j| self.nodes[j].parent.is_some_and(|p| p >= i)).any(|j| self.nodes[j].parent == Some(i) && menu(j));
         let opened = if is_menu && !self.focus.keyboard() { Opened::PointerMenu } else { Opened::Dialog };

@@ -986,6 +986,45 @@ mod tests {
     }
 
     #[test]
+    fn a_modal_that_replaces_another_returns_focus_to_the_first_opener() {
+        use crate::{text_input, TextEdit, TextStyle};
+        #[derive(Default)]
+        struct Modals { palette: bool, settings: bool, blur: bool, field: TextEdit }
+        fn view(s: &Modals, _: &mut Cx<Modals>) -> El {
+            col().key("root").size(300.0, 300.0)
+                .child(button("opener").on_press(|s: &mut Modals| s.palette = true))
+                .child(button("next"))
+                .children(s.palette.then(|| col().key("palette").absolute(100.0, 100.0).size(150.0, 100.0)
+                    .modal(true, |s: &mut Modals| s.palette = false)
+                    .child(button("pick").on_press_tx(|s: &mut Modals, tx: &mut Tx| {
+                        s.palette = false;
+                        s.settings = true;
+                        if s.blur { tx.blur() } else { s.field.focused = true }
+                    }))))
+                .children(s.settings.then(|| col().key("settings").absolute(100.0, 100.0).size(150.0, 100.0)
+                    .modal(true, |s: &mut Modals| { s.settings = false; s.field.focused = false; })
+                    .child(text_input(&s.field, TextStyle::new(14.0, 400.0)).key("field").size(120.0, 30.0)
+                        .on_edit(|s: &mut Modals| &mut s.field))))
+        }
+        for blur in [true, false] {
+            let mut rt = Runtime::new(Modals { blur, ..Modals::default() }, view, (300.0, 300.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            press(&mut rt, Key::Tab);
+            assert_eq!(focused(&rt), "opener");
+            press(&mut rt, Key::Text(" ".into()));
+            while focused(&rt) != "pick" { press(&mut rt, Key::Tab); }
+            press(&mut rt, Key::Text(" ".into()));
+            assert!(!rt.state().palette && rt.state().settings);
+            assert_eq!(focused(&rt), "field", "the new modal takes focus (blur: {blur})");
+            press(&mut rt, Key::Escape);
+            assert!(!rt.state().settings);
+            assert_eq!(focused(&rt), "opener", "closing the replacement returns to the first modal's opener (blur: {blur})");
+            press(&mut rt, Key::Tab);
+            assert_eq!(focused(&rt), "next", "Tab continues from the opener (blur: {blur})");
+        }
+    }
+
+    #[test]
     fn closing_a_modal_keeps_a_focus_request_outside_it() {
         use crate::{text_input, TextEdit, TextStyle};
         #[derive(Default)]
