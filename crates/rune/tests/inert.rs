@@ -160,3 +160,45 @@ fn canvas_gestures_help_selection_and_held_hover_respect_inert() {
     let doc = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("doc")).unwrap();
     assert_eq!((doc.hover, doc.press), (0.0, 0.0), "turning inert clears hover and press tracks");
 }
+
+#[test]
+fn a_disabled_inert_control_still_shows_its_tooltips_and_takes_nothing_else() {
+    #[derive(Default)]
+    struct Unavailable {
+        presses: u32,
+        hovered: bool,
+    }
+
+    fn unavailable_view(_: &Unavailable, _: &mut Cx<Unavailable>) -> El {
+        let control = el().key("control").size(120.0, 40.0).cursor(Cursor::Pointer)
+            .help("Claude CLI not found in PATH")
+            .on_press(|s: &mut Unavailable| s.presses += 1)
+            .on_hover_change(|s: &mut Unavailable, inside, _| s.hovered = inside)
+            .child(el().key("mark").size(20.0, 20.0).help("Claude"))
+            .disabled(true)
+            .inert();
+        el().key("page").size(200.0, 200.0).child(control)
+    }
+
+    fn rest_on(rt: &mut Runtime<Unavailable>, (x, y): (f32, f32)) -> Option<String> {
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        rt.frame(1.0);
+        rt.help_tooltip().map(|(words, _)| words.to_owned())
+    }
+
+    let mut rt = Runtime::new(Unavailable::default(), unavailable_view, (200.0, 200.0), Env::default());
+    rt.frame(0.0);
+    assert_eq!(rest_on(&mut rt, (100.0, 30.0)).as_deref(), Some("Claude CLI not found in PATH"), "the control says why it is unavailable");
+    assert_eq!(rest_on(&mut rt, (10.0, 10.0)).as_deref(), Some("Claude"), "a part inside it keeps its own tooltip");
+
+    click(&mut rt, (100.0, 30.0));
+    assert_eq!(rt.state().presses, 0, "it takes no press");
+    assert!(!rt.state().hovered, "and no hover");
+    assert_eq!(info(&rt, "control").hover, 0.0);
+    assert_ne!(rt.cursor(), Cursor::Pointer, "nor its cursor");
+    rt.set_full_keyboard_access(true);
+    rt.key(KeyEvent { key: Key::Tab, mods: Mods::default() });
+    rt.frame(1.0 / 60.0);
+    assert!(!info(&rt, "control").focused, "Tab skips it");
+}
