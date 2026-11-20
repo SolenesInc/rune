@@ -44,10 +44,8 @@ pub(crate) struct NodeCold {
     pub(super) a11y: crate::el::A11y,
     /// The image ratio this picture's layout took, when it sizes one side from its pixels.
     pub(super) pixel_aspect: Option<f32>,
-    /// `El::aspect_fit`: the ratio and the element's own style, which the fitted size replaces.
-    pub(super) aspect_fit: Option<Box<(f32, CompactStyle)>>,
-    /// `El::row_or_column`: its style as a row, which layout restores before it decides.
-    pub(super) row_or_column: Option<Box<CompactStyle>>,
+    /// A style layout rewrites from what it measures: `El::aspect_fit` or `El::row_or_column`.
+    pub(super) refit: Option<Box<Refit>>,
     pub(super) material: Option<crate::SystemMaterial>,
     /// `El::help`.
     pub(super) help: Option<String>,
@@ -57,6 +55,16 @@ pub(crate) struct NodeCold {
     pub(super) help_side: Option<crate::Side>,
     #[cfg(debug_assertions)]
     pub(super) scroll_source: Option<&'static std::panic::Location<'static>>,
+}
+
+/// What layout does to a node's style once it has measured it. One slot for both, as a commit
+/// finds these nodes by reading one field of each node.
+#[derive(Clone)]
+pub(super) enum Refit {
+    /// `El::aspect_fit`: the ratio and the element's own style, which the fitted size replaces.
+    Aspect(f32, CompactStyle),
+    /// `El::row_or_column`: its style as a row, which layout restores before it decides.
+    RowOrColumn(CompactStyle),
 }
 
 impl crate::cold::Empty for NodeCold {
@@ -82,8 +90,7 @@ impl crate::cold::Empty for NodeCold {
         glide: None,
         a11y: crate::el::A11y::EMPTY,
         pixel_aspect: None,
-        aspect_fit: None,
-        row_or_column: None,
+        refit: None,
         material: None,
         help: None,
         help_cut: false,

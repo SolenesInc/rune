@@ -39,7 +39,7 @@ pub(super) fn root_size(viewport: (f32, f32), fit_height: bool) -> Size<Dimensio
 /// values and exact fill, while `apply` leaves their scene tracks alone.
 pub(super) fn reusable(n: &Node) -> bool {
     n.cold.get().is_none_or(|c| {
-        c.aspect_fit.is_none() && c.above.as_ref().is_none_or(|a| !a.fit) && c.pixel_aspect.is_none()
+        !matches!(c.refit.as_deref(), Some(Refit::Aspect(..))) && c.above.as_ref().is_none_or(|a| !a.fit) && c.pixel_aspect.is_none()
     })
 }
 
@@ -236,14 +236,18 @@ impl Measurement<'_> {
         };
         let natural_rows = {
             let _layout_time = crate::frame::profile::Scope::new(crate::frame::profile::Phase::Layout);
-            let natural_rows = natural_rows(&mut taffy, &nodes, &mut self.text, scale);
-            lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows);
+            compute_layout(&mut taffy, root_id, room, &nodes, &mut self.text, scale);
+            let (fits, rows) = refitted(&nodes);
+            let natural_rows = natural_rows(&mut taffy, &nodes, &mut self.text, scale, rows);
+            if !natural_rows.is_empty() {
+                lay_out(&mut taffy, root_id, room, &nodes, &mut self.text, scale, &natural_rows);
+            }
             // `aspect_fit` elements laid out filling their room; fix each at the largest box
             // at its ratio inside it and lay out again, so siblings and alignment follow.
             let mut refit = false;
-            for n in &nodes {
-                if let Some(fit) = &n.aspect_fit {
-                    let style = fitted(fit.0, &fit.1, taffy.box_layout(n.taffy).size());
+            for n in fits.into_iter().map(|i| &nodes[i]) {
+                if let Some(Refit::Aspect(ratio, own)) = n.refit.as_deref() {
+                    let style = fitted(*ratio, own, taffy.box_layout(n.taffy).size());
                     taffy.set_style_and_mark_ancestors(
                         n.taffy,
                         style,
@@ -279,15 +283,29 @@ impl Measurement<'_> {
     }
 }
 
+/// The `aspect_fit` nodes and the `row_or_column` nodes, by index, read from one field of each
+/// node after the commit's first layout, as the walk for `aspect_fit` alone did.
+fn refitted(nodes: &[Node]) -> (Vec<usize>, Vec<usize>) {
+    let (mut fits, mut rows) = (Vec::new(), Vec::new());
+    for (i, n) in nodes.iter().enumerate() {
+        match n.refit.as_deref() {
+            Some(Refit::Aspect(..)) => fits.push(i),
+            Some(Refit::RowOrColumn(_)) => rows.push(i),
+            None => {}
+        }
+    }
+    (fits, rows)
+}
+
 /// Each `row_or_column` node, by index, with the width its children take in a row at their
 /// natural widths: its max-content width from the row style it was built with, measured
 /// without placing anything. A node inside another stays a row.
-fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem, scale: f32) -> Vec<(usize, f32)> {
+fn natural_rows(taffy: &mut LayoutEngine, nodes: &[Node], text: &mut TextSystem, scale: f32, flagged: Vec<usize>) -> Vec<(usize, f32)> {
     let mut rows = Vec::new();
-    for (i, n) in nodes.iter().enumerate() {
-        if n.row_or_column.is_none() { continue; }
+    for i in flagged {
+        let n = &nodes[i];
         restore_row(taffy, nodes, i);
-        let nested = std::iter::successors(n.parent, |&p| nodes[p].parent).any(|p| nodes[p].row_or_column.is_some());
+        let nested = std::iter::successors(n.parent, |&p| nodes[p].parent).any(|p| matches!(nodes[p].refit.as_deref(), Some(Refit::RowOrColumn(_))));
         debug_assert!(!nested, "a row_or_column element inside another lays out as a row: {}", n.path);
         if nested { continue; }
         rows.push((i, max_content_width(taffy, n.taffy, nodes, text, scale)));
@@ -321,7 +339,7 @@ fn lay_out(
 /// column.
 fn restore_row(taffy: &mut LayoutEngine, nodes: &[Node], i: usize) {
     let n = &nodes[i];
-    let Some(row) = n.row_or_column.as_deref() else { return };
+    let Some(Refit::RowOrColumn(row)) = n.refit.as_deref() else { return };
     if taffy.style(n.taffy) != row {
         taffy.set_style_and_mark_ancestors(
             n.taffy,

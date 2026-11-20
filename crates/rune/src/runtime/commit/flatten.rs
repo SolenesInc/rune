@@ -23,6 +23,15 @@ pub(super) fn fit_room(own: &CompactStyle, parent_row: bool) -> CompactStyle {
     })
 }
 
+/// What layout rewrites in a node's style once measured: its `aspect_fit`, or else the row
+/// style `style` that `row_or_column` starts from.
+fn refit(aspect_fit: Option<Box<(f32, CompactStyle)>>, row_or_column: bool, style: &CompactStyle) -> Option<Box<Refit>> {
+    match aspect_fit {
+        Some(fit) => Some(Box::new(Refit::Aspect(fit.0, fit.1))),
+        None => row_or_column.then(|| Box::new(Refit::RowOrColumn(style.clone()))),
+    }
+}
+
 /// The largest box at `ratio` inside `room`, as the fixed size an `aspect_fit` element lays
 /// out at once its room is known.
 pub(super) fn fitted(ratio: f32, own: &CompactStyle, room: Size<f32>) -> CompactStyle {
@@ -357,8 +366,7 @@ fn node_cold_needed(c: &NodeCold) -> bool {
         || c.glide.is_some()
         || c.a11y != crate::el::A11y::default()
         || c.pixel_aspect.is_some()
-        || c.aspect_fit.is_some()
-        || c.row_or_column.is_some()
+        || c.refit.is_some()
         || c.material.is_some()
         || c.help.is_some()
         || c.help_cut
@@ -496,8 +504,8 @@ fn flatten_owned(
     let room_taken = scroll_room::room_taken_before(memo_ctx, id, cold.scroll_edges.room);
     scroll_room::pad_room(&mut style, cold.scroll_edges.room, room_taken, 1.0);
     let time_scale = cold.time_scale;
-    let row_or_column = cold.row_or_column.then(|| Box::new(style.clone()));
-    let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
+    let refit = refit(aspect_fit, cold.row_or_column, &style);
+    let cold = if cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && refit.is_none() {
         crate::cold::Cold::default()
     } else {
         let c = cold.into_owned();
@@ -523,8 +531,7 @@ fn flatten_owned(
             glide: c.glide,
             a11y: c.a11y,
             pixel_aspect,
-            aspect_fit,
-            row_or_column,
+            refit,
             material: c.material,
             help: c.help,
             help_cut: c.help_cut,
@@ -704,8 +711,8 @@ fn flatten_ref(
     if room_taken != [false; 2] {
         scroll_room::pad_room(style.to_mut(), c.scroll_edges.room, room_taken, 1.0);
     }
-    let row_or_column = c.row_or_column.then(|| Box::new(style.clone().into_owned()));
-    let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && aspect_fit.is_none() {
+    let refit = refit(aspect_fit, c.row_or_column, &style);
+    let cold = if el.cold.is_empty() && trace_namespace.is_none() && pixel_aspect.is_none() && refit.is_none() {
         crate::cold::Cold::default()
     } else {
         pack_node_cold(NodeCold {
@@ -733,8 +740,7 @@ fn flatten_ref(
             glide: c.glide,
             a11y: c.a11y.clone(),
             pixel_aspect,
-            aspect_fit,
-            row_or_column,
+            refit,
             material: c.material,
             help: c.help.clone(),
             help_cut: c.help_cut,

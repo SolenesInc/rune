@@ -62,7 +62,8 @@ use rune_kit::{Badge, Button, ButtonVariant, Card, Kit, Markdown, MarkdownStyle,
 static ALLOC: probe::Probe = probe::Probe;
 
 const CASES: &[&str] = &["stack", "stack-same", "list", "edit", "md-resize", "md-resize-live", "md-same", "md-open", "md-virtual", "md-beside", "tree", "vlist-resize", "vlist-resize-live", "memo-chat",
-    "md-stream", "md-stream-para", "md-stream-fence", "md-stream-colon", "md-stream-parse", "md-parse"];
+    "md-stream", "md-stream-para", "md-stream-fence", "md-stream-colon", "md-stream-parse", "md-parse",
+    "groups-at-threshold", "rows-at-threshold"];
 const METRICS: &[&str] = &["cpu_ms", "view_ms", "commit_ms", "layout_ms", "text_ms", "paint_ms", "apply_ms", "allocs", "alloc_bytes", "shaped", "rebroken", "nodes", "view_runs"];
 thread_local! {
     static VIEWS: Cell<usize> = const { Cell::new(0) };
@@ -145,6 +146,25 @@ fn scroller(content: El) -> El {
     col().w_full().h_full().fill(BG).child(
         col().key("viewport").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).child(content),
     )
+}
+
+// groups-at-threshold, rows-at-threshold
+
+const GROUP_ROWS: usize = 20;
+const GROUP_NAMES: [&str; 3] = ["Claude", "Codex", "Engineering observability staging review agent"];
+
+/// Twenty settings rows, each a choice of three options, as `row_or_column` groups or as plain
+/// rows: the cost of deciding row or column against laying the same rows out.
+fn groups_view(flagged: &bool, _: &mut Cx<bool>) -> El {
+    view_ran();
+    col().w_full().px(24.0).py(24.0).gap(12.0).items_start().children((0..GROUP_ROWS).map(|r| {
+        let group = row().key(format!("g{r}")).shrink().min_w(0.0).max_w_frac(1.0).gap(2.0).padding(2.0)
+            .children(GROUP_NAMES.iter().enumerate().map(|(i, name)| {
+                row().key(format!("o{i}")).shrink().min_w(0.0).px(8.0).center()
+                    .child(text(*name).truncate().shrink().min_w(0.0))
+            }));
+        if *flagged { group.row_or_column() } else { group }
+    }))
 }
 
 // stack, stack-same
@@ -519,6 +539,18 @@ fn run(case: &str, tag: u32, kb: usize, file: Option<&str>, meta: &mut Vec<Strin
     let heap0 = probe::live_bytes();
     let src = file.map_or_else(|| note(kb * 1024), |f| std::fs::read_to_string(f).expect("--file FILE"));
     match case {
+        "groups-at-threshold" | "rows-at-threshold" => {
+            let flagged = case == "groups-at-threshold";
+            let mut rt = runtime(flagged, groups_view, (1200.0, 900.0));
+            let natural = rt.elements().iter().find(|e| e.key.as_deref() == Some("g0")).map_or(0.0, |e| e.rect[2]);
+            let threshold = natural + 48.0;
+            probe::snapshot(tag);
+            meta.push(census(&rt, case, heap0));
+            (0..300).map(|i| {
+                let w = if i % 2 == 0 { threshold - 1.0 } else { threshold + 1.0 };
+                timed(&mut rt, tag, |rt| rt.set_viewport((w, 900.0), 2.0))
+            }).collect()
+        }
         "stack" | "stack-same" => {
             let mut rt = runtime(stack_state(), stack_view, (900.0, 900.0));
             probe::snapshot(tag);
