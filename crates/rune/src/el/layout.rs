@@ -3,6 +3,10 @@
 
 use super::*;
 
+/// `flex-shrink` for [`El::shrink_first`]: a power of two, so it packs exactly, large enough
+/// that a sibling at 1 takes under a millionth of a shortfall while this one can still give.
+const FIRST_TO_SHRINK: f32 = (1u32 << 20) as f32;
+
 impl El {
     #[inline]
     pub fn w(mut self, w: f32) -> Self {
@@ -597,6 +601,15 @@ impl El {
     pub fn set_shrink(&mut self) -> &mut Self {
         self.style.set_flex_shrink(1.0);
         self.style.set_min_width(length(0.0));
+        self
+    }
+
+    /// Shrink along the parent's main axis before its siblings: a shortfall goes to this
+    /// element until it reaches its minimum size, and only then to siblings that shrink. They
+    /// give up less than a millionth of the shortfall meanwhile.
+    #[inline]
+    pub fn shrink_first(mut self) -> Self {
+        self.style.set_flex_shrink(FIRST_TO_SHRINK);
         self
     }
     /// Lay children out in `n` equal columns, each as wide as the widest child needs (CSS

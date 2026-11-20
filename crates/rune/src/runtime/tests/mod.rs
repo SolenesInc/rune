@@ -42,6 +42,7 @@ mod scroll_hover;
 mod scroll_retarget;
 mod scroll_spring;
 mod secure_text;
+mod shrink_first;
 mod selection_phase;
 mod selection_phase_virtual;
 mod shimmer;
