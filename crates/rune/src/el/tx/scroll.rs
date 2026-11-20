@@ -123,7 +123,9 @@ impl Tx {
     /// instead of jumping up with the content, and one that expands stays put as its rows open
     /// below it. Its top edge is what holds, measured where the last frame drew it, stuck shift
     /// included; the offset is clamped to the content, and a `stick_bottom` viewport that lands
-    /// on its end follows it again. Scroll compensation follows the drawn element while
+    /// on its end follows it again. It holds on the screen, also when the viewport's own top
+    /// moves, as when a band arrives above it; an element that showed where the viewport no
+    /// longer reaches lands at its new top. Scroll compensation follows the drawn element while
     /// layout and growth springs run; other rows keep animating. A scroll asked for in the
     /// same handler, or subsequent wheel input, wins.
     pub fn keep_on_screen(&mut self, key: impl Into<String>) {

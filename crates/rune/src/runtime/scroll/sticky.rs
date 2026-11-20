@@ -19,7 +19,11 @@ pub(super) const SHADOW_RAMP: f32 = 8.0;
 pub(super) struct Keep {
     pub path: String,
     pub viewport: String,
+    /// Where the element's top showed, from its viewport's top, when the keep began.
     pub was: f32,
+    /// Where the viewport's top showed on the screen then, for a keep that holds the element on
+    /// the screen; a scroll anchor or a fold's row holds it in its viewport instead.
+    pub on_screen: Option<f32>,
     /// When the element lives inside a virtual row: `(virtual_list_path, row_key, y_in_row)`.
     pub virtual_row: Option<(String, String, f32)>,
     /// The element, or the header it's in, was stuck to the top: it stays there for the commit.
@@ -429,12 +433,13 @@ impl RuntimeCore {
     /// Records where each `Tx::keep_on_screen` element showed on the last frame, before the
     /// commit moves it.
     pub(super) fn capture_keeps(&mut self, tx: &mut Tx) {
-        self.anchor_keeps(tx);
-        if tx.keep_on_screen.is_empty() { return; }
-        let keys = std::mem::take(&mut tx.keep_on_screen);
+        let anchored = self.anchor_rows();
+        if anchored.is_empty() && tx.keep_on_screen.is_empty() { return; }
+        let kept = std::mem::take(&mut tx.keep_on_screen);
         // The last frame's rects describe these nodes only until a commit replaces them.
         if !self.built || self.drawn.len() != self.nodes.len() { return; }
-        for key in keys {
+        let keys = anchored.into_iter().map(|key| (key, false)).chain(kept.into_iter().map(|key| (key, true)));
+        for (key, on_screen) in keys {
             let found = (0..self.nodes.len()).find(|&i| {
                 let n = &self.nodes[i];
                 n.named(&key) && !self.subtree_exiting(i)
@@ -459,6 +464,7 @@ impl RuntimeCore {
                 path: self.nodes[i].path.clone(),
                 viewport: self.nodes[s].path.clone(),
                 was: self.drawn[i][1] - self.drawn[s][1],
+                on_screen: on_screen.then(|| self.drawn[s][1]),
                 virtual_row,
                 hold,
             })));
@@ -603,7 +609,7 @@ impl RuntimeCore {
             let Some(s) = self.viewport_of(i).filter(|&s| self.nodes[s].path == k.viewport) else { continue };
             let scale = self.drawn_scale[s];
             if scale <= 1e-4 { continue; }
-            let delta = (self.drawn[i][1] - self.drawn[s][1] - k.was) / scale;
+            let delta = (self.drawn[i][1] - k.held_at(self.drawn[s][1])) / scale;
             if delta.abs() < 1.0 / 64.0 { continue; }
             let stick = self.nodes[s].scroll.is_some_and(|s| s.stick_bottom);
             let Some(st) = self.scrolls.get_mut(&self.nodes[s].id) else { continue };
@@ -726,5 +732,17 @@ impl RuntimeCore {
             .map(|j| self.drawn[j][1] + self.drawn[j][3] - view[1])
             .fold(0.0f32, f32::max);
         Some(f64::from(cover))
+    }
+}
+
+impl Keep {
+    /// Where the element's top holds while its viewport's top shows at `top`. On the screen, it
+    /// holds where it showed, or at `top` when the viewport now starts below that.
+    fn held_at(&self, top: f32) -> f32 {
+        match self.on_screen {
+            Some(viewport_was) if self.was >= 0.0 => (viewport_was + self.was).max(top),
+            Some(viewport_was) => viewport_was + self.was,
+            None => top + self.was,
+        }
     }
 }

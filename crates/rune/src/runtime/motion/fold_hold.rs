@@ -108,6 +108,7 @@ impl RuntimeCore {
                 path: below.path.clone(),
                 viewport: viewport.clone(),
                 was: self.drawn[i][1] - self.drawn[v][1],
+                on_screen: None,
                 virtual_row: None,
                 hold: None,
             })));

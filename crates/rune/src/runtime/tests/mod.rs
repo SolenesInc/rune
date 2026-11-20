@@ -12,6 +12,7 @@ mod fold_glide;
 mod glyph_replay;
 mod group_opacity;
 mod id_pruning;
+mod keep_on_screen;
 mod kept_paint;
 mod input_clipboard;
 mod layout_hover;

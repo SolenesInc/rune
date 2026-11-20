@@ -111,7 +111,7 @@ impl Old {
 }
 
 fn drive(requests: &mut Requests, input: Input) -> Placement {
-    let anchor = |v: &str, p: &str, header: Option<&str>| Keep { path: p.into(), viewport: v.into(), was: 7.0, virtual_row: None,
+    let anchor = |v: &str, p: &str, header: Option<&str>| Keep { path: p.into(), viewport: v.into(), was: 7.0, on_screen: None, virtual_row: None,
         hold: header.map(|h| Hold { path: h.into(), inset: 1.0 }) };
     let effects = match input {
         CaptureKey { viewport, virtualized, header } => requests.step(Event::Arrive(Request::Capture(Keep { virtual_row:

@@ -1,22 +1,21 @@
 //! `El::scroll_anchor`: a viewport keeps the row at the top of its view where it is when a
 //! commit changes the content above it, as CSS `overflow-anchor: auto` does. Each commit
-//! holds that row with the same `Keep` a `Tx::keep_on_screen` makes, so it follows growth and
-//! layout springs too; a commit that changes nothing above the row moves nothing.
+//! holds that row with the `Keep` a `Tx::keep_on_screen` makes, so it follows growth and
+//! layout springs too, but in its viewport: a viewport whose own top moves takes the row with
+//! it. A commit that changes nothing above the row moves nothing.
 use super::*;
 
 impl RuntimeCore {
-    /// Before a commit: puts each anchored viewport's top row ahead of the app's own
+    /// Before a commit: each anchored viewport's top row, kept ahead of the app's own
     /// `Tx::keep_on_screen` keys, which win when they name a row in the same viewport.
-    pub(super) fn anchor_keeps(&self, tx: &mut Tx) {
-        if !self.built || self.drawn.len() != self.nodes.len() { return; }
-        let rows: Vec<String> = (0..self.nodes.len())
+    pub(super) fn anchor_rows(&self) -> Vec<String> {
+        if !self.built || self.drawn.len() != self.nodes.len() { return Vec::new(); }
+        (0..self.nodes.len())
             .filter(|&s| self.nodes[s].scroll_edges.anchor && self.nodes[s].scroll_axes.y())
             .filter(|&s| self.anchor_holds(s))
             .filter_map(|s| self.anchor_row(s))
             .map(|i| self.nodes[i].path.clone())
-            .collect();
-        if rows.is_empty() { return; }
-        tx.keep_on_screen.splice(0..0, rows);
+            .collect()
     }
 
     /// Whether viewport `s` anchors now: scrolled off its top, not following its bottom, still
