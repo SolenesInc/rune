@@ -85,7 +85,7 @@ pub struct SurfaceRenderer {
     timing_pool: Option<Arc<TimingPool>>,
     queries: Option<Arc<TimingSlot>>,
     queries_used: std::sync::atomic::AtomicBool,
-    pub(super) completion: std::sync::mpsc::SyncSender<()>,
+    pub(super) completion: super::completion::Completion,
     pipeline: wgpu::RenderPipeline,
     format: wgpu::TextureFormat,
     extra: Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
@@ -171,25 +171,8 @@ impl SurfaceRenderer {
                 free: std::sync::Mutex::new((0..TIMING_SLOTS).map(|i| i * 2).collect()),
             })
         });
-        let (completion, receiver) = std::sync::mpsc::sync_channel(1);
         let poll_device = device.clone();
-        std::thread::Builder::new()
-            .name("rune-video-completion".into())
-            .spawn(move || {
-                // Nonblocking poll releases wgpu's snatch lock before sleeping. A fence wait here
-                // would keep that read lock and serialize queue.present's write lock behind GPU work.
-                // Wakeups are coalesced; the final frame still completes after the window goes idle.
-                while receiver.recv().is_ok() {
-                    loop {
-                        match poll_device.poll(wgpu::PollType::Poll) {
-                            Ok(wgpu::PollStatus::QueueEmpty) => break,
-                            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(1)),
-                            Err(_) => return,
-                        }
-                    }
-                }
-            })
-            .expect("video completion thread");
+        let completion = super::completion::Completion::spawn(move || poll_device.poll(wgpu::PollType::Poll));
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("video linear"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -604,7 +587,7 @@ impl SurfaceRenderer {
             let queries = queries.clone();
             let device = self.device.clone();
             let queue = queue.clone();
-            let completion = self.completion.clone();
+            let completion = self.completion.waker();
             // Metal counter resolves can race the render pass's final fragment sample when
             // encoded into the same command buffer. Resolve after its completion fence; this
             // is timestamp metadata only, never a readback or wait on the video pixel path.
@@ -650,7 +633,7 @@ impl SurfaceRenderer {
         }
         let index = queue.submit([encoder.finish()]);
         self.release_decoded(queue);
-        let _ = self.completion.try_send(());
+        self.completion.wake();
         index
     }
 

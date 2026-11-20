@@ -406,7 +406,8 @@ fn clipped_single_draw_fades_do_not_allocate_targets() {
             renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (64, 48));
             assert_eq!(renderer.layer_stats().targets, 0, "mode={mode} video={video}");
             let out = pixels(&gpu, &renderer, &target);
-            assert_eq!(out[(24 * 64 + 32) * 4 + 3], 128);
+            // Half of 255 is 127.5, which a GPU may round either way.
+            assert!((127..=128).contains(&out[(24 * 64 + 32) * 4 + 3]), "mode={mode} video={video}");
             assert_eq!(out[(24 * 64 + 4) * 4 + 3], 0);
             if mode == 1 { assert!(out[(24 * 64 + 8) * 4 + 3] < 32); }
             frames.push(out);

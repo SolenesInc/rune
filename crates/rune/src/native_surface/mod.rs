@@ -1,6 +1,7 @@
 //! Latest-wins video frames. macOS imports IOSurface-backed CoreVideo buffers without a copy.
 //! CPU byte frames provide a portable source and a reference for headless verification.
 
+mod completion;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod gpu_tests;

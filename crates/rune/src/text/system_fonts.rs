@@ -35,9 +35,17 @@ pub(super) const SYMBOL_FAMILIES: &[&str] = &["System Font", ".SF NS", "Apple Sy
 // SF italic rides along so `Family::Named("System Font").italic()` gets the real face.
 pub(super) const SYMBOL_FONT_FILES: &[&str] = &["sfnsttf", "sfnsitalic", "applesymbols", "sfnssymbols", "menlo", "applecoloremoji"];
 // DejaVu Sans lacks ⎋ (U+238B), which DejaVu Sans Mono has; `dejavusans` loads both files.
+// Noto's symbols font is "Noto Sans Symbols 2" since 2023; older releases, still in Debian and
+// Ubuntu, name it "Noto Sans Symbols2".
 #[cfg(not(target_vendor = "apple"))]
-pub(super) const SYMBOL_FAMILIES: &[&str] =
-    &["DejaVu Sans", "Noto Sans Symbols2", "Noto Sans Symbols", "DejaVu Sans Mono", "Noto Color Emoji"];
+pub(super) const SYMBOL_FAMILIES: &[&str] = &[
+    "DejaVu Sans",
+    "Noto Sans Symbols 2",
+    "Noto Sans Symbols2",
+    "Noto Sans Symbols",
+    "DejaVu Sans Mono",
+    "Noto Color Emoji",
+];
 #[cfg(not(target_vendor = "apple"))]
 pub(super) const SYMBOL_FONT_FILES: &[&str] = &["dejavusans", "notosanssymbols", "notocoloremoji"];
 
