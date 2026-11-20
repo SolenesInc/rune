@@ -162,14 +162,15 @@ impl El {
         self.cold_mut().focus.reveal = Reveal::Row(key.map(Into::into));
         self
     }
-    /// Shows this element on the frame it arrives in a scroll viewport that is already on
-    /// screen: the viewport moves just far enough to show it, then far enough to show the
-    /// focused control, with no motion, as [`Tx::scroll_into_view`] of each in turn. For a
-    /// refusal that appears below the fold while the button that caused it stays in view. It
-    /// runs once, on arrival: after that the viewport's scroll is the person's, and a change
-    /// that keeps the element mounted moves nothing. An element that mounts with what holds it,
-    /// such as a page that opens on an error far down, leaves the viewport where it opens, as
-    /// does one inside a virtual list, whose rows mount as they scroll in.
+    /// Shows this element on the frame it arrives in a scroll viewport that was already one on
+    /// the frame before: that viewport alone moves just far enough to show it, with no motion,
+    /// as [`Tx::scroll_into_view`] does, and then far enough to show the focused control when
+    /// that sits in the same viewport. No other viewport moves. For a refusal that appears below
+    /// the fold. It runs once, on arrival: after that the viewport's scroll is the person's, and
+    /// a change that keeps the element mounted moves nothing. An element that mounts with its
+    /// viewport, or as its container becomes one, such as a page that opens on an error far
+    /// down, leaves the viewport where it opens, as does one inside a virtual list, whose rows
+    /// mount as they scroll in.
     pub fn reveal_on_arrival(mut self) -> Self {
         self.cold_mut().focus.reveal_on_arrival = true;
         self

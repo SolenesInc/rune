@@ -397,7 +397,7 @@ impl RuntimeCore {
                     if mounted.is_empty() { mounted.resize(nodes.len(), false); }
                     mounted[i] = true;
                 }
-                if nodes[i].focus.reveal_on_arrival && nodes[i].parent.is_some_and(|p| !mounted.get(p).copied().unwrap_or(false)) {
+                if nodes[i].focus.reveal_on_arrival && !was_present {
                     self.note_arrival(&nodes, i);
                 }
                 let rides_row = row_like || (nodes[i].in_row == RowLayout::Horizontal && nodes[i].parent.is_some_and(|p| mounted.get(p).copied().unwrap_or(false)));
