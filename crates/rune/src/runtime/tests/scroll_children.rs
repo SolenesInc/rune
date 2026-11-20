@@ -231,7 +231,7 @@ fn scroll_x_with_multiple_children_unwraps_w_full_text_column() {
 
 
 #[test]
-fn scroll_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_end_from_above() {
+fn scroll_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_start_from_above() {
     // Short rows, one 500pt row in a 200pt viewport, and a varying tail after it.
     fn view(tail: &usize, _: &mut Cx<usize>) -> El {
         let n = 31 + *tail;
@@ -257,9 +257,15 @@ fn scroll_into_view_of_a_virtual_row_taller_than_the_viewport_lands_its_end_from
         }
         let r30 = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r30")).expect("r30 revealed");
         assert!(
-            (r30.rect[1] + r30.rect[3] - 200.0).abs() < 0.05,
-            "tail {tail}: moving down, the row's end lands at the viewport's bottom, not its top: {:?}",
+            r30.rect[1].abs() < 0.05 && r30.rect[3] > 200.0,
+            "tail {tail}: moving down, the row's start lands at the viewport's top, not its end at the bottom: {:?}",
             r30.rect
         );
+        for _ in 0..30 {
+            rt.update(|_, tx| tx.scroll_into_view("r30"));
+            rt.frame(1.0 / 120.0);
+        }
+        let again = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("r30")).unwrap();
+        assert_eq!(again.rect[1], r30.rect[1], "tail {tail}: revealing the row again leaves it where it fills the viewport");
     }
 }

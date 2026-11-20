@@ -18,13 +18,14 @@ fn partial(width: f32, strength: f32) -> (f32, f32) {
 }
 
 /// The scroll offset that shows `[top, top + height)` with `margin` to spare, moving as little
-/// as possible from `offset` (unclamped). A row taller than the viewport that already fills it
-/// stays put, so placing it again doesn't flip it from its end to its start.
+/// as possible from `offset` (unclamped). A row taller than the viewport shows from its start,
+/// from either side, so its heading is what the reader reaches; once it fills the viewport it
+/// stays put, so placing it again doesn't move it.
 pub(super) fn reveal(offset: f64, top: f64, height: f64, viewport: f64, margin: f64) -> f64 {
     let margin = margin.min(((viewport - height) / 2.0).max(0.0));
     let (start, end) = (top - margin, top + height + margin);
     if start <= offset && end >= offset + viewport { offset }
-    else if start < offset { start }
+    else if start < offset || end - start > viewport { start }
     else if end > offset + viewport { end - viewport }
     else { offset }
 }
@@ -143,8 +144,8 @@ mod tests {
         assert_eq!(reveal(100.0, 90.0, 20.0, 200.0, 24.0), 66.0, "and above");
         assert_eq!(reveal(100.0, 150.0, 20.0, 200.0, 24.0), 100.0, "already clear: no move");
         assert_eq!(reveal(100.0, 300.0, 180.0, 200.0, 24.0), 290.0, "a tall row splits what space is left");
-        assert_eq!(reveal(100.0, 300.0, 500.0, 200.0, 24.0), 600.0, "a row taller than the viewport, below: its end");
-        assert_eq!(reveal(600.0, 300.0, 500.0, 200.0, 24.0), 600.0, "and placing it again leaves it there");
+        assert_eq!(reveal(100.0, 300.0, 500.0, 200.0, 24.0), 300.0, "a row taller than the viewport, below: its start");
+        assert_eq!(reveal(300.0, 300.0, 500.0, 200.0, 24.0), 300.0, "and placing it again leaves it there");
         assert_eq!(reveal(400.0, 300.0, 500.0, 200.0, 24.0), 400.0, "a row filling the viewport: no move");
         assert_eq!(reveal(700.0, 300.0, 500.0, 200.0, 24.0), 300.0, "its end in view: its start");
     }
