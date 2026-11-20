@@ -69,6 +69,8 @@ pub(super) enum Action {
 pub(super) struct Queued {
     pub(super) action: Action,
     pub(super) at: Option<Instant>,
+    /// The person's acts as of the input that queued it (`Tx::inputs`).
+    pub(super) acts: u64,
 }
 
 /// The actions waiting for the next frame, in order, each with its input's arrival time.
@@ -77,7 +79,7 @@ pub(super) struct ActionQueue(Vec<Queued>);
 
 impl ActionQueue {
     /// Queues `action` stamped with the input being dispatched now, if any.
-    pub(super) fn push(&mut self, action: Action) { self.0.push(Queued { action, at: crate::input::time::current() }); }
+    pub(super) fn push(&mut self, action: Action) { self.0.push(Queued { action, at: crate::input::time::current(), acts: crate::input::acts::queued() }); }
     /// Queues an action again with its own stamp.
     pub(super) fn push_queued(&mut self, queued: Queued) { self.0.push(queued); }
     /// Puts `queued` ahead of everything queued.
@@ -200,6 +202,7 @@ pub(crate) fn merge(tx: &mut Tx, one: Tx) {
     tx.scroll_pages.extend(one.scroll_pages);
     tx.scroll_offsets.extend(one.scroll_offsets);
     tx.keep_on_screen.extend(one.keep_on_screen);
+    tx.keep_focus_on_screen |= one.keep_focus_on_screen;
     tx.evict_memos.extend(one.evict_memos);
     tx.wakes.extend(one.wakes);
     tx.text_flights.extend(one.text_flights);
@@ -242,7 +245,7 @@ pub(crate) fn merge(tx: &mut Tx, one: Tx) {
 /// runs at a time and hosts report ends in order, so each belongs to the oldest open drag: it
 /// runs before any later drag's start, and after its own start when both are queued.
 pub(super) fn order_drag_ends(queue: ActionQueue, ended: Vec<(String, crate::DragOutcome)>, open: &mut usize) -> ActionQueue {
-    let mut ended = ended.into_iter().map(|(path, outcome)| Queued { action: Action::DragEnd(path, outcome), at: None });
+    let mut ended = ended.into_iter().map(|(path, outcome)| Queued { action: Action::DragEnd(path, outcome), at: None, acts: crate::input::acts::queued() });
     let mut out = Vec::with_capacity(queue.len() + ended.len());
     for queued in queue {
         match &queued.action {

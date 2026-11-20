@@ -25,7 +25,7 @@ impl RuntimeCore {
 
     /// Capture a secondary gesture without activating primary actions or text selection.
     pub fn secondary_down(&mut self, x: f32, y: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Act);
         self.pointer = Some((x, y));
         self.release_hover_hold();
         self.focus.step(focus_machine::FocusEvent::Pointed);
@@ -66,7 +66,7 @@ impl RuntimeCore {
     }
 
     pub fn secondary_up(&mut self, x: f32, y: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Following);
         self.pointer = Some((x, y));
         let (path, down_link, left) = match std::mem::take(&mut self.secondary) {
             capture::Secondary::Held { path, link, left } => (Some(path), link, left),

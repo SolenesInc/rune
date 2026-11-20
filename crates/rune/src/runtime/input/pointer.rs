@@ -6,7 +6,7 @@ pub(super) const CLICK_SLOP: f32 = 4.0;
 
 impl RuntimeCore {
     pub fn pointer_move(&mut self, x: f32, y: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Following);
         self.move_pointer(x, y, true);
     }
 
@@ -226,7 +226,7 @@ impl RuntimeCore {
     }
 
     pub fn pointer_down(&mut self, x: f32, y: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Act);
         let other_button_held = self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary);
         self.press_down(x, y);
         if !other_button_held { self.queue_presses_within(x, y, crate::PointerButton::Primary); }
@@ -362,7 +362,7 @@ impl RuntimeCore {
     }
 
     pub fn pointer_up(&mut self, x: f32, y: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Following);
         if self.press.held().is_some_and(|h| h.button != crate::PointerButton::Primary) {
             self.pointer = Some((x, y));
             return;
@@ -541,7 +541,12 @@ impl RuntimeCore {
     /// negative deltaY). Applied 1:1: the platform supplies its own momentum phases. It scrolls the
     /// innermost viewport under the pointer with room to move that way.
     pub fn wheel(&mut self, x: f32, y: f32, dy: f32) {
-        self.heard_input();
+        self.heard_input(Heard::Act);
+        self.wheel_y(x, y, dy);
+    }
+
+    /// Scrolls the innermost vertical viewport under (x, y) with room to move by `dy`.
+    pub(crate) fn wheel_y(&mut self, x: f32, y: f32, dy: f32) {
         self.release_hover_hold();
         self.drop_scroll_holds();
         self.dismiss_help();

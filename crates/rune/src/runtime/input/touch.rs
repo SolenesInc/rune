@@ -67,7 +67,7 @@ impl RuntimeCore {
     /// One touch event at (x, y) in window points, `time` in seconds on any steady clock. A
     /// host with touches calls this for every one; `id` tells fingers apart.
     pub fn touch(&mut self, id: u64, phase: TouchPhase, x: f32, y: f32, time: f64) {
-        self.heard_input();
+        self.heard_input(Heard::Following);
         match phase {
             TouchPhase::Started => self.touch_down(id, x, y, time),
             TouchPhase::Moved => self.touch_move(id, x, y, time),

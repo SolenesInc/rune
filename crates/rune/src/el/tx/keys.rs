@@ -42,6 +42,14 @@ impl Tx {
     /// (`Runtime::key` and kin, headless scripts) outside [`input_arrived`](crate::input_arrived).
     pub fn input_time(&self) -> Option<crate::time::Instant> { self.input_time }
 
+    /// How many times the person has acted on this thread's windows (a key, a pointer or
+    /// secondary press, a touch, a wheel, committed input-method text) as of the input this
+    /// handler runs for, or as of now in handlers no input caused. An answer that lands later
+    /// compares it with the count its action read to tell whether the person did anything
+    /// since: a refusal shows them where they acted only if they did not. Pointer motion,
+    /// releases, a key's auto-repeat and a lone modifier don't count.
+    pub fn inputs(&self) -> u64 { self.inputs }
+
     /// The key of the element that had focus when the event arrived, `None` when nothing had:
     /// in a key handler, when the key arrived; in a press handler, after the press moved focus (a
     /// menu opened there remembers it to hand focus back). Timers, polls and updates read the focus
