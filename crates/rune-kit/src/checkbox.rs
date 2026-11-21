@@ -83,7 +83,7 @@ impl Checkbox {
             _ if on => (c.bg_accent, c.bg_accent),
             _ => (Color::TRANSPARENT, c.border_weak),
         };
-        let mark_color = if on && self.state != State::Disabled { c.knob_on } else { c.std_icon };
+        let mark_color = if self.state == State::Disabled { c.std_icon } else { c.knob_on };
         let mark = match self.glyph {
             Some(g) => icon(g, 14.0),
             None => icon(k.glyph.check, 10.0),
