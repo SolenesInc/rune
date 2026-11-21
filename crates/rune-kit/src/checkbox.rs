@@ -2,7 +2,7 @@
 
 use rune::{Color, El, Icon, Tx, col, el, icon, row, text};
 
-use crate::{Acts, Kit, State};
+use crate::{Acts, Kit, State, over};
 
 pub struct Checkbox {
     label: Option<String>,
@@ -71,13 +71,19 @@ impl Checkbox {
     pub fn build(self, k: &Kit) -> El {
         let c = &k.c;
         let on = self.checked || self.indeterminate;
+        // On fills with the accent as a checked Switch's track does, and keeps it under the pointer
+        // (the Switch's hover overlay); the mark is the Switch thumb's colour on accent. A disabled
+        // box stays on the disabled surface, with the usual mark.
+        let accent_hover = over(k.on(c.contrast_hover, c.bg_accent), c.bg_accent);
         let (fill, border) = match self.state {
             State::Disabled => (c.surface_disabled, c.border_disabled),
+            State::Hover if on => (accent_hover, accent_hover),
             State::Hover => (c.surface_hover, c.border_hover),
-            State::Focus => (if on { c.surface_weak } else { Color::TRANSPARENT }, c.border_active),
-            _ if on => (c.surface_weak, c.std_border),
+            State::Focus => (if on { c.bg_accent } else { Color::TRANSPARENT }, c.border_active),
+            _ if on => (c.bg_accent, c.bg_accent),
             _ => (Color::TRANSPARENT, c.border_weak),
         };
+        let mark_color = if on && self.state != State::Disabled { c.knob_on } else { c.std_icon };
         let mark = match self.glyph {
             Some(g) => icon(g, 14.0),
             None => icon(k.glyph.check, 10.0),
@@ -90,9 +96,9 @@ impl Checkbox {
             .fill(fill)
             .border(1.0, border)
             .token_motion(k.motion.control)
-            .child(mark.key("mark").color(c.std_icon).opacity(if on { 1.0 } else { 0.0 }));
+            .child(mark.key("mark").color(mark_color).opacity(if on { 1.0 } else { 0.0 }));
         if self.state == State::Rest {
-            control = control.hover(c.surface_hover);
+            control = control.hover(if on { k.on(c.contrast_hover, c.bg_accent) } else { c.surface_hover });
         }
         let disabled = self.state == State::Disabled;
         let mut root = row().role("checkbox").gap(12.0).center_y()

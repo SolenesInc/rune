@@ -251,7 +251,7 @@ fn task_lists_render_checkboxes_press_space_and_respect_read_only() {
     let marks: Vec<_> = rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("mark")).collect();
     assert_eq!((marks[0].opacity, marks[1].opacity), (0.0, 1.0));
     let controls: Vec<_> = rt.elements().into_iter().filter(|e| e.key.as_deref() == Some("control")).collect();
-    assert_eq!((controls[0].fill, controls[1].fill), (Color::TRANSPARENT, k.c.surface_weak));
+    assert_eq!((controls[0].fill, controls[1].fill), (Color::TRANSPARENT, k.c.bg_accent));
 
     let click = |rt: &mut Runtime<TaskDoc>, r: [f32; 4]| {
         let (x, y) = (r[0] + 12.0, r[1] + r[3] * 0.5);

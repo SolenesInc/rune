@@ -797,7 +797,7 @@ impl Renderer {
             .child(icon(t.check, t.size * 0.625).key("mark").color(t.mark).opacity(if checked { 1.0 } else { 0.0 }))
             .a11y_hidden();
         if interactive {
-            control = control.hover(t.hover);
+            control = control.hover(if checked { t.hover_on } else { t.hover });
         }
         let mut r = row()
             .key(format!("i{k}"))

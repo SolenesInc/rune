@@ -142,6 +142,8 @@ pub(super) struct TaskPaint {
     pub(super) border_off: Color,
     pub(super) fill_off: Color,
     pub(super) hover: Color,
+    /// The overlay a checked box takes under the pointer, so it keeps its fill.
+    pub(super) hover_on: Color,
     pub(super) focus_ring: Color,
     pub(super) mark: Color,
     pub(super) check: &'static Icon,
@@ -290,13 +292,14 @@ impl MarkdownStyle {
             highlight_current_fg: None,
             highlight_current_ring: Some((if k.dark { c.warning.icon } else { rune::oklch(0.66, 0.16, 70.0) }, 1.0)),
             task: TaskPaint {
-                fill_on: c.surface_weak,
-                border_on: c.std_border,
+                fill_on: c.bg_accent,
+                border_on: c.bg_accent,
                 border_off: c.border_weak,
                 fill_off: Color::TRANSPARENT,
                 hover: c.surface_hover,
+                hover_on: k.on(c.contrast_hover, c.bg_accent),
                 focus_ring: c.border_active,
-                mark: c.std_icon,
+                mark: c.knob_on,
                 check: k.glyph.check,
                 radius: k.radius.sm,
                 motion: k.motion.control,
@@ -480,12 +483,14 @@ impl MarkdownStyle {
         let t = &mut self.task;
         (t.size, t.radius, t.left, t.top) = (size.max(0.0), radius.max(0.0), left.max(0.0), top);
         (t.fill_on, t.border_on, t.mark, t.fill_off, t.border_off) = (fill_on, fill_on, mark, fill_off, border_off);
+        t.hover_on = t.hover;
         self
     }
     /// A checked task checkbox: its fill, outline and mark, for a box that stays a ring with a
     /// check in it rather than filling ([`Self::task_checkbox`] gives the outline the fill).
     pub fn task_checked(mut self, fill: Color, border: Color, mark: Color) -> Self {
         (self.task.fill_on, self.task.border_on, self.task.mark) = (fill, border, mark);
+        self.task.hover_on = self.task.hover;
         self
     }
     /// Task checkboxes' outline width (1 by default) and the room from the box to the item's
@@ -916,8 +921,8 @@ impl std::hash::Hash for MarkdownStyle {
             highlight_current_ring.map(|(c, w)| (c, f32_bits(w))),
         )
             .hash(state);
-        let TaskPaint { fill_on, border_on, border_off, fill_off, hover, focus_ring, mark, check, radius, motion, size, left, top, ring, gap, done } = task;
-        (fill_on, border_on, border_off, fill_off, hover, focus_ring, mark, check as *const Icon as usize, f32_bits(radius), f32_bits(motion.duration), f32_bits(motion.bounce)).hash(state);
+        let TaskPaint { fill_on, border_on, border_off, fill_off, hover, hover_on, focus_ring, mark, check, radius, motion, size, left, top, ring, gap, done } = task;
+        (fill_on, border_on, border_off, fill_off, hover, hover_on, focus_ring, mark, check as *const Icon as usize, f32_bits(radius), f32_bits(motion.duration), f32_bits(motion.bounce)).hash(state);
         (f32_bits(size), f32_bits(left), top.map(f32_bits), f32_bits(ring), gap.map(f32_bits), done).hash(state);
         let DiagramPaint {
             text,
