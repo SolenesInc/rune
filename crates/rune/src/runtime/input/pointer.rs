@@ -280,7 +280,7 @@ impl RuntimeCore {
             return;
         };
         let link = self.link_at(ti, x, y);
-        let on_link = link.is_some();
+        let on_link = link.is_some_and(|k| !self.link_drag_selects(ti, k));
         // Any press breaks a pending pair unless it's the second press of it.
         let pending = self.press.take_first();
         let now = self.now_clock();
@@ -301,7 +301,8 @@ impl RuntimeCore {
             return;
         }
         // Clicking a link leaves focus where it is (a composer keeps typing). Selectable text
-        // off its links isn't a control: the press blurs, as a click on plain content does.
+        // off its links, or on a link a drag selects through, isn't a control: the press blurs,
+        // as a click on plain content does.
         // Inside a control that owns its keyboard (`El::on_key`), a click on any part of it
         // focuses it, as a click on a table view's row focuses the table.
         // A control that keeps the focus on a press (`preserve_focus_on_press`, or any control

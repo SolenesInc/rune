@@ -4,8 +4,8 @@
 #![cfg(feature = "markdown")]
 
 use rune::runtime::ElementInfo;
-use rune::{Cursor, Cx, El, Env, Key, KeyEvent, Mods, Runtime, col, memo};
-use rune_kit::{Kit, Markdown};
+use rune::{Cursor, Cx, El, Env, Key, KeyEvent, Mods, Runtime, TextEdit, col, memo};
+use rune_kit::{Kit, Markdown, TextInput};
 
 #[derive(Default)]
 struct S { msgs: Vec<String>, selectable: bool, opened: Vec<String> }
@@ -48,9 +48,9 @@ fn glyphs(rt: &Runtime<S>, path_end: &str) -> Vec<(f32, f32)> {
     out
 }
 
-fn tick(rt: &mut Runtime<S>) { rt.frame(1.0 / 60.0); }
+fn tick<T: 'static>(rt: &mut Runtime<T>) { rt.frame(1.0 / 60.0); }
 
-fn drag(rt: &mut Runtime<S>, (x0, y0): (f32, f32), (x1, y1): (f32, f32)) {
+fn drag<T: 'static>(rt: &mut Runtime<T>, (x0, y0): (f32, f32), (x1, y1): (f32, f32)) {
     rt.pointer_move(x0, y0);
     rt.pointer_down(x0, y0);
     tick(rt);
@@ -65,7 +65,7 @@ fn drag(rt: &mut Runtime<S>, (x0, y0): (f32, f32), (x1, y1): (f32, f32)) {
 
 fn before(g: (f32, f32)) -> (f32, f32) { (g.0 - 3.0, g.1) }
 
-fn command(rt: &mut Runtime<S>, c: char) {
+fn command<T: 'static>(rt: &mut Runtime<T>, c: char) {
     rt.key(KeyEvent { key: Key::Command(c), mods: Mods { cmd: true, ..Mods::default() } });
     tick(rt);
 }
@@ -234,4 +234,63 @@ fn a_quote_with_paragraphs_a_list_and_code_copies_as_plain_text() {
     let one = glyphs(&rt, "m0/b1/#1/b2/i0/#1/b0");
     drag(&mut rt, before(one[1]), (two[2].0 + 3.0, two[2].1));
     assert_eq!(rt.selected_text().as_deref(), Some("ne\n- two"));
+}
+
+struct Noted { note: TextEdit, opened: Vec<String> }
+
+const NOTES: &str = "https://x.dev/n";
+
+fn noted(s: &Noted, _: &mut Cx<Noted>) -> El {
+    let k = Kit::neutral(true);
+    col().w_full().gap(24.0).padding(10.0)
+        .child(TextInput::new(&s.note).on_edit(|s: &mut Noted| &mut s.note).build(&k))
+        .child(Markdown::new(format!("Read [the notes]({NOTES}) first.")).selectable(true)
+            .on_link(|s: &mut Noted, url| s.opened.push(url.to_owned())).build(&k).key("md"))
+}
+
+/// Selectable markdown below a field that holds the keyboard.
+fn noted_runtime() -> Runtime<Noted> {
+    let mut rt = Runtime::new(Noted { note: TextEdit::new(""), opened: Vec::new() }, noted, (480.0, 400.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+    let field = rt.elements().into_iter().find(|e| e.role == "textbox").expect("the field").rect;
+    let at = (field[0] + field[2] / 2.0, field[1] + field[3] / 2.0);
+    rt.pointer_down(at.0, at.1);
+    rt.pointer_up(at.0, at.1);
+    tick(&mut rt);
+    assert!(rt.elements().into_iter().any(|e| e.focused && e.role == "textbox"), "the field holds the keyboard");
+    rt
+}
+
+fn rect(rt: &Runtime<Noted>, key: &str) -> [f32; 4] {
+    rt.elements().into_iter().find(|e| e.key.as_deref() == Some(key)).unwrap_or_else(|| panic!("{key}")).rect
+}
+
+/// A drag that starts on a link selects from it and opens nothing, and the press takes the
+/// keyboard from the field, so the copy chord copies the selection.
+#[test]
+fn a_drag_from_a_link_selects_and_copies_though_a_field_held_the_keyboard() {
+    let mut rt = noted_runtime();
+    let clipboard = rune::clipboard::memory();
+    rt.use_clipboard(&clipboard);
+    let (link, md) = (rect(&rt, NOTES), rect(&rt, "md"));
+    let y = link[1] + link[3] / 2.0;
+    drag(&mut rt, (link[0] + 1.0, y), (md[0] + md[2] - 1.0, y));
+    assert_eq!(rt.selected_text().as_deref(), Some("the notes first."));
+    assert!(rt.state().opened.is_empty(), "a drag opens nothing");
+    command(&mut rt, 'c');
+    assert_eq!(clipboard.text().as_deref().map(String::as_str), Some("the notes first."));
+}
+
+#[test]
+fn a_click_on_a_link_still_opens_it_though_a_field_held_the_keyboard() {
+    let mut rt = noted_runtime();
+    let link = rect(&rt, NOTES);
+    let at = (link[0] + link[2] / 2.0, link[1] + link[3] / 2.0);
+    rt.pointer_move(at.0, at.1);
+    tick(&mut rt);
+    rt.pointer_down(at.0, at.1);
+    rt.pointer_up(at.0, at.1);
+    tick(&mut rt);
+    assert_eq!(rt.state().opened, [NOTES]);
+    assert_eq!(rt.selected_text(), None);
 }

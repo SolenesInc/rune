@@ -172,7 +172,8 @@ impl Renderer {
     }
 
     /// The single place a link press is connected: each of `inl.links` becomes a pressable
-    /// span of `e` (the text element holding it) reporting its destination.
+    /// span of `e` (the text element holding it) reporting its destination. In selectable
+    /// markdown a drag that starts on a link selects, and a click opens it.
     pub(super) fn wire_link(&self, mut e: El, inl: &Inline) -> El {
         let inl = &*self.with_code_links(inl);
         if let Some(ring) = self.link_ring.as_ref().filter(|_| !inl.links.is_empty()) {
@@ -193,7 +194,11 @@ impl Renderer {
             Some(c) => LinkPaint::new().underline(c.alpha(0.4)),
             None => hover(url),
         };
-        let e = inl.links.iter().fold(e, |e, (a, b, url)| e.link(Link::new(*a..*b, url.clone()).hover(hover_at(*a, *b, url)).help(help(url))));
+        let link = |a: usize, b: usize, url: &str| {
+            let link = Link::new(a..b, url).hover(hover_at(a, b, url)).help(help(url));
+            if self.selectable { link.drag_selects() } else { link }
+        };
+        let e = inl.links.iter().fold(e, |e, (a, b, url)| e.link(link(*a, *b, url)));
         let e = match &self.on_link { Some(f) => f(e), None => e };
         match &self.on_link_secondary { Some(f) => f(e), None => e }
     }
