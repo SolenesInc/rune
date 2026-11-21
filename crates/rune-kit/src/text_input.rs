@@ -102,6 +102,9 @@ impl EditActs {
     pub(crate) fn blur<S: 'static>(&mut self, f: impl Fn(&mut S, &mut Tx) + 'static) {
         self.handlers.push(Box::new(move |e: El| e.on_blur(f)));
     }
+    pub(crate) fn paste<S: 'static>(&mut self, f: impl Fn(&mut S, &rune::ClipboardContent, &mut Tx) -> bool + 'static) {
+        self.handlers.push(Box::new(move |e: El| e.on_input_paste(f)));
+    }
     pub(crate) fn visual(&mut self, f: impl FnOnce(El) -> El + 'static) {
         self.visual.push(Box::new(f));
     }

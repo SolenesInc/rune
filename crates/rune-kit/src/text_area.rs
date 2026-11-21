@@ -227,6 +227,12 @@ impl TextArea {
         self.edits.blur(f);
         self
     }
+    /// Sees a paste into the field first, with everything the clipboard held
+    /// ([`El::on_input_paste`]): return true to take it, false to paste its plain text.
+    pub fn on_paste<S: 'static>(mut self, f: impl Fn(&mut S, &rune::ClipboardContent, &mut Tx) -> bool + 'static) -> Self {
+        self.edits.paste(f);
+        self
+    }
     rich_forwarders!();
 
     pub fn build(self, k: &Kit) -> El {
