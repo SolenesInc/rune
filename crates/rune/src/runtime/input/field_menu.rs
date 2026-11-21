@@ -69,7 +69,7 @@ impl RuntimeCore {
             .item(PopupItem::new("cut", label(Label::Cut)).enabled(selected))
             .item(PopupItem::new("copy", label(Label::Copy)).enabled(selected))
             .item(PopupItem::new("paste", label(Label::Paste)));
-        if !cfg!(target_os = "macos") {
+        if !crate::Platform::current().mac() {
             menu = menu.item(PopupItem::new("select-all", label(Label::SelectAll)));
         }
         if let Some((on, _)) = &toggle {
@@ -91,7 +91,7 @@ impl RuntimeCore {
         if self.focus.path() != Some(menu.path.as_str()) && self.live(&menu.path).is_some() {
             self.set_focus(Some(menu.path.clone()), false);
         }
-        let command = |c| KeyEvent { key: Key::Command(c), mods: Mods { cmd: true, ctrl: !cfg!(target_os = "macos"), ..Mods::default() } };
+        let command = |c| KeyEvent { key: Key::Command(c), mods: Mods { cmd: true, ctrl: !crate::Platform::current().mac(), ..Mods::default() } };
         match picked {
             "cut" | "copy" | "select-all" => {
                 let ev = command(match picked {

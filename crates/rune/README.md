@@ -294,7 +294,7 @@ Rune's core crate: views, layout, animation, rendering, text and the native shel
   ```rust
   let reopen = Chord::parse("mod+shift+t")?;          // ⇧⌘T on macOS, Ctrl+Shift+T elsewhere
   let next = Chord::parse("ctrl+tab")?;               // ⌃⇥ on macOS (a literal Control), Ctrl+Tab elsewhere
-  let home = Keybind::new("mod+b").on(KeyPlatform::Linux, "alt+home");
+  let home = Keybind::new("mod+b").on(Platform::Linux, "alt+home");
   if reopen.matches_tx(ev, tx) { /* … */ }
   reopen.label();                                     // "⇧⌘T" or "Ctrl+Shift+T"
   ```

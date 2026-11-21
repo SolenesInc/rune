@@ -19,7 +19,7 @@ use std::ops::Range;
 
 /// A secondary press outside the selection selects the word under it first: AppKit text does,
 /// Chromium on Windows and Linux doesn't.
-const SECONDARY_SELECTS_WORD: bool = cfg!(target_os = "macos");
+fn secondary_selects_word() -> bool { crate::Platform::current().mac() }
 
 #[path = "copy_join.rs"]
 mod copy_join;
@@ -703,7 +703,7 @@ impl RuntimeCore {
     pub(super) fn selection_menu(&mut self, path: &str, x: f32, y: f32) -> bool {
         let Some(i) = self.live(path) else { return false };
         if !self.is_selectable(i) || self.nodes[i].handlers.on_secondary_press.is_some() { return false; }
-        if SECONDARY_SELECTS_WORD
+        if secondary_selects_word()
             && let Some(at) = self.text_index_at(i, x, y)
             && range_in(&self.selection_ranges(), i).is_none_or(|(a, b)| at < a || at >= b)
         {

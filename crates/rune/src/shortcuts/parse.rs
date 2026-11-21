@@ -20,12 +20,12 @@ pub struct Shortcut {
 
 impl FromStr for Shortcut {
     type Err = ShortcutError;
-    fn from_str(input: &str) -> Result<Self, Self::Err> { Self::parse_on(input, crate::KeyPlatform::current()) }
+    fn from_str(input: &str) -> Result<Self, Self::Err> { Self::parse_on(input, crate::Platform::current()) }
 }
 
 impl Shortcut {
     /// `str::parse` with `mod` resolved for `platform`: super on macOS, ctrl elsewhere.
-    pub fn parse_on(input: &str, platform: crate::KeyPlatform) -> Result<Self, ShortcutError> {
+    pub fn parse_on(input: &str, platform: crate::Platform) -> Result<Self, ShortcutError> {
         let invalid = || ShortcutError::InvalidAccelerator(input.into());
         let mut mods = 0;
         // Names given, to refuse a repeat; "mod" is its own name, so "mod+ctrl" is ⌃⌘ on
@@ -39,7 +39,7 @@ impl Shortcut {
                 "alt" | "option" | "opt" => (ALT, ALT),
                 "shift" => (SHIFT, SHIFT),
                 "cmd" | "command" | "super" | "meta" | "logo" | "win" => (SUPER, SUPER),
-                "mod" | "primary" => (PRIMARY_NAME, if platform == crate::KeyPlatform::Mac { SUPER } else { CTRL }),
+                "mod" | "primary" => (PRIMARY_NAME, if platform == crate::Platform::Mac { SUPER } else { CTRL }),
                 _ => (0, 0),
             };
             if modifier != 0 {

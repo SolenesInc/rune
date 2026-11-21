@@ -59,7 +59,7 @@ impl RuntimeCore {
             | crate::edit::Key::Dead(_) => false,
             crate::edit::Key::Command(_) => match ev.edit_command() {
                 Some('a' | 'c' | 'x' | 'z') => true,
-                Some('y') => !cfg!(target_os = "macos"),
+                Some('y') => !crate::Platform::current().mac(),
                 Some('b' | 'i' | 'u') => self.focused_input().is_some_and(|i| i.edit.format_chord(ev).is_some()),
                 _ => false,
             },

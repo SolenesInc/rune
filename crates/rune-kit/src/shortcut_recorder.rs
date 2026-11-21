@@ -154,10 +154,10 @@ pub fn shortcut_error_message(error: &ShortcutError, shortcut: Option<&Shortcut>
         return if matches!(error, ShortcutError::InvalidAccelerator(_)) { "That key can't be part of a shortcut.".into() }
             else { "The shortcut couldn't be cleared.".into() };
     };
-    let chord = shortcut.keycaps().join(if rune::KeyPlatform::current() == rune::KeyPlatform::Mac { "" } else { "+" });
+    let chord = shortcut.keycaps().join(if rune::Platform::current() == rune::Platform::Mac { "" } else { "+" });
     match error {
         ShortcutError::InvalidAccelerator(_) if shortcut.require_modifier().is_err() =>
-            if rune::KeyPlatform::current() == rune::KeyPlatform::Mac { "Add ⌘, ⌃ or ⌥.".into() } else { "Add Ctrl, Alt or Super.".into() },
+            if rune::Platform::current() == rune::Platform::Mac { "Add ⌘, ⌃ or ⌥.".into() } else { "Add Ctrl, Alt or Super.".into() },
         ShortcutError::Conflict => format!("{chord} is already in use."),
         ShortcutError::Unsupported => "This desktop doesn't support global shortcuts.".into(),
         ShortcutError::PermissionDenied => format!("Permission to use {chord} was declined."),

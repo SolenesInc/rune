@@ -42,6 +42,7 @@ pub use language::set_language;
 mod line_break;
 mod ltr_units;
 pub use ltr_units::ltr_units;
+pub use system_fonts::without_system_fonts;
 mod paragraphs;
 mod span;
 mod system_fonts;

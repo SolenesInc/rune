@@ -124,7 +124,7 @@ impl RuntimeCore {
         if !self.fit.ask(height, self.viewport.1) { return; }
         let jump = first || tx.commit.snaps() || tx.relayout || self.reduced_motion;
         // Only a macOS window and headless runs move the frame on a spring.
-        if !jump && self.window_resting && (cfg!(target_os = "macos") || self.wall_start.is_none()) { self.fit.hold = FitHold::Asked; }
+        if !jump && self.window_resting && (crate::Platform::current().mac() || self.wall_start.is_none()) { self.fit.hold = FitHold::Asked; }
         let request = crate::window::frame::FrameRequest {
             size: Some((self.viewport.0, height)), animate: !jump,
             spring: (!jump).then(|| tx.motion.map_or(motion::DEFAULT, MotionSource::spring)), center: false,

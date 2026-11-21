@@ -150,20 +150,21 @@ impl RuntimeCore {
         self.titlebar.insets
     }
 
-    /// What a run without a window reports and draws for `App::titlebar` on this platform, as
+    /// What a run without a window reports and draws for `App::titlebar` on `Platform::current()`, as
     /// its window would at rest: `Cx::titlebar_inset` and `Cx::chrome_insets`. Returns the frame the headless traffic-light checks see.
     pub(crate) fn headless_chrome(&mut self, chrome: crate::Chrome, titlebar: Option<crate::Titlebar>, borderless: bool) -> crate::Chrome {
         let titlebar = titlebar.filter(|_| !borderless);
+        let mac = crate::Platform::current().mac();
         self.titlebar.headless = titlebar.map(|t| (chrome, t));
         let titlebar = titlebar.map(|t| self.titlebar.set.over(t));
         let chrome = match titlebar {
-            Some(t) if cfg!(target_os = "macos") => t.mac_chrome(chrome),
+            Some(t) if mac => t.mac_chrome(chrome),
             _ => chrome,
         };
         let inset = if borderless { 0.0 } else { chrome.titlebar_inset() };
         self.set_titlebar_inset(inset);
-        let height = titlebar.filter(|_| cfg!(target_os = "macos")).map_or(0.0, |t| t.height());
-        let leading = if cfg!(target_os = "macos") { inset } else { 0.0 };
+        let height = titlebar.filter(|_| mac).map_or(0.0, |t| t.height());
+        let leading = if mac { inset } else { 0.0 };
         self.set_chrome_insets(crate::ChromeInsets::new(leading, height));
         chrome
     }

@@ -186,7 +186,6 @@ pub use input::chord::Chord;
 pub use input::chord::ChordError;
 pub use input::chord::ChordKey;
 pub use input::chord::ChordMod;
-pub use input::chord::KeyPlatform;
 pub use input::chord::Keybind;
 pub use input::physical_input::PhysicalInput;
 pub use input::time::InputArrival;
@@ -229,6 +228,7 @@ pub use pixels::Pixels;
 pub use platform::accent::SystemAccent;
 pub use platform::accent::system_accent;
 pub use platform::app_icon::set_app_icon;
+pub use platform::current::Platform;
 #[cfg(target_vendor = "apple")]
 pub use platform::embed;
 #[cfg(target_os = "macos")]

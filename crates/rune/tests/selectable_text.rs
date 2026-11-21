@@ -151,7 +151,7 @@ fn copy_select_all_and_the_context_menu() {
 
     // A right-click outside the selection offers Copy. On macOS it selects the word there first,
     // as AppKit text does; elsewhere the selection stays, as in Chromium.
-    let selected = if cfg!(target_os = "macos") { "first" } else { CMD };
+    let selected = if rune::Platform::current() == rune::Platform::Mac { "first" } else { CMD };
     let p = glyphs(&rt, "para");
     rt.pointer_move(p[1].0, p[1].1);
     rt.secondary_down(p[1].0, p[1].1);

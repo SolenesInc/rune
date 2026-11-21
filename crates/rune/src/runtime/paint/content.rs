@@ -342,7 +342,7 @@ impl RuntimeCore {
                     let found = crate::spell::misspelled(&e.text);
                     // The word typing left the caret in waits unmarked until the pause ends (`spell::pause`).
                     let caret = if e.focused { crate::spell::pause::observe(&mut self.spell_watch, &n.path, &e.text, e.range(), self.clock) } else { None };
-                    let color = premul(SPELLING, o, srgb);
+                    let color = premul(spelling(), o, srgb);
                     for &(a, b) in found.iter().filter(|&&(a, b)| caret.is_none_or(|c| c < a || c > b)) {
                         let (da, db) = e.display_selection_range(a, b);
                         if db < shown_a || da > shown_b { continue; }
@@ -684,13 +684,13 @@ impl RuntimeCore {
 
 /// A misspelled word's marker: Chromium's red, on macOS a row of dots and elsewhere a wavy line.
 /// (Linear light: #FF3B30 on macOS, #FF0000 elsewhere.)
-const SPELLING: Color = if cfg!(target_os = "macos") { Color { r: 1.0, g: 0.0437, b: 0.0296, a: 1.0 } } else { Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 } };
+fn spelling() -> Color { if crate::Platform::current().mac() { Color { r: 1.0, g: 0.0437, b: 0.0296, a: 1.0 } } else { Color { r: 1.0, g: 0.0, b: 0.0, a: 1.0 } } }
 
 /// The spelling marker from device x `x0` to `x1`, its top at `y`, `k` device px a point: on
 /// macOS 3 pt dots every 4 pt, elsewhere Chromium's 1 pt line waving 2 pt down and back every 6 pt.
 #[allow(clippy::too_many_arguments)]
 fn push_spelling_marker(out: &mut Vec<Instance>, x0: f32, x1: f32, y: f32, k: f32, color: [f32; 4], clip: [f32; 4], fade: [f32; 4]) {
-    if cfg!(target_os = "macos") {
+    if crate::Platform::current().mac() {
         let (d, step) = (3.0 * k, 4.0 * k);
         let count = ((x1 - x0 - d) / step).floor().max(0.0) as usize + 1;
         let x = x0 + ((x1 - x0) - (count - 1) as f32 * step - d) / 2.0;

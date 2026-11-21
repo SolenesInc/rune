@@ -34,8 +34,8 @@ const SLOP: f32 = 4.0;
 const ROW: f32 = 24.0;
 const LEFT: f32 = 2.0;
 const RIGHT: f32 = 296.0;
-/// `SECONDARY_SELECTS_WORD`, transcribed.
-const MENU_SELECTS_WORD: bool = cfg!(target_os = "macos");
+/// `secondary_selects_word`, transcribed.
+fn menu_selects_word() -> bool { crate::Platform::current() == crate::Platform::Mac }
 
 /// The window's selectable texts, top to bottom: A, M and B in a selection group, C on its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -418,7 +418,7 @@ impl Dev {
     /// `selection_menu` on A's start.
     fn menu(&mut self, doc: &Doc) {
         let at = 0;
-        if MENU_SELECTS_WORD && self.ranges(doc).iter().find(|r| r.0 == T::A).is_none_or(|r| at < r.1 || at >= r.2) {
+        if menu_selects_word() && self.ranges(doc).iter().find(|r| r.0 == T::A).is_none_or(|r| at < r.1 || at >= r.2) {
             let content = doc.content(T::A);
             let (a, b) = unit_at(&content, at, U::Word);
             *self = Dev { path: Some(doc.path(T::A)), content, anchor: a, focus: b, far: None, between: Vec::new(), unit: U::Word,

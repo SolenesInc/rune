@@ -2,7 +2,8 @@
 //! keycaps per platform. One table per kind of name drives parsing, `Display` and labels.
 use std::fmt;
 
-use super::chord::{Chord, ChordKey, ChordMod, KeyPlatform};
+use super::chord::{Chord, ChordKey, ChordMod};
+use crate::Platform;
 use crate::Key;
 
 /// Each modifier's names, the canonical one first, and its keycap on macOS and elsewhere, in
@@ -66,17 +67,17 @@ pub(super) fn named(key: &Key) -> Option<ChordKey> {
 
 impl Chord {
     /// How the chord reads here: "⇧⌘T" on macOS, "Ctrl+Shift+T" on Linux.
-    pub fn label(&self) -> String { self.label_on(KeyPlatform::current()) }
+    pub fn label(&self) -> String { self.label_on(Platform::current()) }
 
     /// How the chord reads on `platform`: macOS glyphs run together in Apple's order
     /// (⌃⌥⇧⌘), elsewhere words join with "+" in Ctrl, Alt, Shift, Win (Super) order.
-    pub fn label_on(&self, platform: KeyPlatform) -> String {
-        self.keycaps_on(platform).join(if platform == KeyPlatform::Mac { "" } else { "+" })
+    pub fn label_on(&self, platform: Platform) -> String {
+        self.keycaps_on(platform).join(if platform == Platform::Mac { "" } else { "+" })
     }
 
     /// One label per key, modifiers first, for drawing each as a keycap.
-    pub fn keycaps_on(&self, platform: KeyPlatform) -> Vec<String> {
-        let mac = platform == KeyPlatform::Mac;
+    pub fn keycaps_on(&self, platform: Platform) -> Vec<String> {
+        let mac = platform == Platform::Mac;
         let mut caps: Vec<String> = self.mods_on(platform).into_iter().map(|m| {
             let &(_, _, glyph, word) = MODS.iter().find(|row| row.0 == m).expect("every modifier has a row");
             if mac { glyph } else { word }.to_owned()

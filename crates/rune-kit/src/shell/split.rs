@@ -41,7 +41,7 @@ pub struct SidebarToggle {
 }
 
 fn default_toggle_shortcut() -> &'static str {
-    if rune::KeyPlatform::current() == rune::KeyPlatform::Mac { "⇧⌘B" } else { "Ctrl+Shift+B" }
+    if rune::Platform::current() == rune::Platform::Mac { "⇧⌘B" } else { "Ctrl+Shift+B" }
 }
 
 impl SidebarToggle {

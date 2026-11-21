@@ -13,14 +13,47 @@ mod core_text;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
 mod fontconfig;
 #[cfg(target_vendor = "apple")]
-use core_text as platform;
+use core_text as host;
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]
-use fontconfig as platform;
+use fontconfig as host;
 /// Android and the web: no system fonts to ask.
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-mod platform {
+mod host {
     pub(super) fn family_files(_: &[&str]) -> Vec<std::path::PathBuf> { Vec::new() }
     pub(super) fn fallback_family_files(_: &[char], _: Option<&str>) -> Vec<std::path::PathBuf> { Vec::new() }
+}
+
+/// The installed fonts the platform names, or none in a process that
+/// [`without_system_fonts`] set.
+mod platform {
+    pub(super) fn family_files(names: &[&str]) -> Vec<std::path::PathBuf> {
+        if super::replacement_mono().is_some() { return Vec::new(); }
+        super::host::family_files(names)
+    }
+
+    pub(super) fn fallback_family_files(chars: &[char], locale: Option<&str>) -> Vec<std::path::PathBuf> {
+        if super::replacement_mono().is_some() { return Vec::new(); }
+        super::host::fallback_family_files(chars, locale)
+    }
+}
+
+static REPLACEMENT_MONO: std::sync::OnceLock<Option<&'static [u8]>> = std::sync::OnceLock::new();
+
+fn replacement_mono() -> Option<&'static [u8]> {
+    *REPLACEMENT_MONO.get_or_init(|| None)
+}
+
+/// Makes text in this process load no installed font: only the app's own fonts and `mono`, a
+/// font file that stands in for the system's monospace (`Family::SystemMono`, `ui-monospace`).
+/// So text measures the same on every machine, as a test suite needs. Call it before any text
+/// lays out; it panics when text already asked for the system's fonts, or when it was called
+/// with another font.
+pub fn without_system_fonts(mono: &'static [u8]) {
+    let set = *REPLACEMENT_MONO.get_or_init(|| Some(mono));
+    assert!(
+        set.is_some_and(|set| std::ptr::eq(set, mono)),
+        "without_system_fonts was called after text asked for the system's fonts, or with another font"
+    );
 }
 
 // Common-script symbols can inherit the script of adjacent letters. Put these families at
@@ -63,6 +96,13 @@ const SYSTEM_MONO_FILES: &[&str] = &["dejavusansmono", "liberationmono", "notosa
 
 /// The installed `Family::SystemMono` families, most preferred first, loading their files.
 pub(super) fn load_system_mono(collection: &mut Collection, loaded: &mut LoadedFiles) -> Vec<String> {
+    if let Some(mono) = replacement_mono() {
+        return collection
+            .register_fonts(Blob::new(Arc::new(mono)), None)
+            .into_iter()
+            .filter_map(|(id, _)| collection.family_name(id).map(str::to_owned))
+            .collect();
+    }
     let mut names: Vec<String> = Vec::new();
     // fontconfig's own `monospace`, asked in process.
     #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "android")))]

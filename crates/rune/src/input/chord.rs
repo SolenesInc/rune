@@ -6,54 +6,13 @@
 use std::{fmt, hash::{Hash, Hasher}, str::FromStr};
 
 use super::chord_label::{char_named, key_named_word, modifier_named, named};
-use crate::{Key, KeyEvent, Mods, PhysicalKeyCode};
+use crate::{Key, KeyEvent, Mods, PhysicalKeyCode, Platform};
 
 pub(super) const PRIMARY: u8 = 1;
 const CTRL: u8 = 2;
 const ALT: u8 = 4;
 pub(super) const SHIFT: u8 = 8;
 const SUPER: u8 = 16;
-
-/// The platform whose keyboard conventions a chord resolves and draws with.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum KeyPlatform {
-    /// ⌘ is the primary modifier; Control is a separate key. Glyph labels: "⇧⌘T".
-    Mac,
-    /// Ctrl is the primary modifier. Word labels, the logo key is "Super". The web uses this
-    /// in a browser that isn't on an Apple device.
-    Linux,
-}
-
-impl KeyPlatform {
-    /// The platform this build runs on, unless `RUNE_KEY_PLATFORM` names another (`mac` or
-    /// `linux`), so a test suite can run one platform's keymap on the other.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn current() -> Self {
-        static PLATFORM: std::sync::OnceLock<KeyPlatform> = std::sync::OnceLock::new();
-        *PLATFORM.get_or_init(|| match std::env::var("RUNE_KEY_PLATFORM").as_deref() {
-            Ok("mac") => Self::Mac,
-            Ok("linux") => Self::Linux,
-            Ok(other) => panic!("RUNE_KEY_PLATFORM is {other:?}; expected mac or linux"),
-            Err(_) if cfg!(any(target_os = "macos", target_os = "ios")) => Self::Mac,
-            Err(_) => Self::Linux,
-        })
-    }
-
-    /// The platform the browser runs on: `Mac` when `navigator.platform` names an Apple
-    /// device (as the browser's own shortcuts do), else `Linux`.
-    #[cfg(target_arch = "wasm32")]
-    pub fn current() -> Self {
-        static PLATFORM: std::sync::OnceLock<KeyPlatform> = std::sync::OnceLock::new();
-        *PLATFORM.get_or_init(|| {
-            let platform = js_sys::Reflect::get(&js_sys::global(), &"navigator".into())
-                .and_then(|navigator| js_sys::Reflect::get(&navigator, &"platform".into()))
-                .ok().and_then(|p| p.as_string()).unwrap_or_default();
-            if ["Mac", "iPod", "iPhone", "iPad"].iter().any(|apple| platform.contains(apple)) { Self::Mac } else { Self::Linux }
-        })
-    }
-
-    pub(crate) fn mac(self) -> bool { matches!(self, Self::Mac) }
-}
 
 /// One modifier as a chord names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -167,33 +126,33 @@ impl Chord {
     /// and the same key. Letters match either case. A shifted character also matches the key
     /// that types it unshifted on a US layout ('{' for "shift+["); use `matches_tx` in a key
     /// handler to follow the user's layout instead.
-    pub fn matches(&self, ev: &KeyEvent) -> bool { self.matches_on(ev, KeyPlatform::current()) }
+    pub fn matches(&self, ev: &KeyEvent) -> bool { self.matches_on(ev, Platform::current()) }
 
     /// `matches`, also comparing a character chord with `tx.key_base()`, the character the
     /// key types with no modifiers under the current layout (⌥B types "∫" on a Mac, ⇧[ types
     /// "{"), so the binding follows the layout as the menu bar's does. Where neither that
     /// character nor the typed one is ASCII (a Cyrillic or Greek layout, "ü" on German) an
     /// ASCII chord falls back to `tx.physical_key()`, the key in that place on a US layout.
-    pub fn matches_tx(&self, ev: &KeyEvent, tx: &crate::Tx) -> bool { self.matches_tx_on(ev, tx, KeyPlatform::current()) }
+    pub fn matches_tx(&self, ev: &KeyEvent, tx: &crate::Tx) -> bool { self.matches_tx_on(ev, tx, Platform::current()) }
 
     /// `matches`, resolving the chord with `platform`'s conventions: for tests, or an app that
     /// lets the user pick a keymap. `ev.mods` reads as this build reports them.
-    pub fn matches_on(&self, ev: &KeyEvent, platform: KeyPlatform) -> bool { self.matches_with(ev, None, None, platform) }
+    pub fn matches_on(&self, ev: &KeyEvent, platform: Platform) -> bool { self.matches_with(ev, None, None, platform) }
 
     /// `matches_tx` with `platform`'s conventions; see `matches_on`.
-    pub fn matches_tx_on(&self, ev: &KeyEvent, tx: &crate::Tx, platform: KeyPlatform) -> bool {
+    pub fn matches_tx_on(&self, ev: &KeyEvent, tx: &crate::Tx, platform: Platform) -> bool {
         self.matches_with(ev, tx.key_base(), tx.physical_key(), platform)
     }
 
     /// Whether `self` and `other` are the same keys on `platform`: "mod+b" and "ctrl+b" are
     /// on Linux, not on macOS. For conflict checks in a shortcut table or editor.
-    pub fn same_keys(&self, other: &Chord, platform: KeyPlatform) -> bool {
+    pub fn same_keys(&self, other: &Chord, platform: Platform) -> bool {
         self.key() == other.key() && fold(self.mods, platform) == fold(other.mods, platform)
     }
 
     /// The modifiers this chord needs on `platform`, in label order: ⌃⌥⇧⌘ on macOS, where
     /// `Super` folds into `Primary`; Ctrl, Alt, Shift, Super elsewhere, where `Ctrl` does.
-    pub fn mods_on(&self, platform: KeyPlatform) -> Vec<ChordMod> {
+    pub fn mods_on(&self, platform: Platform) -> Vec<ChordMod> {
         let bits = fold(self.mods, platform);
         let order = if platform.mac() {
             [ChordMod::Ctrl, ChordMod::Alt, ChordMod::Shift, ChordMod::Primary]
@@ -203,7 +162,7 @@ impl Chord {
         order.into_iter().filter(|m| bits & m.bit() != 0).collect()
     }
 
-    fn matches_with(&self, ev: &KeyEvent, base: Option<char>, physical: Option<PhysicalKeyCode>, platform: KeyPlatform) -> bool {
+    fn matches_with(&self, ev: &KeyEvent, base: Option<char>, physical: Option<PhysicalKeyCode>, platform: Platform) -> bool {
         let (want, held) = (fold(self.mods, platform), held(ev.mods, platform));
         let ChordKey::Char(c) = self.key() else { return want == held && named(&ev.key) == Some(self.key) };
         let Some(typed) = typed(&ev.key) else { return false };
@@ -266,12 +225,12 @@ impl FromStr for Chord {
 }
 
 /// A command's chords: any of several alternatives ("mod+t, mod+n"), with other chords on
-/// some platforms. `Keybind::new("mod+b").on(KeyPlatform::Linux, "alt+home")` is ⌘B on
+/// some platforms. `Keybind::new("mod+b").on(Platform::Linux, "alt+home")` is ⌘B on
 /// macOS and Alt+Home on Linux. "" and "none" bind nothing.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Keybind {
     chords: Vec<Chord>,
-    platforms: Vec<(KeyPlatform, Vec<Chord>)>,
+    platforms: Vec<(Platform, Vec<Chord>)>,
 }
 
 impl Keybind {
@@ -284,51 +243,51 @@ impl Keybind {
 
     /// These chords instead on `platform`. Panics if `spec` doesn't parse, as `new` does.
     #[track_caller]
-    pub fn on(self, platform: KeyPlatform, spec: &str) -> Self {
+    pub fn on(self, platform: Platform, spec: &str) -> Self {
         self.on_chords(platform, &parse_list(spec).unwrap_or_else(|e| panic!("{e}")))
     }
 
     /// `chords` instead on `platform`: `on` for chords built as data.
-    pub fn on_chords(mut self, platform: KeyPlatform, chords: &[Chord]) -> Self {
+    pub fn on_chords(mut self, platform: Platform, chords: &[Chord]) -> Self {
         self.platforms.retain(|(p, _)| *p != platform);
         self.platforms.push((platform, chords.to_vec()));
         self
     }
 
     /// The chords that apply on `platform`.
-    pub fn chords_on(&self, platform: KeyPlatform) -> &[Chord] {
+    pub fn chords_on(&self, platform: Platform) -> &[Chord] {
         self.platforms.iter().find(|(p, _)| *p == platform).map_or(&self.chords, |(_, c)| c)
     }
 
     /// The chords that apply here.
-    pub fn chords(&self) -> &[Chord] { self.chords_on(KeyPlatform::current()) }
+    pub fn chords(&self) -> &[Chord] { self.chords_on(Platform::current()) }
 
     /// Whether `ev` is any of this platform's chords; see `Chord::matches`.
-    pub fn matches(&self, ev: &KeyEvent) -> bool { self.matches_on(ev, KeyPlatform::current()) }
+    pub fn matches(&self, ev: &KeyEvent) -> bool { self.matches_on(ev, Platform::current()) }
 
     /// Whether `ev` is any of this platform's chords; see `Chord::matches_tx`.
-    pub fn matches_tx(&self, ev: &KeyEvent, tx: &crate::Tx) -> bool { self.matches_tx_on(ev, tx, KeyPlatform::current()) }
+    pub fn matches_tx(&self, ev: &KeyEvent, tx: &crate::Tx) -> bool { self.matches_tx_on(ev, tx, Platform::current()) }
 
     /// Whether `ev` is any of `platform`'s chords; see `Chord::matches_on`.
-    pub fn matches_on(&self, ev: &KeyEvent, platform: KeyPlatform) -> bool {
+    pub fn matches_on(&self, ev: &KeyEvent, platform: Platform) -> bool {
         self.chords_on(platform).iter().any(|c| c.matches_on(ev, platform))
     }
 
     /// Whether `ev` is any of `platform`'s chords; see `Chord::matches_tx_on`.
-    pub fn matches_tx_on(&self, ev: &KeyEvent, tx: &crate::Tx, platform: KeyPlatform) -> bool {
+    pub fn matches_tx_on(&self, ev: &KeyEvent, tx: &crate::Tx, platform: Platform) -> bool {
         self.chords_on(platform).iter().any(|c| c.matches_tx_on(ev, tx, platform))
     }
 
     /// The first chord's label here ("⇧⌘T", "Ctrl+Shift+T"), or "" when nothing is bound.
-    pub fn label(&self) -> String { self.label_on(KeyPlatform::current()) }
+    pub fn label(&self) -> String { self.label_on(Platform::current()) }
 
     /// The first chord's label on `platform`, or "" when nothing is bound there.
-    pub fn label_on(&self, platform: KeyPlatform) -> String {
+    pub fn label_on(&self, platform: Platform) -> String {
         self.chords_on(platform).first().map(|c| c.label_on(platform)).unwrap_or_default()
     }
 
     /// The string `parse` reads back as `platform`'s chords: "mod+t, mod+n", or "none".
-    pub fn spec_on(&self, platform: KeyPlatform) -> String {
+    pub fn spec_on(&self, platform: Platform) -> String {
         let chords = self.chords_on(platform);
         if chords.is_empty() { return "none".into(); }
         chords.iter().map(Chord::to_string).collect::<Vec<_>>().join(", ")
@@ -353,7 +312,7 @@ impl FromStr for Keybind {
 /// The chords that apply here, comma-separated (`spec_on` the current platform), so a
 /// settings file written here reads back as what this platform binds.
 impl fmt::Display for Keybind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.spec_on(KeyPlatform::current())) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.spec_on(Platform::current())) }
 }
 
 fn parse_list(spec: &str) -> Result<Vec<Chord>, ChordError> {
@@ -366,12 +325,12 @@ fn parse_list(spec: &str) -> Result<Vec<Chord>, ChordError> {
 /// `Key::Command`): ⌘ alone on macOS, Ctrl alone elsewhere. For the edit commands a text
 /// field takes (copy, paste, undo), which another modifier turns into an app's chord.
 pub(crate) fn primary_alone(m: Mods) -> bool {
-    matches!(held(m, KeyPlatform::current()) & !SHIFT, 0 | PRIMARY)
+    matches!(held(m, Platform::current()) & !SHIFT, 0 | PRIMARY)
 }
 
 /// `bits` with the modifiers that are one key on `platform` merged: Ctrl into the primary
 /// off macOS, the logo key into it on macOS.
-fn fold(bits: u8, platform: KeyPlatform) -> u8 {
+fn fold(bits: u8, platform: Platform) -> u8 {
     let same = if platform.mac() { SUPER } else { CTRL };
     if bits & same != 0 { bits & !same | PRIMARY } else { bits }
 }
@@ -379,11 +338,11 @@ fn fold(bits: u8, platform: KeyPlatform) -> u8 {
 /// The keys `m` says are held, as chord bits for `platform`. `cmd` repeats the key this build
 /// reports as primary: ⌘ (`logo`) on macOS, Ctrl elsewhere (iOS too), Ctrl or ⌘ on the web. A `Mods`
 /// with `cmd` and neither key (a script, a test) holds `platform`'s primary.
-fn held(m: Mods, platform: KeyPlatform) -> u8 {
+fn held(m: Mods, platform: Platform) -> u8 {
     let bare = m.cmd && !m.ctrl && !m.logo;
     let (ctrl, logo) = if bare || cfg!(target_arch = "wasm32") {
         (m.ctrl, m.logo)
-    } else if crate::KeyPlatform::current().mac() {
+    } else if crate::Platform::current().mac() {
         (m.ctrl, m.logo || m.cmd)
     } else {
         (m.ctrl || m.cmd, m.logo)

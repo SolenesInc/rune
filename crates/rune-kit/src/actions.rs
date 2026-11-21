@@ -177,7 +177,7 @@ enum Label {
 fn format_shortcut(s: &str) -> String {
     let s = s.trim();
     if let Ok(sc) = s.parse::<rune::Shortcut>() {
-        sc.menu_keycaps().join(if rune::KeyPlatform::current() == rune::KeyPlatform::Mac { "" } else { "+" })
+        sc.menu_keycaps().join(if rune::Platform::current() == rune::Platform::Mac { "" } else { "+" })
     } else {
         s.to_owned()
     }

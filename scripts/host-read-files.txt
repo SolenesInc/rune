@@ -1,0 +1,10 @@
+# Files under crates/rune/src/runtime and crates/rune/src/text that may ask the build's OS
+# (scripts/host-reads.sh). Each talks to the real OS or matches its text rasterizer; a run
+# without a window behaves the same on every host apart from them.
+crates/rune/src/runtime/scroll/x.rs
+crates/rune/src/text.rs
+crates/rune/src/text/coretext_match.rs
+crates/rune/src/text/fallback.rs
+crates/rune/src/text/pixel_compare.rs
+crates/rune/src/text/system_fonts.rs
+crates/rune/src/text/windfoil.rs

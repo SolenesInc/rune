@@ -5,7 +5,8 @@
 #   warn  > 1000 lines in a test file or inline test module   scripts/file-size-exceptions.txt ("<path> <ceiling>")
 # Also runs scripts/folder-shape.sh (prefix families and folder breadth); its errors and warnings are
 # added to the summary line, and --update-exceptions refreshes both exception lists. Then runs
-# scripts/state-free.sh (no impl over Runtime<S> outside the typed side); a failure is one error.
+# scripts/state-free.sh (no impl over Runtime<S> outside the typed side) and scripts/host-reads.sh
+# (no host read in runtime/ or text/ outside the OS files); a failure of either is one error.
 # Usage: scripts/file-size.sh [--warn-only] [--update-exceptions [--allow-raise]]
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -115,6 +116,7 @@ else
   printf '%s\n' "$shape_out"
 fi
 if [ "$update" -eq 0 ] && ! bash scripts/state-free.sh; then errors=$((errors + 1)); fi
+if [ "$update" -eq 0 ] && ! bash scripts/host-reads.sh; then errors=$((errors + 1)); fi
 echo "over $SOFT: $oversoft, over $HARD: $overhard, errors: $errors, warnings: $warns"
 
 if [ "$update" -eq 1 ]; then
