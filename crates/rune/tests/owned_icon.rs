@@ -74,3 +74,31 @@ fn a_colored_owned_icon_paints_as_an_image_when_svg_is_enabled() {
         "a colored owned icon must paint into the frame"
     );
 }
+
+#[test]
+fn a_monochrome_symbol_use_owned_icon_paints_through_svg_and_unrenderable_bodies_are_refused() {
+    let symbol_use = OwnedIcon::try_new(
+        "symbol-use",
+        24.0,
+        r##"<defs><symbol id="mark" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></symbol></defs><use href="#mark" fill="currentColor"/>"##,
+    )
+    .expect("valid currentColor symbol/use SVG must be accepted");
+    let mut rt = Runtime::new(
+        State {
+            logo: symbol_use,
+            tick: 0,
+        },
+        view,
+        (100.0, 100.0),
+        Env::new(true, 1.0),
+    );
+    rt.frame(0.0);
+    assert!(
+        !rt.instances.is_empty(),
+        "a monochrome symbol/use owned icon must paint into the frame"
+    );
+
+    assert!(OwnedIcon::try_new("empty", 24.0, "<g></g>").is_none());
+    assert!(OwnedIcon::try_new("broken", 24.0, "<path fill=\"#ff0000\" d=\"broken").is_none());
+    assert!(OwnedIcon::try_new("missing-ref", 24.0, r##"<use href="#nope" fill="currentColor"/>"##).is_none());
+}

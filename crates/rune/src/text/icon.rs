@@ -39,7 +39,7 @@ pub struct OwnedIcon(Arc<OwnedIconInner>);
 impl OwnedIcon {
     pub fn new(name: impl Into<String>, view: f32, body: impl Into<String>) -> Self {
         let body = body.into();
-        let kind = super::color_icon::kind_of(&body);
+        let kind = classify_owned(view, &body).unwrap_or_else(|| super::color_icon::kind_of(&body));
         Self(Arc::new(OwnedIconInner {
             id: NEXT_OWNED_ICON_ID.fetch_add(1, Ordering::Relaxed),
             name: name.into(),
@@ -49,11 +49,52 @@ impl OwnedIcon {
         }))
     }
 
+    pub fn try_new(name: impl Into<String>, view: f32, body: impl Into<String>) -> Option<Self> {
+        let body = body.into();
+        let kind = classify_owned(view, &body)?;
+        Some(Self(Arc::new(OwnedIconInner {
+            id: NEXT_OWNED_ICON_ID.fetch_add(1, Ordering::Relaxed),
+            name: name.into(),
+            view,
+            body,
+            kind,
+        })))
+    }
+
     pub fn name(&self) -> &str { &self.0.name }
     pub fn view(&self) -> f32 { self.0.view }
     pub fn body(&self) -> &str { &self.0.body }
     pub(crate) fn id(&self) -> u64 { self.0.id }
     pub(super) fn kind(&self) -> super::color_icon::Kind { self.0.kind }
+}
+
+fn classify_owned(view: f32, body: &str) -> Option<super::color_icon::Kind> {
+    if !view.is_finite() || view <= 0.0 || body.trim().is_empty() {
+        return None;
+    }
+    const PROBE_PX: u32 = 32;
+    let kind = super::color_icon::kind_of(body);
+    match kind {
+        super::color_icon::Kind::Mono => {
+            if coverage_at(view, body, PROBE_PX, PROBE_PX as f32).iter().any(|&c| c != 0) {
+                return Some(super::color_icon::Kind::Mono);
+            }
+            if super::color_icon::renders_svg(view, body, PROBE_PX, "#ffffff") {
+                return Some(if body.contains("currentColor") {
+                    super::color_icon::Kind::ColorAndCurrent
+                } else {
+                    super::color_icon::Kind::Color
+                });
+            }
+            None
+        }
+        super::color_icon::Kind::Color => {
+            super::color_icon::renders_svg(view, body, PROBE_PX, "").then_some(kind)
+        }
+        super::color_icon::Kind::ColorAndCurrent => {
+            super::color_icon::renders_svg(view, body, PROBE_PX, "#ffffff").then_some(kind)
+        }
+    }
 }
 
 impl PartialEq for OwnedIcon {

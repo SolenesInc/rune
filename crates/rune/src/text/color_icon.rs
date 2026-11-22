@@ -111,6 +111,24 @@ fn bytes_of(p: &Pixels) -> usize {
 }
 
 #[cfg(feature = "svg")]
+pub(super) fn renders_svg(view: f32, body: &str, px: u32, current: &str) -> bool {
+    if !view.is_finite() || view <= 0.0 || px == 0 {
+        return false;
+    }
+    let body = if current.is_empty() { body.to_owned() } else { body.replace("currentColor", current) };
+    let doc = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 {view} {view}">{body}</svg>"#
+    );
+    crate::image::svg_rgba(doc.as_bytes(), px)
+        .is_ok_and(|(_, _, rgba)| rgba.chunks_exact(4).any(|p| p[3] != 0))
+}
+
+#[cfg(not(feature = "svg"))]
+pub(super) fn renders_svg(_: f32, _: &str, _: u32, _: &str) -> bool {
+    false
+}
+
+#[cfg(feature = "svg")]
 fn rasterize(icon: &IconSource, px: u32, current: &str, one: Option<Color>) -> Option<Pixels> {
     let v = icon.view();
     if !v.is_finite() || v <= 0.0 || px == 0 {
