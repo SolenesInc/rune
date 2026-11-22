@@ -325,7 +325,7 @@ fn take_foreground(
             }
         }
     }
-    if !vis.icon_inked && vis.icon.is_some_and(|(_, c)| c != fg) && let Some((_, c)) = &mut vis.cold_mut().icon {
+    if !vis.icon_inked && vis.icon.as_ref().is_some_and(|(_, c)| *c != fg) && let Some((_, c)) = &mut vis.cold_mut().icon {
         *c = fg;
     }
 }

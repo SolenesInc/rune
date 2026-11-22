@@ -3,6 +3,9 @@
 //! inherit and whose `opacity` fades them as one; `transform` on groups and elements). What
 //! `defs`, `clipPath`, `mask` and the like hold doesn't paint.
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use swash::zeno::{Cap, Fill, Join, Mask, Stroke, Transform};
 
 use super::{Atlas, Rasterized, svg_path};
@@ -15,6 +18,126 @@ pub struct Icon {
     pub name: &'static str,
     pub view: f32,
     pub body: &'static str,
+}
+
+static NEXT_OWNED_ICON_ID: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug)]
+struct OwnedIconInner {
+    id: u64,
+    name: String,
+    view: f32,
+    body: String,
+    kind: super::color_icon::Kind,
+}
+
+/// A runtime-loaded SVG icon with owned name and body. Cheaply cloned via `Arc`; each constructed
+/// icon carries a unique cache identity so dropping and recreating one never collides in the atlas.
+#[derive(Clone, Debug)]
+pub struct OwnedIcon(Arc<OwnedIconInner>);
+
+impl OwnedIcon {
+    pub fn new(name: impl Into<String>, view: f32, body: impl Into<String>) -> Self {
+        let body = body.into();
+        let kind = super::color_icon::kind_of(&body);
+        Self(Arc::new(OwnedIconInner {
+            id: NEXT_OWNED_ICON_ID.fetch_add(1, Ordering::Relaxed),
+            name: name.into(),
+            view,
+            body,
+            kind,
+        }))
+    }
+
+    pub fn name(&self) -> &str { &self.0.name }
+    pub fn view(&self) -> f32 { self.0.view }
+    pub fn body(&self) -> &str { &self.0.body }
+    pub(crate) fn id(&self) -> u64 { self.0.id }
+    pub(super) fn kind(&self) -> super::color_icon::Kind { self.0.kind }
+}
+
+impl PartialEq for OwnedIcon {
+    fn eq(&self, other: &Self) -> bool { self.0.id == other.0.id }
+}
+
+impl Eq for OwnedIcon {}
+
+/// Either a compiled catalog [`Icon`] or a runtime-loaded [`OwnedIcon`].
+#[derive(Clone, Debug)]
+pub enum IconSource {
+    Static(&'static Icon),
+    Owned(OwnedIcon),
+}
+
+impl From<&'static Icon> for IconSource {
+    fn from(icon: &'static Icon) -> Self { Self::Static(icon) }
+}
+
+impl From<&&'static Icon> for IconSource {
+    fn from(icon: &&'static Icon) -> Self { Self::Static(*icon) }
+}
+
+impl From<OwnedIcon> for IconSource {
+    fn from(icon: OwnedIcon) -> Self { Self::Owned(icon) }
+}
+
+impl From<&OwnedIcon> for IconSource {
+    fn from(icon: &OwnedIcon) -> Self { Self::Owned(icon.clone()) }
+}
+
+impl PartialEq for IconSource {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Static(a), Self::Static(b)) => std::ptr::eq(*a, *b),
+            (Self::Owned(a), Self::Owned(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for IconSource {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum IconKey {
+    Static(usize),
+    Owned(u64),
+}
+
+impl IconSource {
+    pub(crate) fn resolved(&self) -> Self {
+        match self {
+            Self::Static(i) => Self::Static(swapped(i)),
+            Self::Owned(i) => Self::Owned(i.clone()),
+        }
+    }
+
+    pub(crate) fn key(&self) -> IconKey {
+        match self {
+            Self::Static(i) => IconKey::Static(*i as *const Icon as usize),
+            Self::Owned(i) => IconKey::Owned(i.id()),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Static(i) => i.name,
+            Self::Owned(i) => i.name(),
+        }
+    }
+
+    pub fn view(&self) -> f32 {
+        match self {
+            Self::Static(i) => i.view,
+            Self::Owned(i) => i.view(),
+        }
+    }
+
+    pub fn body(&self) -> &str {
+        match self {
+            Self::Static(i) => i.body,
+            Self::Owned(i) => i.body(),
+        }
+    }
 }
 
 /// What draws in place of each icon: an app's alternative icon set (`set_icon_swap`).
@@ -145,14 +268,14 @@ pub(crate) enum Facing {
 /// `icon` drawn `size` device pixels across (its viewBox's scale) on a `px` × `px` canvas,
 /// `px` the size rounded up, so an icon at a fractional size keeps its exact scale and its canvas
 /// lands 1:1 on the device grid, as Chromium paints an SVG at its scale from a snapped origin.
-pub(super) fn rasterize_icon(icon: &Icon, (px, size): (u32, f32), facing: Facing, atlas: &mut Atlas) -> Rasterized {
+pub(super) fn rasterize_icon(icon: &IconSource, (px, size): (u32, f32), facing: Facing, atlas: &mut Atlas) -> Rasterized {
     if px == 0 {
         return Rasterized::Empty;
     }
     if px + 4 > super::ATLAS_SIZE {
         return Rasterized::Unplaced;
     }
-    let mut cov = icon_coverage_at(icon, px, size);
+    let mut cov = coverage_at(icon.view(), icon.body(), px, size);
     if facing == Facing::Mirrored {
         cov.chunks_exact_mut(px as usize).for_each(<[u8]>::reverse);
     }
@@ -196,14 +319,21 @@ pub fn icon_coverage(icon: &Icon, px: u32) -> Vec<u8> {
 /// `icon`'s coverage drawn `size` device pixels across, from the top-left of a `px` × `px`
 /// canvas.
 pub fn icon_coverage_at(icon: &Icon, px: u32, size: f32) -> Vec<u8> {
-    let s = size / icon.view;
+    coverage_at(icon.view, icon.body, px, size)
+}
+
+fn coverage_at(view: f32, body: &str, px: u32, size: f32) -> Vec<u8> {
+    if !view.is_finite() || view <= 0.0 || px == 0 {
+        return vec![0u8; (px * px) as usize];
+    }
+    let s = size / view;
     let mut acc = vec![0u8; (px * px) as usize];
     // Each open group with an `opacity`: what it holds so far, and that opacity.
     let mut layers: Vec<(Vec<u8>, f32)> = Vec::new();
     let mut buf = vec![0u8; (px * px) as usize];
     let root = Scope { ctm: Transform::scale(s, s), paints: true, group: None, layer: false };
     let mut scopes: Vec<Scope> = Vec::new();
-    for raw in icon.body.split('>') {
+    for raw in body.split('>') {
         let el = raw.trim();
         if el.is_empty() || el.starts_with("<!") || el.starts_with("<?") {
             continue;

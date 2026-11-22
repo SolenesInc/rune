@@ -369,10 +369,10 @@ fn atlas_eviction_preserves_cached_empty_outlines() {
     let mut atlas = Atlas::new();
     let key = GlyphKey { font: 0, index: 0, glyph: 0, size: 0, coords: 0, subpx: 0, subpy: 0, dilation: 0, apple: 0, skew: 0 };
     atlas.map.insert(key, super::atlas_fill::Residency::Blank);
-    atlas.icons.insert((0, 0), None);
+    atlas.icons.insert((super::icon::IconKey::Static(0), 0), None);
     atlas.evict_page(0);
     assert!(atlas.map.contains_key(&key));
-    assert!(atlas.icons.contains_key(&(0, 0)));
+    assert!(atlas.icons.contains_key(&(super::icon::IconKey::Static(0), 0)));
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn four_hundred_scales_never_exhaust_the_atlas_or_poison_glyphs() {
     let mut text = TextSystem::default();
     // Unplaceable request must not poison the icon cache with `Some(None)`.
     assert!(text.icon_quad(&ICON, ATLAS_SIZE, [0.0, 0.0]).is_none());
-    assert!(!text.atlas.icons.contains_key(&(&ICON as *const Icon as usize, ATLAS_SIZE)));
+    assert!(!text.atlas.icons.contains_key(&(IconSource::Static(&ICON).key(), ATLAS_SIZE)));
 
     let sample = "The quick brown fox jumps over the lazy dog 0123456789";
     let mut quads = Vec::new();

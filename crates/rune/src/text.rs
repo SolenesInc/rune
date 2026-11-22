@@ -103,7 +103,7 @@ pub(crate) use layout_cache::Keep;
 pub(crate) use paragraphs::{ParagraphLayout, Piece, TextFlow, TextLayout};
 #[cfg(test)]
 use layout_cache::STALE_BYTES;
-pub use icon::{Icon, icon_coverage, set_icon_swap, set_icon_swap_size};
+pub use icon::{Icon, IconSource, OwnedIcon, icon_coverage, set_icon_swap, set_icon_swap_size};
 pub(crate) use icon::Facing;
 use icon::rasterize_icon;
 use rich_layout::mono_tab_stops;
@@ -876,23 +876,24 @@ impl TextSystem {
     }
 
     /// The atlas quad for `icon` at `px` device pixels square, top-left at `origin`.
-    pub fn icon_quad(&mut self, icon: &'static Icon, px: u32, origin: [f32; 2]) -> Option<GlyphQuad> {
-        self.icon_quad_facing(icon, px, origin, Facing::Upright)
+    pub fn icon_quad(&mut self, icon: impl Into<IconSource>, px: u32, origin: [f32; 2]) -> Option<GlyphQuad> {
+        let icon = icon.into();
+        self.icon_quad_facing(&icon, px, origin, Facing::Upright)
     }
 
     /// [`Self::icon_quad`], drawn facing `facing` (`El::mirror_in_rtl` mirrors it).
-    pub(crate) fn icon_quad_facing(&mut self, icon: &'static Icon, px: u32, origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
+    pub(crate) fn icon_quad_facing(&mut self, icon: &IconSource, px: u32, origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
         self.icon_quad_sized(icon, (px, px as f32), origin, facing)
     }
 
     /// [`Self::icon_quad_facing`] for an icon `size` device pixels across on a `px` canvas, `px`
     /// the size rounded up: the drawing keeps its exact scale where the size isn't whole.
-    pub(crate) fn icon_quad_sized(&mut self, icon: &'static Icon, (px, size): (u32, f32), origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
-        let icon = icon::swapped(icon);
+    pub(crate) fn icon_quad_sized(&mut self, icon: &IconSource, (px, size): (u32, f32), origin: [f32; 2], facing: Facing) -> Option<GlyphQuad> {
+        let icon = icon.resolved();
         // A mirrored drawing is cached apart, under the size's top bit; what the size falls short
         // of the canvas, in 64ths of a pixel, under the seven bits below it.
         let short = ((px as f32 - size) * 64.0).round().clamp(0.0, 63.0) as u32;
-        let key = (icon as *const Icon as usize, px | (short << 24) | (u32::from(facing == Facing::Mirrored) << 31));
+        let key = (icon.key(), px | (short << 24) | (u32::from(facing == Facing::Mirrored) << 31));
         let size = px as f32 - short as f32 / 64.0;
         let entry = match self.atlas.icons.get(&key) {
             Some(&e) => {
@@ -901,7 +902,7 @@ impl TextSystem {
                 }
                 e
             }
-            None => match rasterize_icon(icon, (px, size), facing, &mut self.atlas) {
+            None => match rasterize_icon(&icon, (px, size), facing, &mut self.atlas) {
                 Rasterized::Placed(g) => {
                     self.atlas.icons.insert(key, Some(g));
                     Some(g)

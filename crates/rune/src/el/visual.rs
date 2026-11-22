@@ -8,7 +8,7 @@ use crate::cold::{Cold, Empty};
 use crate::color::Color;
 use crate::el::{Outline, RadialGradient, Shadow};
 use crate::shape::Shape;
-use crate::text::Icon;
+use crate::text::IconSource;
 
 /// Rarely set visual extras shared behind `Cold<VisualCold>` so common boxes and text pay 8 bytes.
 #[doc(hidden)]
@@ -45,7 +45,7 @@ pub struct VisualCold {
     /// A round hole through this element and its subtree (`El::cutout_circle`): centre x and y
     /// from the element's top-left, and the radii it's clear within and whole from, in points.
     pub(crate) cutout: Option<[f32; 4]>,
-    pub icon: Option<(&'static Icon, Color)>,
+    pub icon: Option<(IconSource, Color)>,
     /// The icon's colour came from `El::color`; without it the icon takes the window's
     /// foreground (`Cx::foreground`) when the view sets one.
     pub(crate) icon_inked: bool,

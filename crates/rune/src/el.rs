@@ -10,7 +10,7 @@ use crate::edit::TextEdit;
 use crate::growth::{GROWTH, StreamEdge, edge};
 use crate::shape::Shape;
 use crate::states::{downcast, edit_fn};
-use crate::text::{Icon, Link, Span};
+use crate::text::{IconSource, Link, Span};
 use crate::tok::TextStyle;
 
 mod a11y;
@@ -327,10 +327,15 @@ pub fn rich(content: impl Into<String>, spans: Vec<Span>) -> El {
     e
 }
 
-/// An SVG icon from a catalog, `size` points square (or what [`crate::text::set_icon_swap_size`]
-/// gives a swapped icon), tinted with `.color()`.
-pub fn icon(i: &'static Icon, size: f32) -> El {
-    let size = crate::text::icon::swapped_size(i, size);
+/// An SVG icon from a catalog (`&'static Icon`) or loaded at runtime ([`crate::OwnedIcon`]),
+/// `size` points square (or what [`crate::text::set_icon_swap_size`] gives a swapped static icon),
+/// tinted with `.color()`.
+pub fn icon(i: impl Into<IconSource>, size: f32) -> El {
+    let i = i.into();
+    let size = match &i {
+        IconSource::Static(icon) => crate::text::icon::swapped_size(icon, size),
+        IconSource::Owned(_) => size,
+    };
     let mut e = base(FlexDirection::Row).size(size, size);
     e.role = RoleTag::ICON;
     e.vis.cold_mut().icon = Some((i, Color::WHITE));

@@ -323,7 +323,7 @@ impl RuntimeCore {
                             Property::Fill => { node.vis.fill = c; P_FILL }
                             Property::TextColor => {
                                 if let Some(spec) = &mut node.text { if spec.color != c { spec.color = c; } }
-                                else if node.vis.icon.is_some_and(|(_, ic)| ic != c) && let Some((_, ic)) = &mut node.vis.cold_mut().icon { *ic = c; }
+                                else if node.vis.icon.as_ref().is_some_and(|(_, ic)| *ic != c) && let Some((_, ic)) = &mut node.vis.cold_mut().icon { *ic = c; }
                                 P_TEXT
                             }
                             Property::Border => { node.vis.set_border_color(c); P_BORDER }

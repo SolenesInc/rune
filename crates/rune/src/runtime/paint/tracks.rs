@@ -55,7 +55,7 @@ pub(super) fn prev_node<'a>(old_nodes: &'a [Node], nodes: &'a [Node], old: Optio
 
 /// The colour a node's text or icon draws in.
 pub(super) fn text_color(n: &Node) -> Option<Color> {
-    n.text.as_ref().map(|t| t.color).or(n.vis.icon.map(|(_, c)| c))
+    n.text.as_ref().map(|t| t.color).or(n.vis.icon.as_ref().map(|(_, c)| *c))
 }
 
 /// Text or icon colour `c` as it paints while its hover group is `group` hovered (0 to 1):
@@ -104,7 +104,7 @@ impl LiveColors {
         if self.border { new.vis.set_border_color(old.vis.border()); }
         if self.text && let Some(c) = text_color(old) {
             if let Some(spec) = &mut new.text { if spec.color != c { spec.color = c; } }
-            else if new.vis.icon.is_some_and(|(_, ic)| ic != c) && let Some((_, ic)) = &mut new.vis.cold_mut().icon { *ic = c; }
+            else if new.vis.icon.as_ref().is_some_and(|(_, ic)| *ic != c) && let Some((_, ic)) = &mut new.vis.cold_mut().icon { *ic = c; }
         }
         if self.shadow && let Some(c) = old.vis.shadows.first().map(|s| s.color)
             && new.vis.shadows.first().is_some_and(|s| s.color != c)

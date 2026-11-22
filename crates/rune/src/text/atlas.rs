@@ -214,7 +214,7 @@ pub struct Atlas {
     pub(crate) lcd: bool,
     /// Per page, the entries whose GPU fill is queued (`atlas_fill.rs`).
     pub(super) fills: Vec<Vec<GlyphKey>>,
-    pub(super) icons: HashMap<(usize, u32), Option<AtlasGlyph>>,
+    pub(super) icons: HashMap<(super::icon::IconKey, u32), Option<AtlasGlyph>>,
     /// Glyph outlines drawn straight on the GPU, uploaded with the pages.
     pub(crate) outlines: super::outline::OutlineStore,
 }

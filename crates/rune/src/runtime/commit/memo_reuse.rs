@@ -205,7 +205,7 @@ fn same_visual_cold(a: &crate::el::VisualCold, b: &crate::el::VisualCold) -> boo
         && a.clip_radius == *clip_radius && a.clip_corners == *clip_corners && a.cutout == *cutout
         && match (&a.icon, icon) {
             (None, None) => true,
-            (Some((ia, ca)), Some((ib, cb))) => std::ptr::eq(*ia, *ib) && ca == cb,
+            (Some((ia, ca)), Some((ib, cb))) => ia == ib && ca == cb,
             _ => false,
         }
         && a.icon_inked == *icon_inked && a.icon_one_color == *icon_one_color

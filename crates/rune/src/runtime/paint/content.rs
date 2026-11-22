@@ -56,7 +56,7 @@ impl RuntimeCore {
         let k_px = sc * s;
         let link_fx = self.nodes[i].text.is_some().then(|| self.link_fx(i));
         let node_id = self.nodes[i].id;
-        let text_color = self.nodes[i].vis.icon.map(|(_, c)| c)
+        let text_color = self.nodes[i].vis.icon.as_ref().map(|(_, c)| *c)
             .or_else(|| self.nodes[i].text.as_ref().map(|sp| sp.color))
             .map(|c| self.color(node_id, P_TEXT, c));
         let n = &self.nodes[i];
@@ -117,7 +117,7 @@ impl RuntimeCore {
                 });
             }
         }
-        if let Some((ic, _)) = n.vis.icon {
+        if let Some((ic, _)) = &n.vis.icon {
             let color = text_tint(text_color.unwrap());
             let looped = if matches!(n.looping.as_ref().map(|l| l.kind), Some(rune_motion::LoopKind::Rotation)) { loop_value.unwrap_or(0.0) } else { 0.0 };
             let turn = looped + if self.scene.store().has(n.id, P_ICON_TURN) {
@@ -166,7 +166,7 @@ impl RuntimeCore {
             // An icon that paints its own colours draws as its image (or its silhouette in
             // `color`, `El::icon_one_color`), upright, faded only by the
             // element's opacity and its colour's alpha.
-            } else if drawn > 1e-4 && let Some(pixels) = self.text.color_icon(ic, px, color, n.vis.icon_one_color) {
+            } else if drawn > 1e-4 && let Some(pixels) = self.text.color_icon_source(ic, px, color, n.vis.icon_one_color) {
                 if let Some(image) = self.images.place(pixels, [drawn, drawn]) {
                     self.instances.push(Instance {
                         rect: [pos[0], pos[1], drawn, drawn],
