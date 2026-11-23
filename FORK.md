@@ -205,7 +205,7 @@ commit on `main` ends with `(cherry picked from commit <hash>)`. `scripts/rune-b
 |---|---|
 | `d80c872f` | macOS: a caret can ask for Option as the Alt key (ime_option_as_alt) (#837) |
 
-Last upstream commit reviewed: `78efd4a7` (2026-11-18). attn's `scripts/rune-upstream reviewed` moves this line.
+Last upstream commit reviewed: `fc40e384` (2026-11-23). attn's `scripts/rune-upstream reviewed` moves this line.
 
 ## Dropped
 
