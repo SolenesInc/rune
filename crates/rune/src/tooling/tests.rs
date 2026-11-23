@@ -1,4 +1,5 @@
 use super::*;
+use super::no_draw_tests::drawn_and_draw_free;
 use crate::time::Instant;
 
 #[test]
@@ -256,7 +257,7 @@ fn single_window_snapshots_honor_transparency_and_physical_size() {
         let app = crate::App::new(spec).window_options(options);
         let snap = dir.join(format!("{name}.png"));
         let args = Args { snap: Some(snap.clone()), scale: Some(2.0), size, ..Default::default() };
-        if legacy { headless_configured(app, args, false); } else { headless(app, args); }
+        if legacy { headless_configured(app, args, false).unwrap(); } else { headless(app, args); }
         (std::fs::read(&snap).unwrap(), image::open(snap).unwrap().into_rgba8())
     };
     let plain = render("plain", crate::WindowOptions::default(), None, false);
@@ -282,13 +283,13 @@ fn window_resizes_move_the_headless_viewport_on_the_virtual_clock() {
     let script = dir.join("script.json");
     std::fs::write(&script, r#"[{"t": 0.1, "type": "tap", "key": "grow"}]"#).unwrap();
     let viewport = |name: &str, instant: bool, at: &str| {
-        let spec = AppSpec::new("resize", (300.0, 400.0), || false, |_, _| crate::el().key("root").w_full().h_full()
+        let spec = || AppSpec::new("resize", (300.0, 400.0), || false, |_, _| crate::el().key("root").w_full().h_full()
             .child(crate::el().key("grow").size(50.0, 50.0).on_press_tx(|instant: &mut bool, tx| {
                 if *instant { tx.resize_window_instant((300.0, 600.0)) } else { tx.resize_window((300.0, 600.0)) }
             })));
         let tree = dir.join(format!("{name}.json"));
         let args = ["--script", script.to_str().unwrap(), "--scale", "1", "--fps", "60", "--at", at, "--tree", tree.to_str().unwrap()];
-        headless(crate::App::new(spec).init(move || instant), Args::parse_from(args.map(String::from).into()));
+        drawn_and_draw_free(&args, |args| headless(crate::App::new(spec()).init(move || instant), Args::parse_from(args)));
         let tree: Value = serde_json::from_str(&std::fs::read_to_string(tree).unwrap()).unwrap();
         let size = tree["viewport"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect::<Vec<_>>();
         (size[0], size[1])
@@ -314,10 +315,10 @@ fn a_scripted_resize_steps_the_viewport_with_the_hand() {
     let script = dir.join("script.json");
     std::fs::write(&script, r#"[{"t": 0.1, "type": "resize", "dw": -100, "dh": -40, "dur": 0.5}]"#).unwrap();
     let viewport = |at: &str| {
-        let spec = AppSpec::new("resize", (300.0, 400.0), || (), |_, _| crate::el().key("root").w_full().h_full());
+        let spec = || AppSpec::new("resize", (300.0, 400.0), || (), |_, _| crate::el().key("root").w_full().h_full());
         let tree = dir.join(format!("{at}.json"));
         let args = ["--script", script.to_str().unwrap(), "--scale", "1", "--fps", "60", "--at", at, "--tree", tree.to_str().unwrap()];
-        headless(crate::App::new(spec), Args::parse_from(args.map(String::from).into()));
+        drawn_and_draw_free(&args, |args| headless(crate::App::new(spec()), Args::parse_from(args)));
         let tree: Value = serde_json::from_str(&std::fs::read_to_string(tree).unwrap()).unwrap();
         let size = tree["viewport"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect::<Vec<_>>();
         (size[0], size[1])
@@ -337,12 +338,12 @@ fn fit_content_height_follows_the_content() {
     let script = dir.join("script.json");
     std::fs::write(&script, r#"[{"t": 0.1, "type": "tap", "key": "more"}]"#).unwrap();
     let viewport = |name: &str, at: &str| {
-        let spec = AppSpec::new("fit", (300.0, 400.0), || 1usize, |rows, _| crate::col().key("root").w_full()
+        let spec = || AppSpec::new("fit", (300.0, 400.0), || 1usize, |rows, _| crate::col().key("root").w_full()
             .child(crate::el().key("more").size(50.0, 50.0).on_press(|rows: &mut usize| *rows += 1))
             .children((0..*rows).map(|i| crate::el().key(format!("row{i}")).size(100.0, 40.0))));
         let tree = dir.join(format!("{name}.json"));
         let args = ["--script", script.to_str().unwrap(), "--scale", "2", "--fps", "60", "--at", at, "--tree", tree.to_str().unwrap()];
-        headless(crate::App::new(spec).fit_content_height(), Args::parse_from(args.map(String::from).into()));
+        drawn_and_draw_free(&args, |args| headless(crate::App::new(spec()).fit_content_height(), Args::parse_from(args)));
         let tree: Value = serde_json::from_str(&std::fs::read_to_string(tree).unwrap()).unwrap();
         let size = tree["viewport"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect::<Vec<_>>();
         (size[0], size[1])
@@ -388,10 +389,9 @@ fn apps_read_the_headless_run_from_init() {
         assert_eq!((run.size(), run.scale(), run.fps()), ((37.0, 23.0), 1.0, 30.0));
         run.events().len()
     }
-    let spec = AppSpec::new("run", (37.0, 23.0), init, |_, _| crate::el());
     let tree = dir.join("tree.json");
     let args = ["--script", script.to_str().unwrap(), "--scale", "1", "--fps", "30", "--tree", tree.to_str().unwrap()];
-    headless(crate::App::new(spec), Args::parse_from(args.map(String::from).into()));
+    drawn_and_draw_free(&args, |args| headless(crate::App::new(AppSpec::new("run", (37.0, 23.0), init, |_, _| crate::el())), Args::parse_from(args)));
     let run = headless_run().unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(run.script(), Some(script.as_path()));
@@ -530,19 +530,23 @@ fn pair(name: &'static str, color: crate::Color, other: Option<crate::AppHandle<
 }
 
 /// Runs `windows` over a grey 120x80-point backdrop at scale 2: the snap at `at`, and the run.
-fn desktop_case(name: &str, script: &str, at: f64, extra: &[&str], windows: impl FnOnce() -> Vec<crate::AnyWindowSpec> + 'static) -> (::image::RgbaImage, &'static HeadlessRun) {
+fn desktop_case(name: &str, script: &str, at: f64, extra: &[&str], windows: impl Fn() -> Vec<crate::AnyWindowSpec> + Clone + 'static) -> (::image::RgbaImage, &'static HeadlessRun) {
     let dir = std::env::temp_dir().join(format!("rune-desktop-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let backdrop = dir.join("backdrop.png");
     ::image::RgbaImage::from_pixel(240, 160, ::image::Rgba([128, 128, 128, 255])).save(&backdrop).unwrap();
     let (script_path, snap) = (dir.join("script.json"), dir.join("snap.png"));
     std::fs::write(&script_path, script).unwrap();
-    KEYED.lock().unwrap().clear();
     let at = at.to_string();
     let mut args = vec!["--desktop", backdrop.to_str().unwrap(), "--script", script_path.to_str().unwrap(),
         "--scale", "2", "--fps", "10", "--at", &at, "--snap", snap.to_str().unwrap()];
     args.extend_from_slice(extra);
-    crate::run_windows_with_args(crate::RunOptions::default(), args.into_iter().map(String::from).collect::<Vec<_>>(), move |_| windows());
+    let run = |args: Vec<String>| {
+        KEYED.lock().unwrap().clear();
+        let windows = windows.clone();
+        crate::run_windows_with_args(crate::RunOptions::default(), args, move |_| windows());
+    };
+    if extra.contains(&"--tree") { drawn_and_draw_free(&args, run) } else { run(args.into_iter().map(String::from).collect()) }
     let png = ::image::open(&snap).unwrap().into_rgba8();
     std::fs::remove_dir_all(&dir).unwrap();
     (png, headless_run().unwrap())
@@ -673,8 +677,7 @@ fn closer(name: &'static str, color: crate::Color, handles: bool, options: crate
 }
 
 /// Runs `windows` on a headless desktop with `script`, as `desktop_case` does.
-fn reopen_case(script: &str, accessory: bool, windows: impl FnOnce() -> Vec<crate::AnyWindowSpec> + 'static) -> &'static HeadlessRun {
-    REOPENED.lock().unwrap().clear();
+fn reopen_case(script: &str, accessory: bool, windows: impl Fn() -> Vec<crate::AnyWindowSpec> + Clone + 'static) -> &'static HeadlessRun {
     let dir = std::env::temp_dir().join(format!("rune-reopen-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let backdrop = dir.join("backdrop.png");
@@ -684,7 +687,11 @@ fn reopen_case(script: &str, accessory: bool, windows: impl FnOnce() -> Vec<crat
     let args = ["--desktop", backdrop.to_str().unwrap(), "--script", script_path.to_str().unwrap(),
         "--scale", "2", "--fps", "10", "--tree", tree.to_str().unwrap()];
     let options = crate::RunOptions { accessory, ..Default::default() };
-    crate::run_windows_with_args(options, args.map(String::from), move |_| windows());
+    drawn_and_draw_free(&args, |args| {
+        REOPENED.lock().unwrap().clear();
+        let windows = windows.clone();
+        crate::run_windows_with_args(options, args, move |_| windows());
+    });
     std::fs::remove_dir_all(&dir).unwrap();
     headless_run().unwrap()
 }
@@ -783,12 +790,12 @@ fn keycaps_draw_over_frames_but_never_enter_the_tree() {
     let script = dir.join("script.json");
     std::fs::write(&script, r#"[{"t": 0.1, "type": "type", "text": "hi"}, {"t": 0.3, "type": "tap", "x": 150, "y": 30}]"#).unwrap();
     let run = |name: &str, extra: &[&str]| {
-        let spec = AppSpec::new("keys", (200.0, 120.0), || (), |_, _| crate::el().key("root").w_full().h_full().fill(crate::oklch(0.9, 0.0, 0.0)));
+        let spec = || AppSpec::new("keys", (200.0, 120.0), || (), |_, _| crate::el().key("root").w_full().h_full().fill(crate::oklch(0.9, 0.0, 0.0)));
         let (snap, tree) = (dir.join(format!("{name}.png")), dir.join(format!("{name}.json")));
         let mut args = vec!["--script", script.to_str().unwrap(), "--scale", "1", "--at", "0.5",
             "--snap", snap.to_str().unwrap(), "--tree", tree.to_str().unwrap()];
         args.extend_from_slice(extra);
-        headless(crate::App::new(spec), Args::parse_from(args.into_iter().map(String::from).collect()));
+        drawn_and_draw_free(&args, |args| headless(crate::App::new(spec()), Args::parse_from(args)));
         (std::fs::read(snap).unwrap(), std::fs::read_to_string(tree).unwrap())
     };
     let plain = run("plain", &[]);
@@ -819,20 +826,21 @@ fn script_chords_only_fire_global_handlers_even_when_the_window_is_key() {
     let dir = std::env::temp_dir().join(format!("rune-chords-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("script.json");
-    SEEN.lock().unwrap().clear();
     std::fs::write(&path, r#"[{"focus": true}, {"t": 0.1, "type": "shortcut", "chord": "cmd+k"},
         {"t": 0.2, "type": "shortcut", "chord": "cmd+space"}, {"t": 0.3, "shortcut": "cmd+k"},
         {"t": 0.4, "focus": false}, {"t": 0.5, "type": "shortcut", "chord": "cmd+space"},
         {"t": 0.6, "type": "key", "name": "Escape"}]"#).unwrap();
-    let spec = AppSpec {
+    let app = || crate::App::new(AppSpec {
         on_key: Some(|_, ev, _| { SEEN.lock().unwrap().push(format!("on_key {:?}", ev.key)); true }),
         ..AppSpec::new("chords", (40.0, 30.0), || (), |_, _| crate::el())
-    };
-    let app = crate::App::new(spec)
+    })
         .global_shortcut("cmd+k", |_, _| SEEN.lock().unwrap().push("global cmd+k".into()))
         .global_shortcut("cmd+space", |_, _| SEEN.lock().unwrap().push("global cmd+space".into()));
     let tree = dir.join("tree.json");
-    headless(app, Args::parse_from(["--script", path.to_str().unwrap(), "--tree", tree.to_str().unwrap()].map(String::from).into()));
+    drawn_and_draw_free(&["--script", path.to_str().unwrap(), "--tree", tree.to_str().unwrap()], |args| {
+        SEEN.lock().unwrap().clear();
+        headless(app(), Args::parse_from(args));
+    });
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(*SEEN.lock().unwrap(), ["global cmd+k", "global cmd+space", "global cmd+k", "global cmd+space", "on_key Escape"]);
 }

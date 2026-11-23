@@ -414,7 +414,7 @@ impl AnyWindowSpec {
     pub(crate) fn resolve_args(&mut self, inherited: crate::tooling::Args) -> crate::tooling::Args { self.0.resolve_args(inherited) }
 
     /// Render this window headless; `scale` converts a physical size option to points.
-    pub(crate) fn headless(self, args: crate::tooling::Args, scale: f32) { self.0.headless(args, scale) }
+    pub(crate) fn headless(self, args: crate::tooling::Args, scale: f32) -> Result<(), String> { self.0.headless(args, scale) }
 
     /// This window as one member of a `--desktop` composite; `selected` takes `--scene`.
     pub(crate) fn desktop(self, args: &crate::tooling::Args, selected: bool, scale: f32) -> Box<dyn crate::desktop::Member> {
@@ -434,7 +434,7 @@ trait ErasedWindow {
     fn key(&self) -> &str;
     fn take_windows(&mut self) -> Vec<AnyWindowSpec>;
     fn resolve_args(&mut self, inherited: crate::tooling::Args) -> crate::tooling::Args;
-    fn headless(self: Box<Self>, args: crate::tooling::Args, scale: f32);
+    fn headless(self: Box<Self>, args: crate::tooling::Args, scale: f32) -> Result<(), String>;
     fn desktop(self: Box<Self>, args: &crate::tooling::Args, selected: bool, scale: f32) -> Box<dyn crate::desktop::Member>;
     fn start(self: Box<Self>, inherited: crate::tooling::Args, cx: crate::window::Start<'_>) -> Option<Box<dyn crate::window::AnyHost>>;
 }
@@ -449,12 +449,12 @@ impl<S: 'static> ErasedWindow for Erased<S> {
     fn key(&self) -> &str { &self.spec.key }
     fn take_windows(&mut self) -> Vec<AnyWindowSpec> { std::mem::take(&mut self.spec.app.windows) }
     fn resolve_args(&mut self, inherited: crate::tooling::Args) -> crate::tooling::Args { self.spec.app.resolve_args(inherited) }
-    fn headless(self: Box<Self>, args: crate::tooling::Args, scale: f32) {
+    fn headless(self: Box<Self>, args: crate::tooling::Args, scale: f32) -> Result<(), String> {
         let WindowSpec { mut app, options, .. } = self.spec;
         if let Some((w, h)) = options.physical_size { app.spec.size = (w as f32 / scale, h as f32 / scale); }
         let transparent = options.transparent;
         app.window_options = options;
-        crate::tooling::headless_configured(app, args, transparent);
+        crate::tooling::headless_configured(app, args, transparent)
     }
     fn desktop(self: Box<Self>, args: &crate::tooling::Args, selected: bool, scale: f32) -> Box<dyn crate::desktop::Member> {
         let Erased { spec, handle, secondary } = *self;

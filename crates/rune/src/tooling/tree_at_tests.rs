@@ -74,7 +74,8 @@ fn compare(dir: &std::path::Path, base: &[&str], moments: &[&str], run: &dyn Fn(
     }
     // `--tree` beside the requests keeps its own moment.
     once.extend(["--at".into(), moments[0].into(), "--tree".into(), dir.join("plain.json").display().to_string()]);
-    run(once);
+    // And a draw-free run writes the same trees.
+    super::no_draw_tests::drawn_and_draw_free(&once.iter().map(String::as_str).collect::<Vec<_>>(), |argv| run(argv));
     let mut written = Vec::new();
     for (i, at) in moments.iter().enumerate() {
         let separate = dir.join(format!("separate-{i}.json"));

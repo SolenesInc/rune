@@ -41,8 +41,7 @@ pub(crate) fn try_headless<S: 'static>(mut app: crate::app::App<S>, args: Args) 
             app.spec.size = (w as f32 / scale, h as f32 / scale);
         }
         let transparent = app.window_options.transparent;
-        headless_configured(app, args, transparent);
-        return Ok(());
+        return headless_configured(app, args, transparent);
     }
     let windows = std::mem::take(&mut app.windows);
     let displays = desktop(&args, read_script(&args).as_ref()).displays();
@@ -51,7 +50,7 @@ pub(crate) fn try_headless<S: 'static>(mut app: crate::app::App<S>, args: Args) 
     headless_window(std::iter::once(main.into()).chain(windows).collect(), &displays, args, crate::RunOptions { accessory })
 }
 
-pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args: Args, transparent: bool) {
+pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args: Args, transparent: bool) -> Result<(), String> {
     // RUNE_HEADLESS_WAIT=SECS holds the run before it starts, so a sampling profiler can attach.
     if let Some(secs) = std::env::var("RUNE_HEADLESS_WAIT").ok().and_then(|s| s.parse::<f64>().ok()) {
         std::thread::sleep(std::time::Duration::from_secs_f64(secs));
@@ -62,14 +61,16 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
         for (n, _) in app.spec.scenes {
             println!("{n}");
         }
-        return;
+        return Ok(());
     }
     #[cfg(feature = "hot")]
     if args.snap_on_patch.is_some() {
-        return crate::hot::snap_window(app, args);
+        crate::hot::snap_window(app, args);
+        return Ok(());
     }
     crate::tooling::interaction::gate::headless();
     let mut comp = app.compositor.take();
+    if args.no_draw && comp.is_some() { return Err(NO_DRAW_COMPOSITOR.into()); }
     let (srgb_blend, font_smoothing) = (app.srgb_blend, app.font_smoothing);
     let (on_focus, on_ime, on_mods) = (app.on_focus, app.on_ime, app.on_mods);
     let on_field_key = app.on_field_key;
@@ -346,38 +347,42 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
                 ui.set_format(&gpu.device, target_format);
             }
         }
-        if let Some(tool) = cpu_boot.borrow_mut().as_mut() { tool.frame(&mut rt, (wp, hp), k, (update_ms * 1e6) as u64, k == snap_frame); }
-        renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
-        renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (wp, hp));
-        let mut enc = gpu.device.create_command_encoder(&Default::default());
-        let view = alpha.as_ref().map_or(&target.view, |a| &a.view);
-        if let Some(c) = comp.as_mut() {
-            let mut f = Frame {
-                device: &gpu.device,
-                queue: &gpu.queue,
-                encoder: &mut enc,
-                target: view,
-                format: target_format,
-                size: (wp, hp),
-                dt: step,
-                update_ms,
-                rt: &mut rt,
-                ui: &mut renderer,
-            };
-            c.render(&mut f);
-            animating |= c.animating();
-        } else {
-            { let core: &mut crate::runtime::RuntimeCore = &mut rt; renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
-            renderer.draw(&mut enc, view, rt.clear_color());
-        }
-        if let Some((ov, ui)) = overlay.as_mut() {
-            let ort = ov.frame(real_t, step, rt.backdrop_dark().unwrap_or(dark));
-            if !ort.instances.is_empty() {
-                { let core: &mut crate::runtime::RuntimeCore = &mut **ort; ui.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
-                ui.draw_over(&mut enc, view);
+        // A draw-free run (`--no-draw`) builds each frame and encodes and submits none of it.
+        let enc = if args.no_draw { None } else {
+            if let Some(tool) = cpu_boot.borrow_mut().as_mut() { tool.frame(&mut rt, (wp, hp), k, (update_ms * 1e6) as u64, k == snap_frame); }
+            renderer.upload_images(&gpu.device, &gpu.queue, &mut rt.images);
+            renderer.prepare_surfaces(&gpu.device, &gpu.queue, &rt.surfaces, (wp, hp));
+            let mut enc = gpu.device.create_command_encoder(&Default::default());
+            let view = alpha.as_ref().map_or(&target.view, |a| &a.view);
+            if let Some(c) = comp.as_mut() {
+                let mut f = Frame {
+                    device: &gpu.device,
+                    queue: &gpu.queue,
+                    encoder: &mut enc,
+                    target: view,
+                    format: target_format,
+                    size: (wp, hp),
+                    dt: step,
+                    update_ms,
+                    rt: &mut rt,
+                    ui: &mut renderer,
+                };
+                c.render(&mut f);
+                animating |= c.animating();
+            } else {
+                { let core: &mut crate::runtime::RuntimeCore = &mut rt; renderer.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
+                renderer.draw(&mut enc, view, rt.clear_color());
             }
-        }
-        if let Some(alpha) = &alpha { alpha.draw(&mut enc, &target.view); }
+            if let Some((ov, ui)) = overlay.as_mut() {
+                let ort = ov.frame(real_t, step, rt.backdrop_dark().unwrap_or(dark));
+                if !ort.instances.is_empty() {
+                    { let core: &mut crate::runtime::RuntimeCore = &mut **ort; ui.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
+                    ui.draw_over(&mut enc, view);
+                }
+            }
+            if let Some(alpha) = &alpha { alpha.draw(&mut enc, &target.view); }
+            Some(enc)
+        };
         let in_range = k >= start_frame && k < start_frame + frames;
         let shot = Shot {
             k,
@@ -388,11 +393,13 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
         if shot.snap { snap_crop.set(crop::snap_rect(&rt, &args, scale, (wp, hp))); }
         let first_pixels = args.first_pixels && k == 0;
         let want_pixels = shot.dump || shot.video || shot.snap || first_pixels;
-        if want_pixels {
-            for (shot, px) in readback.make_room(&gpu.device) { deliver(shot, px); }
-            readback.copy(&mut enc, &target, shot);
+        if let Some(mut enc) = enc {
+            if want_pixels {
+                for (shot, px) in readback.make_room(&gpu.device) { deliver(shot, px); }
+                readback.copy(&mut enc, &target, shot);
+            }
+            renderer.submit(&gpu.queue, enc);
         }
-        renderer.submit(&gpu.queue, enc);
         reports.drawn(reports.stamp(), None, frame_start, update_ms);
         rt.interaction_presented(Instant::now(), None);
         if want_pixels { readback.submitted(); }
@@ -493,7 +500,11 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
     if let Some(s) = comp.as_mut().and_then(|c| c.summary(&gpu.device)) {
         eprintln!("{s}");
     }
+    Ok(())
 }
+
+/// Why a draw-free run refuses an app with a custom compositor.
+pub(crate) const NO_DRAW_COMPOSITOR: &str = "--no-draw: this app draws through a custom compositor (App::compositor), whose render can change the runtime and what the tree shows; drop --no-draw";
 
 /// Takes the size handlers asked for a headless window, inside the limits the app set; its
 /// viewport moves there on the virtual clock from `start`. Centring has nothing to centre on.

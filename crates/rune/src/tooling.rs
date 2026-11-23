@@ -262,8 +262,7 @@ fn headless_window(windows: Vec<crate::AnyWindowSpec>, displays: &[crate::Displa
     };
     if args.desktop.is_some() {
         crate::tooling::interaction::gate::headless();
-        crate::desktop::run(windows, index, args, options.accessory);
-        return Ok(());
+        return crate::desktop::run(windows, index, args, options.accessory);
     }
     let mut window = windows.remove(index);
     let args = window.resolve_args(args);
@@ -271,8 +270,7 @@ fn headless_window(windows: Vec<crate::AnyWindowSpec>, displays: &[crate::Displa
         return crate::window::run_windows(Box::new(move |_| vec![window]), args, options);
     }
     let scale = displays.iter().find(|d| d.primary).unwrap_or(&displays[0]).scale;
-    window.headless(args, scale as f32);
-    Ok(())
+    window.headless(args, scale as f32)
 }
 
 /// `run` with a compositor drawing every frame (see `compose`); `App::compositor` for other lifetimes.
@@ -513,6 +511,9 @@ pub(crate) mod record;
 pub(crate) mod virtual_desktop;
 #[cfg(test)]
 pub(crate) mod test_alloc;
+#[cfg(test)]
+#[path = "tooling/no_draw_tests.rs"]
+mod no_draw_tests;
 #[cfg(test)]
 #[path = "tooling/window_tests.rs"]
 mod window_tests;
