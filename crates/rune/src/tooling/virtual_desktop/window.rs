@@ -142,7 +142,7 @@ impl<S: 'static> Window<S> {
         rt.headless_chrome(chrome, titlebar, options.borderless);
         rt.transparent = options.transparent;
         rt.track_marks = comp.is_some();
-        if selected && args.tree.is_some() { rt.key_warnings = Some(Vec::new()); }
+        if selected && args.wants_tree() { rt.key_warnings = Some(Vec::new()); }
         let visible = options.visible && open;
         rt.set_live_visible(visible);
         shared.visible.store(visible, Ordering::Release);

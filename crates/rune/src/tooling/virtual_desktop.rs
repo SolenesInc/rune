@@ -341,7 +341,7 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
     let mut members: Vec<Box<dyn Member>> = windows.into_iter().enumerate()
         .map(|(i, w)| w.desktop(&args, i == selected, scale)).collect();
     for m in &mut members { m.start(&desktop); }
-    let Timeline { fps, dt, start_frame, frames, snap_frame, last_frame } = timeline;
+    let Timeline { fps, dt, start_frame, frames, snap_frame, last_frame, trees } = timeline;
     let mut trace = args.trace.as_ref().map(|p| {
         let f = members[selected].frame();
         members[selected].trace_on();
@@ -547,15 +547,14 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
         } else if want_pixels {
             for (shot, px) in readback.ready(&gpu.device) { deliver(shot, px); }
         }
-        if k == snap_frame && let Some(p) = &args.tree {
+        crate::tooling::write_trees(&trees, k, || {
             let mut tree = desk.members[selected].tree(real_t);
             tree["windows"] = (0..n).map(|i| {
                 let f = desk.snapshot(i, real_t);
                 json!({ "key": f.key, "frame": f.frame, "visible": f.visible, "focused": f.focused })
             }).collect();
-            let text = serde_json::to_string_pretty(&tree).unwrap();
-            std::fs::write(p, text).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
-        }
+            tree
+        });
     }
     for (shot, px) in readback.finish(&gpu.device) { deliver(shot, px); }
     drop(deliver);

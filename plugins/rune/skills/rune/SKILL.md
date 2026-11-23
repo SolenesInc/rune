@@ -45,6 +45,7 @@ $APP --snap out.png --theme light --scene NAME --size 900x600
 $APP --snap out.png --playground "Group/Story" --variant "Long names"
 $APP --script input.json --snap out.png --at mark:end # a state behind a click or a key
 $APP --tree tree.json                                 # every element's key, text, rect and colours
+$APP --script input.json --tree-at mark:a=a.json --tree-at mark:b=b.json  # a tree at each mark, one run
 ```
 
 A script is timed input: `[{"t": 0.1, "type": "tap", "key": "open-menu"}, {"t": 0.6, "type": "type", "text": "hi"}, {"t": 1.0, "type": "mark", "name": "end"}]`.
