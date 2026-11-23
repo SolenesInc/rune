@@ -2428,6 +2428,7 @@ $S --script examples/settings/scripts/demo.json --start 0.12 --frames 24 --every
    --strip strip.png --crop 370,74,214,36 --crop 530,305,60,30     # crops stacked per frame
 $S --tree tree.json [--at T]     # key, path, role, label, text, presented rect, target, opacity,
                                  # fill/text colour, hover/press, moving
+$S --script s.json --tree-at mark:open=open.json --tree-at 1.5=late.json  # several trees, one run
 $S --trace run.jsonl             # motion-trace JSONL (the app trace format); keyed elements only
 $S --native --trace run.jsonl --frames 240  # native submission timestamps, then close the traced window
 L=target/release/launcher        # every window of a multi-window app, composited over a backdrop
@@ -2435,6 +2436,13 @@ $L --desktop examples/launcher/backdrop.png --script examples/launcher/scripts/d
    --video desktop.mp4 --keys --pointer
 ```
 
+- **Several trees**: `--tree-at AT=PATH`, repeated, writes the tree at each moment from one play
+  of the script. AT takes what `--at` takes (seconds, `mark:NAME`, `mark:NAME+0.5`), and each file
+  is byte for byte the tree a separate `--at AT --tree PATH` run writes, over `--desktop` too.
+  `--at`, `--tree` and `--snap` keep their own moment beside it. A run with only `--tree-at` stops
+  at its latest request, which `--chrome` then reports at; dumped frames still run to their end.
+  Two trees to one path are refused, and an unknown mark fails before the first frame. One run
+  differs from separate runs only in `headless_run().end()`, which is the combined run's last frame.
 - **Scripts** are timestamped `move`, `down`, `up`, `tap` (`hold`), `double-click` (`hold`,
   `gap`, default 0.15 s between presses) and `drag` (`dx`, `dy`, `dur`) events, at `x,y` in points or at an element by `key` (or a path of keys such as `slider/knob`, where elements without keys
   between them don't count).

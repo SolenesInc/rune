@@ -520,3 +520,6 @@ mod window_tests;
 #[cfg(test)]
 #[path = "tooling/tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "tooling/tree_at_tests.rs"]
+mod tree_at_tests;

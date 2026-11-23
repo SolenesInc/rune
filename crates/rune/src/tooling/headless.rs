@@ -127,7 +127,7 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
         let height = crate::window::frame::clamp_size((size.0, rt.content_height()), limits.0, limits.1).1;
         rt.set_viewport((size.0, height), scale);
     }
-    if args.tree.is_some() { rt.key_warnings = Some(Vec::new()); }
+    if args.wants_tree() { rt.key_warnings = Some(Vec::new()); }
     rt.track_marks = comp.is_some();
     let runtime_ms = launched.elapsed().as_secs_f64() * 1000.0 - state_ms;
 
@@ -135,7 +135,7 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
     let opened = desktop.open_at(app_options.position, size);
     rt.set_window_origin((opened[0], opened[1]));
     let mut placed = None;
-    let Timeline { fps, dt, start_frame, frames, snap_frame, last_frame } = timeline;
+    let Timeline { fps, dt, start_frame, frames, snap_frame, last_frame, trees } = timeline;
     reports.set_refresh(Some(fps));
 
     let t0 = Instant::now();
@@ -437,14 +437,11 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
         {
             report_traffic_light_overlaps(&rt, &lights);
         }
-        if k == snap_frame
-            && let Some(p) = &args.tree
-        {
+        write_trees(&trees, k, || {
             let mut tree = tree_json(&rt, real_t);
             if let Some(placed) = &placed { tree["placed"] = placed.clone(); }
-            let text = serde_json::to_string_pretty(&tree).unwrap();
-            std::fs::write(p, text).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
-        }
+            tree
+        });
     }
     for (shot, px) in readback.finish(&gpu.device) { deliver(shot, px); }
     rt.interaction_flush();
@@ -519,8 +516,18 @@ fn step_window_frame<S>(rt: &mut Runtime<S>, anim: &mut Option<crate::window::fr
     if moving.done(now) { *anim = None; }
 }
 
+/// Writes the tree `build` makes to each path requested at frame `k`, building it once.
+pub(crate) fn write_trees(trees: &[(usize, std::path::PathBuf)], k: usize, build: impl FnOnce() -> Value) {
+    let mut paths = trees.iter().filter(|(frame, _)| *frame == k).map(|(_, p)| p).peekable();
+    if paths.peek().is_none() { return; }
+    let text = serde_json::to_string_pretty(&build()).unwrap();
+    for p in paths {
+        std::fs::write(p, &text).unwrap_or_else(|e| die(&format!("{}: {e}", p.display())));
+    }
+}
+
 /// Which frames a headless run renders and dumps.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Timeline {
     pub fps: f64,
     pub dt: f64,
@@ -529,6 +536,8 @@ pub(crate) struct Timeline {
     pub frames: usize,
     pub snap_frame: usize,
     pub last_frame: usize,
+    /// The trees to write, by frame: `--tree` at `snap_frame`, then each `--tree-at` in order.
+    pub trees: Vec<(usize, std::path::PathBuf)>,
 }
 
 impl Timeline {
@@ -568,16 +577,25 @@ impl Timeline {
             (Some(Length::Auto), _) | (None, true) => auto(),
             (None, false) => 0,
         });
+        let requested = args.tree_at.iter().map(|(at, path)| {
+            let t = match at { At::Seconds(t) => *t, At::Mark(spec) => resolve(spec)? };
+            Ok(((t * fps).round() as usize, path.clone()))
+        }).collect::<Result<Vec<_>, String>>()?;
+        // With only `--tree-at`, the run's default moment is its latest request.
+        let latest = requested.iter().map(|(frame, _)| *frame).max().filter(|_| args.snap.is_none() && args.tree.is_none());
         let snap_t = at.unwrap_or(if frames > 0 {
             (start_frame + frames - 1) as f64 * dt
+        } else if let Some(frame) = latest {
+            frame as f64 * dt
         } else if script.is_empty() {
             0.0
         } else {
             script_end + 1.0
         });
         let snap_frame = (snap_t * fps).round() as usize;
-        let last_frame = snap_frame.max(start_frame + frames.max(1) - 1);
-        Ok(Timeline { fps, dt, start_frame, frames, snap_frame, last_frame })
+        let trees: Vec<_> = args.tree.iter().map(|p| (snap_frame, p.clone())).chain(requested).collect();
+        let last_frame = trees.iter().map(|(frame, _)| *frame).fold(snap_frame.max(start_frame + frames.max(1) - 1), usize::max);
+        Ok(Timeline { fps, dt, start_frame, frames, snap_frame, last_frame, trees })
     }
 }
 

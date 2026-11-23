@@ -44,6 +44,8 @@ pub struct Args {
     /// `--at mark:NAME±S` and `--start mark:NAME±S`: a script mark's time plus an offset.
     pub(crate) at_mark: Option<String>,
     pub(crate) start_mark: Option<String>,
+    /// `--tree-at AT=PATH`, repeatable: the element tree at each moment, in one run.
+    pub(crate) tree_at: Vec<(At, PathBuf)>,
     /// `--keys [CORNER]`: keycaps for script keys and chords over dumped frames.
     pub(crate) keys: Option<crate::input::keycaps::Corner>,
     /// `--keys-theme light|dark`; None (`auto`) follows the app's theme.
@@ -84,6 +86,35 @@ pub(crate) enum Length {
     Seconds(f64),
     /// To the script's `end` mark, or one second after its last event.
     Auto,
+}
+
+/// A moment as `--at` takes it: seconds, or a script mark's expression (`NAME`, `NAME+0.5`),
+/// resolved once the script is loaded.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum At {
+    Seconds(f64),
+    Mark(String),
+}
+
+/// `--tree-at AT=PATH`: split at the first `=`, so a path may hold one and a mark name may not.
+pub(crate) fn parse_tree_at(v: &str) -> Result<(At, PathBuf), String> {
+    let bad = || format!("--tree-at is AT=PATH, AT seconds or mark:NAME as --at takes: {v}");
+    let (at, path) = v.split_once('=').filter(|(at, path)| !at.is_empty() && !path.is_empty()).ok_or_else(bad)?;
+    let at = match mark_time(at) {
+        Some(name) if !name.is_empty() => At::Mark(name),
+        Some(_) => return Err(bad()),
+        None => At::Seconds(at.trim().parse::<f64>().ok().filter(|t| t.is_finite() && *t >= 0.0).ok_or_else(bad)?),
+    };
+    Ok((at, path.into()))
+}
+
+/// Two trees written to one file would leave only the later one.
+pub(crate) fn check_tree_paths(a: &Args) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
+    for path in a.tree.iter().chain(a.tree_at.iter().map(|(_, p)| p)) {
+        if !seen.insert(path) { return Err(format!("two trees would write {}: give each --tree and --tree-at its own path", path.display())); }
+    }
+    Ok(())
 }
 
 /// Retain the whole expression until the script is loaded: a mark's name can end in `-1`.
@@ -175,6 +206,7 @@ impl Args {
                 "--pointer" => a.pointer = true,
                 "--desktop" => a.desktop = Some(val(&mut i).into()),
                 "--tree" => a.tree = Some(val(&mut i).into()),
+                "--tree-at" => a.tree_at.push(parse_tree_at(&val(&mut i)).unwrap_or_else(|e| die(&e))),
                 "--html" => a.html = Some(val(&mut i).into()),
                 "--html-template" => a.html_template = Some(val(&mut i).into()),
                 "--html-widths" => {
@@ -215,14 +247,20 @@ impl Args {
         if a.crop_key.is_some() && a.snap.is_none() { die("--crop KEY needs --snap"); }
         if a.whole_window && (a.playground.is_none() || a.snap.is_none()) { die("--whole-window needs --playground and --snap"); }
         if a.cpu_boot.is_some() && a.snap.is_none() { die("--cpu-boot needs --snap"); }
+        check_tree_paths(&a).unwrap_or_else(|e| die(&e));
         (a, extra)
+    }
+
+    /// Whether the run writes any element tree (`--tree` or `--tree-at`).
+    pub(crate) fn wants_tree(&self) -> bool {
+        self.tree.is_some() || !self.tree_at.is_empty()
     }
 
     pub fn headless(&self) -> bool {
         #[cfg(feature = "hot")]
         if self.snap_on_patch.is_some() { return true; }
         self.snap.is_some()
-            || self.tree.is_some()
+            || self.wants_tree()
             || self.html.is_some()
             || (!self.native
                 && (self.script.is_some() || self.trace.is_some() || self.frames.is_some() || self.duration.is_some() || self.out.is_some()))
@@ -284,6 +322,9 @@ const HELP: &str = "usage: <app> [window]
   --strip out.png --crop x,y,w,h --every K    tile dumped frames into one image
                         (repeat --crop to stack several regions per frame; --cols N per row)
   --tree out.json       element tree with animated values
+  --tree-at AT=out.json  also the tree at AT (seconds or mark:NAME, as --at takes); repeat it
+                        to write several moments from one run. With only --tree-at, the run
+                        stops at its latest request (and --chrome reports there)
   --html out.html       the page as static HTML and CSS, at rest, for a web app's first paint
                         (no GPU); --html-widths 360,640,1000 lays it out at each width and
                         folds them into @media rules; --html-template FILE fills
