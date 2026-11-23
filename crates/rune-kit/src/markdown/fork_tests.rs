@@ -696,7 +696,42 @@ fn a_prose_measure_centers_top_level_prose_at_the_measure_while_tables_code_and_
     };
     // Front matter, heading, paragraph, list, quote, table, code, rule and a picture 1200 wide.
     let prose = ((1600.0 - MEASURE) / 2.0, MEASURE);
+    let holds = ((1600.0 - MEASURE) / 2.0, (1600.0 + MEASURE) / 2.0);
     let column = (0.0, 1600.0);
-    assert_eq!(widths(1600.0), [column, prose, prose, prose, prose, column, column, column, (200.0, 1200.0)]);
+    assert_eq!(widths(1600.0), [column, prose, prose, holds, holds, column, column, column, (200.0, 1200.0)]);
     assert_eq!(widths(500.0), [(0.0, 500.0); 9]);
+}
+
+#[test]
+fn in_a_list_or_quote_held_to_a_prose_measure_lines_and_code_keep_the_measure_while_pictures_and_tables_run_to_the_column_end() {
+    const MEASURE: f32 = 620.0;
+    let src = "- An item long enough to wrap at the measure if it had to, and then some more words after that.\n\n  ![Wide](wide.png)\n\n  | a | b |\n  |---|---|\n  | 1 | 2 |\n\n  ```rust\n  fn main() {}\n  ```\n\n  <details open><summary>More</summary>\n\n  A folded line long enough to wrap at the measure if it had to, and then some more words after that.\n\n  ![Wide](wide.png)\n\n  </details>\n\n> A quote long enough to wrap at the measure if it had to, and then some more words after that.\n>\n> ![Wide](wide.png)\n>\n> | a | b |\n> |---|---|\n> | 1 | 2 |\n>\n> ```rust\n> fn main() {}\n> ```\n";
+    fn view((src, column): &(String, f32), _: &mut Cx<(String, f32)>) -> El {
+        thread_local! {
+            static WIDE: rune::Image = {
+                let cache = rune::ImageCache::new(std::sync::Arc::new(|| {}));
+                let image = cache.rgba(1200, 8, [40u8, 80, 120, 255].repeat(1200 * 8));
+                image.wait().unwrap();
+                image
+            };
+        }
+        let picture = WIDE.with(|p| p.clone());
+        let style = MarkdownStyle::from_kit(&Kit::neutral(true)).table_full_width(true).text_width(*column).prose_measure(MEASURE);
+        let md = Markdown::new(src.clone()).style(style).images(move |_| Some(picture.clone()));
+        col().w_full().child(md.build(&Kit::neutral(true)))
+    }
+    let ends = |column: f32| {
+        let mut rt = Runtime::new((src.to_owned(), column), view, (column, 1600.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let elements = rt.elements();
+        let end = |e: &rune::ElementInfo| (e.rect[0] + e.rect[2]).round();
+        let all = |role: &str| elements.iter().filter(|e| e.role == role).map(end).collect::<Vec<_>>();
+        let line = |t: &str| elements.iter().find(|e| e.text.as_deref().is_some_and(|s| s.starts_with(t))).map(end).unwrap_or_else(|| panic!("no text {t:?}"));
+        let lines = ["An item", "A folded line", "A quote"].map(line);
+        (lines.to_vec(), all("image"), all("table"), all("code"))
+    };
+    let (measure_end, column_end) = ((1600.0 + MEASURE) / 2.0, 1600.0);
+    assert_eq!(ends(1600.0), (vec![measure_end; 3], vec![column_end; 3], vec![column_end; 2], vec![measure_end; 2]));
+    let (lines, pictures, tables, code) = ends(500.0);
+    assert!(lines.iter().chain(&pictures).chain(&tables).chain(&code).all(|end| *end <= 500.0), "everything fits a narrow column");
 }

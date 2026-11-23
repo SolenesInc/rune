@@ -85,6 +85,9 @@ pub(super) struct Flow {
     pub(super) italic: bool,
     /// Whether their text is struck through, as a finished task's may be.
     pub(super) struck: bool,
+    /// The widest their lines run when they sit in a top-level list, quote or alert held to a
+    /// [`MarkdownStyle::prose_measure`]: the measure less the indents and rules since its start.
+    pub(super) measure: Option<f32>,
 }
 
 /// A list item's marker as copying writes it.
@@ -176,6 +179,18 @@ fn measured(b: &Block) -> bool {
 /// measured prose, and a picture narrower than the column.
 fn centered(b: &Block) -> bool {
     measured(b) || matches!(b, Block::Image { .. })
+}
+
+/// Whether `b` holds blocks that keep the measure beside blocks that take the column: measured
+/// at the top level, it then starts where the measure starts and runs to the column's end, its
+/// lines held to the measure and its pictures and tables running past it.
+fn holds(b: &Block) -> bool {
+    matches!(b, Block::List { .. } | Block::Quote(_) | Block::Alert(..) | Block::Details { .. })
+}
+
+/// Whether `b`, inside a block that [`holds`] others, runs past the measure to the column's end.
+fn wide(b: &Block) -> bool {
+    matches!(b, Block::Image { .. } | Block::Table(_))
 }
 
 /// (margin-top, margin-bottom) per block, collapsed like CSS margins.
@@ -585,21 +600,30 @@ impl Renderer {
                 if top_level {
                     BLOCKS.with(|n| n.set(n.get() + 1));
                 }
-                // Measured prose is narrower than the column by what the measure leaves over.
                 let measure = self.s.prose_measure.filter(|_| top_level && measured(b));
+                let spans = measure.is_some() && holds(b);
                 let flow = self.flow.get();
-                if let (Some(measure), Some(width)) = (measure, self.s.text_width) {
-                    self.flow.set(Flow { inset: flow.inset + (width - measure).max(0.0), ..flow });
+                if let Some(measure) = measure {
+                    // Measured prose is narrower than the column by what the measure leaves over,
+                    // and a block that holds others by what it leaves before the measure.
+                    let before = self.s.text_width.map_or(0.0, |width| (width - measure).max(0.0) / if spans { 2.0 } else { 1.0 });
+                    self.flow.set(Flow { inset: flow.inset + before, measure: spans.then_some(measure), ..flow });
                 }
                 let drawn = self.block(b, maps.get(i).unwrap_or(&empty));
                 self.flow.set(flow);
-                let drawn = match measure {
-                    Some(measure) => drawn.w_full().max_w(measure),
-                    None => drawn,
+                let drawn = match (measure, flow.measure) {
+                    (Some(measure), _) if spans => drawn.grow_from(1.0, measure),
+                    (Some(measure), _) => drawn.w_full().max_w(measure),
+                    (None, Some(measure)) if !holds(b) && !wide(b) => drawn.w_full().max_w(measure),
+                    (None, _) => drawn,
                 };
                 let drawn = bidi::directed(drawn, dir);
-                let drawn = if top_level && self.s.prose_measure.is_some() && centered(b) { drawn.self_center() } else { drawn };
-                drawn.key(key).mt(top)
+                let drawn = if top_level && self.s.prose_measure.is_some() && centered(b) && !spans { drawn.self_center() } else { drawn };
+                let drawn = drawn.key(key);
+                match spans {
+                    true => bidi::directed(row().w_full().child(el().grow(1.0)).child(drawn), dir).mt(top),
+                    false => drawn.mt(top),
+                }
             };
             // A block that can't change any more is built once: the blocks above a stream's
             // last cost a lookup each time it grows, so a reply costs what its newest block
@@ -913,7 +937,7 @@ impl Renderer {
                         (None, Some(n)) => Lead::Number(n + k as u64),
                         (None, None) => Lead::Bullet,
                     };
-                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), struck: false, ..flow });
+                    self.flow.set(Flow { lists: flow.lists + 1, inset: flow.inset + indent, measure: flow.measure.map(|m| (m - indent).max(0.0)), cols: flow.cols + lead.width(), lead: Some((flow.cols, lead, if k == 0 && flow.lists == 0 { 2 } else { 1 })), struck: false, ..flow });
                     if let Some((checked, marker_offset)) = task {
                         c = c.child(self.task_item((k, n), indent, item, imap, marker_offset, checked).mt(gap(k)));
                         continue;
@@ -951,7 +975,7 @@ impl Renderer {
                 let q = s.quote;
                 let flow = self.flow.get();
                 let first_task = self.next_task.get();
-                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, italic: flow.italic || q.italic, ..flow });
+                self.flow.set(Flow { ink: q.text.or(flow.ink), inset: flow.inset + q.width + q.pad, measure: flow.measure.map(|m| (m - q.width - q.pad).max(0.0)), italic: flow.italic || q.italic, ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
                 // The rule stands on the side the quote starts on.
@@ -976,7 +1000,7 @@ impl Renderer {
                 let (q, ink) = (s.quote, s.alert(*alert));
                 let flow = self.flow.get();
                 let first_task = self.next_task.get();
-                self.flow.set(Flow { inset: flow.inset + 3.0 + q.pad, ..flow });
+                self.flow.set(Flow { inset: flow.inset + 3.0 + q.pad, measure: flow.measure.map(|m| (m - 3.0 - q.pad).max(0.0)), ..flow });
                 let drawn = self.blocks(inner, inner_maps, &[], false);
                 self.flow.set(flow);
                 let title = row()
@@ -1017,6 +1041,9 @@ impl Renderer {
                     .w_full()
                     .child(marker)
                     .child(self.para(summary, None, s.body, s.text).grow(1.0).shrink());
+                if let Some(measure) = self.flow.get().measure {
+                    head = head.max_w(measure);
+                }
                 if let Some((d, at)) = wire {
                     head = (d.press)(head.cursor(Cursor::Pointer), at, !shown);
                 }
