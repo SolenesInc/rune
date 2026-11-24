@@ -361,6 +361,8 @@ const HELP: &str = "usage: <app> [window]
   --window KEY         select a window for headless tools (run_windows, App::window)
   --list-windows       list window keys using a deterministic virtual display
   --chrome              draw where macOS puts the traffic lights; list elements overlapping them
+                        on stderr at --at; every tree also gets a chrome field: the lights
+                        and what overlaps them at that tree's moment
   --cpu-boot DIR        also paint the --snap frame on the CPU, as a window's first frame before
                         its GPU: DIR gets draw.bin, cpu.png and gpu.png, and the run prints
                         rune-cpu-boot {json} (stage times, drift); --cpu-boot-threads N (6)

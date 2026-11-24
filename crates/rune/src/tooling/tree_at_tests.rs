@@ -151,3 +151,73 @@ fn one_desktop_run_writes_the_tree_a_separate_run_writes_at_each_moment() {
     assert_eq!(tree["windows"][1]["visible"], json!(true), "the tree at a mark carries each window's frame: {tree}");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// A label under the traffic lights until a tap moves it clear.
+fn titled(chrome: crate::Chrome) -> crate::App<usize> {
+    let spec = AppSpec::new("titled", (300.0, 400.0), || 0usize, |taps, _| crate::col().key("root").w_full()
+        .child(crate::el().key("spacer").size(10.0, *taps as f32 * 100.0))
+        .child(crate::text("Back").key("back"))
+        .child(crate::el().size(10.0, 60.0))
+        .child(crate::el().key("more").size(50.0, 50.0).on_press(|taps: &mut usize| *taps += 1)));
+    crate::App::new(spec).chrome(chrome)
+}
+
+#[test]
+fn with_chrome_each_tree_carries_the_traffic_lights_and_what_overlaps_them_at_its_moment() {
+    let _turn = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("rune-tree-at-chrome-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("script.json");
+    std::fs::write(&script, r#"[{"t": 0.1, "type": "tap", "key": "more"}, {"t": 1.0, "type": "mark", "name": "clear"}]"#).unwrap();
+    let base = ["--script", script.to_str().unwrap(), "--scale", "1", "--fps", "60", "--chrome"];
+    // Each request's chrome report equals a separate `--at X --chrome --tree` run's.
+    compare(&dir, &base, &["0.05", "mark:clear"], &|argv| headless(titled(crate::Chrome::DEFAULT), Args::parse_from(argv)));
+    let read = |name: &str| -> Value { serde_json::from_slice(&std::fs::read(dir.join(name)).unwrap()).unwrap() };
+    let (under, clear) = (read("once-0.json"), read("once-1.json"));
+    assert_eq!(under["chrome"]["trafficLights"], json!([[7.0, 6.0, 14.0, 14.0], [30.0, 6.0, 14.0, 14.0], [53.0, 6.0, 14.0, 14.0]]));
+    let overlaps = under["chrome"]["overlaps"].as_array().unwrap();
+    assert_eq!(overlaps.len(), 1, "{overlaps:?}");
+    assert!(overlaps[0]["path"].as_str().unwrap().ends_with("back"), "{overlaps:?}");
+    assert_eq!(clear["chrome"]["overlaps"], json!([]), "the tap moved the label clear");
+    assert_eq!(clear["chrome"]["trafficLights"], under["chrome"]["trafficLights"]);
+
+    // Without --chrome, no tree carries the field.
+    let plain = dir.join("plain-no-chrome.json");
+    let at = |path: &std::path::Path| vec!["--script".into(), script.display().to_string(), "--scale".into(), "1".into(), "--tree-at".into(), format!("0.05={}", path.display())];
+    headless(titled(crate::Chrome::DEFAULT), Args::parse_from(at(&plain)));
+    assert!(read("plain-no-chrome.json").get("chrome").is_none());
+    // A window without traffic lights reports none, so "not checked" and "nothing overlaps" differ.
+    let bare = dir.join("bare.json");
+    let mut argv = at(&bare);
+    argv.push("--chrome".into());
+    headless(titled(crate::Chrome { full_size_content: false, ..crate::Chrome::DEFAULT }), Args::parse_from(argv));
+    assert_eq!(read("bare.json")["chrome"], json!({"trafficLights": null, "overlaps": []}));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn with_chrome_a_desktop_run_reports_the_selected_window_at_each_moment() {
+    let _turn = HEADLESS.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("rune-tree-at-desktop-chrome-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let backdrop = dir.join("backdrop.png");
+    ::image::RgbaImage::from_pixel(240, 160, ::image::Rgba([128, 128, 128, 255])).save(&backdrop).unwrap();
+    let script = dir.join("script.json");
+    std::fs::write(&script, r#"[{"t": 0.1, "type": "key", "name": "Enter"}, {"t": 0.2, "type": "mark", "name": "opened"}]"#).unwrap();
+    let base = ["--desktop", backdrop.to_str().unwrap(), "--script", script.to_str().unwrap(), "--scale", "2", "--fps", "10", "--window", "a", "--chrome"];
+    let windows = || {
+        let at = |x, y, w, visible| crate::WindowOptions { position: Some((x, y)), physical_size: Some((w, 60)), visible, ..Default::default() };
+        let (b, handle) = counter("b", None, at(160, 40, 60, false));
+        let (a, _) = counter("a", Some(handle), at(20, 20, 100, true));
+        vec![a, b]
+    };
+    compare(&dir, &base, &["0", "mark:opened"], &|argv| {
+        crate::run_windows_with_args(crate::RunOptions::default(), argv, move |_| windows());
+    });
+    for i in 0..2 {
+        let tree: Value = serde_json::from_slice(&std::fs::read(dir.join(format!("once-{i}.json"))).unwrap()).unwrap();
+        let overlaps = tree["chrome"]["overlaps"].as_array().unwrap_or_else(|| panic!("no chrome field: {tree}"));
+        assert!(overlaps.iter().any(|o| o["path"].as_str().unwrap().ends_with("count")), "window a's label sits under its lights: {overlaps:?}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}

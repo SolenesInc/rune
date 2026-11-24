@@ -46,6 +46,7 @@ $APP --snap out.png --playground "Group/Story" --variant "Long names"
 $APP --script input.json --snap out.png --at mark:end # a state behind a click or a key
 $APP --tree tree.json                                 # every element's key, text, rect and colours
 $APP --script input.json --tree-at mark:a=a.json --tree-at mark:b=b.json  # a tree at each mark, one run
+$APP --script input.json --chrome --tree-at mark:a=a.json  # the tree's "chrome": traffic lights and what overlaps them
 $APP --script input.json --tree tree.json --no-draw   # the same tree without drawing: fast tests that read only trees
 ```
 

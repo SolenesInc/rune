@@ -1048,7 +1048,11 @@ rune::App::new(spec).fit_content_height().run();
   move, the window wakes at `fps` instead of every display frame, and a still window does no work.
 - **Drags** report `dx, dy`, the pointer's travel since the press.
 - **`--chrome`** (headless) paints the traffic lights and a 4 pt clearance box onto snapshots and
-  prints any element that overlaps them.
+  prints any element that overlaps them at the `--at` moment. Every tree the run writes (`--tree`,
+  each `--tree-at`, and the selected window's under `--desktop`) also carries
+  `"chrome": {"trafficLights": [[x, y, w, h], …], "overlaps": [{"path", "visible"}]}` for its own
+  moment, so one run checks the clearance at every request. `trafficLights` is `null` for a
+  window without them.
 
 ### Finite choreography
 
@@ -2441,7 +2445,8 @@ $L --desktop examples/launcher/backdrop.png --script examples/launcher/scripts/d
   of the script. AT takes what `--at` takes (seconds, `mark:NAME`, `mark:NAME+0.5`), and each file
   is byte for byte the tree a separate `--at AT --tree PATH` run writes, over `--desktop` too.
   `--at`, `--tree` and `--snap` keep their own moment beside it. A run with only `--tree-at` stops
-  at its latest request, which `--chrome` then reports at; dumped frames still run to their end.
+  at its latest request, which `--chrome` then reports at on stderr (each tree carries its own
+  `chrome` field); dumped frames still run to their end.
   Two trees to one path are refused, and an unknown mark fails before the first frame. One run
   differs from separate runs only in `headless_run().end()`, which is the combined run's last frame.
 - **Scripts** are timestamped `move`, `down`, `up`, `tap` (`hold`), `double-click` (`hold`,
