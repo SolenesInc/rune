@@ -2429,6 +2429,7 @@ $S --script examples/settings/scripts/demo.json --start 0.12 --frames 24 --every
 $S --tree tree.json [--at T]     # key, path, role, label, text, presented rect, target, opacity,
                                  # fill/text colour, hover/press, moving
 $S --script s.json --tree-at mark:open=open.json --tree-at 1.5=late.json  # several trees, one run
+$S --script demo.json --tree tree.json --no-draw   # the same tree, without drawing a frame
 $S --trace run.jsonl             # motion-trace JSONL (the app trace format); keyed elements only
 $S --native --trace run.jsonl --frames 240  # native submission timestamps, then close the traced window
 L=target/release/launcher        # every window of a multi-window app, composited over a backdrop
@@ -2491,6 +2492,15 @@ $L --desktop examples/launcher/backdrop.png --script examples/launcher/scripts/d
   the app's root background, falling back to `--theme` when the background is transparent.
   `--pointer` adds a ripple at each press. A separate runtime draws both after the app, so they
   appear in `--video`, `--out`, `--snap` and strips but never in `--tree` or `--trace`.
+- **Draw-free runs**: `--no-draw` steps every frame as usual (time, script events, handlers,
+  layout, `on_frame_encoded`, `--trace`, trees) but encodes and submits no GPU work, so a test
+  that reads only trees skips the drawing. The trees are byte for byte the ones a drawn run
+  writes. On a CPU rasterizer such as lavapipe that is most of a run: `examples/settings`'s
+  `keycaps.json` (493 frames) takes 0.18 s instead of about 7 s on 4 cores. It works with
+  `--tree-at` and `--desktop`. It is refused, naming both flags, beside a pixel output (`--snap`, `--out`,
+  `--video`, `--strip`, `--first-pixels`) and on a run that would open a window, and for an
+  app or a `--desktop` window with a custom compositor, whose `render` can change the runtime.
+  The GPU still opens and the renderer is still made, about 0.1 s per run.
 - **Desktop recordings**: `--desktop BACKDROP.png` renders all of a multi-window app's visible
   windows into one frame, so a launcher, its panel and the app's other windows record together
   the way a screen recording would show them. Each window renders with its own state into its

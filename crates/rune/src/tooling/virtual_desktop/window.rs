@@ -39,6 +39,8 @@ pub(crate) trait Member {
     fn radius(&self) -> f32;
     fn shadow(&self) -> bool;
     fn features(&self) -> wgpu::Features;
+    /// It draws through a custom compositor (`App::compositor`).
+    fn compositor(&self) -> bool;
     /// Its first frame: where it opens on `desktop` when it has no position.
     fn start(&mut self, desktop: &VirtualDesktop);
     fn trace_on(&mut self);
@@ -255,6 +257,7 @@ impl<S: 'static> Member for Window<S> {
     fn radius(&self) -> f32 { self.radius }
     fn shadow(&self) -> bool { self.shadow }
     fn features(&self) -> wgpu::Features { self.comp.as_ref().map_or(wgpu::Features::empty(), |c| c.features()) }
+    fn compositor(&self) -> bool { self.comp.is_some() }
 
     fn start(&mut self, desktop: &VirtualDesktop) {
         let display = desktop.display_at(self.position);

@@ -269,7 +269,7 @@ pub(crate) fn start<S: 'static>(mut spec: WindowSpec<S>, handle: Option<WindowHa
         }
         let transparent = spec.options.transparent;
         spec.app.window_options = spec.options;
-        crate::tooling::headless_configured(spec.app, args, transparent);
+        crate::tooling::headless_configured(spec.app, args, transparent).unwrap_or_else(|e| crate::tooling::die(&e));
         return None;
     }
     crate::video::enable_playback();

@@ -313,7 +313,7 @@ impl Desk {
 /// Renders `windows` composited over the `--desktop` backdrop. `selected` is the window
 /// `--scene`, `--tree` and `--trace` describe.
 /// `accessory` is `RunOptions::accessory`: reopening brings back no window.
-pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, accessory: bool) {
+pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, accessory: bool) -> Result<(), String> {
     let launched = Instant::now();
     let backdrop = args.desktop.clone().expect("--desktop");
     if args.list_scenes { die("--list-scenes lists one window's scenes; drop --desktop"); }
@@ -340,6 +340,9 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
 
     let mut members: Vec<Box<dyn Member>> = windows.into_iter().enumerate()
         .map(|(i, w)| w.desktop(&args, i == selected, scale)).collect();
+    if args.no_draw && let Some(m) = members.iter().find(|m| m.compositor()) {
+        return Err(format!("{} (window {:?})", crate::tooling::NO_DRAW_COMPOSITOR, m.key()));
+    }
     for m in &mut members { m.start(&desktop); }
     let Timeline { fps, dt, start_frame, frames, snap_frame, last_frame, trees } = timeline;
     let mut trace = args.trace.as_ref().map(|p| {
@@ -495,6 +498,8 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
             if px.0.max(px.1) > max {
                 die(&format!("--desktop: window {:?} is {}x{} pixels, over the GPU's {max} a side", m.key(), px.0, px.1));
             }
+            // A draw-free run (`--no-draw`) renders, composites and submits nothing.
+            if args.no_draw { continue; }
             if slots[i].as_ref().is_none_or(|s| s.px != px) { slots[i] = Some(Slot::new(&gpu.device, &comp, px, scale)); }
             let slot = slots[i].as_ref().unwrap();
             m.render(&gpu, slot, px, step, update_ms);
@@ -508,16 +513,19 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
             });
             drawn.push((i, desk.members[i].shadow()));
         }
-        let mut enc = gpu.device.create_command_encoder(&Default::default());
-        comp.draw(&mut enc, &target.view, drawn.iter().map(|&(i, shadow)| (slots[i].as_ref().unwrap(), shadow)));
-        if let Some((ov, ui)) = overlay.as_mut() {
-            let app_dark = key.and_then(|i| desk.members[i].backdrop_dark()).unwrap_or(dark);
-            let ort = ov.frame(real_t, step, app_dark);
-            if !ort.instances.is_empty() {
-                { let core: &mut crate::runtime::RuntimeCore = &mut **ort; ui.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
-                ui.draw_over(&mut enc, &target.view);
+        let enc = if args.no_draw { None } else {
+            let mut enc = gpu.device.create_command_encoder(&Default::default());
+            comp.draw(&mut enc, &target.view, drawn.iter().map(|&(i, shadow)| (slots[i].as_ref().unwrap(), shadow)));
+            if let Some((ov, ui)) = overlay.as_mut() {
+                let app_dark = key.and_then(|i| desk.members[i].backdrop_dark()).unwrap_or(dark);
+                let ort = ov.frame(real_t, step, app_dark);
+                if !ort.instances.is_empty() {
+                    { let core: &mut crate::runtime::RuntimeCore = &mut **ort; ui.prepare(&gpu.device, &gpu.queue, &mut core.text.atlas, &core.instances, (wp, hp)); }
+                    ui.draw_over(&mut enc, &target.view);
+                }
             }
-        }
+            Some(enc)
+        };
         let in_range = k >= start_frame && k < start_frame + frames;
         let shot = Shot {
             k,
@@ -527,11 +535,13 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
         };
         let first_pixels = args.first_pixels && k == 0;
         let want_pixels = shot.dump || shot.video || shot.snap || first_pixels;
-        if want_pixels {
-            for (shot, px) in readback.make_room(&gpu.device) { deliver(shot, px); }
-            readback.copy(&mut enc, &target, shot);
+        if let Some(mut enc) = enc {
+            if want_pixels {
+                for (shot, px) in readback.make_room(&gpu.device) { deliver(shot, px); }
+                readback.copy(&mut enc, &target, shot);
+            }
+            gpu.queue.submit([enc.finish()]);
         }
-        gpu.queue.submit([enc.finish()]);
         if want_pixels { readback.submitted(); }
         let ms = frame_start.elapsed().as_secs_f64() * 1000.0;
         cpu_ms.push(ms);
@@ -569,6 +579,7 @@ pub(crate) fn run(windows: Vec<AnyWindowSpec>, selected: usize, args: Args, acce
     for m in &mut desk.members {
         if let Some(s) = m.summary(&gpu.device) { eprintln!("{s}"); }
     }
+    Ok(())
 }
 
 /// Sends a shortcut or menu pick to the key window's app, else the first other app that knows it.

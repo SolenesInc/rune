@@ -79,6 +79,9 @@ pub struct Args {
     /// `--cpu-boot-threads N` threads (6 by default).
     pub(crate) cpu_boot: Option<PathBuf>,
     pub(crate) cpu_boot_threads: usize,
+    /// `--no-draw`: step every frame but encode and submit no GPU work, for runs that read only
+    /// trees. Refused beside a pixel output (`Args::check`).
+    pub(crate) no_draw: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -230,6 +233,7 @@ impl Args {
                 "--every" => a.every = (num(&val(&mut i)) as usize).max(1),
                 "--list-scenes" => a.list_scenes = true,
                 "--first-pixels" => a.first_pixels = true,
+                "--no-draw" => a.no_draw = true,
                 "--window" => a.window = Some(val(&mut i)),
                 "--list-windows" => a.list_windows = true,
                 "--chrome" => a.chrome_overlay = true,
@@ -243,12 +247,26 @@ impl Args {
             }
             i += 1;
         }
-        if a.variant.is_some() && a.playground.is_none() { die("--variant needs --playground"); }
-        if a.crop_key.is_some() && a.snap.is_none() { die("--crop KEY needs --snap"); }
-        if a.whole_window && (a.playground.is_none() || a.snap.is_none()) { die("--whole-window needs --playground and --snap"); }
-        if a.cpu_boot.is_some() && a.snap.is_none() { die("--cpu-boot needs --snap"); }
-        check_tree_paths(&a).unwrap_or_else(|e| die(&e));
+        a.check().unwrap_or_else(|e| die(&e));
         (a, extra)
+    }
+
+    /// The rules between flags, once every flag is read.
+    pub(crate) fn check(&self) -> Result<(), String> {
+        if self.variant.is_some() && self.playground.is_none() { return Err("--variant needs --playground".into()); }
+        if self.crop_key.is_some() && self.snap.is_none() { return Err("--crop KEY needs --snap".into()); }
+        if self.whole_window && (self.playground.is_none() || self.snap.is_none()) { return Err("--whole-window needs --playground and --snap".into()); }
+        if self.cpu_boot.is_some() && self.snap.is_none() { return Err("--cpu-boot needs --snap".into()); }
+        check_tree_paths(self)?;
+        if self.no_draw {
+            #[cfg(feature = "hot")]
+            if self.snap_on_patch.is_some() { return Err(no_pixels("--snap-on-patch")); }
+            let pixels = [("--snap", self.snap.is_some()), ("--out", self.out.is_some()), ("--video", self.video.is_some()),
+                ("--strip", self.strip.is_some()), ("--first-pixels", self.first_pixels)];
+            if let Some((flag, _)) = pixels.into_iter().find(|&(_, asked)| asked) { return Err(no_pixels(flag)); }
+            if !self.headless() { return Err("--no-draw is for headless runs (--tree, --tree-at, --script, --trace or --desktop)".into()); }
+        }
+        Ok(())
     }
 
     /// Whether the run writes any element tree (`--tree` or `--tree-at`).
@@ -325,6 +343,9 @@ const HELP: &str = "usage: <app> [window]
   --tree-at AT=out.json  also the tree at AT (seconds or mark:NAME, as --at takes); repeat it
                         to write several moments from one run. With only --tree-at, the run
                         stops at its latest request (and --chrome reports there)
+  --no-draw             step every frame but draw nothing on the GPU, for runs that read only
+                        trees; refused with --snap, --out, --video, --strip and --first-pixels,
+                        and for an app with a custom compositor
   --html out.html       the page as static HTML and CSS, at rest, for a web app's first paint
                         (no GPU); --html-widths 360,640,1000 lays it out at each width and
                         folds them into @media rules; --html-template FILE fills
@@ -344,6 +365,10 @@ const HELP: &str = "usage: <app> [window]
                         its GPU: DIR gets draw.bin, cpu.png and gpu.png, and the run prints
                         rune-cpu-boot {json} (stage times, drift); --cpu-boot-threads N (6)
   other arguments are passed to the app (rune::tooling::extra_args)";
+
+fn no_pixels(flag: &str) -> String {
+    format!("--no-draw draws nothing, so {flag} has no pixels to write; drop one of them")
+}
 
 pub(crate) fn die(msg: &str) -> ! {
     eprintln!("{msg}");

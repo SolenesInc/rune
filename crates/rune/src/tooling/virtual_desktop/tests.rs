@@ -62,6 +62,7 @@ impl Member for Fake {
     fn radius(&self) -> f32 { 0.0 }
     fn shadow(&self) -> bool { false }
     fn features(&self) -> wgpu::Features { wgpu::Features::empty() }
+    fn compositor(&self) -> bool { false }
     fn start(&mut self, _: &VirtualDesktop) {}
     fn trace_on(&mut self) {}
     fn drain(&mut self, _: &VirtualDesktop, _: f64) -> Changes { Changes::default() }
