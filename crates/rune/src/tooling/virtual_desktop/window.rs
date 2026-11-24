@@ -104,6 +104,8 @@ pub(crate) struct Window<S: 'static> {
     frame: [f32; 4],
     life: Life,
     placed: Option<Value>,
+    /// The window's chrome, when the run has `--chrome`: its trees carry a `chrome` field.
+    chrome: Option<crate::Chrome>,
 }
 
 impl<S: 'static> Window<S> {
@@ -141,7 +143,7 @@ impl<S: 'static> Window<S> {
         if let Some(bars) = own.scroll_bars.or(args.scroll_bars) { rt.set_system_scroll_bars(bars); }
         rt.set_srgb_blend(srgb_blend);
         rt.set_font_smoothing(font_smoothing);
-        rt.headless_chrome(chrome, titlebar, options.borderless);
+        let chrome = rt.headless_chrome(chrome, titlebar, options.borderless);
         rt.transparent = options.transparent;
         rt.track_marks = comp.is_some();
         if selected && args.wants_tree() { rt.key_warnings = Some(Vec::new()); }
@@ -163,6 +165,7 @@ impl<S: 'static> Window<S> {
             frame: [0.0, 0.0, size.0, size.1],
             life: if visible { Life::Shown { sight: crate::window::Sight::Seen } } else { Life::Unopened },
             placed: None,
+            chrome: args.chrome_overlay.then_some(chrome),
         }
     }
 
@@ -413,6 +416,7 @@ impl<S: 'static> Member for Window<S> {
     fn tree(&self, t: f64) -> Value {
         let mut tree = crate::tooling::tree_json(&self.rt, t);
         if let Some(placed) = &self.placed { tree["placed"] = placed.clone(); }
+        if let Some(chrome) = &self.chrome { tree["chrome"] = crate::tooling::chrome_json(&self.rt, chrome); }
         tree
     }
 

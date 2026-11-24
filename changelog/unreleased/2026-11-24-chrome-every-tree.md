@@ -1,0 +1,1 @@
+- With `--chrome`, every tree a headless run writes (`--tree`, each `--tree-at`, and the selected window's under `--desktop`) carries a `chrome` field: the traffic-light rects (or `null`) and the elements that overlap them at that tree's moment, from the same check the stderr report prints. The stderr report is unchanged.

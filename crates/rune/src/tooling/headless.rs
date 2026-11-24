@@ -447,6 +447,7 @@ pub(crate) fn headless_configured<S: 'static>(mut app: crate::app::App<S>, args:
         write_trees(&trees, k, || {
             let mut tree = tree_json(&rt, real_t);
             if let Some(placed) = &placed { tree["placed"] = placed.clone(); }
+            if args.chrome_overlay { tree["chrome"] = chrome_json(&rt, &chrome); }
             tree
         });
     }
@@ -655,19 +656,33 @@ fn paint_traffic_lights(px: &mut [u8], w: u32, h: u32, scale: f32, lights: &[[f3
     }
 }
 
-/// Lists visible text, icons and controls whose drawn rect comes within 4 pt of a traffic light.
-fn report_traffic_light_overlaps<S>(rt: &Runtime<S>, lights: &[[f32; 4]; 3]) {
+/// Visible text, icons and controls whose drawn rect comes within 4 pt of a traffic light.
+fn traffic_light_overlaps(rt: &crate::runtime::RuntimeCore, lights: &[[f32; 4]; 3]) -> Vec<crate::runtime::ElementInfo> {
     let m = 4.0;
     let zone = [lights[0][0] - m, lights[0][1] - m, lights[2][0] + lights[2][2] + m, lights[2][1] + lights[2][3] + m];
-    let mut n = 0;
-    for e in rt.elements() {
+    rt.elements().into_iter().filter(|e| {
         let drawn = e.text.is_some() || matches!(e.role, "icon" | "button" | "textbox");
         let v = e.visible;
         let (x1, y1) = (v[0] + v[2], v[1] + v[3]);
-        if drawn && e.opacity > 0.01 && v[2] > 0.0 && v[3] > 0.0 && v[0] < zone[2] && x1 > zone[0] && v[1] < zone[3] && y1 > zone[1] {
-            eprintln!("rune: chrome: {} overlaps the traffic lights at {:?}", e.path, e.visible.map(r2));
-            n += 1;
-        }
+        drawn && e.opacity > 0.01 && v[2] > 0.0 && v[3] > 0.0 && v[0] < zone[2] && x1 > zone[0] && v[1] < zone[3] && y1 > zone[1]
+    }).collect()
+}
+
+/// Prints each element [`traffic_light_overlaps`] finds, then a count.
+fn report_traffic_light_overlaps(rt: &crate::runtime::RuntimeCore, lights: &[[f32; 4]; 3]) {
+    let overlaps = traffic_light_overlaps(rt, lights);
+    for e in &overlaps {
+        eprintln!("rune: chrome: {} overlaps the traffic lights at {:?}", e.path, e.visible.map(r2));
     }
-    eprintln!("rune: chrome: traffic lights at {:?}, {n} overlapping elements", lights[0].map(r2));
+    eprintln!("rune: chrome: traffic lights at {:?}, {} overlapping elements", lights[0].map(r2), overlaps.len());
+}
+
+/// A `--chrome` tree's `chrome` field: the traffic lights (null for a window without them)
+/// and the elements [`report_traffic_light_overlaps`] would list at this frame.
+pub(crate) fn chrome_json(rt: &crate::runtime::RuntimeCore, chrome: &crate::Chrome) -> Value {
+    let lights = chrome.traffic_light_rects();
+    let overlaps: Vec<Value> = lights.iter().flat_map(|l| traffic_light_overlaps(rt, l))
+        .map(|e| json!({"path": e.path, "visible": e.visible.map(r2)}))
+        .collect();
+    json!({"trafficLights": lights.map(|l| l.map(|r| r.map(r2))), "overlaps": overlaps})
 }
