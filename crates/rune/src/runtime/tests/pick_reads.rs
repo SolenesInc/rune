@@ -123,3 +123,38 @@ fn find_links_answers_where_the_last_frame_showed_each_link_of_a_prefix_line_by_
     rt.frame(3.0);
     assert_eq!(ask(&mut rt), [], "a modal over the links keeps input from them");
 }
+
+#[test]
+fn a_read_after_a_commit_in_the_same_frame_answers_once_a_frame_shows_what_it_committed() {
+    #[derive(Default)]
+    struct S { rows: usize, found: Vec<crate::ShownLink>, rect: Option<[f32; 4]>, ran: Vec<&'static str> }
+    fn view(s: &S, _: &mut Cx<S>) -> El {
+        col().w_full().h_full().key("root").focusable(true)
+            .on_key(|s: &mut S, _, tx| {
+                s.ran.push("key");
+                tx.find_links("id:", |s: &mut S, found, _| { s.found = found; s.ran.push("answer"); });
+                tx.find_elements(vec!["words".into()], |s: &mut S, found, _| s.rect = found[0].as_ref().map(|e| e.rect));
+                true
+            })
+            .child(el().key("grow").size(40.0, 40.0).on_press(|s: &mut S| { s.rows = 3; s.ran.push("press"); }))
+            .children((0..s.rows).map(|_| el().size(10.0, 10.0)))
+            .child(crate::rich("ag-first1", Vec::new()).font(crate::TextStyle::new(14.0, 400.0).lh(20.0)).key("words")
+                .link(crate::Link::new(0..9, "id:shown")).on_link(|_: &mut S, _, _| {}))
+            .children((0..3 - s.rows).map(|_| el().size(10.0, 10.0)))
+    }
+    let mut rt = Runtime::new(S::default(), view, (300.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    rt.update(|_, tx| tx.focus("root", false));
+    rt.frame(1.0);
+    rt.pointer_move(20.0, 20.0);
+    rt.pointer_down(20.0, 20.0);
+    rt.pointer_up(20.0, 20.0);
+    rt.key(crate::KeyEvent { key: crate::Key::Enter, mods: crate::Mods::default() });
+    rt.frame(1.0);
+    rt.key(crate::KeyEvent { key: crate::Key::Enter, mods: crate::Mods::default() });
+    for _ in 0..3 { rt.frame(1.0); }
+    assert_eq!(rt.state().ran, ["press", "key", "answer", "key", "answer"]);
+    assert_eq!(rt.state().rect.map(|r| r[1]), Some(70.0));
+    assert_eq!(rt.state().found, rt.links("id:"));
+    assert_eq!(rt.state().found[0].lines[0][1], 70.0);
+}

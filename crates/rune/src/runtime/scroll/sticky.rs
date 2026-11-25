@@ -432,7 +432,7 @@ impl RuntimeCore {
 
     /// Whether the last frame's rects describe these nodes: nothing committed since it drew
     /// them, or what did, such as a press's commit before its focus moves, kept every node.
-    fn drawn_describes_nodes(&self) -> bool {
+    pub(super) fn drawn_describes_nodes(&self) -> bool {
         self.drawn.len() == self.nodes.len() && (self.built || self.nodes.iter().map(|n| n.id).eq(self.built_ids.iter().copied()))
     }
 

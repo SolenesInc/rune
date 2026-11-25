@@ -486,6 +486,8 @@ impl RuntimeCore {
         #[cfg(debug_assertions)]
         let mut ran_other = ran;
         let mut pointer_hover = false;
+        // A read the last frame put off answers ahead of this frame's input.
+        self.run_frame_reads(&mut tx);
         for Queued { action, at, acts } in queue {
             let _input = crate::input::time::scope(at);
             let _acts = crate::input::acts::scope(acts);

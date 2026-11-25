@@ -444,6 +444,12 @@ impl RuntimeCore {
     }
 
     pub(super) fn run_frame_reads(&mut self, tx: &mut Tx) {
+        if !self.drawn_describes_nodes() {
+            // A commit ahead of a key or a focus change in this frame: the next frame answers
+            // before its input, from the frame that shows it.
+            self.pending.frame_reads.append(&mut tx.frame_reads);
+            return;
+        }
         let reads = std::mem::take(&mut tx.frame_reads);
         let mut elements = None;
         for read in reads {
