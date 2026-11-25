@@ -13,20 +13,15 @@ impl<S: 'static> App<S> {
     pub fn headless_runtime(mut self, size: (f32, f32), env: Env) -> Runtime<S> {
         let playground = self.playground.take();
         let (chrome, titlebar, borderless) = (self.chrome, self.titlebar, self.window_options.borderless);
-        let (on_focus, on_ime, on_mods, modifier_keys, tab_visits_controls, srgb_blend) = (self.on_focus, self.on_ime, self.on_mods, self.modifier_keys, self.tab_visits_controls, self.srgb_blend);
-        let (on_field_key, on_visibility, on_input) = (self.on_field_key, self.on_visibility, self.on_input);
+        let (modifier_keys, tab_visits_controls, srgb_blend) = (self.modifier_keys, self.tab_visits_controls, self.srgb_blend);
+        let hooks = self.hooks();
         let (spec, state, _) = self.into_parts(None);
         let mut rt = crate::tooling::runtime_for(&spec, state, size, env, std::sync::Arc::new(|| {}));
         if let Some(playground) = playground.filter(Playground::is_enabled) {
             rt.app_mut().playground = Some(Box::new(Live::new(playground, &spec, false)));
         }
         rt.headless_chrome(chrome, titlebar, borderless);
-        rt.app_mut().on_focus = on_focus;
-        rt.app_mut().on_ime = on_ime;
-        rt.app_mut().on_mods = on_mods;
-        rt.app_mut().on_field_key = on_field_key;
-        rt.app_mut().on_visibility = on_visibility;
-        rt.app_mut().on_input = on_input;
+        rt.app_mut().hear(hooks);
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
         rt.set_srgb_blend(srgb_blend);

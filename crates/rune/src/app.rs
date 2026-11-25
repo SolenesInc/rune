@@ -285,6 +285,17 @@ impl<S: 'static> App<S> {
         self
     }
 
+    pub(crate) fn hooks(&self) -> crate::runtime::Hooks<S> {
+        crate::runtime::Hooks {
+            on_field_key: self.on_field_key,
+            on_focus: self.on_focus,
+            on_mods: self.on_mods,
+            on_visibility: self.on_visibility,
+            on_input: self.on_input,
+            on_ime: self.on_ime,
+        }
+    }
+
     /// Hears the modifier keys held down (Shift, Control, Alt or Option, the logo key) each time
     /// they change, wherever focus is and whether or not anything takes the key, as a web page's
     /// window-level `keydown`/`keyup` for `Alt` hear it; and none held once the window loses

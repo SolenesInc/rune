@@ -117,9 +117,8 @@ impl<S: 'static> Window<S> {
         if !selected { inherited.scene = None; inherited.playground = None; inherited.variant = None; }
         let own = app.resolve_args(inherited);
         let comp = app.compositor.take();
-        let (open, keep_running, on_close, on_focus, on_reopen) = (app.open, app.keep_running, app.on_close, app.on_focus, app.on_reopen);
-        let (on_mods, on_visibility, on_input) = (app.on_mods, app.on_visibility, app.on_input);
-        let (on_ime, on_field_key) = (app.on_ime, app.on_field_key);
+        let (open, keep_running, on_close, on_reopen) = (app.open, app.keep_running, app.on_close, app.on_reopen);
+        let hooks = app.hooks();
         let native = std::mem::take(&mut app.macos_window);
         let (modifier_keys, tab_visits_controls, srgb_blend) = (app.modifier_keys, app.tab_visits_controls, app.srgb_blend);
         let font_smoothing = app.font_smoothing;
@@ -132,12 +131,7 @@ impl<S: 'static> Window<S> {
         let dark = own.theme.as_deref() != Some("light");
         let mut rt = crate::tooling::runtime_for(&spec, state, size, Env::new(dark, scale), Arc::new(|| {}));
         crate::playground::attach(&mut rt, playground, &spec, own.playground.clone(), own.variant.clone(), false);
-        rt.app_mut().on_focus = on_focus;
-        rt.app_mut().on_mods = on_mods;
-        rt.app_mut().on_field_key = on_field_key;
-        rt.app_mut().on_visibility = on_visibility;
-        rt.app_mut().on_input = on_input;
-        rt.app_mut().on_ime = on_ime;
+        rt.app_mut().hear(hooks);
         rt.set_modifier_keys(modifier_keys);
         rt.set_tab_visits_controls(tab_visits_controls);
         if let Some(bars) = own.scroll_bars.or(args.scroll_bars) { rt.set_system_scroll_bars(bars); }

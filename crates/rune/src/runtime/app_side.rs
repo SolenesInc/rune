@@ -154,7 +154,28 @@ pub struct Typed<S: 'static> {
     pub(crate) playground: Option<Box<dyn LiveApp<S>>>,
 }
 
+/// The window events an [`App`](crate::App) hears, as every host that runs one hands them to its
+/// runtime ([`Typed::hear`]).
+pub(crate) struct Hooks<S> {
+    pub(crate) on_field_key: Option<fn(&mut S, &KeyEvent, &mut Tx) -> bool>,
+    pub(crate) on_focus: Option<fn(&mut S, bool, &mut Tx)>,
+    pub(crate) on_mods: Option<fn(&mut S, crate::Mods, &mut Tx)>,
+    pub(crate) on_visibility: Option<fn(&mut S, bool, &mut Tx)>,
+    pub(crate) on_input: Option<fn(&mut S, &mut Tx)>,
+    pub(crate) on_ime: Option<fn(&mut S, &Ime, &mut Tx) -> bool>,
+}
+
 impl<S: 'static> Typed<S> {
+    pub(crate) fn hear(&mut self, hooks: Hooks<S>) {
+        let Hooks { on_field_key, on_focus, on_mods, on_visibility, on_input, on_ime } = hooks;
+        self.on_field_key = on_field_key;
+        self.on_focus = on_focus;
+        self.on_mods = on_mods;
+        self.on_visibility = on_visibility;
+        self.on_input = on_input;
+        self.on_ime = on_ime;
+    }
+
     /// The state `on_key` and `on_mods` get: the stage's while the playground shows an app state.
     fn key_state(&mut self) -> Option<&mut S> {
         match &mut self.playground {

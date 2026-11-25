@@ -218,7 +218,7 @@ mod app_ime;
 #[path = "runtime/app_side.rs"]
 mod app_side;
 pub use app_side::{Runtime, Typed};
-pub(crate) use app_side::AppSide;
+pub(crate) use app_side::{AppSide, Hooks};
 #[path = "runtime/input/press_run.rs"]
 mod press_run;
 #[path = "runtime/input/press_repeat.rs"]

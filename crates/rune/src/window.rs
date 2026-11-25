@@ -488,8 +488,7 @@ impl<S: 'static> Host<S> {
         let present_log = args.trace.as_ref().map(|_| Arc::default());
         let mut app = app;
         let comp = app.compositor.take();
-        let (on_focus, on_ime, on_visibility, on_input) = (app.on_focus, app.on_ime, app.on_visibility, app.on_input);
-        let on_field_key = app.on_field_key;
+        let hooks = app.hooks();
         let titlebar = app.titlebar.filter(|_| !options.borderless);
         let chrome = app.chrome;
         let (srgb_blend, font_smoothing) = (app.srgb_blend, app.font_smoothing);
@@ -517,11 +516,7 @@ impl<S: 'static> Host<S> {
             spec.size = size;
             args.size = None;
         }
-        rt.app_mut().on_focus = on_focus;
-        rt.app_mut().on_visibility = on_visibility;
-        rt.app_mut().on_input = on_input;
-        rt.app_mut().on_field_key = on_field_key;
-        rt.app_mut().on_ime = on_ime;
+        rt.app_mut().hear(hooks);
         rt.set_modifier_keys(modifier_keys);
         rt.set_srgb_blend(srgb_blend); rt.set_font_smoothing(font_smoothing);
         rt.set_system_reduced_motion(crate::platform::preferences::reduced_motion());
