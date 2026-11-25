@@ -455,6 +455,7 @@ impl RuntimeCore {
                         elements.iter().find(|e| !e.exiting && crate::flight::selects(key, &e.path, e.key.as_deref())).cloned()
                     }).collect())
                 }
+                crate::el::ReadQuery::Links(prefix) => crate::el::ReadAnswer::Links(self.links(prefix)),
             };
             if let Some(f) = read.take() {
                 f(self.app.states(), answer, tx);

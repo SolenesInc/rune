@@ -316,6 +316,15 @@ impl Tx {
         });
     }
 
+    /// The links whose id starts with `prefix` that the last presented frame showed, as
+    /// [`RuntimeCore::links`](crate::RuntimeCore::links) lists them. Runs `f` after this handler, as
+    /// [`Tx::find_elements`] does.
+    pub fn find_links<S: 'static>(&mut self, prefix: impl Into<String>, f: impl FnOnce(&mut S, Vec<crate::ShownLink>, &mut Tx) + 'static) {
+        self.frame_read(ReadQuery::Links(prefix.into()), move |s: &mut S, answer, tx| {
+            if let ReadAnswer::Links(found) = answer { f(s, found, tx); }
+        });
+    }
+
     fn frame_read<S: 'static>(&mut self, query: ReadQuery, f: impl FnOnce(&mut S, ReadAnswer, &mut Tx) + 'static) {
         let f: FrameReadFn = Box::new(move |s, answer, tx| {
             if let Some(s) = s.cast::<S>() { f(s, answer, tx); }

@@ -57,3 +57,69 @@ fn find_elements_answers_where_the_last_frame_showed_each_key_after_the_handler(
     assert_eq!(clipped.1[3], 10.0, "its parent's clip leaves 10 points of it visible");
     assert_eq!(rt.state().found[2], None);
 }
+
+#[test]
+fn find_links_answers_where_the_last_frame_showed_each_link_of_a_prefix_line_by_line() {
+    #[derive(Default)]
+    struct S { found: Vec<crate::ShownLink>, covered: bool, lidded: bool }
+    const WORDS: &str = "see ag-first1 ag-second and ag-third1";
+    fn at(part: &str) -> std::ops::Range<usize> {
+        let i = WORDS.find(part).unwrap();
+        i..i + part.len()
+    }
+    fn linked(id: &'static str) -> El {
+        crate::rich(WORDS, Vec::new()).font(crate::TextStyle::new(14.0, 400.0).lh(20.0)).w(100.0)
+            .link(crate::Link::new(at("ag-first1 ag-second"), id))
+            .link(crate::Link::new(at("ag-third1"), "https://other"))
+            .on_link(|_: &mut S, _, _| {})
+    }
+    fn view(s: &S, _: &mut Cx<S>) -> El {
+        let read = |key: &str| el().key(key.to_owned()).size(40.0, 40.0).on_press_tx(|_: &mut S, tx| {
+            tx.find_links("id:", |s: &mut S, found, _| s.found = found);
+        });
+        col().w_full().h_full()
+            .child(read("ask"))
+            .child(linked("id:shown"))
+            .child(col().w(100.0).h(30.0).scroll(crate::ScrollSpec { stick_bottom: false })
+                .child(linked("id:clipped"))
+                .child(el().size(10.0, 200.0))
+                .child(linked("id:scrolled-away")))
+            .children(s.lidded.then(|| el().key("lid").absolute(0.0, 40.0).size(300.0, 40.0).on_press(|_: &mut S| {})))
+            .children(s.covered.then(|| el().key("modal").absolute(0.0, 0.0).size(300.0, 300.0).modal(true, |_: &mut S| {}).child(read("over"))))
+    }
+    let mut rt = Runtime::new(S::default(), view, (300.0, 300.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let ask = |rt: &mut Runtime<S>| {
+        rt.pointer_move(20.0, 20.0);
+        rt.pointer_down(20.0, 20.0);
+        rt.pointer_up(20.0, 20.0);
+        rt.frame(1.0);
+        std::mem::take(&mut rt.state_mut().found)
+    };
+    let found = ask(&mut rt);
+    let ids: Vec<&str> = found.iter().map(|l| l.id.as_str()).collect();
+    assert_eq!(ids, ["id:shown", "id:clipped"], "a link of another prefix and one scrolled away are left out");
+    let [first, second] = found[0].lines[..] else { panic!("the link wraps onto a second line: {found:?}") };
+    assert!(first[0] > second[0] && second[1] == first[1] + 20.0, "each line has its own box: {found:?}");
+    assert_eq!(found[0].clip, [0.0, 0.0, 300.0, 300.0], "only the window cuts it");
+    assert_eq!(found[1].lines.len(), 2);
+    assert_eq!([found[1].clip[2], found[1].clip[3]], [100.0, 30.0], "its scroll view's box");
+    assert!(found[1].lines[1][3] < first[3], "the clip cuts its second line: {found:?}");
+
+    let [x, y, w, h] = first;
+    rt.pointer_move(x + w / 2.0, y + h / 2.0);
+    rt.frame(2.0);
+    let hovered = |rt: &Runtime<S>| rt.links("id:").iter().filter(|l| l.hovered).map(|l| l.id.clone()).collect::<Vec<_>>();
+    assert_eq!(hovered(&rt), ["id:shown"]);
+
+    rt.state_mut().lidded = true;
+    rt.invalidate();
+    rt.frame(3.0);
+    let found = ask(&mut rt);
+    assert_eq!(found.iter().map(|l| l.id.as_str()).collect::<Vec<_>>(), ["id:clipped"], "what takes the press over a link hides it");
+
+    rt.state_mut().covered = true;
+    rt.invalidate();
+    rt.frame(3.0);
+    assert_eq!(ask(&mut rt), [], "a modal over the links keeps input from them");
+}

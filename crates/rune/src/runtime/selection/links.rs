@@ -4,6 +4,22 @@
 use super::*;
 use crate::text::LinkPaint;
 
+/// A text's link ([`El::link`]) as the last presented frame showed it ([`RuntimeCore::links`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShownLink {
+    /// What `on_link` reports for it ([`crate::Link::new`]).
+    pub id: String,
+    /// The boxes of its glyphs, one for each line it wraps onto, as `[x, y, w, h]` in window points
+    /// cut to the clips around it. A line a press does not reach has none.
+    pub lines: Vec<[f32; 4]>,
+    /// The box its ancestors' clips leave its text in the window, as `[x, y, w, h]`.
+    pub clip: [f32; 4],
+    /// The pointer is on it.
+    pub hovered: bool,
+    /// It holds the keyboard's focus.
+    pub focused: bool,
+}
+
 /// The focused text element's focused link. A press's link is the press's
 /// (`capture::Held::link`, `capture::Secondary::Held`).
 #[derive(Default)]
@@ -242,6 +258,34 @@ impl RuntimeCore {
         log_event!(self, "link secondary {path} {id}");
         (f.0)(self.app.states(), &id, point.window(), tx);
         true
+    }
+
+    /// The links whose id starts with `prefix` that the last presented frame showed, in the order
+    /// their texts are laid out. A line whose middle a press does not reach, since its ancestors
+    /// clip it away, a modal layer keeps input from it or something over it takes the press, is
+    /// left out. Running handlers can use [`Tx::find_links`] without holding a `Runtime`.
+    pub fn links(&self, prefix: &str) -> Vec<ShownLink> {
+        let mut found = Vec::new();
+        for (i, n) in self.nodes.iter().enumerate() {
+            let Some(links) = n.text.as_ref().map(|t| &t.cold.links) else { continue };
+            if !links.iter().any(|l| l.id.starts_with(prefix)) || self.subtree_exiting(i) { continue; }
+            let c = self.screen_clip_of_parent(n.parent).map(|v| v / self.env.scale);
+            let (vw, vh) = self.viewport;
+            let clip = [c[0].max(0.0), c[1].max(0.0), c[2].min(vw), c[3].min(vh)];
+            let boxes = self.link_boxes(i, self.drawn_box(i));
+            let (hovered, _, focused) = self.link_states(i);
+            for (k, l) in links.iter().enumerate().filter(|(_, l)| l.id.starts_with(prefix)) {
+                let lines: Vec<[f32; 4]> = boxes.iter().filter(|(j, _)| *j == k).filter_map(|(_, r)| {
+                    let [x0, y0, x1, y1] = [r[0].max(clip[0]), r[1].max(clip[1]), r[2].min(clip[2]), r[3].min(clip[3])];
+                    let reached = || self.top_target((x0 + x1) * 0.5, (y0 + y1) * 0.5) == Some(i);
+                    (x1 > x0 && y1 > y0 && reached()).then(|| [x0, y0, x1 - x0, y1 - y0])
+                }).collect();
+                if lines.is_empty() { continue; }
+                let clip = [clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1]];
+                found.push(ShownLink { id: l.id.clone(), lines, clip, hovered: hovered == Some(k), focused: focused == Some(k) });
+            }
+        }
+        found
     }
 
     /// Centre of the first drawn line box of the link whose id is `id`, in points.

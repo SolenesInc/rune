@@ -385,6 +385,7 @@ mod a11y_tests;
 #[path = "runtime/paint_probe.rs"]
 mod paint_probe;
 pub use elements::{ElementInfo, Pick, Picked, Pose};
+pub use links::ShownLink;
 #[path = "runtime/paint/cache_layer.rs"]
 mod cache_layer;
 use cache_layer::{ActiveCache, AnotherFrame, NodeCache, RasterPass, RasterPhase, ScaleSettle};

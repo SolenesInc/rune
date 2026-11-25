@@ -195,12 +195,15 @@ pub(crate) enum ReadQuery {
     At { within: Option<String>, x: f32, y: f32, pick: crate::Pick },
     /// The element each key names ([`Tx::find_elements`]).
     Keys(Vec<String>),
+    /// The links whose id starts with a prefix ([`Tx::find_links`]).
+    Links(String),
 }
 
 /// The frame's answer to a [`ReadQuery`], of the same variant.
 pub(crate) enum ReadAnswer {
     At(Option<crate::Picked>),
     Keys(Vec<Option<crate::ElementInfo>>),
+    Links(Vec<crate::ShownLink>),
 }
 
 pub(crate) type FrameReadFn = Box<dyn FnOnce(crate::states::States<'_>, ReadAnswer, &mut Tx)>;

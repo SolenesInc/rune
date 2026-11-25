@@ -314,6 +314,7 @@ pub use runtime::Runtime;
 pub use runtime::RuntimeCore;
 pub use runtime::SelectedText;
 pub use runtime::SelectionChange;
+pub use runtime::ShownLink;
 pub use runtime::TextMark;
 pub use runtime::TextSelection;
 pub use runtime::TitlebarAction;
