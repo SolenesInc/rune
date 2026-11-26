@@ -49,3 +49,41 @@ fn half_of_it_or_half_the_window_counts() {
     assert!(on_screen([0.0, -400.0, 400.0, 1000.0], view), "taller than the window, covering it");
     assert!(!on_screen([0.0, 200.0, 400.0, 100.0], view));
 }
+
+#[derive(Default)]
+struct Paged {
+    rows: usize,
+    more: bool,
+    log: Vec<bool>,
+}
+
+fn paged(s: &Paged, _: &mut Cx<Paged>) -> El {
+    let mut list = crate::col().key("list").w_full();
+    for i in 0..s.rows {
+        list = list.child(crate::col().key(format!("r{i}")).w_full().h(100.0));
+    }
+    let tail = if s.more {
+        crate::col().key("more").w_full().h(20.0).on_visible(|s: &mut Paged, on, _| s.log.push(on))
+    } else {
+        crate::col().key("loading").w_full().h(20.0)
+    };
+    crate::col().key("page").w_full().growth(crate::el::GrowthSpec::default())
+        .child(crate::col().key("list.block").w_full().child(list))
+        .child(crate::col().key("tail.block").w_full().child(tail))
+}
+
+#[test]
+fn an_element_that_rows_growing_above_it_carry_off_screen_never_hears_it_showed() {
+    let mut rt = Runtime::new(Paged { rows: 1, ..Paged::default() }, paged, (400.0, 200.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+    rt.frame(0.0);
+    rt.update(|s, _| { s.rows = 10; s.more = true; });
+    rt.frame(1.0 / 60.0);
+    let more = rt.elements().into_iter().find(|e| e.key.as_deref() == Some("more")).unwrap();
+    assert!(more.rect[1] < 200.0, "the rows above it are still growing: {:?}", more.rect);
+    for _ in 0..240 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(!rt.animating);
+    assert!(rt.state().log.is_empty(), "it rests at 1000, below the window: {:?}", rt.state().log);
+}

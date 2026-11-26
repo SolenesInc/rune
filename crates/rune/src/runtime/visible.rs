@@ -15,8 +15,9 @@ pub(crate) fn on_screen(rect: [f32; 4], view: (f32, f32)) -> bool {
 }
 
 impl RuntimeCore {
-    /// Queues `on_visible` for elements that came on screen or left it since the last frame.
-    /// True when it queued any.
+    /// Queues `on_visible` for elements that came on screen or left it since the last frame,
+    /// once their own and their ancestors' springs rest, as `on_drawn_layout` does. True when
+    /// it queued any.
     pub(super) fn report_visible(&mut self) -> bool {
         if !self.has_drawn_layout && self.visible_fired.is_empty() { return false; }
         let last = std::mem::take(&mut self.visible_fired);
@@ -29,6 +30,10 @@ impl RuntimeCore {
             let n = &self.nodes[i];
             if n.handlers.get().is_none_or(|h| h.on_visible.is_none()) || self.subtree_exiting(i) { continue; }
             let Some(&drawn) = self.drawn.get(i) else { continue };
+            if self.rect_springing(i) {
+                if let Some(&was) = last.get(&n.id) { seen.insert(n.id, was); }
+                continue;
+            }
             let on = on_screen([drawn[0], drawn[1] - top, drawn[2], drawn[3]], (self.viewport.0, view));
             seen.insert(n.id, on);
             if last.get(&n.id).copied().unwrap_or(false) != on {
