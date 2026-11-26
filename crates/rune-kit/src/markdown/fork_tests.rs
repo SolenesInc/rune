@@ -127,6 +127,41 @@ fn a_details_block_holds_its_summary_and_markdown_body_and_maps_to_source() {
     assert!(matches!(parse("<details><summary>Cut</summary>\n\nstill arriving").as_slice(), [Block::Details { body, .. }] if body.len() == 1), "an unclosed block holds the rest");
 }
 
+#[test]
+fn search_can_reveal_the_details_bodies_enclosing_a_match() {
+    let src = "<details>
+<summary>Outer title</summary>
+
+<details>
+<summary>Inner title</summary>
+
+- body text
+
+</details>
+
+</details>
+
+Outside.
+
+```
+<details>
+code text
+```
+";
+    let inner = src.match_indices("<details>").nth(1).unwrap().0;
+    for (query, expected) in [
+        ("Outer title", vec![]),
+        ("Inner title", vec![0]),
+        ("body text", vec![0, inner]),
+        ("Outside", vec![]),
+        ("code text", vec![]),
+    ] {
+        let hits = Markdown::find(src, query, Case::Sensitive);
+        assert_eq!(hits.len(), 1, "{query}");
+        assert_eq!(Markdown::enclosing_details(src, hits[0][0].start), expected, "{query}");
+    }
+}
+
 struct Disclosed {
     src: String,
     flipped: Vec<usize>,

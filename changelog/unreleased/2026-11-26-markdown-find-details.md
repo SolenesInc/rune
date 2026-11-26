@@ -1,0 +1,1 @@
+- `Markdown::enclosing_details` gives document search the disclosure blocks to open before scrolling to a match.

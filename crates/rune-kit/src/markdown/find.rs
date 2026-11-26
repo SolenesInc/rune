@@ -64,6 +64,37 @@ impl Markdown {
     pub fn find(src: &str, query: &str, case: Case) -> Vec<Vec<Range<usize>>> {
         find(src, query, case)
     }
+
+    /// The opening tag offsets, outermost first, of the details bodies that hide the
+    /// text at source byte `at` when closed. A details summary is outside its own body.
+    pub fn enclosing_details(src: &str, at: usize) -> Vec<usize> {
+        let (_, _, _, _, maps) = doc_cached(src);
+        let mut enclosing = Vec::new();
+        contains_text(&maps, at, &mut enclosing);
+        enclosing.reverse();
+        enclosing
+    }
+}
+
+fn contains_text(maps: &[BlockMap], at: usize, enclosing: &mut Vec<usize>) -> bool {
+    let covers = |map: &SpanMap| map.0.iter().any(|(source, _)| source.contains(&at));
+    maps.iter().any(|map| match map {
+        BlockMap::Inline(map) | BlockMap::Code(map) => covers(map),
+        BlockMap::Table { head, rows } => head.iter().chain(rows.iter().flatten()).any(covers),
+        BlockMap::List(items) => items.iter().any(|item| contains_text(item, at, enclosing)),
+        BlockMap::Quote(body) => contains_text(body, at, enclosing),
+        BlockMap::Details { at: opening, summary, body } => {
+            if covers(summary) {
+                return true;
+            }
+            if contains_text(body, at, enclosing) {
+                enclosing.push(*opening);
+                return true;
+            }
+            false
+        }
+        BlockMap::None => false,
+    })
 }
 
 enum Needle<'a> {
