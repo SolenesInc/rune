@@ -482,7 +482,8 @@ fn shows(map: &BlockMap, r: &Range<usize>) -> bool {
     match map {
         BlockMap::Inline(m) | BlockMap::Code(m) => hit(m),
         BlockMap::List(items) => items.iter().flatten().any(|b| shows(b, r)),
-        BlockMap::Quote(inner) | BlockMap::Details { body: inner, .. } => inner.iter().any(|b| shows(b, r)),
+        BlockMap::Quote(inner) => inner.iter().any(|b| shows(b, r)),
+        BlockMap::Details { summary, body, .. } => hit(summary) || body.iter().any(|b| shows(b, r)),
         BlockMap::Table { head, rows } => head.iter().chain(rows.iter().flatten()).any(hit),
         BlockMap::None => false,
     }

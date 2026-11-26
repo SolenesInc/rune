@@ -19,8 +19,7 @@ pub struct DrawnText {
     /// The text as drawn, which a [`rune::SelectedText`]'s range indexes.
     pub text: String,
     /// `(source bytes, text bytes)` in order. A pair whose lengths differ (an entity, typographic
-    /// punctuation) maps as a whole. Empty for a text with no source of its own, such as a
-    /// `<details>` summary.
+    /// punctuation) maps as a whole. Empty for a text with no source of its own.
     pub map: Vec<(Range<usize>, Range<usize>)>,
 }
 
@@ -197,9 +196,9 @@ fn collect(blocks: &[Block], maps: &[BlockMap], at: &mut Vec<Step>, code_style: 
             }
             (Block::Details { summary, body, .. }, m) => {
                 at.push(Step::Summary);
-                push(out, at, &summary.text, Vec::new());
+                let (summary_map, body_maps) = match m { BlockMap::Details { summary, body, .. } => (summary.0.clone(), body.as_slice()), _ => (Vec::new(), &[][..]) };
+                push(out, at, &summary.text, summary_map);
                 at.pop();
-                let body_maps = match m { BlockMap::Details { body, .. } => body.as_slice(), _ => &[] };
                 collect(body, body_maps, at, code_style, out);
             }
             _ => {}

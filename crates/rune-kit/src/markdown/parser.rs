@@ -8,7 +8,7 @@ use super::*;
 pub(super) struct SpanMap(pub(super) Vec<(Range<usize>, Range<usize>)>);
 
 impl SpanMap {
-    fn push(&mut self, src: Range<usize>, out: Range<usize>) {
+    pub(super) fn push(&mut self, src: Range<usize>, out: Range<usize>) {
         if src.start >= src.end || out.start >= out.end {
             return;
         }
@@ -61,8 +61,9 @@ pub(super) enum BlockMap {
     List(Vec<Vec<BlockMap>>),
     Quote(Vec<BlockMap>),
     Table { head: Vec<SpanMap>, rows: Vec<Vec<SpanMap>> },
-    /// A `<details>` block: the source byte its `<details>` tag starts at, and its body's maps.
-    Details { at: usize, body: Vec<BlockMap> },
+    /// A `<details>` block: the source byte its `<details>` tag starts at, its summary's map,
+    /// and its body's maps.
+    Details { at: usize, summary: SpanMap, body: Vec<BlockMap> },
     #[default]
     None,
 }
@@ -86,8 +87,9 @@ impl BlockMap {
                     *b = std::mem::take(b).shift_src(offset);
                 }
             }
-            BlockMap::Details { at, body } => {
+            BlockMap::Details { at, summary, body } => {
                 *at += offset;
+                summary.shift_src(offset);
                 for b in body {
                     *b = std::mem::take(b).shift_src(offset);
                 }
@@ -114,7 +116,7 @@ pub(super) struct Builder {
     inline: Option<(InlineKind, Inline, Vec<Open>, SpanMap)>,
     code: Option<(String, Fence, SpanMap)>,
     /// The HTML block being read: its text so far and the source byte it starts at.
-    html: Option<(String, usize)>,
+    html: Option<(String, usize, SpanMap)>,
     /// The source range of the last paragraph started at the root.
     last_root_para: Option<Range<usize>>,
     sources: Vec<Source>,
@@ -232,9 +234,9 @@ enum Container {
     List(Option<u64>, Vec<Vec<Block>>, Vec<Vec<BlockMap>>),
     Item(usize),
     Table(Table, Vec<Inline>, Vec<SpanMap>, Vec<Vec<SpanMap>>, Vec<SpanMap>),
-    /// A `<details>` block: its summary, whether it says `open`, and the source byte its tag
-    /// starts at.
-    Details(Inline, bool, usize),
+    /// A `<details>` block: its summary and the summary's map, whether it says `open`, and the
+    /// source byte its tag starts at.
+    Details(Inline, SpanMap, bool, usize),
     /// A footnote's definition: its label, and the document's code sources and list items
     /// read before it, set aside while it gathers its own.
     Footnote(String, Vec<Source>, Vec<Option<(bool, usize)>>),
@@ -341,13 +343,14 @@ impl Builder {
     /// Opens a `<details>` block whose tag starts at source byte `at`.
     pub(super) fn open_details(&mut self, open: bool, at: usize) {
         self.flush_inline();
-        self.stack.push((Container::Details(Inline::default(), open, at), Vec::new(), Vec::new()));
+        self.stack.push((Container::Details(Inline::default(), SpanMap::default(), open, at), Vec::new(), Vec::new()));
     }
 
-    /// Sets the innermost open `<details>` block's summary.
-    pub(super) fn summarize(&mut self, summary: &str) {
-        if let Some((Container::Details(inl, ..), _, _)) = self.stack.last_mut() {
-            inl.text = summary.into();
+    /// Sets the innermost open `<details>` block's summary and the summary's map.
+    pub(super) fn summarize(&mut self, summary: String, map: SpanMap) {
+        if let Some((Container::Details(inl, summary_map, ..), _, _)) = self.stack.last_mut() {
+            inl.text = summary;
+            *summary_map = map;
         }
     }
 
@@ -379,7 +382,7 @@ impl Builder {
                 }
                 self.push(Block::Table(t), BlockMap::Table { head, rows });
             }
-            Container::Details(summary, open, at) => self.push(Block::Details { summary, open, body: blocks }, BlockMap::Details { at, body: maps }),
+            Container::Details(summary, summary_map, open, at) => self.push(Block::Details { summary, open, body: blocks }, BlockMap::Details { at, summary: summary_map, body: maps }),
             Container::Footnote(label, sources, tasks) => {
                 let (sources, tasks) = (std::mem::replace(&mut self.sources, sources), std::mem::replace(&mut self.tasks, tasks));
                 self.footnotes.push(Footnote { label, blocks, maps, sources, tasks });
@@ -621,7 +624,7 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
                 }
                 Tag::HtmlBlock => {
                     b.flush_inline();
-                    b.html = Some((String::new(), range.start));
+                    b.html = Some((String::new(), range.start, SpanMap::default()));
                 }
                 Tag::MetadataBlock(MetadataBlockKind::YamlStyle) => {
                     b.flush_inline();
@@ -715,8 +718,8 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
                     }
                 }
                 TagEnd::HtmlBlock => {
-                    if let Some((html, at)) = b.html.take() {
-                        super::html::block(&mut b, &html, at);
+                    if let Some((html, at, map)) = b.html.take() {
+                        super::html::block(&mut b, &html, at, &map);
                     }
                 }
                 TagEnd::BlockQuote(_) | TagEnd::Item | TagEnd::List(_) | TagEnd::Table | TagEnd::FootnoteDefinition => b.pop_container(),
@@ -791,7 +794,10 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
             }
             Event::InlineHtml(html) => super::html::inline(&mut b, &html, range),
             Event::Html(html) => {
-                if let Some((text, _)) = &mut b.html {
+                if let Some((text, _, map)) = &mut b.html {
+                    if range.len() == html.len() {
+                        map.push(range.clone(), text.len()..text.len() + html.len());
+                    }
                     text.push_str(&html);
                 }
             }
@@ -814,8 +820,8 @@ pub(super) fn parse_doc_defs(src: &str, how: Reading) -> (ParsedDoc, Tail, Optio
     if let Some((text, fence, map)) = b.code.take() {
         b.push_code(text, fence, map, true);
     }
-    if let Some((html, at)) = b.html.take() {
-        super::html::block(&mut b, &html, at);
+    if let Some((html, at, map)) = b.html.take() {
+        super::html::block(&mut b, &html, at, &map);
     }
     // Unwind containers left open by a partial stream.
     while b.stack.len() > 1 {

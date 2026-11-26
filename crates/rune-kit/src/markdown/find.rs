@@ -120,8 +120,10 @@ fn find_in_blocks(src: &str, blocks: &[Block], maps: &[BlockMap], needle: &Needl
                     find_in_blocks(src, item, imap, needle, out);
                 }
             }
-            (Block::Quote(inner) | Block::Alert(_, inner), BlockMap::Quote(inner_maps)) | (Block::Details { body: inner, .. }, BlockMap::Details { body: inner_maps, .. }) => {
-                find_in_blocks(src, inner, inner_maps, needle, out)
+            (Block::Quote(inner) | Block::Alert(_, inner), BlockMap::Quote(inner_maps)) => find_in_blocks(src, inner, inner_maps, needle, out),
+            (Block::Details { summary, body, .. }, BlockMap::Details { summary: summary_map, body: body_maps, .. }) => {
+                find_in_text(src, &summary.text, summary_map, needle, out);
+                find_in_blocks(src, body, body_maps, needle, out);
             }
             _ => {}
         }

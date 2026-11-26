@@ -4,7 +4,7 @@
 #![cfg(feature = "markdown")]
 
 use rune::{Cx, El, Env, Key, KeyEvent, Mods, Runtime, col};
-use rune_kit::{Kit, Markdown};
+use rune_kit::{Kit, Markdown, MarkdownStyle};
 
 const SRC: &str = "# Title\n\nHello **world** and [link](https://x.dev/a).\n\n- alpha\n- [x] beta\n\n```rust\nfn main() {}\n```\n\nLast *line*.\n";
 
@@ -69,6 +69,23 @@ fn a_drag_across_blocks_copies_each_whole() {
     rt.key(KeyEvent { key: Key::Command('c'), mods: Mods { cmd: true, ..Mods::default() } });
     tick(&mut rt);
     assert_eq!(clipboard.text().as_deref().map(String::as_str), Some(&SRC[9..]).map(|s| s.trim_end()));
+}
+
+fn held(_: &S, _: &mut Cx<S>) -> El {
+    let k = Kit::neutral(true);
+    let style = MarkdownStyle::from_kit(&k).prose_measure(320.0);
+    col().w_full().padding(10.0).child(Markdown::new(SRC).style(style).selectable(true).copy_source(true).build(&k).key("note"))
+}
+
+#[test]
+fn held_to_a_prose_measure_copying_takes_the_source_of_a_whole_list() {
+    let mut rt = Runtime::new(S { source: true }, held, (480.0, 800.0), Env::new(true, 2.0));
+    rt.frame(0.0);
+    let clipboard = rune::clipboard::memory();
+    rt.use_clipboard(&clipboard);
+    assert_eq!(copy(&mut rt, &clipboard, |tx| tx.select_all_text("note/b2")), "- alpha\n- [x] beta", "a whole list");
+    let alpha = rt.elements().into_iter().find(|e| e.path.ends_with("note/b2/#1/i0/#1/b0")).expect("alpha").path;
+    assert_eq!(copy(&mut rt, &clipboard, |tx| tx.select_all_text(alpha)), "alpha");
 }
 
 #[test]

@@ -619,10 +619,9 @@ impl Renderer {
                 };
                 let drawn = bidi::directed(drawn, dir);
                 let drawn = if top_level && self.s.prose_measure.is_some() && centered(b) && !spans { drawn.self_center() } else { drawn };
-                let drawn = drawn.key(key);
                 match spans {
-                    true => bidi::directed(row().w_full().child(el().grow(1.0)).child(drawn), dir).mt(top),
-                    false => drawn.mt(top),
+                    true => bidi::directed(row().w_full().child(el().grow(1.0)).child(drawn), dir).key(key).mt(top),
+                    false => drawn.key(key).mt(top),
                 }
             };
             // A block that can't change any more is built once: the blocks above a stream's
@@ -1024,9 +1023,9 @@ impl Renderer {
                 }
             }
             Block::Details { summary, open, body } => {
-                let (at, body_maps) = match map {
-                    BlockMap::Details { at, body } => (Some(*at), body.as_slice()),
-                    _ => (None, &[][..]),
+                let (at, summary_map, body_maps) = match map {
+                    BlockMap::Details { at, summary, body } => (Some(*at), Some(summary), body.as_slice()),
+                    _ => (None, None, &[][..]),
                 };
                 let wire = self.details.as_ref().zip(at);
                 let shown = wire.as_ref().map_or(true, |(d, at)| (d.open)(*at, *open));
@@ -1040,7 +1039,7 @@ impl Renderer {
                     .expanded(shown)
                     .w_full()
                     .child(marker)
-                    .child(self.para(summary, None, s.body, s.text).grow(1.0).shrink());
+                    .child(self.para(summary, summary_map, s.body, s.text).grow(1.0).shrink());
                 if let Some(measure) = self.flow.get().measure {
                     head = head.max_w(measure);
                 }

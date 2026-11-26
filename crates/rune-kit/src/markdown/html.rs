@@ -4,7 +4,7 @@
 //! drops it.
 
 use super::Style;
-use super::parser::{Builder, close_run, open, push_text};
+use super::parser::{Builder, SpanMap, close_run, open, push_text};
 use std::ops::Range;
 
 enum Inline {
@@ -58,9 +58,10 @@ fn tags(html: &str) -> impl Iterator<Item = (usize, String, bool, &str, &str)> {
 
 /// Reads the HTML block `html`, which starts at source byte `at`, for the `<details>` blocks it
 /// opens, names or closes; the body between a `<details>` and its `</details>` is Markdown.
-/// Each `<details>` is known by the source byte its tag starts at.
-pub(super) fn block(b: &mut Builder, html: &str, at: usize) {
-    let mut summary: Option<String> = None;
+/// Each `<details>` is known by the source byte its tag starts at; `src` maps source bytes to
+/// bytes of `html`.
+pub(super) fn block(b: &mut Builder, html: &str, at: usize, src: &SpanMap) {
+    let mut summary: Option<Vec<&str>> = None;
     for (lt, name, closing, attrs, after) in tags(html) {
         match (name.as_str(), closing) {
             ("details", false) => {
@@ -68,17 +69,48 @@ pub(super) fn block(b: &mut Builder, html: &str, at: usize) {
                 b.open_details(open, at + lt);
             }
             ("details", true) => b.close_details(),
-            ("summary", false) => summary = Some(String::new()),
+            ("summary", false) => summary = Some(Vec::new()),
             ("summary", true) => {
-                if let Some(text) = summary.take() {
-                    b.summarize(text.split_whitespace().collect::<Vec<_>>().join(" ").as_str());
+                if let Some(pieces) = summary.take() {
+                    let (text, map) = collapsed(html, &pieces, src);
+                    b.summarize(text, map);
                 }
                 continue;
             }
             _ => {}
         }
-        if let Some(text) = summary.as_mut() {
-            text.push_str(after);
+        if let Some(pieces) = summary.as_mut() {
+            pieces.push(after);
         }
     }
+}
+
+/// The text of `pieces`, slices of `html`, with each run of whitespace one space and none at
+/// either end, and its map to the source bytes `src` maps `html` from.
+fn collapsed(html: &str, pieces: &[&str], src: &SpanMap) -> (String, SpanMap) {
+    let source = |at: usize, len: usize| {
+        src.0.iter().find(|(s, out)| s.len() == out.len() && out.start <= at && at + len <= out.end).map(|(s, out)| s.start + at - out.start..s.start + at - out.start + len)
+    };
+    let (mut text, mut map, mut space) = (String::new(), SpanMap::default(), None);
+    for piece in pieces {
+        let base = piece.as_ptr() as usize - html.as_ptr() as usize;
+        for (i, c) in piece.char_indices() {
+            let at = base + i;
+            if c.is_whitespace() {
+                space = space.or((!text.is_empty()).then_some((at, c.len_utf8())));
+                continue;
+            }
+            if let Some((at, len)) = space.take() {
+                if let Some(s) = source(at, len).filter(|_| len == 1) {
+                    map.push(s, text.len()..text.len() + 1);
+                }
+                text.push(' ');
+            }
+            if let Some(s) = source(at, c.len_utf8()) {
+                map.push(s, text.len()..text.len() + c.len_utf8());
+            }
+            text.push(c);
+        }
+    }
+    (text, map)
 }

@@ -229,13 +229,33 @@ fn smart_punctuation_sets_prose_and_maps_each_piece_to_its_source() {
 
 const DRAWN: &str = "# A \"title\"\n\nHello **world** &amp; [a link](https://x.dev) -- it's `code`.\n\n- one\n- two\n\n  second paragraph\n  - nested\n\n- [ ] a task\n\n> quoted\n\n> [!NOTE]\n> noted\n\n<details>\n<summary>More</summary>\n\nhidden body\n\n</details>\n\n| a | b |\n|---|---|\n| c | d |\n\n```rust\nfn main() {}\n```\n\n```diff\n-old\n+new\n```\n";
 
-fn drawn_view((src, wide): &(String, bool), _: &mut Cx<(String, bool)>) -> El {
-    col().w_full().child(Markdown::new(src.clone()).smart_punctuation(true).selectable(true).scroll_wide(*wide).build(&Kit::neutral(true)).key("md"))
+const DRAWN_HELD: &str = "Noted[^1] here.\n\n1. first\n2. second\n   - nested\n\n> - a quoted item\n\n> [!TIP]\n> - an alert's item\n\n<details>\n<summary>\n  Summary   <b>label</b>\n</summary>\n\n- folded item\n\n</details>\n\n[^1]: the note\n";
+
+fn drawn_view((src, wide, measure): &(String, bool, Option<f32>), _: &mut Cx<(String, bool, Option<f32>)>) -> El {
+    let style = MarkdownStyle::from_kit(&Kit::neutral(true));
+    let style = match measure { Some(m) => style.prose_measure(*m), None => style };
+    col().w_full().child(Markdown::new(src.clone()).style(style).smart_punctuation(true).selectable(true).scroll_wide(*wide).build(&Kit::neutral(true)).key("md"))
 }
 
 #[test]
 fn each_selectable_text_a_document_draws_is_drawn_text_found_by_its_path() {
-    each_selected_text_is_drawn_text_found_by_its_path(DRAWN, false);
+    for measure in [None, Some(320.0)] {
+        for src in [DRAWN, DRAWN_HELD] {
+            each_selected_text_is_drawn_text_found_by_its_path_at(src, false, measure);
+        }
+    }
+}
+
+#[test]
+fn a_details_summary_maps_its_collapsed_text_to_the_source_it_came_from() {
+    let drawn = Markdown::new(DRAWN_HELD).drawn(&Kit::neutral(true));
+    let summary = drawn.texts().iter().find(|t| t.text == "Summary label").expect("the summary");
+    let sources = |r: std::ops::Range<usize>| summary.source(r).into_iter().map(|r| &DRAWN_HELD[r]).collect::<Vec<_>>();
+    assert_eq!(sources(0..7), ["Summary"]);
+    assert_eq!(sources(8..13), ["label"]);
+    assert_eq!(sources(0..13), ["Summary ", "label"], "a run of whitespace maps to its first byte");
+    let label = DRAWN_HELD.find("label").unwrap();
+    assert_eq!(find(DRAWN_HELD, "label", Case::Insensitive), vec![vec![label..label + 5]], "find reaches a summary");
 }
 
 #[test]
@@ -258,7 +278,11 @@ fn each_text_of_a_long_code_block_is_drawn_text_found_by_its_path() {
 }
 
 fn each_selected_text_is_drawn_text_found_by_its_path(src: &str, wide: bool) {
-    let mut rt = Runtime::new((src.to_owned(), wide), drawn_view, (480.0, 4000.0), Env::new(true, 1.0));
+    each_selected_text_is_drawn_text_found_by_its_path_at(src, wide, None);
+}
+
+fn each_selected_text_is_drawn_text_found_by_its_path_at(src: &str, wide: bool, measure: Option<f32>) {
+    let mut rt = Runtime::new((src.to_owned(), wide, measure), drawn_view, (480.0, 4000.0), Env::new(true, 1.0));
     rt.frame(0.0);
     let first = rt.elements().into_iter().find(|e| e.path.ends_with("md/b0")).expect("the first block");
     rt.pointer_down(first.rect[0] + 2.0, first.rect[1] + 4.0);
@@ -689,7 +713,9 @@ fn a_prose_measure_centers_top_level_prose_at_the_measure_while_tables_code_and_
         (0..parse(src).len())
             .map(|i| {
                 let key = format!("b{i}");
-                let e = elements.iter().find(|e| e.key.as_deref() == Some(key.as_str())).unwrap_or_else(|| panic!("no {key}"));
+                let keyed = elements.iter().find(|e| e.key.as_deref() == Some(key.as_str())).unwrap_or_else(|| panic!("no {key}"));
+                let held = format!("{}/#1", keyed.path);
+                let e = elements.iter().find(|e| e.path == held).unwrap_or(keyed);
                 (e.rect[0].round(), e.rect[2].round())
             })
             .collect::<Vec<_>>()
