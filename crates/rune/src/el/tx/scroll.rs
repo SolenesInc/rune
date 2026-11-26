@@ -1,5 +1,6 @@
-//! `Tx`'s scroll requests: revealing a row, moving a viewport to its end, a page or an
-//! offset, and holding an element where it shows.
+//! `Tx`'s scroll requests: revealing a row, moving a viewport to its end, by a page, points
+//! or a fraction of itself, to an offset or the next of a set of elements, and holding an
+//! element where it shows.
 
 #[cfg(doc)]
 use crate::El;
@@ -63,7 +64,28 @@ impl Tx {
     /// again. An app routes the page keys itself with it, e.g. from a composer's
     /// `on_input_key` to the message list.
     pub fn scroll_page(&mut self, key: impl Into<String>, pages: i32) {
-        self.scroll_pages.push((key.into(), pages));
+        self.scroll_pages.push((key.into(), crate::runtime::ScrollStep::Pages(pages)));
+    }
+    /// Move the vertical scroll viewport keyed `key` (or the one containing it) `dy` points
+    /// from where it stands, down for positive, as a reader's line step does. Instant and
+    /// clamped to its ends; any momentum or glide stops, and a `stick_bottom` viewport that
+    /// lands on its end follows it again.
+    pub fn scroll_by(&mut self, key: impl Into<String>, dy: f32) {
+        self.scroll_pages.push((key.into(), crate::runtime::ScrollStep::Points(dy)));
+    }
+    /// [`Tx::scroll_by`] `pages` of the viewport's whole height: 0.5 and -0.5 step half a
+    /// viewport down and up.
+    pub fn scroll_fraction(&mut self, key: impl Into<String>, pages: f32) {
+        self.scroll_pages.push((key.into(), crate::runtime::ScrollStep::Viewports(pages)));
+    }
+    /// Move the vertical scroll viewport keyed `viewport` (or the one containing it) to the
+    /// nearest laid-out element of `keys` below its top (`forward`) or above it, landing that
+    /// element's top `margin` points below the viewport's top, as a reader's next and previous
+    /// heading do. An element already there doesn't count, so repeated requests step on; with
+    /// none past it, the viewport stays. Keys that aren't laid out, such as unmounted virtual
+    /// rows, are skipped. Instant and clamped as [`Tx::scroll_by`] is.
+    pub fn scroll_adjacent_key(&mut self, viewport: impl Into<String>, keys: Vec<String>, forward: bool, margin: f32) {
+        self.scroll_pages.push((viewport.into(), crate::runtime::ScrollStep::AdjacentKey { keys, forward, margin }));
     }
     /// Move the horizontal scroll viewport keyed `key` (or the nearest one containing it) so it
     /// shows its content from `x` points in, clamped to its ends: 0 is the start, as a carousel's

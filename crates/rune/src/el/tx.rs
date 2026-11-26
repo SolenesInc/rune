@@ -63,8 +63,8 @@ pub struct Tx {
     pub(crate) scroll_to: Vec<crate::runtime::ScrollReveal>,
     /// Scroll viewports to send to their bottom: (key, animated).
     pub(crate) scroll_bottom: Vec<(String, bool)>,
-    /// Scroll viewports to page: (key, pages).
-    pub(crate) scroll_pages: Vec<(String, i32)>,
+    /// Scroll viewports to step from where they stand (`Tx::scroll_page` and kin).
+    pub(crate) scroll_pages: Vec<(String, crate::runtime::ScrollStep)>,
     /// Scroll viewports to move to offsets (`Tx::scroll_to` and kin).
     pub(crate) scroll_offsets: Vec<crate::runtime::ScrollRequest>,
     /// Elements to hold where they show across this commit (`Tx::keep_on_screen`).

@@ -251,6 +251,7 @@ use shape_paint::push_shape;
 use props::*;
 pub(crate) use scroll_x::{SHIFT_TURNS_WHEEL, wheel_delta};
 pub(crate) use scroll_offset::ScrollRequest;
+pub(crate) use scroll_bottom::ScrollStep;
 pub(crate) use reveal::ScrollReveal;
 pub use selectable::{SelectedText, SelectionChange, TextSelection};
 #[cfg(test)]
