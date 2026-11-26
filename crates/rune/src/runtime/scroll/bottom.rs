@@ -6,6 +6,9 @@ use super::*;
 /// extends the trip.
 /// A glide starts at most this many viewports above the bottom (a longer trip cuts first).
 pub(super) const GLIDE_REACH: f64 = 2.0;
+/// A key within this many points of the viewport's top counts as where it stands, so the next
+/// `Tx::scroll_adjacent_key` moves past it.
+const PAST_KEY: f64 = 2.0;
 /// Within this many points of the bottom a viewport counts as showing it.
 const AT_BOTTOM: f64 = 1.0;
 /// Slack starts closing once its stack has stopped growing for this long (seconds).
@@ -108,6 +111,20 @@ pub(super) fn glide(st: &mut ScrollState, dt: f32) -> bool {
     moving
 }
 
+/// How a relative scroll request moves its viewport.
+#[derive(Clone, Debug)]
+pub(crate) enum ScrollStep {
+    /// Pages of 90% of the viewport's height (`Tx::scroll_page`).
+    Pages(i32),
+    /// Whole viewport heights (`Tx::scroll_fraction`).
+    Viewports(f32),
+    /// Points (`Tx::scroll_by`).
+    Points(f32),
+    /// To the nearest of `keys` past the viewport's top, landing it `margin` points below it
+    /// (`Tx::scroll_adjacent_key`).
+    AdjacentKey { keys: Vec<String>, forward: bool, margin: f32 },
+}
+
 impl RuntimeCore {
     /// The scroll viewport `key` names (`Node::named`), or the nearest one containing it.
     fn scroll_viewport(&self, key: &str) -> Option<usize> {
@@ -159,13 +176,30 @@ impl RuntimeCore {
         }
     }
 
-    /// `Tx::scroll_page`: each viewport moves by its requested pages.
-    pub(super) fn scroll_pages(&mut self, requests: Vec<(String, i32)>) {
+    /// `Tx::scroll_page`, `Tx::scroll_by`, `Tx::scroll_fraction` and `Tx::scroll_adjacent_key`:
+    /// each viewport steps from where it stands.
+    pub(super) fn scroll_pages(&mut self, requests: Vec<(String, ScrollStep)>) {
         // This frame's commit may have changed the content: measure the extent first.
         self.step_scroll(0.0);
-        for (key, pages) in requests {
+        for (key, step) in requests {
             let Some(i) = self.scroll_viewport(&key) else { continue };
-            self.page_to(i, |offset, _, page| offset + page * f64::from(pages));
+            let (view_top, view_h) = (self.nodes[i].target[1], f64::from(self.nodes[i].local.h));
+            let tops: Vec<f64> = match &step {
+                ScrollStep::AdjacentKey { keys, margin, .. } => keys.iter()
+                    .filter_map(|k| self.nodes.iter().enumerate().find(|&(j, n)| n.named(k) && !self.subtree_exiting(j)))
+                    .map(|(_, n)| f64::from(n.target[1] - view_top - margin))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            self.page_to(i, |offset, _, page| match step {
+                ScrollStep::Pages(pages) => offset + page * f64::from(pages),
+                ScrollStep::Viewports(viewports) => offset + view_h * f64::from(viewports),
+                ScrollStep::Points(dy) => offset + f64::from(dy),
+                ScrollStep::AdjacentKey { forward: true, .. } =>
+                    tops.iter().copied().filter(|&top| top > offset + PAST_KEY).reduce(f64::min).unwrap_or(offset),
+                ScrollStep::AdjacentKey { forward: false, .. } =>
+                    tops.iter().copied().filter(|&top| top < offset - PAST_KEY).reduce(f64::max).unwrap_or(offset),
+            });
         }
         if self.virtual_window_changed() {
             self.commit(&Tx::default());
